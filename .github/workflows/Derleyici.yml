@@ -35,6 +35,12 @@ jobs:
       - name: Eklentileri Derle
         run: gradle make
 
+      - name: Çıktıları Builds Klasörüne Taşı
+        run: |
+          # CloudStream derleme çıktıları genellikle build/out veya kök dizindeki çıkışlarda oluşur
+          # Çıktı dosyalarını (json ve cs3) builds klasörüne kopyalıyoruz
+          find . -maxdepth 3 \( -name "*.cs3" -o -name "*.json" \) -not -path "./.git/*" -exec cp {} builds/ \;
+
       - name: Derlemeleri builds Dalına Yükle
         uses: peaceiris/actions-gh-pages@v4
         with:
