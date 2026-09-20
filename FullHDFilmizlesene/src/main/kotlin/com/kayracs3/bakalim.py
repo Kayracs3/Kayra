@@ -116,7 +116,7 @@ def fullhdfilmizlesene(url:str) -> list:
     return vid_links
 
 # konsol.print(fullhdfilmizlesene("https://www.fullhdfilmizlesene.de/film/makine-2/"))
-konsol.print(fullhdfilmizlesene("https://www.fullhdfilmizlesene.de/film/iskence-okulu/"))
+konsol.print(fullhdfilmizlesene("https://www.fullhdfilmizlesene.now/film/iskence-okulu/"))
 # konsol.print(fullhdfilmizlesene("https://www.fullhdfilmizlesene.de/film/yedi-yasam/"))
 # konsol.print(fullhdfilmizlesene("https://www.fullhdfilmizlesene.de/film/cilgin-cocuklar-oyun-bitti-izle-1/"))
 # konsol.print(fullhdfilmizlesene("https://www.fullhdfilmizlesene.de/film/suclu-den-skyldige/"))
