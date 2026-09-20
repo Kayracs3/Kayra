@@ -128,7 +128,7 @@ class HDFilmCehennemi : MainAPI() {
                 this.year            = year
                 this.plot            = description
                 this.tags            = tags
-                @Suppress("DEPRECATION")
+                @Suppress("DEPRECATION", "DEPRECATION_ERROR")
                 this.rating          = ratingInt
                 this.recommendations = recommendations
                 addActors(actors)
@@ -142,7 +142,7 @@ class HDFilmCehennemi : MainAPI() {
                 this.year            = year
                 this.plot            = description
                 this.tags            = tags
-                @Suppress("DEPRECATION")
+                @Suppress("DEPRECATION", "DEPRECATION_ERROR")
                 this.rating          = ratingInt
                 this.recommendations = recommendations
                 addActors(actors)
