@@ -13,7 +13,7 @@ buildscript {
         classpath("com.android.tools.build:gradle:8.7.3")
         // Cloudstream gradle plugin which makes everything work and builds plugins
         classpath("com.github.recloudstream:gradle:-SNAPSHOT")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0")
     }
 }
 
@@ -38,7 +38,7 @@ subprojects {
         // when running through github workflow, GITHUB_REPOSITORY should contain current repository name
         setRepo(System.getenv("GITHUB_REPOSITORY") ?: "https://github.com/kayracs3/Kayra")
 
-        authors = listOf("Kayras")
+        authors = listOf("Kayracs3")
     }
 
     android {
