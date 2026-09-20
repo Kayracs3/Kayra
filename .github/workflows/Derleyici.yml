@@ -29,8 +29,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Gradlew Çalıştırma İzni Ver
+        run: chmod +x gradlew
+
+      - name: Çıktı Klasörünü Hazırla
+        run: mkdir -p builds
+
       - name: Eklentileri Derle
-        run: gradle make
+        run: ./gradlew make
 
       - name: Derlemeleri builds Dalına Yükle
         uses: peaceiris/actions-gh-pages@v4
