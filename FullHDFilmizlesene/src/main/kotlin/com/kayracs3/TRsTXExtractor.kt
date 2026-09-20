@@ -54,7 +54,7 @@ open class TRsTX : ExtractorApi() {
             val m3uLink = mapEntry["videoData"] ?: continue
 
             callback.invoke(
-                ExtractorLink(
+                newExtractorLink(
                     source  = this.name,
                     name    = "${this.name} - $title",
                     url     = m3uLink,
