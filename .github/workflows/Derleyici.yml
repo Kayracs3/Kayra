@@ -29,17 +29,23 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Çıktı Klasörünü Hazırla
-        run: mkdir -p builds
+      - name: Projedeki Dosyaları Listele (Kontrol)
+        run: ls -la
 
-      - name: Eklentileri Derle
-        run: gradle make
+      - name: Eklentileri Derle (Detaylı Log)
+        run: gradle make --info --stacktrace
 
-      - name: Çıktıları Builds Klasörüne Taşı
+      - name: Derleme Sonrası Tüm Dosyaları Ara
         run: |
-          # CloudStream derleme çıktıları genellikle build/out veya kök dizindeki çıkışlarda oluşur
-          # Çıktı dosyalarını (json ve cs3) builds klasörüne kopyalıyoruz
-          find . -maxdepth 3 \( -name "*.cs3" -o -name "*.json" \) -not -path "./.git/*" -exec cp {} builds/ \;
+          echo "--- Bulunan .cs3 ve .json dosyaları ---"
+          find . -name "*.cs3" -o -name "plugins.json" -o -name "repo.json"
+
+      - name: Çıktıları Builds Klasörüne Kopyala
+        run: |
+          mkdir -p builds
+          find . \( -name "*.cs3" -o -name "*.json" \) -not -path "./.git/*" -not -path "./builds/*" -exec cp {} builds/ \;
+          echo "--- builds klasörünün içeriği ---"
+          ls -la builds/
 
       - name: Derlemeleri builds Dalına Yükle
         uses: peaceiris/actions-gh-pages@v4
