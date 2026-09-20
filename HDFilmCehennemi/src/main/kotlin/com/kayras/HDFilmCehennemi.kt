@@ -31,7 +31,7 @@ class HDFilmCehennemi : MainAPI() {
         "${mainUrl}/tur/belgesel-filmlerini-izle-2"         to "Belgesel Filmleri",
         "${mainUrl}/tur/bilim-kurgu-filmlerini-izleyin-5"   to "Bilim Kurgu Filmleri",
         "${mainUrl}/tur/komedi-filmlerini-izleyin-2"        to "Komedi Filmleri",
-        "${mainUrl}/tur/korku-filmlerini-izle-9/"           to "Korku Filmleri",
+        "${mainUrl}/tur/korku-filmleri-izle-9/"           to "Korku Filmleri",
         "${mainUrl}/tur/romantik-filmleri-izle-3"           to "Romantik Filmleri"
     )
 
@@ -84,7 +84,12 @@ class HDFilmCehennemi : MainAPI() {
         val year        = document.selectFirst("div.post-info-year-country a")?.text()?.trim()?.toIntOrNull()
         val tvType      = if (document.select("div.seasons").isEmpty()) TvType.Movie else TvType.TvSeries
         val description = document.selectFirst("article.post-info-content > p")?.text()?.trim()
-        val score       = document.selectFirst("div.post-info-imdb-rating span")?.text()?.substringBefore("(")?.trim()?.toDoubleOrNull()
+        val score       = document.selectFirst("div.post-info-imdb-rating span")
+                            ?.text()
+                            ?.substringBefore("(")
+                            ?.trim()
+                            ?.toDoubleOrNull()
+                            ?.let { Score(it, 10) }
         
         val actors      = document.select("div.post-info-cast a").mapNotNull {
             val actorName = it.selectFirst("strong")?.text() ?: return@mapNotNull null
