@@ -17,6 +17,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       - name: Build Extension
-        uses: recloudstream/build-action@master
+        uses: recloudstream/build-action@main
         with:
           repositoryUrl: ${{ github.repositoryUrl }}
