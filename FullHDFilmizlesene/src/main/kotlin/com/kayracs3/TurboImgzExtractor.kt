@@ -7,8 +7,8 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 
 open class TurboImgz : ExtractorApi() {
-    override val name            = "TurboImgz"
-    override val mainUrl         = "https://turbo.imgz.me"
+    override val name           = "TurboImgz"
+    override val mainUrl        = "https://turbo.imgz.me"
     override val requiresReferer = true
 
     override suspend fun getUrl(url: String, referer: String?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit) {
@@ -19,7 +19,7 @@ open class TurboImgz : ExtractorApi() {
         Log.d("Kekik_${this.name}", "videoLink » $videoLink")
 
         callback.invoke(
-            ExtractorLink(
+            newExtractorLink(
                 source  = "${this.name} - " + url.substringBefore("||").uppercase(),
                 name    = "${this.name} - " + url.substringBefore("||").uppercase(),
                 url     = videoLink,
