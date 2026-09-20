@@ -32,8 +32,13 @@ jobs:
       - name: Projedeki Dosyaları Listele (Kontrol)
         run: ls -la
 
-      - name: Eklentileri Derle (Detaylı Log)
-        run: gradle make --info --stacktrace
+      - name: Gradle Wrapper Oluştur ve İzin Ver
+        run: |
+          gradle wrapper
+          chmod +x gradlew
+
+      - name: Eklentileri Derle
+        run: ./gradlew make --info --stacktrace
 
       - name: Derleme Sonrası Tüm Dosyaları Ara
         run: |
@@ -45,7 +50,7 @@ jobs:
           mkdir -p builds
           find . \( -name "*.cs3" -o -name "*.json" \) -not -path "./.git/*" -not -path "./builds/*" -exec cp {} builds/ \;
           
-          # Eğer repo.json üretilmiş ama plugins.json yoksa, CloudStream için kopya oluşturalım
+          # Eğer repo.json üretilmiş ama plugins.json yoksa kopyala
           if [ -f "builds/repo.json" ] && [ ! -f "builds/plugins.json" ]; then
             cp builds/repo.json builds/plugins.json
           fi
