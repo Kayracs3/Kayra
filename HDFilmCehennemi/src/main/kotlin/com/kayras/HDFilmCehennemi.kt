@@ -1,6 +1,6 @@
 // ! https://github.com/hexated/cloudstream-extensions-hexated/blob/master/Hdfilmcehennemi/src/main/kotlin/com/hexated/Hdfilmcehennemi.kt
 
-package com.kayras
+package com.kayracs3
 
 import android.util.Log
 import org.jsoup.nodes.Element
