@@ -1,28 +1,18 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 version = 18
 
-android {
-    defaultConfig {
-        minSdk = 21
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-}
-
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_11)
-    }
-}
-
 cloudstream {
-    authors     = listOf("hexated", "kayracs3")
+    authors     = listOf("hexated", "keyiflerolsun")
     language    = "tr"
     description = "Türkiye'nin en hızlı hd film izleme sitesi"
-    status      = 1
-    tvTypes     = listOf("Movie", "TvSeries")
-    iconUrl     = "https://www.google.com/s2/favicons?domain=hdfilmcehennemi.com&sz=%size%"
+
+    /**
+     * Status int as the following:
+     * 0: Down
+     * 1: Ok
+     * 2: Slow
+     * 3: Beta only
+    **/
+    status  = 1 // will be 3 if unspecified
+    tvTypes = listOf("Movie", "TvSeries")
+    iconUrl = "https://www.google.com/s2/favicons?domain=hdfilmcehennemi.com&sz=%size%"
 }
