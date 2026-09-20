@@ -1,4 +1,4 @@
-package com.kayras
+package com.kayracs3
 
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
