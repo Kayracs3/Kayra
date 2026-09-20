@@ -44,6 +44,12 @@ jobs:
         run: |
           mkdir -p builds
           find . \( -name "*.cs3" -o -name "*.json" \) -not -path "./.git/*" -not -path "./builds/*" -exec cp {} builds/ \;
+          
+          # Eğer repo.json üretilmiş ama plugins.json yoksa, CloudStream için kopya oluşturalım
+          if [ -f "builds/repo.json" ] && [ ! -f "builds/plugins.json" ]; then
+            cp builds/repo.json builds/plugins.json
+          fi
+
           echo "--- builds klasörünün içeriği ---"
           ls -la builds/
 
