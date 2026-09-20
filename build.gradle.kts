@@ -42,7 +42,7 @@ subprojects {
     }
 
     android {
-        namespace = "com.kayras"
+        namespace = "com.kayracs3"
 
         defaultConfig {
             minSdk = 21
