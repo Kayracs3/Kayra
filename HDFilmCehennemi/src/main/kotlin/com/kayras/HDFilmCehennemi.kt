@@ -1,4 +1,4 @@
-package com.kayracs3
+package com.kayras
 
 import android.util.Log
 import org.jsoup.nodes.Element
@@ -89,7 +89,7 @@ class HDFilmCehennemi : MainAPI() {
                             ?.substringBefore("(")
                             ?.trim()
                             ?.toDoubleOrNull()
-                            ?.let { Score(it, 10) }
+                            ?.let { Score((it * 1000).toInt()) }
         
         val actors      = document.select("div.post-info-cast a").mapNotNull {
             val actorName = it.selectFirst("strong")?.text() ?: return@mapNotNull null
