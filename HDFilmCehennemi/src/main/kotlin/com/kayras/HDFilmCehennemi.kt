@@ -1,4 +1,4 @@
-package com.kayracs3
+package com.kayras
 
 import android.util.Log
 import org.jsoup.nodes.Element
