@@ -36,7 +36,7 @@ subprojects {
 
     cloudstream {
         // when running through github workflow, GITHUB_REPOSITORY should contain current repository name
-       setRepo("kayracs3", "Kayra", "builds")
+       setRepo("kayracs3", "Kayra", "github")
 
         authors = listOf("Kayracs3")
     }
