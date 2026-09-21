@@ -5,8 +5,13 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        // Shitpack repo which contains our tools and dependencies
-        maven("https://jitpack.io")
+        // JitPack repo which contains our tools and dependencies
+        maven("https://jitpack.io") {
+            metadataSources {
+                mavenPom()
+                artifact()
+            }
+        }
     }
 
     dependencies {
@@ -21,7 +26,12 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven("https://jitpack.io")
+        maven("https://jitpack.io") {
+            metadataSources {
+                mavenPom()
+                artifact()
+            }
+        }
     }
 }
 
@@ -80,9 +90,9 @@ subprojects {
         // these dependencies can include any of those which are added by the app,
         // but you dont need to include any of them if you dont need them
         // https://github.com/recloudstream/cloudstream/blob/master/app/build.gradle
-        implementation(kotlin("stdlib"))                                              // Kotlin'in temel kütüphanesi
+        implementation(kotlin("stdlib"))                                            // Kotlin'in temel kütüphanesi
         implementation("com.github.Blatzar:NiceHttp:0.4.11")                          // HTTP kütüphanesi
-        implementation("org.jsoup:jsoup:1.18.3")                                      // HTML ayrıştırıcı
+        implementation("org.jsoup:jsoup:1.18.3")                                    // HTML ayrıştırıcı
         implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.16.0")   // Kotlin için Jackson JSON kütüphanesi
         implementation("com.fasterxml.jackson.core:jackson-databind:2.16.0")          // JSON-nesne dönüştürme kütüphanesi
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1")      // Kotlin için asenkron işlemler
