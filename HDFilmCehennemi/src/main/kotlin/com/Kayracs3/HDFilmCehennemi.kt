@@ -1,4 +1,3 @@
-@file:Suppress("DEPRECATION")
 package com.Kayracs3
 
 import android.util.Log
@@ -11,12 +10,12 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class HDFilmCehennemi : MainAPI() {
-    override var mainUrl              = "https://www.hdfilmcehennemi.nl"
-    override var name                 = "HDFilmCehennemi"
-    override val hasMainPage          = true
-    override var lang                 = "tr"
-    override val hasQuickSearch       = true
-    override val supportedTypes       = setOf(TvType.Movie, TvType.TvSeries)
+    override var mainUrl               = "https://www.hdfilmcehennemi.nl"
+    override var name                  = "HDFilmCehennemi"
+    override val hasMainPage           = true
+    override var lang                  = "tr"
+    override val hasQuickSearch        = true
+    override val supportedTypes        = setOf(TvType.Movie, TvType.TvSeries)
 
     override val mainPage = mainPageOf(
         mainUrl to "Yeni Eklenen Filmler",
@@ -84,7 +83,7 @@ class HDFilmCehennemi : MainAPI() {
         val year        = document.selectFirst("div.post-info-year-country a")?.text()?.trim()?.toIntOrNull()
         val tvType      = if (document.select("div.seasons").isEmpty()) TvType.Movie else TvType.TvSeries
         val description = document.selectFirst("article.post-info-content > p")?.text()?.trim()
-        val rating      = document.selectFirst("div.post-info-imdb-rating span")?.text()?.substringBefore("(")?.trim()?.toRatingInt()
+        val score       = document.selectFirst("div.post-info-imdb-rating span")?.text()?.substringBefore("(")?.trim()?.toDoubleOrNull()
         val actors      = document.select("div.post-info-cast a").mapNotNull {
             val actorName = it.selectFirst("strong")?.text() ?: return@mapNotNull null
             val actorImg  = it.selectFirst("img")?.attr("data-src")
@@ -121,7 +120,7 @@ class HDFilmCehennemi : MainAPI() {
                 this.year            = year
                 this.plot            = description
                 this.tags            = tags
-                this.rating          = rating
+                this.score           = score
                 this.recommendations = recommendations
                 addActors(actors)
                 addTrailer(trailer)
@@ -134,7 +133,7 @@ class HDFilmCehennemi : MainAPI() {
                 this.year            = year
                 this.plot            = description
                 this.tags            = tags
-                this.rating          = rating
+                this.score           = score
                 this.recommendations = recommendations
                 addActors(actors)
                 addTrailer(trailer)
@@ -153,14 +152,15 @@ class HDFilmCehennemi : MainAPI() {
         val subData   = script.substringAfter("tracks: [").substringBefore("]")
 
         callback.invoke(
-            ExtractorLink(
+            newExtractorLink(
                 source  = source,
                 name    = source,
                 url     = base64Decode(videoData),
-                referer = "${mainUrl}/",
-                quality = Qualities.Unknown.value,
                 type    = INFER_TYPE
-            )
+            ) {
+                this.referer = "${mainUrl}/"
+                this.quality = Qualities.Unknown.value
+            }
         )
 
         AppUtils.tryParseJson<List<SubSource>>("[${subData}]")?.filter { it.kind == "captions" }?.forEach { sub ->
