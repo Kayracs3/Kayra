@@ -194,10 +194,19 @@ class HDFilmCehennemi : MainAPI() {
                     referer = data
                 ).text
 
-                var iframe = Regex("""data-src=\\"([^"]+)""").find(apiGet)?.groupValues?.get(1)?.replace("\\", "") ?: continue
-                if (iframe.contains("?rapidrame_id=")) {
-                    iframe = "${mainUrl}/playerr/" + iframe.substringAfter("?rapidrame_id=")
-                }
+                // Sunucudan gelen JSON/HTML içindeki kaçış tırnaklarını temizle
+val cleanHtml = apiGet.replace("\\\"", "\"")
+
+// Jsoup ile iframe etiketini bul ve data-src (yoksa src) değerini güvenle al
+val iframeTag = Jsoup.parse(cleanHtml).selectFirst("iframe")
+val rawIframe = iframeTag?.attr("data-src")?.takeIf { it.isNotBlank() } 
+    ?: iframeTag?.attr("src")?.takeIf { it.isNotBlank() } 
+    ?: continue
+
+var iframe = rawIframe
+if (iframe.contains("?rapidrame_id=")) {
+    iframe = "${mainUrl}/playerr/" + iframe.substringAfter("?rapidrame_id=")
+}
 
                 Log.d("HDCH", "$source » $videoID » $iframe")
                 invokeLocalSource(source, iframe, subtitleCallback, callback)
