@@ -1,3 +1,4 @@
+@file:Suppress("DEPRECATION")
 package com.Kayracs3
 
 import android.util.Log
