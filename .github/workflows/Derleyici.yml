@@ -7,6 +7,7 @@ concurrency:
 on:
   workflow_dispatch:
   push:
+  viva: # paths-ignore korundu
     branches:
       - master
     paths-ignore:
@@ -42,9 +43,8 @@ jobs:
 
       - name: Android SDK Ayarla
         uses: android-actions/setup-android@v3.2.2
-
-      - name: Android SDK Lisanslarını Onayla
-        run: yes | sdkmanager --licenses || true
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
 
       - name: Eklentileri Derle
         run: |
