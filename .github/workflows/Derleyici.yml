@@ -44,10 +44,7 @@ jobs:
         uses: android-actions/setup-android@v3.2.2
         with:
           packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
-
-       - name: Bozuk Gradle Önbelleğini Temizle
-        run: rm -rf ~/.gradle/caches/modules-2/files-2.1/com.github.recloudstream
-
+      
       - name: Eklentileri Derle
         run: |
           cd $GITHUB_WORKSPACE/src
