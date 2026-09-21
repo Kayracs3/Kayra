@@ -21,19 +21,19 @@ class HDFilmCehennemi : MainAPI() {
 
     override val mainPage = mainPageOf(
         mainUrl to "Yeni Eklenen Filmler",
-        "${mainUrl}/yabancidiziizle-2"                    to "Yeni Eklenen Diziler",
-        "${mainUrl}/category/tavsiye-filmler-izle2"       to "Tavsiye Filmler",
-        "${mainUrl}/imdb-7-puan-uzeri-filmler"            to "IMDB 7+ Filmler",
-        "${mainUrl}/en-cok-yorumlananlar-1"               to "En Çok Yorumlananlar",
-        "${mainUrl}/en-cok-begenilen-filmleri-izle"       to "En Çok Beğenilenler",
-        "${mainUrl}/tur/aile-filmleri-izleyin-6"          to "Aile Filmleri",
-        "${mainUrl}/tur/aksiyon-filmleri-izleyin-3"       to "Aksiyon Filmleri",
-        "${mainUrl}/tur/animasyon-filmlerini-izleyin-4"   to "Animasyon Filmleri",
-        "${mainUrl}/tur/belgesel-filmlerini-izle-1"       to "Belgesel Filmleri",
-        "${mainUrl}/tur/bilim-kurgu-filmlerini-izleyin-2" to "Bilim Kurgu Filmleri",
-        "${mainUrl}/tur/komedi-filmlerini-izleyin-1"      to "Komedi Filmleri",
-        "${mainUrl}/tur/korku-filmlerini-izle-2/"         to "Korku Filmleri",
-        "${mainUrl}/tur/romantik-filmleri-izle-1"         to "Romantik Filmleri"
+        "${mainUrl}/yabancidiziizle-5"                    to "Yeni Eklenen Diziler",
+        "${mainUrl}/category/tavsiye-filmler-izle3"       to "Tavsiye Filmler",
+        "${mainUrl}/imdb-7-puan-uzeri-filmle-2r"          to "IMDB 7+ Filmler",
+        "${mainUrl}/en-cok-yorumlananlar-2"               to "En Çok Yorumlananlar",
+        "${mainUrl}/en-cok-begenilen-filmleri-izle-4"     to "En Çok Beğenilenler",
+        "${mainUrl}/tur/aile-filmleri-izleyin-7"          to "Aile Filmleri",
+        "${mainUrl}/tur/aksiyon-filmleri-izleyin-8"       to "Aksiyon Filmleri",
+        "${mainUrl}/tur/animasyon-filmlerini-izleyin-5"   to "Animasyon Filmleri",
+        "${mainUrl}/tur/belgesel-filmlerini-izle-2"       to "Belgesel Filmleri",
+        "${mainUrl}/tur/bilim-kurgu-filmlerini-izleyin-5" to "Bilim Kurgu Filmleri",
+        "${mainUrl}/tur/komedi-filmlerini-izleyin-2"      to "Komedi Filmleri",
+        "${mainUrl}/tur/korku-filmlerini-izle-9/"         to "Korku Filmleri",
+        "${mainUrl}/tur/romantik-filmleri-izle-3"         to "Romantik Filmleri"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
