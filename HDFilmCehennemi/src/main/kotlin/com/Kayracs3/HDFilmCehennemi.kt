@@ -8,7 +8,6 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-import com.lagradost.cloudstream3.syncproviders.providers.Imdb // (or whichever path is correct for this class)
 
 class HDFilmCehennemi : MainAPI() {
     override var mainUrl               = "https://www.hdfilmcehennemi.nl"
@@ -84,7 +83,10 @@ class HDFilmCehennemi : MainAPI() {
         val year        = document.selectFirst("div.post-info-year-country a")?.text()?.trim()?.toIntOrNull()
         val tvType      = if (document.select("div.seasons").isEmpty()) TvType.Movie else TvType.TvSeries
         val description = document.selectFirst("article.post-info-content > p")?.text()?.trim()
-        val scoreVal    = document.selectFirst("div.post-info-imdb-rating span")?.text()?.substringBefore("(")?.trim()?.toDoubleOrNull()
+        
+        // Puanı String'den (örneğin 8.5) ondalık sayıya çevirip doğrudan 85 şekline getiriyoruz.
+        val ratingVal   = document.selectFirst("div.post-info-imdb-rating span")?.text()?.substringBefore("(")?.trim()?.toDoubleOrNull()?.let { (it * 10).toInt() }
+        
         val actors      = document.select("div.post-info-cast a").mapNotNull {
             val actorName = it.selectFirst("strong")?.text() ?: return@mapNotNull null
             val actorImg  = it.selectFirst("img")?.attr("data-src")
@@ -121,7 +123,7 @@ class HDFilmCehennemi : MainAPI() {
                 this.year            = year
                 this.plot            = description
                 this.tags            = tags
-                this.score           = scoreVal?.let { Score.Imdb(it) }
+                this.rating          = ratingVal // this.score YERİNE BURADA rating KULLANILDI
                 this.recommendations = recommendations
                 addActors(actors)
                 addTrailer(trailer)
@@ -134,7 +136,7 @@ class HDFilmCehennemi : MainAPI() {
                 this.year            = year
                 this.plot            = description
                 this.tags            = tags
-                this.score           = scoreVal?.let { Score.Imdb(it) }
+                this.rating          = ratingVal // this.score YERİNE BURADA rating KULLANILDI
                 this.recommendations = recommendations
                 addActors(actors)
                 addTrailer(trailer)
