@@ -16,7 +16,8 @@ buildscript {
     dependencies {
         classpath("com.android.tools.build:gradle:8.7.3")
         classpath("com.github.recloudstream:gradle:-SNAPSHOT")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0")
+        // 1. Kotlin sürümü 2.1.20'ye yükseltildi
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20")
     }
 }
 
@@ -70,7 +71,9 @@ subprojects {
                     listOf(
                         "-Xno-call-assertions",
                         "-Xno-param-assertions",
-                        "-Xno-receiver-assertions"
+                        "-Xno-receiver-assertions",
+                        // 2. Metadata sürüm uyuşmazlığını yok sayan bayrak eklendi
+                        "-Xskip-metadata-version-check"
                     )
                 )
             }
