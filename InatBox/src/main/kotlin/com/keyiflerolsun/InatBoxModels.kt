@@ -1,4 +1,4 @@
-package com.keyiflerolsun
+package com.Kayracs3
 
 data class ChContent(
     val chName : String,
