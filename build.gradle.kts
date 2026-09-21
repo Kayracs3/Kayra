@@ -16,8 +16,7 @@ buildscript {
     dependencies {
         classpath("com.android.tools.build:gradle:8.7.3")
         classpath("com.github.recloudstream:gradle:-SNAPSHOT")
-        // Cloudstream pre-release ile uyumlu güncel Kotlin Gradle Eklentisi
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0")
     }
 }
 
@@ -60,13 +59,13 @@ subprojects {
         }
 
         compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_1_8
-            targetCompatibility = JavaVersion.VERSION_1_8
+            sourceCompatibility = JavaVersion.VERSION_11
+            targetCompatibility = JavaVersion.VERSION_11
         }
 
         tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
             compilerOptions {
-                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
                 freeCompilerArgs.addAll(
                     listOf(
                         "-Xno-call-assertions",
