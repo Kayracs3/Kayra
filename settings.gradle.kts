@@ -1,7 +1,15 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+        maven("https://jitpack.io")
+    }
+}
+
 rootProject.name = "CloudstreamPlugins"
 
-// This file sets what projects are included. All new projects should get automatically included unless specified in "disabled" variable.
-
+// Bu liste içerisine yazılan klasörler derlemeye dahil edilmez
 val disabled = listOf("__Temel")
 
 File(rootDir, ".").eachDir { dir ->
@@ -13,7 +21,3 @@ File(rootDir, ".").eachDir { dir ->
 fun File.eachDir(block: (File) -> Unit) {
     listFiles()?.filter { it.isDirectory }?.forEach { block(it) }
 }
-
-
-// To only include a single project, comment out the previous lines (except the first one), and include your plugin like so:
-// include("PluginName")
