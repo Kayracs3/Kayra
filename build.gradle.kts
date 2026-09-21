@@ -48,11 +48,11 @@ subprojects {
         // when running through github workflow, GITHUB_REPOSITORY should contain current repository name
         setRepo(System.getenv("GITHUB_REPOSITORY") ?: "https://github.com/Kayracs3/Kayra")
 
-        authors = listOf("keyiflerolsun")
+        authors = listOf("Kayracs3")
     }
 
     android {
-        namespace = "com.keyiflerolsun"
+        namespace = "com.Kayracs3"
 
         defaultConfig {
             minSdk = 21
