@@ -84,9 +84,6 @@ class HDFilmCehennemi : MainAPI() {
         val tvType      = if (document.select("div.seasons").isEmpty()) TvType.Movie else TvType.TvSeries
         val description = document.selectFirst("article.post-info-content > p")?.text()?.trim()
         
-        // Güncel API'ye uygun olarak Score nesnesi oluşturuluyor (Örn: 8.5)
-        val scoreVal    = document.selectFirst("div.post-info-imdb-rating span")?.text()?.substringBefore("(")?.trim()?.toDoubleOrNull()?.let { Score.Rating(it) }
-        
         val actors      = document.select("div.post-info-cast a").mapNotNull {
             val actorName = it.selectFirst("strong")?.text() ?: return@mapNotNull null
             val actorImg  = it.selectFirst("img")?.attr("data-src")
@@ -123,7 +120,6 @@ class HDFilmCehennemi : MainAPI() {
                 this.year            = year
                 this.plot            = description
                 this.tags            = tags
-                this.score           = scoreVal // rating yerine güncel score alanı kullanıldı
                 this.recommendations = recommendations
                 addActors(actors)
                 addTrailer(trailer)
@@ -136,7 +132,6 @@ class HDFilmCehennemi : MainAPI() {
                 this.year            = year
                 this.plot            = description
                 this.tags            = tags
-                this.score           = scoreVal // rating yerine güncel score alanı kullanıldı
                 this.recommendations = recommendations
                 addActors(actors)
                 addTrailer(trailer)
