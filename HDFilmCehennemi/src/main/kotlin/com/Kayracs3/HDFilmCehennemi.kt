@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import java.net.URI
 
 data class Results(
     @JsonProperty("results")
@@ -273,7 +274,7 @@ class HDFilmCehennemi : MainAPI() {
             headers = mapOf("User-Agent" to userAgent)
         ).document
 
-        var extractorMatched = false
+        var linkFound = false
 
         val elements = document.select("iframe")
 
@@ -301,33 +302,41 @@ class HDFilmCehennemi : MainAPI() {
                 "Player URL: $fixedUrl"
             )
 
-            // Oyuncu URL'sini CloudStream'un mevcut extractor zincirine bırak.
-            // Ozellikle Vidmoly/Rapidrame gibi alternatiflerde siteye ozel
-            // bir m3u8 deseni varsaymak yerine ilgili extractor kullanilir.
             try {
-                val matched = loadExtractor(
-                    fixedUrl,
-                    data,
-                    subtitleCallback,
-                    callback
-                )
+                val handled = if (
+                    fixedUrl.contains("hdfilmcehennemi.mobi/video/embed", ignoreCase = true) ||
+                    fixedUrl.contains("rapidrame_id=", ignoreCase = true)
+                ) {
+                    extractRapidrame(
+                        playerUrl = fixedUrl,
+                        siteReferer = data,
+                        callback = callback
+                    )
+                } else {
+                    loadExtractor(
+                        fixedUrl,
+                        data,
+                        subtitleCallback,
+                        callback
+                    )
+                }
 
-                if (matched) {
-                    extractorMatched = true
+                if (handled) {
+                    linkFound = true
                     Log.d(
                         "HDFilmCehennemi",
-                        "Extractor eslesti: $fixedUrl"
+                        "Kaynak bulundu: $fixedUrl"
                     )
                 } else {
                     Log.d(
                         "HDFilmCehennemi",
-                        "Extractor bulunamadi: $fixedUrl"
+                        "Kaynak bulunamadi: $fixedUrl"
                     )
                 }
             } catch (e: Exception) {
                 Log.e(
                     "HDFilmCehennemi",
-                    "Extractor hatasi ($fixedUrl): ${e.message}",
+                    "Link hatasi ($fixedUrl): ${e.message}",
                     e
                 )
             }
@@ -335,9 +344,96 @@ class HDFilmCehennemi : MainAPI() {
 
         Log.d(
             "HDFilmCehennemi",
-            "loadLinks tamamlandi. extractorMatched=$extractorMatched"
+            "loadLinks tamamlandi. linkFound=$linkFound"
         )
 
-        return extractorMatched
+        return linkFound
+    }
+
+    private suspend fun extractRapidrame(
+        playerUrl: String,
+        siteReferer: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        return try {
+            val rawHtml = app.get(
+                playerUrl,
+                referer = siteReferer,
+                headers = mapOf("User-Agent" to userAgent)
+            ).text
+
+            val normalized = rawHtml
+                .replace("\\/", "/")
+                .replace("\\u002F", "/")
+                .replace("&amp;", "&")
+
+            val unpacked = try {
+                getAndUnpack(normalized)
+            } catch (_: Exception) {
+                normalized
+            }
+
+            val candidates = listOf(normalized, unpacked)
+
+            val absoluteRegex = Regex(
+                """(?:(?:https?:)?//)[^\"'\s<>]+(?:master\.m3u8|index\.m3u8|\.m3u8)(?:\?[^\"'\s<>]*)?""",
+                RegexOption.IGNORE_CASE
+            )
+
+            val relativeRegex = Regex(
+                """(?:^|[\"'])((?:/|\./|\.\./)?[^\"'\s<>]*(?:master\.m3u8|index\.m3u8|\.m3u8)(?:\?[^\"'\s<>]*)?)""",
+                RegexOption.IGNORE_CASE
+            )
+
+            var streamUrl: String? = null
+
+            for (text in candidates) {
+                streamUrl = absoluteRegex.find(text)?.value
+                    ?: relativeRegex.find(text)?.groupValues?.getOrNull(1)
+
+                if (!streamUrl.isNullOrBlank()) break
+            }
+
+            if (streamUrl.isNullOrBlank()) {
+                Log.d(
+                    "HDFilmCehennemi",
+                    "Rapidrame sayfasinda m3u8 bulunamadi"
+                )
+                return false
+            }
+
+            val finalUrl = when {
+                streamUrl!!.startsWith("//") -> "https:$streamUrl"
+                streamUrl.startsWith("http://") || streamUrl.startsWith("https://") -> streamUrl
+                else -> URI(playerUrl).resolve(streamUrl).toString()
+            }
+
+            Log.d(
+                "HDFilmCehennemi",
+                "Rapidrame M3U8 bulundu: $finalUrl"
+            )
+
+            callback.invoke(
+                newExtractorLink(
+                    source = "HDFilmCehennemi",
+                    name = "Rapidrame",
+                    url = finalUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    referer = siteReferer
+                    quality = Qualities.P1080.value
+                    headers = mapOf("User-Agent" to userAgent)
+                }
+            )
+
+            true
+        } catch (e: Exception) {
+            Log.e(
+                "HDFilmCehennemi",
+                "Rapidrame extractor hatasi: ${e.message}",
+                e
+            )
+            false
+        }
     }
 }
