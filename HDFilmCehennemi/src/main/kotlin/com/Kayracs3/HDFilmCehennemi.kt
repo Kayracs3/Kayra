@@ -414,7 +414,7 @@ class HDFilmCehennemi : MainAPI() {
 
     private fun decodePackedVideoUrl(text: String): String? {
         val match = Regex(
-            """dc_\\w+\\(\\[([^\\]]+)\\]\\)"""
+            """dc_\w+\(\[([^\]]+)\]\)"""
         ).find(text) ?: return null
 
         val parts = Regex("""[\"']([^\"']+)[\"']""")
@@ -623,8 +623,7 @@ class HDFilmCehennemi : MainAPI() {
                     val probe = app.get(
                         finalContentUrl,
                         referer = playerUrl,
-                        headers = mapOf("User-Agent" to userAgent),
-                        timeout = 10
+                        headers = mapOf("User-Agent" to userAgent)
                     )
 
                     if (probe.code in 200..299) {
