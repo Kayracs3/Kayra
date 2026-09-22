@@ -439,24 +439,20 @@ class HDFilmCehennemi : MainAPI() {
         return wordRegex.replace(p) { decodeWord(it.value) }
     }
 
-    private fun decodePackedVideoUrl(text: String): String? {
-        val match = Regex(
-            """dc_\w+\(\[([^\]]+)\]\)"""
-        ).find(text) ?: return null
-
-        val parts = Regex("""["']([^"']+)["']""")
-            .findAll(match.groupValues[1])
-            .map { it.groupValues[1] }
-            .toList()
-
+    private fun tryDecodeParts(
+        parts: List<String>,
+        sourceLabel: String
+    ): String? {
         if (parts.isEmpty()) return null
 
         val value = parts.joinToString("")
+        if (value.length < 16) return null
 
-        Log.d(
-            "HDFilmCehennemi",
-            "Rapidrame packed parca sayisi: ${parts.size}"
-        )
+        val compact = value.replace(Regex("\\s+"), "")
+        val looksBase64ish = compact.length >= 20 &&
+                compact.all { it.isLetterOrDigit() || it == '+' || it == '/' || it == '=' || it == '_' || it == '-' }
+
+        if (!looksBase64ish) return null
 
         val decoders = listOf(
             "v3" to ::decodeVideoVariant3,
@@ -470,16 +466,101 @@ class HDFilmCehennemi : MainAPI() {
                 if (isValidVideoUrl(decoded)) {
                     Log.d(
                         "HDFilmCehennemi",
-                        "Rapidrame packed URL bulundu ($name): $decoded"
+                        "Rapidrame encoded URL bulundu ($sourceLabel/$name): $decoded"
                     )
                     return decoded
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
+            }
+        }
+
+        return null
+    }
+
+    private fun decodePackedVideoUrl(text: String): String? {
+        // 1) Public scraper'daki ana biçim: dc_xxx(["...","..."])
+        val direct = Regex(
+            """dc_[A-Za-z0-9_$]+\s*\(\s*\[([^\]]+)\]\s*\)"""
+        ).find(text)
+
+        if (direct != null) {
+            val parts = Regex("""["']([^"']+)["']""")
+                .findAll(direct.groupValues[1])
+                .map { it.groupValues[1] }
+                .toList()
+
+            Log.d(
+                "HDFilmCehennemi",
+                "Rapidrame packed parca sayisi (dc): ${parts.size}"
+            )
+
+            val decoded = tryDecodeParts(parts, "dc")
+            if (decoded != null) return decoded
+        }
+
+        // Tanı: unpack edilmiş JS'de dc_ gerçekten var mı?
+        val dcNames = Regex("""dc_[A-Za-z0-9_$]+""")
+            .findAll(text)
+            .map { it.value }
+            .distinct()
+            .toList()
+
+        Log.d(
+            "HDFilmCehennemi",
+            "Rapidrame unpack dc_ isimleri: ${if (dcNames.isEmpty()) "YOK" else dcNames.joinToString(",")}")
+        if (dcNames.isNotEmpty()) {
+            val name = dcNames.first()
+            val idx = text.indexOf(name)
+            if (idx >= 0) {
+                val from = (idx - 160).coerceAtLeast(0)
+                val to = (idx + 700).coerceAtMost(text.length)
                 Log.d(
                     "HDFilmCehennemi",
-                    "Rapidrame packed $name hatasi: ${e.message}"
+                    "Rapidrame dc snippet: ${text.substring(from, to)}"
                 )
             }
+        }
+
+        // 2) Fonksiyon adı değişmişse genel function([parts]) biçimini dene.
+        val genericFunctions = Regex(
+            """[A-Za-z_$][A-Za-z0-9_$]*\s*\(\s*\[([^\]]+)\]\s*\)"""
+        ).findAll(text)
+
+        for ((index, match) in genericFunctions.withIndex()) {
+            val parts = Regex("""["']([^"']+)["']""")
+                .findAll(match.groupValues[1])
+                .map { it.groupValues[1] }
+                .toList()
+
+            if (parts.size >= 2) {
+                val decoded = tryDecodeParts(parts, "generic#$index")
+                if (decoded != null) return decoded
+            }
+        }
+
+        // 3) Son sağlam fallback: JS içindeki string-array'leri tara.
+        // Kaynağın ana URL'si parçalı bir base64 değeri olduğunda function adı bilinmese bile
+        // bu tarama onu yakalayabilir. URL/track gibi açık metin dizileri base64ish filtreden geçmez.
+        val arrayRegex = Regex(
+            """\[((?:\s*["'][^"']+["']\s*,?){2,})\s*\]"""
+        )
+
+        for ((index, match) in arrayRegex.findAll(text).withIndex()) {
+            val parts = Regex("""["']([^"']+)["']""")
+                .findAll(match.groupValues[1])
+                .map { it.groupValues[1] }
+                .toList()
+
+            if (parts.size < 2) continue
+
+            val value = parts.joinToString("").replace(Regex("\\s+"), "")
+            val looksBase64ish = value.length >= 20 &&
+                    value.all { it.isLetterOrDigit() || it == '+' || it == '/' || it == '=' || it == '_' || it == '-' }
+
+            if (!looksBase64ish) continue
+
+            val decoded = tryDecodeParts(parts, "array#$index")
+            if (decoded != null) return decoded
         }
 
         return null
