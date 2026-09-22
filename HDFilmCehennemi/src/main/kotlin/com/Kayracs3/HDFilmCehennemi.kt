@@ -108,7 +108,8 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
     }
-                override suspend fun load(url: String): LoadResponse? {
+
+    override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
             url, 
             headers = mapOf("User-Agent" to userAgent)
@@ -215,7 +216,6 @@ class HDFilmCehennemi : MainAPI() {
             headers = mapOf("User-Agent" to userAgent)
         ).document
         
-        // Önbellek çakışmasını aşmak için düz Java/Kotlin for döngüsü mimarisi
         val elements = document.select("iframe")
         for (element in elements) {
             val src = element.attr("src").ifEmpty { 
@@ -254,7 +254,13 @@ class HDFilmCehennemi : MainAPI() {
                     """(?:master\.txt|master\.m3u8)""" +
                     """[^"']*)["']"""
             
-            Regex(pattern).find(responseText)?.groupValues?.first()?.let {
+            // Reassigned (var) olarak tanımlandı, hata giderildi
+            var extractedUrl = Regex(pattern).find(responseText)?.groupValues?.first()
+            
+            // Eğer tırnak işaretlerini temizlemek gerekirse güvenle atama yapılabilir
+            extractedUrl = extractedUrl?.removeSurrounding("\"")?.removeSurrounding("'")
+
+            extractedUrl?.let {
                 callback.invoke(
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
