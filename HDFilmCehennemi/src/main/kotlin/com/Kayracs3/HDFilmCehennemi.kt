@@ -350,6 +350,10 @@ class HDFilmCehennemi : MainAPI() {
         return linkFound
     }
 
+    private fun candidatesFirstNonBlank(vararg values: String): String {
+        return values.firstOrNull { it.isNotBlank() } ?: ""
+    }
+
     private suspend fun extractRapidrame(
         playerUrl: String,
         siteReferer: String,
@@ -468,6 +472,46 @@ class HDFilmCehennemi : MainAPI() {
                         "Rapidrame unpack sonrasi da m3u8 yok"
                     )
                 }
+            }
+
+            // Rapidrame sayfasinda JSON-LD icindeki contentUrl dogrudan HLS playlistine isaret ediyor.
+            // Ornek format: https://.../master.txt
+            val contentUrlRegex = Regex(
+                """[\"']contentUrl[\"']\s*:\s*[\"']([^\"']+)[\"']""",
+                RegexOption.IGNORE_CASE
+            )
+
+            val contentUrl = candidatesFirstNonBlank(
+                normalized,
+                unpacked
+            ).let { text ->
+                contentUrlRegex.find(text)?.groupValues?.getOrNull(1)
+            }
+
+            if (!contentUrl.isNullOrBlank()) {
+                val finalContentUrl = contentUrl
+                    .replace("\\/", "/")
+                    .replace("&amp;", "&")
+
+                Log.d(
+                    "HDFilmCehennemi",
+                    "Rapidrame contentUrl bulundu: $finalContentUrl"
+                )
+
+                callback.invoke(
+                    newExtractorLink(
+                        source = "HDFilmCehennemi",
+                        name = "Rapidrame HLS",
+                        url = finalContentUrl,
+                        type = ExtractorLinkType.M3U8
+                    ) {
+                        referer = playerUrl
+                        quality = Qualities.P1080.value
+                        headers = mapOf("User-Agent" to userAgent)
+                    }
+                )
+
+                return true
             }
 
             val candidates = listOf(normalized, unpacked)
