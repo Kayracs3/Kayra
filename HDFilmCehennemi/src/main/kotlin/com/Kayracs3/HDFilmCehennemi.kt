@@ -413,30 +413,57 @@ class HDFilmCehennemi : MainAPI() {
     }
 
     private fun unpackHdfcJs(packed: String): String? {
+        // Dean-Edwards/P.A.C.K.E.R biçimini mümkün olduğunca kesin yakala.
+        // Önceki sürümdeki greedy regex yanlış tırnak çiftini seçebiliyordu.
         val match = Regex(
-            """eval\(function\(p,a,c,k,e,d\)\{.*?\}\('(.+)',(\d+),(\d+),'([^']+)'""",
+            """eval\(function\(p,a,c,k,e,d\)\{.*?\}\('([^']*)',(\d+),(\d+),'([^']*)'\.split\('\|'\)""",
             RegexOption.DOT_MATCHES_ALL
         ).find(packed) ?: return null
 
         val p = match.groupValues[1]
         val a = match.groupValues[2].toIntOrNull() ?: return null
+        val c = match.groupValues[3].toIntOrNull() ?: return null
         val k = match.groupValues[4].split('|')
-        val wordRegex = Regex("""\b\w+\b""")
 
-        fun decodeWord(word: String): String {
-            var n = 0
-            for (ch in word) {
-                n = when {
-                    ch.isDigit() -> n * a + ch.digitToInt()
-                    ch in 'a'..'z' -> n * a + (ch.code - 'a'.code + 10)
-                    ch in 'A'..'Z' -> n * a + (ch.code - 'A'.code + 36)
-                    else -> n
-                }
+        Log.d(
+            "HDFilmCehennemi",
+            "Rapidrame packer parametreleri: a=$a c=$c k=${k.size} p=${p.length}"
+        )
+
+        if (a < 2 || a > 62 || k.isEmpty()) return null
+
+        val alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+        fun encodeBase(value: Int): String {
+            if (value == 0) return "0"
+            var n = value
+            val out = StringBuilder()
+            while (n > 0) {
+                val digit = n % a
+                if (digit >= alphabet.length) return ""
+                out.append(alphabet[digit])
+                n /= a
             }
-            return if (n < k.size && k[n].isNotEmpty()) k[n] else word
+            return out.reverse().toString()
         }
 
-        return wordRegex.replace(p) { decodeWord(it.value) }
+        // Packer replacement: 0..c-1 değerlerini a tabanındaki token'lara çevirip
+        // k sözlüğündeki karşılıklarla değiştir.
+        var unpacked = p
+        for (index in c - 1 downTo 0) {
+            if (index >= k.size) continue
+            val token = encodeBase(index)
+            if (token.isEmpty()) continue
+            val replacement = k[index]
+            if (replacement.isEmpty()) continue
+
+            unpacked = unpacked.replace(
+                Regex("""\b${Regex.escape(token)}\b"""),
+                replacement
+            )
+        }
+
+        return unpacked
     }
 
     private fun tryDecodeParts(
@@ -668,6 +695,18 @@ class HDFilmCehennemi : MainAPI() {
                 "Rapidrame kendi packer sonucu: ${if (customUnpacked != null) "BULUNDU" else "YOK"}"
             )
 
+            if (customUnpacked != null) {
+                val unpackSourceIdx = customUnpacked.indexOf("sources:")
+                if (unpackSourceIdx >= 0) {
+                    val from = (unpackSourceIdx - 250).coerceAtLeast(0)
+                    val to = (unpackSourceIdx + 900).coerceAtMost(customUnpacked.length)
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame unpack sources snippet: ${customUnpacked.substring(from, to).replace("\n", " ").replace("\r", " ")}"
+                    )
+                }
+            }
+
             val unpacked = customUnpacked ?: try {
                 getAndUnpack(normalized)
             } catch (_: Exception) {
@@ -699,6 +738,34 @@ class HDFilmCehennemi : MainAPI() {
             }
 
             // Ana yöntem: Rapidrame'in packed JS içindeki dc_...( [parçalar] ) kaynağını çöz.
+            val variableUrlRegex = Regex(
+                """(?:var|let|const)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*[\"'](https://[^\"']+)[\"']""",
+                RegexOption.IGNORE_CASE
+            )
+
+            for (text in listOf(normalized, unpacked).distinct()) {
+                variableUrlRegex.findAll(text).forEach { m ->
+                    val name = m.groupValues[1]
+                    val url = m.groupValues[2]
+                    if (isValidVideoUrl(url)) {
+                        Log.d("HDFilmCehennemi", "Rapidrame acik degisken URL bulundu: $name=$url")
+                        callback.invoke(
+                            newExtractorLink(
+                                source = "HDFilmCehennemi",
+                                name = "Rapidrame",
+                                url = url,
+                                type = ExtractorLinkType.M3U8
+                            ) {
+                                referer = siteReferer
+                                quality = Qualities.P1080.value
+                                headers = mapOf("User-Agent" to userAgent)
+                            }
+                        )
+                        return true
+                    }
+                }
+            }
+
             val packedCandidates = listOf(normalized, unpacked)
             for (packedText in packedCandidates.distinct()) {
                 val packedUrl = decodePackedVideoUrl(packedText)
