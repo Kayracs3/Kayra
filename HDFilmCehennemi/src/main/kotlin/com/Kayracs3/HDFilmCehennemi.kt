@@ -267,7 +267,7 @@ class HDFilmCehennemi : MainAPI() {
         return true
     }
 
-    private suspend fun fetchLocalStream(
+        private suspend fun fetchLocalStream(
         playerUrl: String, 
         callback: (ExtractorLink) -> Unit
     ) {
@@ -287,14 +287,13 @@ class HDFilmCehennemi : MainAPI() {
             val match = m3u8Regex.find(responseText)
             
             if (match != null) {
-                // val yeniden atama hatasını kaldıran doğrudan atama:
-                var finalVideoUrl = match.groupValues.first()
-                
+                // Değişken atama hatasını kökten çözen 
+                // doğrudan çağrı mimarisi:
                 callback.invoke(
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
-                        url = finalVideoUrl
+                        url = match.groupValues.first()
                     ) {
                         this.referer = playerUrl
                         this.quality = Qualities.P1080.value
@@ -306,4 +305,4 @@ class HDFilmCehennemi : MainAPI() {
             Log.e("HDFilmCehennemi", "Hata: ${e.message}")
         }
     }
-}
+} // Sınıfı kapatan son süslü parantez
