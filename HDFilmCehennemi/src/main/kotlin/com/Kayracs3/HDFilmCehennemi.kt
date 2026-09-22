@@ -116,7 +116,6 @@ class HDFilmCehennemi : MainAPI() {
         }
         return searchResults
     }
-
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
             url, 
@@ -151,7 +150,7 @@ class HDFilmCehennemi : MainAPI() {
                 val actorName = it.selectFirst("strong")?.text() 
                     ?: return@mapNotNull null
                 val actorImg = it.selectFirst("img")?.attr("data-src")
-                Actor(actorName, actorImg)
+                ActorData(Actor(actorName, actorImg), null, null)
             }
 
         val recommendations = document
@@ -279,28 +278,31 @@ class HDFilmCehennemi : MainAPI() {
                 referer = "$mainUrl/", 
                 headers = headersMap
             ).text
+            val pattern = """["']?(https?://[^"']+""" +
+                    """(?:cdnimages|shop)[^"']+""" +
+                    """(?:master\.txt|master\.m3u8)""" +
+                    """[^"']*)["']"""
             
-            val pattern = """["']?(https?://[^"']+""" + """(?:cdnimages|shop)[^"']+""" + """(?:master.txt|master.m3u8)""" + """[^"']*)["']"""
             val m3u8Regex = Regex(pattern)
             val match = m3u8Regex.find(responseText)
+            
             if (match != null) {
-                // Listeyi String'e çeviren ve hata alan indeks düzeltildi:
-                val finalVideoUrl = match.groupValues[1]
+                val finalVideoUrl = match.groupValues.first()
+                
                 callback.invoke(
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
                         url = finalVideoUrl
-                        ) {
+                    ) {
                         this.referer = playerUrl
                         this.quality = Qualities.P1080.value
                         this.isM3u8 = true
-                        }
-                    )
-                }
-            } catch (e: Exception) {
-            Log.e("HDFilmCehennemi", "Hata: ${e.message}")
+                    }
+                )
             }
+        } catch (e: Exception) {
+            Log.e("HDFilmCehennemi", "Hata: ${e.message}")
         }
     }
-            
+}
