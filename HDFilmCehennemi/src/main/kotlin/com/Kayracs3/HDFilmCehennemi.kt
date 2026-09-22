@@ -412,12 +412,39 @@ class HDFilmCehennemi : MainAPI() {
         return characterUnmix(step3)
     }
 
+    private fun unpackHdfcJs(packed: String): String? {
+        val match = Regex(
+            """eval\(function\(p,a,c,k,e,d\)\{.*?\}\('(.+)',(\d+),(\d+),'([^']+)'""",
+            RegexOption.DOT_MATCHES_ALL
+        ).find(packed) ?: return null
+
+        val p = match.groupValues[1]
+        val a = match.groupValues[2].toIntOrNull() ?: return null
+        val k = match.groupValues[4].split('|')
+        val wordRegex = Regex("""\b\w+\b""")
+
+        fun decodeWord(word: String): String {
+            var n = 0
+            for (ch in word) {
+                n = when {
+                    ch.isDigit() -> n * a + ch.digitToInt()
+                    ch in 'a'..'z' -> n * a + (ch.code - 'a'.code + 10)
+                    ch in 'A'..'Z' -> n * a + (ch.code - 'A'.code + 36)
+                    else -> n
+                }
+            }
+            return if (n < k.size && k[n].isNotEmpty()) k[n] else word
+        }
+
+        return wordRegex.replace(p) { decodeWord(it.value) }
+    }
+
     private fun decodePackedVideoUrl(text: String): String? {
         val match = Regex(
             """dc_\w+\(\[([^\]]+)\]\)"""
         ).find(text) ?: return null
 
-        val parts = Regex("""[\"']([^\"']+)[\"']""")
+        val parts = Regex("""["']([^"']+)["']""")
             .findAll(match.groupValues[1])
             .map { it.groupValues[1] }
             .toList()
@@ -548,7 +575,19 @@ class HDFilmCehennemi : MainAPI() {
                 }
             }
 
-            val unpacked = try {
+            val customUnpacked = try {
+                unpackHdfcJs(normalized)
+            } catch (e: Exception) {
+                Log.d("HDFilmCehennemi", "Rapidrame kendi unpack hatasi: ${e.message}")
+                null
+            }
+
+            Log.d(
+                "HDFilmCehennemi",
+                "Rapidrame kendi packer sonucu: ${if (customUnpacked != null) "BULUNDU" else "YOK"}"
+            )
+
+            val unpacked = customUnpacked ?: try {
                 getAndUnpack(normalized)
             } catch (_: Exception) {
                 normalized
@@ -596,6 +635,58 @@ class HDFilmCehennemi : MainAPI() {
                         }
                     )
                     return true
+                }
+            }
+
+            // Ek tanı/fallback: fonksiyon adı dc_ ile değişmişse bile array içeriğini yakala.
+            val genericPacked = Regex(
+                """[A-Za-z_$][\w$]*\(\[([^\]]+)\]\)"""
+            ).find(unpacked)
+
+            if (genericPacked != null) {
+                val parts = Regex("""["']([^"']+)["']""")
+                    .findAll(genericPacked.groupValues[1])
+                    .map { it.groupValues[1] }
+                    .toList()
+
+                if (parts.isNotEmpty()) {
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame generic packed parca sayisi: ${parts.size}"
+                    )
+
+                    val value = parts.joinToString("")
+                    val decoders = listOf(
+                        "v3" to ::decodeVideoVariant3,
+                        "v1" to ::decodeVideoVariant1,
+                        "v2" to ::decodeVideoVariant2
+                    )
+
+                    for ((name, decoder) in decoders) {
+                        try {
+                            val decoded = decoder(value)
+                            if (isValidVideoUrl(decoded)) {
+                                Log.d(
+                                    "HDFilmCehennemi",
+                                    "Rapidrame generic URL bulundu ($name): $decoded"
+                                )
+                                callback.invoke(
+                                    newExtractorLink(
+                                        source = "HDFilmCehennemi",
+                                        name = "Rapidrame",
+                                        url = decoded,
+                                        type = ExtractorLinkType.M3U8
+                                    ) {
+                                        referer = siteReferer
+                                        quality = Qualities.P1080.value
+                                        headers = mapOf("User-Agent" to userAgent)
+                                    }
+                                )
+                                return true
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }
                 }
             }
 
