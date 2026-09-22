@@ -176,7 +176,7 @@ class HDFilmCehennemi : MainAPI() {
 
         val trailerBtn = document
             .selectFirst("div.post-info-trailer button")
-        val trailer = trailerBtn?.attr("data-modal")
+        val trailerUrl = trailerBtn?.attr("data-modal")
             ?.substringAfter("trailer/")
             ?.let { "https://youtube.com" }
 
@@ -212,8 +212,8 @@ class HDFilmCehennemi : MainAPI() {
                 this.plot = description
                 this.tags = tags
                 this.recommendations = recommendations
-                addActors(actors)
-                addTrailer(trailer)
+                this.actors = actors
+                this.trailer = trailerUrl
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, url) {
@@ -222,8 +222,8 @@ class HDFilmCehennemi : MainAPI() {
                 this.plot = description
                 this.tags = tags
                 this.recommendations = recommendations
-                addActors(actors)
-                addTrailer(trailer)
+                this.actors = actors
+                this.trailer = trailerUrl
             }
         }
     }
@@ -281,21 +281,4 @@ class HDFilmCehennemi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-val response = app.get
-            (playerUrl,
-             referer = "$mainUrl/",
-             headers = mapOf("User-Agent" to userAgent)).text
-            val pattern = """["']?(https?://[^"']+""" +"""(?:cdnimages|shop)[^"']+""" +"""(?:master.txt|master.m3u8)""" +"""[^"']*)["']"""
-            val m3u8Regex = Regex(pattern)val match = m3u8Regex.find(response)
-            if (match != null) {val finalVideoUrl = match.groupValues[1]
-                callback.invoke(newExtractorLink(source = "HDFilmCehennemi (CDN)",name = "HQ Kalite (Yerel)",url = finalVideoUrl
-                                                ) {
-                    this.referer = playerUrlthis.quality = Qualities.P1080.valuethis.isM3u8 = true
-                }
-                               )
-            }
-        } catch (e: Exception) {Log.e("HDFilmCehennemi", "Hata: ${e.message}"
-                                     )
-        }
-    }
-}
+val headersMap = mapOf("User-Agent" to userAgent)val response = app.get(playerUrl,referer = "$mainUrl/",headers = headersMap).textval pattern = """["']?(https?://[^"']+""" +"""(?:cdnimages|shop)[^"']+""" +"""(?:master.txt|master.m3u8)""" +"""[^"']*)["']"""val m3u8Regex = Regex(pattern)val match = m3u8Regex.find(response)if (match != null) {val finalVideoUrl = match.groupValues[1]callback.invoke(newExtractorLink(source = "HDFilmCehennemi (CDN)",name = "HQ Kalite (Yerel)",url = finalVideoUrl) {this.referer = playerUrlthis.quality = Qualities.P1080.valuethis.isM3u8 = true})}} catch (e: Exception) {Log.e("HDFilmCehennemi", "Hata: ${e.message}")}}}
