@@ -1,4 +1,3 @@
-```kotlin
 package com.Kayracs3
 
 import android.util.Log
@@ -40,7 +39,7 @@ class HDFilmCehennemi : MainAPI() {
         "$mainUrl/tur/aile-filmleri-izleyin-7" to "Aile Filmleri",
         "$mainUrl/tur/aksiyon-filmleri-izleyin-8" to "Aksiyon Filmleri",
         "$mainUrl/tur/animasyon-filmlerini-izleyin-5" to "Animasyon",
-        "$mainUrl/tur/belgesel-filmlerini-izle-2" to "Belgesel",
+        "$mainUrl/tur/belgesel-filmlerini-izle-2" to "Belgesel Filmleri",
         "$mainUrl/tur/bilim-kurgu-filmlerini-izleyin-5" to "Bilim Kurgu",
         "$mainUrl/tur/komedi-filmlerini-izleyin-2" to "Komedi Filmleri",
         "$mainUrl/tur/korku-filmlerini-izle-9/" to "Korku Filmleri",
@@ -352,4 +351,3 @@ class HDFilmCehennemi : MainAPI() {
         }
     }
 }
-```
