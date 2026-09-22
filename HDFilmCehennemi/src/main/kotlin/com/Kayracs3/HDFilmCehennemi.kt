@@ -273,81 +273,71 @@ class HDFilmCehennemi : MainAPI() {
             headers = mapOf("User-Agent" to userAgent)
         ).document
 
+        var extractorMatched = false
+
         val elements = document.select("iframe")
 
+        Log.d(
+            "HDFilmCehennemi",
+            "Bulunan iframe sayisi: ${elements.size}"
+        )
+
         for (element in elements) {
-            val src = element.attr("src").ifEmpty {
-                element.attr("data-src").ifEmpty {
-                    element.attr("data-frame")
-                }
+            val rawSrc = sequenceOf(
+                element.attr("src"),
+                element.attr("data-src"),
+                element.attr("data-frame")
+            ).firstOrNull { it.isNotBlank() }
+
+            if (rawSrc.isNullOrBlank()) {
+                Log.d("HDFilmCehennemi", "Iframe src bulunamadi")
+                continue
             }
 
-            if (src.isNotEmpty()) {
-                val fixedUrl = fixUrl(src)
+            val fixedUrl = fixUrl(rawSrc)
 
-                if (
-                    fixedUrl.contains("hdfilmcehennemi") ||
-                    fixedUrl.contains("moly") ||
-                    fixedUrl.contains("cdnimages")
-                ) {
-                    extractHdStream(fixedUrl, callback)
+            Log.d(
+                "HDFilmCehennemi",
+                "Player URL: $fixedUrl"
+            )
+
+            // Oyuncu URL'sini CloudStream'un mevcut extractor zincirine bırak.
+            // Ozellikle Vidmoly/Rapidrame gibi alternatiflerde siteye ozel
+            // bir m3u8 deseni varsaymak yerine ilgili extractor kullanilir.
+            try {
+                val matched = loadExtractor(
+                    fixedUrl,
+                    data,
+                    subtitleCallback,
+                    callback
+                )
+
+                if (matched) {
+                    extractorMatched = true
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Extractor eslesti: $fixedUrl"
+                    )
                 } else {
-                    loadExtractor(
-                        fixedUrl,
-                        data,
-                        subtitleCallback,
-                        callback
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Extractor bulunamadi: $fixedUrl"
                     )
                 }
-            }
-        }
-
-        return true
-    }
-
-    private suspend fun extractHdStream(
-        playerUrl: String,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        try {
-            val responseText = app.get(
-                playerUrl,
-                referer = "$mainUrl/",
-                headers = mapOf("User-Agent" to userAgent)
-            ).text
-
-            val pattern = """["']?(https?://[^"']+""" +
-                    """(?:cdnimages|shop)[^"']+""" +
-                    """(?:master\.txt|master\.m3u8)""" +
-                    """[^"']*)["']"""
-
-            val foundMatch = Regex(pattern)
-                .find(responseText)
-                ?.groupValues
-                ?.first()
-
-            if (foundMatch != null) {
-                val finalUrl = foundMatch
-                    .replace("\"", "")
-                    .replace("'", "")
-
-                callback.invoke(
-                    newExtractorLink(
-                        source = "HDFilmCehennemi (CDN)",
-                        name = "HQ Kalite (Yerel)",
-                        url = finalUrl,
-                        type = ExtractorLinkType.M3U8
-                    ) {
-                        referer = playerUrl
-                        quality = Qualities.P1080.value
-                    }
+            } catch (e: Exception) {
+                Log.e(
+                    "HDFilmCehennemi",
+                    "Extractor hatasi ($fixedUrl): ${e.message}",
+                    e
                 )
             }
-        } catch (e: Exception) {
-            Log.e(
-                "HDFilmCehennemi",
-                "Hata: ${e.message}"
-            )
         }
+
+        Log.d(
+            "HDFilmCehennemi",
+            "loadLinks tamamlandi. extractorMatched=$extractorMatched"
+        )
+
+        return extractorMatched
     }
 }
