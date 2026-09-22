@@ -91,22 +91,22 @@ class HDFilmCehennemi : MainAPI() {
             )
         ).parsedSafe<Results>() ?: return emptyList()
         
-        // Değişken çakışmalarını ve val atama hatalarını sıfırlayan mapNotNull mimarisi
         return response.results.mapNotNull { resultHtml ->
             val document = Jsoup.parse(resultHtml)
-            val titleText = document.selectFirst("h4.title")?.text() ?: return@mapNotNull null
-            val hrefText = fixUrlNull(document.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
+            val titleText = document.selectFirst("h4.title")?.text() 
+                ?: return@mapNotNull null
+            val hrefText = fixUrlNull(
+                document.selectFirst("a")?.attr("href")
+            ) ?: return@mapNotNull null
             
             val imgEl = document.selectFirst("img")
-            val srcText = fixUrlNull(imgEl?.attr("src")) ?: fixUrlNull(imgEl?.attr("data-src"))
+            val srcText = fixUrlNull(imgEl?.attr("src")) 
+                ?: fixUrlNull(imgEl?.attr("data-src"))
 
             newMovieSearchResponse(titleText, hrefText, TvType.Movie) { 
                 this.posterUrl = srcText?.replace("/thumb/", "/list/") 
             }
         }
-    }
-
-        return searchResults
     }
         override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
@@ -291,3 +291,4 @@ class HDFilmCehennemi : MainAPI() {
         }
     }
 }
+
