@@ -262,7 +262,7 @@ class HDFilmCehennemi : MainAPI() {
                     .replace("'", "")
                 
                 callback.invoke(
-                    ExtractorLink(
+                    newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
                         url = finalUrl,
