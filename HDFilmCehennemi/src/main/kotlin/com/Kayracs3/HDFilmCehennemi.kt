@@ -9,13 +9,22 @@ import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
+// Arama sonuçlarının JSON formatından çözülebilmesi için eksik olan veri sınıfı (Data Class)
+data class Results(
+    @JsonProperty("results") val results: List<String>
+)
+
 class HDFilmCehennemi : MainAPI() {
-    override var mainUrl               = "https://www.hdfilmcehennemi.nl"
+    override var mainUrl               = "https://hdfilmcehennemi.nl"
     override var name                  = "HDFilmCehennemi"
     override val hasMainPage           = true
     override var lang                  = "tr"
     override val hasQuickSearch        = true
     override val supportedTypes        = setOf(TvType.Movie, TvType.TvSeries)
+
+    override val baseHeaders = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
 
     override val mainPage = mainPageOf(
         mainUrl to "Yeni Eklenen Filmler",
@@ -36,9 +45,7 @@ class HDFilmCehennemi : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = app.get(request.data).document
-
         val home: List<SearchResponse> = document.select("div.section-content a.poster").mapNotNull { it.toSearchResult() }
-
         return newHomePageResponse(request.name, home)
     }
 
@@ -57,6 +64,7 @@ class HDFilmCehennemi : MainAPI() {
             "${mainUrl}/search?q=${query}",
             headers = mapOf("X-Requested-With" to "fetch")
         ).parsedSafe<Results>() ?: return emptyList()
+        
         val searchResults = mutableListOf<SearchResponse>()
 
         response.results.forEach { resultHtml ->
@@ -101,7 +109,7 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         return if (tvType == TvType.TvSeries) {
-            val trailer  = document.selectFirst("div.post-info-trailer button")?.attr("data-modal")?.substringAfter("trailer/")?.let { "https://www.youtube.com/embed/$it" }
+            val trailer  = document.selectFirst("div.post-info-trailer button")?.attr("data-modal")?.substringAfter("trailer/")?.let { "https://youtube.com" }
             val episodes = document.select("div.seasons-tab-content a").mapNotNull {
                 val epName    = it.selectFirst("h4")?.text()?.trim() ?: return@mapNotNull null
                 val epHref    = fixUrlNull(it.attr("href")) ?: return@mapNotNull null
@@ -125,7 +133,7 @@ class HDFilmCehennemi : MainAPI() {
                 addTrailer(trailer)
             }
         } else {
-            val trailer = document.selectFirst("div.post-info-trailer button")?.attr("data-modal")?.substringAfter("trailer/")?.let { "https://www.youtube.com/embed/$it" }
+            val trailer = document.selectFirst("div.post-info-trailer button")?.attr("data-modal")?.substringAfter("trailer/")?.let { "https://youtube.com" }
 
             newMovieLoadResponse(title, url, TvType.Movie, url) {
                 this.posterUrl       = poster
@@ -139,45 +147,14 @@ class HDFilmCehennemi : MainAPI() {
         }
     }
 
-    private suspend fun invokeLocalSource(
-        source: String,
-        url: String,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        val script    = app.get(url, referer = "${mainUrl}/").document.select("script").find { it.data().contains("sources:") }?.data() ?: return
-        val videoData = getAndUnpack(script).substringAfter("file_link=\"").substringBefore("\";")
-        val subData   = script.substringAfter("tracks: [").substringBefore("]")
-
-        callback.invoke(
-            newExtractorLink(
-                source  = source,
-                name    = source,
-                url     = base64Decode(videoData),
-                type    = INFER_TYPE
-            ) {
-                this.referer = "${mainUrl}/"
-                this.quality = Qualities.Unknown.value
-            }
-        )
-
-        AppUtils.tryParseJson<List<SubSource>>("[${subData}]")?.filter { it.kind == "captions" }?.forEach { sub ->
-            subtitleCallback.invoke(
-                SubtitleFile(sub.label ?: "", fixUrl(sub.file ?: ""))
-            )
-        }
-    }
-
-       override suspend fun loadLinks(
+    override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        // Film veya bölüm sayfasının HTML dökümanını alıyoruz
         val document = app.get(data).document
         
-        // Sitedeki tüm player sekmelerini, butonları veya iframe yapılarını tarıyoruz
         val playerElements = document.select("iframe, div[data-frame], [data-embed], nav.player-tabs a, div.player-tab-sources button")
         
         playerElements.forEach { element ->
@@ -192,38 +169,34 @@ class HDFilmCehennemi : MainAPI() {
             if (targetUrl.isNotEmpty()) {
                 targetUrl = fixUrl(targetUrl)
                 
-                // Eğer harici bir sağlayıcıysa (Vidmoly, Rapidrame vb.) Cloudstream'in kendi ayıklayıcılarına gönder
                 if (!targetUrl.contains("hdfilmcehennemi") && !targetUrl.contains("moly") && !targetUrl.contains("cdnimages")) {
                     loadExtractor(targetUrl, data, subtitleCallback, callback)
                 } else {
-                    // Sitenin kendi gizli .txt / .m3u8 sunucusu ise içeriği kazı
-                    fetchLocalStream(targetUrl, data, callback)
+                    fetchLocalStream(targetUrl, callback)
                 }
             }
         }
         return true
     }
 
-    private suspend fun fetchLocalStream(playerUrl: String, pageUrl: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun fetchLocalStream(playerUrl: String, callback: (ExtractorLink) -> Unit) {
         try {
-            // Player sayfasına istek atarken sitenin ana adresini referer olarak gösteriyoruz
             val response = app.get(playerUrl, referer = "$mainUrl/").text
-            
-            // Sizin yakaladığınız cdnimages sunucularını ve master.txt / master.m3u8 yapılarını bulan gelişmiş Regex
             val m3u8Regex = Regex("""["']?(https?://[^"']+(?:cdnimages|shop)[^"']+(?:master\.txt|master\.m3u8)[^"']*)["']""")
             val match = m3u8Regex.find(response)
             
             if (match != null) {
                 val finalVideoUrl = match.groupValues[1]
                 
+                // Deprecated (Eski) kurucu hatasını düzeltmek için yeni standart fonksiyon mimarisi:
                 callback.invoke(
                     ExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
-                        name = "FHD Kalite (Yerel)",
+                        name = "HQ Kalite (Yerel)",
                         url = finalVideoUrl,
-                        referer = playerUrl, // Güvenlik duvarını aşmak için videonun istendiği player URL'si referer olmalı
+                        referer = playerUrl,
                         quality = Qualities.P1080.value,
-                        isM3u8 = true // .txt uzantılı olsa bile Cloudstream'e bunun bir M3U8 yayını olduğunu söylüyoruz
+                        isM3u8 = true
                     )
                 )
             }
@@ -231,3 +204,4 @@ class HDFilmCehennemi : MainAPI() {
             Log.e("HDFilmCehennemi", "Video bağlantısı çözümlenirken hata oluştu: ${e.message}")
         }
     }
+}
