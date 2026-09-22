@@ -108,7 +108,7 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
     }
-            override suspend fun load(url: String): LoadResponse? {
+                override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
             url, 
             headers = mapOf("User-Agent" to userAgent)
@@ -118,50 +118,88 @@ class HDFilmCehennemi : MainAPI() {
 
         return if (isTvSeries) {
             newTvSeriesLoadResponse(
-                title = document.selectFirst("h1.section-title")?.text()?.substringBefore(" izle") ?: "",
+                name = document.selectFirst("h1.section-title")?.text()
+                    ?.substringBefore(" izle") ?: "",
                 url = url,
                 type = TvType.TvSeries,
-                episodes = document.select("div.seasons-tab-content a").mapNotNull {
-                    val epName = it.selectFirst("h4")?.text()?.trim() ?: return@mapNotNull null
-                    newEpisode(fixUrlNull(it.attr("href")) ?: "") {
-                        this.name = epName
-                        this.season = Regex("""(\d+)\. ?Sezon""").find(epName)?.groupValues?.get(1)?.toIntOrNull() ?: 1
-                        this.episode = Regex("""(\d+)\. ?Bölüm""").find(epName)?.groupValues?.get(1)?.toIntOrNull()
+                episodes = document.select("div.seasons-tab-content a")
+                    .mapNotNull {
+                        val epName = it.selectFirst("h4")?.text()?.trim() 
+                            ?: return@mapNotNull null
+                        newEpisode(fixUrlNull(it.attr("href")) ?: "") {
+                            this.name = epName
+                            this.season = Regex("""(\d+)\. ?Sezon""")
+                                .find(epName)?.groupValues?.get(1)
+                                ?.toIntOrNull() ?: 1
+                            this.episode = Regex("""(\d+)\. ?Bölüm""")
+                                .find(epName)?.groupValues?.get(1)
+                                ?.toIntOrNull()
+                        }
                     }
-                }
             ) {
-                this.posterUrl = fixUrlNull(document.select("aside.post-info-poster img.lazyload").lastOrNull()?.attr("data-src"))
-                this.year = document.selectFirst("div.post-info-year-country a")?.text()?.trim()?.toIntOrNull()
-                this.plot = document.selectFirst("article.post-info-content > p")?.text()?.trim()
-                this.tags = document.select("div.post-info-genres a").map { it.text() }
-                this.actors = document.select("div.post-info-cast a").mapNotNull {
-                    ActorData(Actor(it.selectFirst("strong")?.text() ?: return@mapNotNull null, it.selectFirst("img")?.attr("data-src")), null, null)
-                }
-                this.recommendations = document.select("div.section-slider-container div.slider-slide").mapNotNull {
-                    newTvSeriesSearchResponse(it.selectFirst("a")?.attr("title") ?: return@mapNotNull null, fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null, TvType.TvSeries) {
-                        this.posterUrl = fixUrlNull(it.selectFirst("img")?.attr("data-src")) ?: fixUrlNull(it.selectFirst("img")?.attr("src"))
+                this.posterUrl = fixUrlNull(document
+                    .select("aside.post-info-poster img.lazyload")
+                    .lastOrNull()?.attr("data-src"))
+                this.year = document.selectFirst("div.post-info-year-country a")
+                    ?.text()?.trim()?.toIntOrNull()
+                this.plot = document.selectFirst("article.post-info-content > p")
+                    ?.text()?.trim()
+                this.tags = document.select("div.post-info-genres a")
+                    .map { it.text() }
+                this.actors = document.select("div.post-info-cast a")
+                    .mapNotNull {
+                        ActorData(Actor(it.selectFirst("strong")?.text() 
+                            ?: return@mapNotNull null, it.selectFirst("img")
+                            ?.attr("data-src")), null, null)
                     }
-                }
+                this.recommendations = document
+                    .select("div.section-slider-container div.slider-slide")
+                    .mapNotNull {
+                        newTvSeriesSearchResponse(it.selectFirst("a")
+                            ?.attr("title") ?: return@mapNotNull null, 
+                            fixUrlNull(it.selectFirst("a")?.attr("href")) 
+                            ?: return@mapNotNull null, TvType.TvSeries) {
+                            this.posterUrl = fixUrlNull(it.selectFirst("img")
+                                ?.attr("data-src")) ?: fixUrlNull(it
+                                ?.selectFirst("img")?.attr("src"))
+                        }
+                    }
             }
         } else {
             newMovieLoadResponse(
-                name = document.selectFirst("h1.section-title")?.text()?.substringBefore(" izle") ?: "",
+                name = document.selectFirst("h1.section-title")?.text()
+                    ?.substringBefore(" izle") ?: "",
                 url = url,
                 type = TvType.Movie,
                 dataUrl = url
             ) {
-                this.posterUrl = fixUrlNull(document.select("aside.post-info-poster img.lazyload").lastOrNull()?.attr("data-src"))
-                this.year = document.selectFirst("div.post-info-year-country a")?.text()?.trim()?.toIntOrNull()
-                this.plot = document.selectFirst("article.post-info-content > p")?.text()?.trim()
-                this.tags = document.select("div.post-info-genres a").map { it.text() }
-                this.actors = document.select("div.post-info-cast a").mapNotNull {
-                    ActorData(Actor(it.selectFirst("strong")?.text() ?: return@mapNotNull null, it.selectFirst("img")?.attr("data-src")), null, null)
-                }
-                this.recommendations = document.select("div.section-slider-container div.slider-slide").mapNotNull {
-                    newTvSeriesSearchResponse(it.selectFirst("a")?.attr("title") ?: return@mapNotNull null, fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null, TvType.TvSeries) {
-                        this.posterUrl = fixUrlNull(it.selectFirst("img")?.attr("data-src")) ?: fixUrlNull(it.selectFirst("img")?.attr("src"))
+                this.posterUrl = fixUrlNull(document
+                    .select("aside.post-info-poster img.lazyload")
+                    .lastOrNull()?.attr("data-src"))
+                this.year = document.selectFirst("div.post-info-year-country a")
+                    ?.text()?.trim()?.toIntOrNull()
+                this.plot = document.selectFirst("article.post-info-content > p")
+                    ?.text()?.trim()
+                this.tags = document.select("div.post-info-genres a")
+                    .map { it.text() }
+                this.actors = document.select("div.post-info-cast a")
+                    .mapNotNull {
+                        ActorData(Actor(it.selectFirst("strong")?.text() 
+                            ?: return@mapNotNull null, it.selectFirst("img")
+                            ?.attr("data-src")), null, null)
                     }
-                }
+                this.recommendations = document
+                    .select("div.section-slider-container div.slider-slide")
+                    .mapNotNull {
+                        newTvSeriesSearchResponse(it.selectFirst("a")
+                            ?.attr("title") ?: return@mapNotNull null, 
+                            fixUrlNull(it.selectFirst("a")?.attr("href")) 
+                            ?: return@mapNotNull null, TvType.TvSeries) {
+                            this.posterUrl = fixUrlNull(it.selectFirst("img")
+                                ?.attr("data-src")) ?: fixUrlNull(it
+                                ?.selectFirst("img")?.attr("src"))
+                        }
+                    }
             }
         }
     }
@@ -177,33 +215,23 @@ class HDFilmCehennemi : MainAPI() {
             headers = mapOf("User-Agent" to userAgent)
         ).document
         
-        val selectors = "iframe, div[data-frame], [data-embed], " +
-                "nav.player-tabs a, div.player-tab-sources button"
-                
-        document.select(selectors).forEach { element ->
-            element.attr("src").ifEmpty { 
+        // Önbellek çakışmasını aşmak için düz Java/Kotlin for döngüsü mimarisi
+        val elements = document.select("iframe")
+        for (element in elements) {
+            val src = element.attr("src").ifEmpty { 
                 element.attr("data-src").ifEmpty { 
-                    element.attr("data-frame").ifEmpty { 
-                        element.attr("data-embed").ifEmpty { 
-                            element.attr("href") ?: "" 
-                        } 
-                    } 
+                    element.attr("data-frame") 
                 } 
-            }.takeIf { it.isNotEmpty() }?.let { rawSrc ->
-                fixUrl(rawSrc).let { fixedUrl ->
-                    if (fixedUrl.contains("hdfilmcehennemi") || 
-                        fixedUrl.contains("moly") || 
-                        fixedUrl.contains("cdnimages")
-                    ) {
-                        extractHdStream(fixedUrl, callback)
-                    } else {
-                        loadExtractor(
-                            fixedUrl, 
-                            data, 
-                            subtitleCallback, 
-                            callback
-                        )
-                    }
+            }
+            if (src.isNotEmpty()) {
+                val fixedUrl = fixUrl(src)
+                if (fixedUrl.contains("hdfilmcehennemi") || 
+                    fixedUrl.contains("moly") || 
+                    fixedUrl.contains("cdnimages")
+                ) {
+                    extractHdStream(fixedUrl, callback)
+                } else {
+                    loadExtractor(fixedUrl, data, subtitleCallback, callback)
                 }
             }
         }
