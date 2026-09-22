@@ -412,55 +412,190 @@ class HDFilmCehennemi : MainAPI() {
         return characterUnmix(step3)
     }
 
-    private fun unpackHdfcJs(packed: String): String? {
-        // Dean-Edwards/P.A.C.K.E.R biçimini mümkün olduğunca kesin yakala.
-        // Önceki sürümdeki greedy regex yanlış tırnak çiftini seçebiliyordu.
-        val match = Regex(
-            """eval\(function\(p,a,c,k,e,d\)\{.*?\}\('([^']*)',(\d+),(\d+),'([^']*)'\.split\('\|'\)""",
-            RegexOption.DOT_MATCHES_ALL
-        ).find(packed) ?: return null
+    private fun readJsQuotedString(text: String, start: Int): Pair<String, Int>? {
+        if (start >= text.length) return null
+        val quote = text[start]
+        if (quote != '\'' && quote != '"') return null
 
-        val p = match.groupValues[1]
-        val a = match.groupValues[2].toIntOrNull() ?: return null
-        val c = match.groupValues[3].toIntOrNull() ?: return null
-        val k = match.groupValues[4].split('|')
+        val out = StringBuilder()
+        var i = start + 1
+
+        while (i < text.length) {
+            val c = text[i]
+            if (c == quote) return out.toString() to (i + 1)
+
+            if (c == '\\' && i + 1 < text.length) {
+                val n = text[i + 1]
+                when (n) {
+                    'n' -> out.append('\n')
+                    'r' -> out.append('\r')
+                    't' -> out.append('\t')
+                    'b' -> out.append('\b')
+                    'f' -> out.append('\u000C')
+                    'v' -> out.append('\u000B')
+                    '0' -> out.append('\u0000')
+                    '\\' -> out.append('\\')
+                    '\'' -> out.append('\'')
+                    '"' -> out.append('"')
+                    'x' -> {
+                        if (i + 3 < text.length) {
+                            val hex = text.substring(i + 2, i + 4)
+                            hex.toIntOrNull(16)?.let { out.append(it.toChar()) }
+                            i += 4
+                            continue
+                        }
+                        out.append(n)
+                    }
+                    'u' -> {
+                        if (i + 5 < text.length) {
+                            val hex = text.substring(i + 2, i + 6)
+                            hex.toIntOrNull(16)?.let { out.append(it.toChar()) }
+                            i += 6
+                            continue
+                        }
+                        out.append(n)
+                    }
+                    else -> out.append(n)
+                }
+                i += 2
+                continue
+            }
+
+            out.append(c)
+            i++
+        }
+
+        return null
+    }
+
+    private fun skipJsSpace(text: String, start: Int): Int {
+        var i = start
+        while (i < text.length && text[i].isWhitespace()) i++
+        return i
+    }
+
+    private fun readJsNumber(text: String, start: Int): Pair<Int, Int>? {
+        var i = skipJsSpace(text, start)
+        val begin = i
+        while (i < text.length && text[i].isDigit()) i++
+        if (i == begin) return null
+        return text.substring(begin, i).toIntOrNull()?.let { it to i }
+    }
+
+    private data class PackerArgs(
+        val p: String,
+        val a: Int,
+        val c: Int,
+        val k: List<String>
+    )
+
+    private fun findPackerArgs(text: String): PackerArgs? {
+        val markerMatch = Regex(
+            """eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\)"""
+        ).find(text) ?: return null
+
+        val markerIndex = markerMatch.range.first
+
+        // P.A.C.K.E.R'ın gövdesinden sonra gelen `(` açılışını bul.
+        val bodyCall = Regex("""\}\s*\(""")
+            .find(text, markerMatch.range.last + 1) ?: return null
+        val callStart = bodyCall.range.last
+        var i = skipJsSpace(text, callStart + 1)
+
+        val pArg = readJsQuotedString(text, i) ?: return null
+        val p = pArg.first
+        i = skipJsSpace(text, pArg.second)
+        if (i >= text.length || text[i] != ',') return null
+        i = skipJsSpace(text, i + 1)
+
+        val aArg = readJsNumber(text, i) ?: return null
+        val a = aArg.first
+        i = skipJsSpace(text, aArg.second)
+        if (i >= text.length || text[i] != ',') return null
+        i = skipJsSpace(text, i + 1)
+
+        val cArg = readJsNumber(text, i) ?: return null
+        val c = cArg.first
+        i = skipJsSpace(text, cArg.second)
+        if (i >= text.length || text[i] != ',') return null
+        i = skipJsSpace(text, i + 1)
+
+        val kArg = readJsQuotedString(text, i) ?: return null
+        val kRaw = kArg.first
+
+        // Normal Packer biçimi: "...".split("|") veya '...'.split('|')
+        i = skipJsSpace(text, kArg.second)
+        if (!text.startsWith(".split", i)) return null
+        val pipeIndex = text.indexOf('|', i)
+        if (pipeIndex < 0) return null
+
+        return PackerArgs(
+            p = p,
+            a = a,
+            c = c,
+            k = kRaw.split('|')
+        )
+    }
+
+    private fun packerEncode(value: Int, radix: Int): String {
+        if (value == 0) return "0"
+        if (radix < 2) return ""
+
+        fun digitToString(digit: Int): String {
+            return if (digit > 35) {
+                (digit + 29).toChar().toString()
+            } else {
+                digit.toString(36)
+            }
+        }
+
+        var n = value
+        val out = StringBuilder()
+        while (n > 0) {
+            val digit = n % radix
+            out.append(digitToString(digit))
+            n /= radix
+        }
+        return out.reverse().toString()
+    }
+
+    private fun unpackHdfcJs(packed: String): String? {
+        val args = findPackerArgs(packed) ?: return null
 
         Log.d(
             "HDFilmCehennemi",
-            "Rapidrame packer parametreleri: a=$a c=$c k=${k.size} p=${p.length}"
+            "Rapidrame packer parametreleri: a=${args.a} c=${args.c} k=${args.k.size} p=${args.p.length}"
         )
 
-        if (a < 2 || a > 62 || k.isEmpty()) return null
+        if (args.a < 2 || args.a > 62 || args.c <= 0 || args.k.isEmpty()) return null
 
-        val alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        // Dean Edwards P.A.C.K.E.R: token'ları radix'e göre üret, sözlükten değiştir.
+        val wordRegex = Regex("""\b\w+\b""")
+        var unpacked = args.p
 
-        fun encodeBase(value: Int): String {
-            if (value == 0) return "0"
-            var n = value
-            val out = StringBuilder()
-            while (n > 0) {
-                val digit = n % a
-                if (digit >= alphabet.length) return ""
-                out.append(alphabet[digit])
-                n /= a
+        unpacked = wordRegex.replace(unpacked) { match ->
+            val token = match.value
+            var value = 0
+
+            for (ch in token) {
+                val digit = when {
+                    ch in '0'..'9' -> ch - '0'
+                    ch in 'a'..'z' -> ch.code - 'a'.code + 10
+                    ch in 'A'..'Z' -> ch.code - 'A'.code + 36
+                    else -> -1
+                }
+
+                if (digit < 0 || digit >= args.a) {
+                    return@replace token
+                }
+                value = value * args.a + digit
             }
-            return out.reverse().toString()
-        }
 
-        // Packer replacement: 0..c-1 değerlerini a tabanındaki token'lara çevirip
-        // k sözlüğündeki karşılıklarla değiştir.
-        var unpacked = p
-        for (index in c - 1 downTo 0) {
-            if (index >= k.size) continue
-            val token = encodeBase(index)
-            if (token.isEmpty()) continue
-            val replacement = k[index]
-            if (replacement.isEmpty()) continue
-
-            unpacked = unpacked.replace(
-                Regex("""\b${Regex.escape(token)}\b"""),
-                replacement
-            )
+            if (value >= args.c || value >= args.k.size) {
+                token
+            } else {
+                args.k[value].ifEmpty { token }
+            }
         }
 
         return unpacked
@@ -683,6 +818,19 @@ class HDFilmCehennemi : MainAPI() {
                 }
             }
 
+            val packerMarker = normalized.indexOf("eval(function(p,a,c,k,e,d)")
+            Log.d(
+                "HDFilmCehennemi",
+                "Rapidrame Packer marker: ${if (packerMarker >= 0) "VAR ($packerMarker)" else "YOK"}"
+            )
+            if (packerMarker >= 0) {
+                val to = (packerMarker + 1400).coerceAtMost(normalized.length)
+                Log.d(
+                    "HDFilmCehennemi",
+                    "Rapidrame Packer snippet: ${normalized.substring(packerMarker, to).replace("\n", " ").replace("\r", " ")}"
+                )
+            }
+
             val customUnpacked = try {
                 unpackHdfcJs(normalized)
             } catch (e: Exception) {
@@ -762,6 +910,49 @@ class HDFilmCehennemi : MainAPI() {
                             }
                         )
                         return true
+                    }
+                }
+            }
+
+            // Kaynak değişkeni çoğu zaman şu yapıda geliyor:
+            // var i35q = dc_xxx(["...", "..."])
+            // Fonksiyon adı değişse bile atamayı yakala.
+            val variablePackedRegex = Regex(
+                """(?:(?:var|let|const)\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\(\s*\[((?:[^\]"']|"[^"']*"|'[^']*')*)\]\s*\)""",
+                RegexOption.DOT_MATCHES_ALL
+            )
+
+            for (text in listOf(normalized, unpacked).distinct()) {
+                variablePackedRegex.findAll(text).forEach { match ->
+                    val variableName = match.groupValues[1]
+                    val functionName = match.groupValues[2]
+                    val parts = Regex("""[\"']([^\"']+)[\"']""")
+                        .findAll(match.groupValues[3])
+                        .map { it.groupValues[1] }
+                        .toList()
+
+                    if (parts.size >= 2) {
+                        Log.d(
+                            "HDFilmCehennemi",
+                            "Rapidrame degisken packed: $variableName=$functionName(parts=${parts.size})"
+                        )
+
+                        val decoded = tryDecodeParts(parts, "assign/$variableName/$functionName")
+                        if (decoded != null) {
+                            callback.invoke(
+                                newExtractorLink(
+                                    source = "HDFilmCehennemi",
+                                    name = "Rapidrame",
+                                    url = decoded,
+                                    type = ExtractorLinkType.M3U8
+                                ) {
+                                    referer = siteReferer
+                                    quality = Qualities.P1080.value
+                                    headers = mapOf("User-Agent" to userAgent)
+                                }
+                            )
+                            return true
+                        }
                     }
                 }
             }
