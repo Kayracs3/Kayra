@@ -1,5 +1,6 @@
 package com.Kayracs3
 
+import android.util.Base64
 import android.util.Log
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
@@ -354,6 +355,109 @@ class HDFilmCehennemi : MainAPI() {
         return values.firstOrNull { it.isNotBlank() } ?: ""
     }
 
+    private fun rot13(input: String): String {
+        return buildString(input.length) {
+            input.forEach { c ->
+                when {
+                    c in 'a'..'z' -> append(('a'.code + (c.code - 'a'.code + 13) % 26).toChar())
+                    c in 'A'..'Z' -> append(('A'.code + (c.code - 'A'.code + 13) % 26).toChar())
+                    else -> append(c)
+                }
+            }
+        }
+    }
+
+    private fun characterUnmix(input: String): String {
+        return buildString(input.length) {
+            input.forEachIndexed { index, c ->
+                val code = (c.code - (399756995L % (index + 5)) + 256) % 256
+                append(code.toChar())
+            }
+        }
+    }
+
+    private fun decodeBase64Latin1(input: String): String {
+        val clean = input
+            .replace("\\n", "")
+            .replace("\\r", "")
+            .trim()
+        return String(Base64.decode(clean, Base64.DEFAULT), Charsets.ISO_8859_1)
+    }
+
+    private fun isValidVideoUrl(url: String): Boolean {
+        return url.startsWith("https://") &&
+                (url.contains(".m3u8", ignoreCase = true) ||
+                 url.contains("/hls/", ignoreCase = true) ||
+                 url.contains(".mp4", ignoreCase = true))
+    }
+
+    private fun decodeVideoVariant1(value: String): String {
+        val reversed = value.reversed()
+        val step1 = rot13(reversed)
+        val step2 = decodeBase64Latin1(step1)
+        return characterUnmix(step2)
+    }
+
+    private fun decodeVideoVariant2(value: String): String {
+        val reversed = value.reversed()
+        val step1 = decodeBase64Latin1(reversed)
+        val step2 = rot13(step1)
+        return characterUnmix(step2)
+    }
+
+    private fun decodeVideoVariant3(value: String): String {
+        val step1 = decodeBase64Latin1(value)
+        val step2 = step1.reversed()
+        val step3 = rot13(step2)
+        return characterUnmix(step3)
+    }
+
+    private fun decodePackedVideoUrl(text: String): String? {
+        val match = Regex(
+            """dc_\\w+\\(\\[([^\\]]+)\\]\\)"""
+        ).find(text) ?: return null
+
+        val parts = Regex("""[\"']([^\"']+)[\"']""")
+            .findAll(match.groupValues[1])
+            .map { it.groupValues[1] }
+            .toList()
+
+        if (parts.isEmpty()) return null
+
+        val value = parts.joinToString("")
+
+        Log.d(
+            "HDFilmCehennemi",
+            "Rapidrame packed parca sayisi: ${parts.size}"
+        )
+
+        val decoders = listOf(
+            "v3" to ::decodeVideoVariant3,
+            "v1" to ::decodeVideoVariant1,
+            "v2" to ::decodeVideoVariant2
+        )
+
+        for ((name, decoder) in decoders) {
+            try {
+                val decoded = decoder(value)
+                if (isValidVideoUrl(decoded)) {
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame packed URL bulundu ($name): $decoded"
+                    )
+                    return decoded
+                }
+            } catch (e: Exception) {
+                Log.d(
+                    "HDFilmCehennemi",
+                    "Rapidrame packed $name hatasi: ${e.message}"
+                )
+            }
+        }
+
+        return null
+    }
+
     private suspend fun extractRapidrame(
         playerUrl: String,
         siteReferer: String,
@@ -474,19 +578,35 @@ class HDFilmCehennemi : MainAPI() {
                 }
             }
 
-            // Rapidrame sayfasinda JSON-LD icindeki contentUrl dogrudan HLS playlistine isaret ediyor.
-            // Ornek format: https://.../master.txt
+            // Ana yöntem: Rapidrame'in packed JS içindeki dc_...( [parçalar] ) kaynağını çöz.
+            val packedCandidates = listOf(normalized, unpacked)
+            for (packedText in packedCandidates.distinct()) {
+                val packedUrl = decodePackedVideoUrl(packedText)
+                if (!packedUrl.isNullOrBlank()) {
+                    callback.invoke(
+                        newExtractorLink(
+                            source = "HDFilmCehennemi",
+                            name = "Rapidrame",
+                            url = packedUrl,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            referer = siteReferer
+                            quality = Qualities.P1080.value
+                            headers = mapOf("User-Agent" to userAgent)
+                        }
+                    )
+                    return true
+                }
+            }
+
+            // Son fallback: JSON-LD contentUrl. Bu değer bazı sayfalarda genel/stale olabilir,
+            // dolayısıyla 404 alırsa bunu gerçek source olarak kabul etmiyoruz.
             val contentUrlRegex = Regex(
                 """[\"']contentUrl[\"']\s*:\s*[\"']([^\"']+)[\"']""",
                 RegexOption.IGNORE_CASE
             )
 
-            val contentUrl = candidatesFirstNonBlank(
-                normalized,
-                unpacked
-            ).let { text ->
-                contentUrlRegex.find(text)?.groupValues?.getOrNull(1)
-            }
+            val contentUrl = contentUrlRegex.find(normalized)?.groupValues?.getOrNull(1)
 
             if (!contentUrl.isNullOrBlank()) {
                 val finalContentUrl = contentUrl
@@ -495,23 +615,44 @@ class HDFilmCehennemi : MainAPI() {
 
                 Log.d(
                     "HDFilmCehennemi",
-                    "Rapidrame contentUrl bulundu: $finalContentUrl"
+                    "Rapidrame contentUrl fallback: $finalContentUrl"
                 )
 
-                callback.invoke(
-                    newExtractorLink(
-                        source = "HDFilmCehennemi",
-                        name = "Rapidrame HLS",
-                        url = finalContentUrl,
-                        type = ExtractorLinkType.M3U8
-                    ) {
-                        referer = playerUrl
-                        quality = Qualities.P1080.value
-                        headers = mapOf("User-Agent" to userAgent)
+                // contentUrl'i önce HEAD/GET ile doğrula; 404 ise yanlış fallback'i yayınlama.
+                try {
+                    val probe = app.get(
+                        finalContentUrl,
+                        referer = playerUrl,
+                        headers = mapOf("User-Agent" to userAgent),
+                        timeout = 10
+                    )
+
+                    if (probe.code in 200..299) {
+                        callback.invoke(
+                            newExtractorLink(
+                                source = "HDFilmCehennemi",
+                                name = "Rapidrame HLS",
+                                url = finalContentUrl,
+                                type = ExtractorLinkType.M3U8
+                            ) {
+                                referer = playerUrl
+                                quality = Qualities.P1080.value
+                                headers = mapOf("User-Agent" to userAgent)
+                            }
+                        )
+                        return true
                     }
-                )
 
-                return true
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame contentUrl gecersiz HTTP ${probe.code}"
+                    )
+                } catch (e: Exception) {
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame contentUrl probe hatasi: ${e.message}"
+                    )
+                }
             }
 
             val candidates = listOf(normalized, unpacked)
