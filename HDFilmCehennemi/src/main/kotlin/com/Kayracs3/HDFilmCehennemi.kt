@@ -217,7 +217,7 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
     }
-    override suspend fun loadLinks(
+       override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -276,20 +276,22 @@ class HDFilmCehennemi : MainAPI() {
                 referer = "$mainUrl/", 
                 headers = headersMap
             ).text
+            
             val pattern = """["']?(https?://[^"']+""" +
                     """(?:cdnimages|shop)[^"']+""" +
                     """(?:master\.txt|master\.m3u8)""" +
                     """[^"']*)["']"""
             
-            val m3u8Regex = Regex(pattern)
-            val match = m3u8Regex.find(responseText)
+            val regex = Regex(pattern)
             
-            if (match != null) {
+            // Atama hatalarını ve cache çakışmalarını tamamen sıfırlayan
+            // doğrudan invoke mimarisi:
+            regex.find(responseText)?.groupValues?.first()?.let { videoUrl ->
                 callback.invoke(
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
-                        url = match.groupValues.first()
+                        url = videoUrl
                     ) {
                         this.referer = playerUrl
                         this.quality = Qualities.P1080.value
