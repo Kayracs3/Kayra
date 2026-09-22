@@ -3,8 +3,6 @@ package com.Kayracs3
 import android.util.Log
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
-import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -153,7 +151,7 @@ class HDFilmCehennemi : MainAPI() {
                 val actorName = it.selectFirst("strong")?.text() 
                     ?: return@mapNotNull null
                 val actorImg = it.selectFirst("img")?.attr("data-src")
-                ActorData(Actor(actorName, actorImg))
+                Actor(actorName, actorImg)
             }
 
         val recommendations = document
@@ -176,12 +174,6 @@ class HDFilmCehennemi : MainAPI() {
                 }
             }
 
-        val trailerBtn = document
-            .selectFirst("div.post-info-trailer button")
-        val trailerUrl = trailerBtn?.attr("data-modal")
-            ?.substringAfter("trailer/")
-            ?.let { "https://youtube.com" }
-
         return if (tvType == TvType.TvSeries) {
             val episodes = document
                 .select("div.seasons-tab-content a")
@@ -203,7 +195,7 @@ class HDFilmCehennemi : MainAPI() {
                     }
                 }
 
-            val response = newTvSeriesLoadResponse(
+            newTvSeriesLoadResponse(
                 title, 
                 url, 
                 TvType.TvSeries, 
@@ -214,23 +206,17 @@ class HDFilmCehennemi : MainAPI() {
                 this.plot = description
                 this.tags = tags
                 this.recommendations = recommendations
+                this.actors = actors
             }
-            
-            addActors(response, actors)
-            addTrailer(response, trailerUrl)
-            response
         } else {
-            val response = newMovieLoadResponse(title, url, TvType.Movie, url) {
+            newMovieLoadResponse(title, url, TvType.Movie, url) {
                 this.posterUrl = poster
                 this.year = year
                 this.plot = description
                 this.tags = tags
                 this.recommendations = recommendations
+                this.actors = actors
             }
-            
-            addActors(response, actors)
-            addTrailer(response, trailerUrl)
-            response
         }
     }
 
@@ -273,11 +259,11 @@ class HDFilmCehennemi : MainAPI() {
                     loadExtractor(
                         targetUrl, 
                         data, 
-                        subtitleCallback,
+                        subtitleCallback, 
                         callback
                     )
                 }
-                            }
+            }
         }
         return true
     }
@@ -287,41 +273,34 @@ class HDFilmCehennemi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-            val headersMap = mapOf(
-                "User-Agent" to userAgent
-            )
+            val headersMap = mapOf("User-Agent" to userAgent)
             val responseText = app.get(
                 playerUrl, 
                 referer = "$mainUrl/", 
                 headers = headersMap
             ).text
             
-            val pattern = """["']?(https?://[^"']+""" +
-                    """(?:cdnimages|shop)[^"']+""" +
-                    """(?:master\.txt|master\.m3u8)""" +
-                    """[^"']*)["']"""
-            
+            val pattern = """["']?(https?://[^"']+""" + """(?:cdnimages|shop)[^"']+""" + """(?:master.txt|master.m3u8)""" + """[^"']*)["']"""
             val m3u8Regex = Regex(pattern)
             val match = m3u8Regex.find(responseText)
-            
             if (match != null) {
-                val finalVideoUrl = match.groupValues
-                
+                // Listeyi String'e çeviren ve hata alan indeks düzeltildi:
+                val finalVideoUrl = match.groupValues[1]
                 callback.invoke(
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
                         url = finalVideoUrl
-                    ) {
+                        ) {
                         this.referer = playerUrl
                         this.quality = Qualities.P1080.value
                         this.isM3u8 = true
-                    }
-                )
-            }
-        } catch (e: Exception) {
+                        }
+                    )
+                }
+            } catch (e: Exception) {
             Log.e("HDFilmCehennemi", "Hata: ${e.message}")
+            }
         }
     }
-}
-
+            
