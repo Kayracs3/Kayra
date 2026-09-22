@@ -254,18 +254,15 @@ class HDFilmCehennemi : MainAPI() {
                     """(?:master\.txt|master\.m3u8)""" +
                     """[^"']*)["']"""
             
-            // Reassigned (var) olarak tanımlandı, hata giderildi
-            var extractedUrl = Regex(pattern).find(responseText)?.groupValues?.first()
-            
-            // Eğer tırnak işaretlerini temizlemek gerekirse güvenle atama yapılabilir
-            extractedUrl = extractedUrl?.removeSurrounding("\"")?.removeSurrounding("'")
-
-            extractedUrl?.let {
+            val match = Regex(pattern).find(responseText)?.groupValues?.first()
+            if (match != null) {
+                val cleanUrl = match.removeSurrounding("\"").removeSurrounding("'")
+                
                 callback.invoke(
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
-                        url = it
+                        url = cleanUrl
                     ) {
                         this.referer = playerUrl
                         this.quality = Qualities.P1080.value
