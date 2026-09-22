@@ -3,6 +3,8 @@ package com.Kayracs3
 import android.util.Log
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -151,7 +153,7 @@ class HDFilmCehennemi : MainAPI() {
                 val actorName = it.selectFirst("strong")?.text() 
                     ?: return@mapNotNull null
                 val actorImg = it.selectFirst("img")?.attr("data-src")
-                Actor(actorName, actorImg)
+                ActorData(Actor(actorName, actorImg))
             }
 
         val recommendations = document
@@ -201,7 +203,7 @@ class HDFilmCehennemi : MainAPI() {
                     }
                 }
 
-            newTvSeriesLoadResponse(
+            val response = newTvSeriesLoadResponse(
                 title, 
                 url, 
                 TvType.TvSeries, 
@@ -212,19 +214,23 @@ class HDFilmCehennemi : MainAPI() {
                 this.plot = description
                 this.tags = tags
                 this.recommendations = recommendations
-                this.actors = actors
-                this.trailer = trailerUrl
             }
+            
+            addActors(response, actors)
+            addTrailer(response, trailerUrl)
+            response
         } else {
-            newMovieLoadResponse(title, url, TvType.Movie, url) {
+            val response = newMovieLoadResponse(title, url, TvType.Movie, url) {
                 this.posterUrl = poster
                 this.year = year
                 this.plot = description
                 this.tags = tags
                 this.recommendations = recommendations
-                this.actors = actors
-                this.trailer = trailerUrl
             }
+            
+            addActors(response, actors)
+            addTrailer(response, trailerUrl)
+            response
         }
     }
 
@@ -267,11 +273,11 @@ class HDFilmCehennemi : MainAPI() {
                     loadExtractor(
                         targetUrl, 
                         data, 
-                        subtitleCallback, 
+                        subtitleCallback,
                         callback
                     )
                 }
-            }
+                            }
         }
         return true
     }
@@ -281,4 +287,41 @@ class HDFilmCehennemi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-val headersMap = mapOf("User-Agent" to userAgent)val response = app.get(playerUrl,referer = "$mainUrl/",headers = headersMap).textval pattern = """["']?(https?://[^"']+""" +"""(?:cdnimages|shop)[^"']+""" +"""(?:master.txt|master.m3u8)""" +"""[^"']*)["']"""val m3u8Regex = Regex(pattern)val match = m3u8Regex.find(response)if (match != null) {val finalVideoUrl = match.groupValues[1]callback.invoke(newExtractorLink(source = "HDFilmCehennemi (CDN)",name = "HQ Kalite (Yerel)",url = finalVideoUrl) {this.referer = playerUrlthis.quality = Qualities.P1080.valuethis.isM3u8 = true})}} catch (e: Exception) {Log.e("HDFilmCehennemi", "Hata: ${e.message}")}}}
+            val headersMap = mapOf(
+                "User-Agent" to userAgent
+            )
+            val responseText = app.get(
+                playerUrl, 
+                referer = "$mainUrl/", 
+                headers = headersMap
+            ).text
+            
+            val pattern = """["']?(https?://[^"']+""" +
+                    """(?:cdnimages|shop)[^"']+""" +
+                    """(?:master\.txt|master\.m3u8)""" +
+                    """[^"']*)["']"""
+            
+            val m3u8Regex = Regex(pattern)
+            val match = m3u8Regex.find(responseText)
+            
+            if (match != null) {
+                val finalVideoUrl = match.groupValues
+                
+                callback.invoke(
+                    newExtractorLink(
+                        source = "HDFilmCehennemi (CDN)",
+                        name = "HQ Kalite (Yerel)",
+                        url = finalVideoUrl
+                    ) {
+                        this.referer = playerUrl
+                        this.quality = Qualities.P1080.value
+                        this.isM3u8 = true
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("HDFilmCehennemi", "Hata: ${e.message}")
+        }
+    }
+}
+
