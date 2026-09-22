@@ -108,105 +108,60 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
     }
-        override suspend fun load(url: String): LoadResponse? {
+            override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
             url, 
             headers = mapOf("User-Agent" to userAgent)
         ).document
 
-        val title = document
-            .selectFirst("h1.section-title")?.text()
-            ?.substringBefore(" izle") ?: return null
-            
-        val poster = fixUrlNull(
-            document.select("aside.post-info-poster img.lazyload")
-                .lastOrNull()?.attr("data-src")
-        )
-        val tags = document
-            .select("div.post-info-genres a")
-            .map { it.text() }
-        val year = document
-            .selectFirst("div.post-info-year-country a")
-            ?.text()?.trim()?.toIntOrNull()
-            
-        val tvType = if (document.select("div.seasons").isEmpty()) 
-            TvType.Movie else TvType.TvSeries
-            
-        val description = document
-            .selectFirst("article.post-info-content > p")
-            ?.text()?.trim()
-        
-        val actors = document
-            .select("div.post-info-cast a")
-            .mapNotNull {
-                val actorName = it.selectFirst("strong")?.text() 
-                    ?: return@mapNotNull null
-                val actorImg = it.selectFirst("img")?.attr("data-src")
-                ActorData(Actor(actorName, actorImg), null, null)
-            }
+        val isTvSeries = !document.select("div.seasons").isEmpty()
 
-        val recommendations = document
-            .select("div.section-slider-container div.slider-slide")
-            .mapNotNull {
-                val recName = it.selectFirst("a")?.attr("title") 
-                    ?: return@mapNotNull null
-                val recHref = fixUrlNull(it.selectFirst("a")?.attr("href")) 
-                    ?: return@mapNotNull null
-                val img = it.selectFirst("img")
-                val recPosterUrl = fixUrlNull(img?.attr("data-src")) 
-                    ?: fixUrlNull(img?.attr("src"))
-
-                newTvSeriesSearchResponse(
-                    recName, 
-                    recHref, 
-                    TvType.TvSeries
-                ) {
-                    this.posterUrl = recPosterUrl
-                }
-            }
-
-        return if (tvType == TvType.TvSeries) {
-            val episodes = document
-                .select("div.seasons-tab-content a")
-                .mapNotNull {
-                    val epName = it.selectFirst("h4")?.text()?.trim() 
-                        ?: return@mapNotNull null
-                    val epHref = fixUrlNull(it.attr("href")) 
-                        ?: return@mapNotNull null
-                    val epEpisode = Regex("""(\d+)\. ?Bölüm""")
-                        .find(epName)?.groupValues?.get(1)?.toIntOrNull()
-                    val epSeason = Regex("""(\d+)\. ?Sezon""")
-                        .find(epName)?.groupValues?.get(1)?.toIntOrNull() 
-                        ?: 1
-
-                    newEpisode(epHref) {
+        return if (isTvSeries) {
+            newTvSeriesLoadResponse(
+                title = document.selectFirst("h1.section-title")?.text()?.substringBefore(" izle") ?: "",
+                url = url,
+                type = TvType.TvSeries,
+                episodes = document.select("div.seasons-tab-content a").mapNotNull {
+                    val epName = it.selectFirst("h4")?.text()?.trim() ?: return@mapNotNull null
+                    newEpisode(fixUrlNull(it.attr("href")) ?: "") {
                         this.name = epName
-                        this.season = epSeason
-                        this.episode = epEpisode
+                        this.season = Regex("""(\d+)\. ?Sezon""").find(epName)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+                        this.episode = Regex("""(\d+)\. ?Bölüm""").find(epName)?.groupValues?.get(1)?.toIntOrNull()
                     }
                 }
-
-            newTvSeriesLoadResponse(
-                title, 
-                url, 
-                TvType.TvSeries, 
-                episodes
             ) {
-                this.posterUrl = poster
-                this.year = year
-                this.plot = description
-                this.tags = tags
-                this.recommendations = recommendations
-                this.actors = actors
+                this.posterUrl = fixUrlNull(document.select("aside.post-info-poster img.lazyload").lastOrNull()?.attr("data-src"))
+                this.year = document.selectFirst("div.post-info-year-country a")?.text()?.trim()?.toIntOrNull()
+                this.plot = document.selectFirst("article.post-info-content > p")?.text()?.trim()
+                this.tags = document.select("div.post-info-genres a").map { it.text() }
+                this.actors = document.select("div.post-info-cast a").mapNotNull {
+                    ActorData(Actor(it.selectFirst("strong")?.text() ?: return@mapNotNull null, it.selectFirst("img")?.attr("data-src")), null, null)
+                }
+                this.recommendations = document.select("div.section-slider-container div.slider-slide").mapNotNull {
+                    newTvSeriesSearchResponse(it.selectFirst("a")?.attr("title") ?: return@mapNotNull null, fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null, TvType.TvSeries) {
+                        this.posterUrl = fixUrlNull(it.selectFirst("img")?.attr("data-src")) ?: fixUrlNull(it.selectFirst("img")?.attr("src"))
+                    }
+                }
             }
         } else {
-            newMovieLoadResponse(title, url, TvType.Movie, url) {
-                this.posterUrl = poster
-                this.year = year
-                this.plot = description
-                this.tags = tags
-                this.recommendations = recommendations
-                this.actors = actors
+            newMovieLoadResponse(
+                name = document.selectFirst("h1.section-title")?.text()?.substringBefore(" izle") ?: "",
+                url = url,
+                type = TvType.Movie,
+                dataUrl = url
+            ) {
+                this.posterUrl = fixUrlNull(document.select("aside.post-info-poster img.lazyload").lastOrNull()?.attr("data-src"))
+                this.year = document.selectFirst("div.post-info-year-country a")?.text()?.trim()?.toIntOrNull()
+                this.plot = document.selectFirst("article.post-info-content > p")?.text()?.trim()
+                this.tags = document.select("div.post-info-genres a").map { it.text() }
+                this.actors = document.select("div.post-info-cast a").mapNotNull {
+                    ActorData(Actor(it.selectFirst("strong")?.text() ?: return@mapNotNull null, it.selectFirst("img")?.attr("data-src")), null, null)
+                }
+                this.recommendations = document.select("div.section-slider-container div.slider-slide").mapNotNull {
+                    newTvSeriesSearchResponse(it.selectFirst("a")?.attr("title") ?: return@mapNotNull null, fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null, TvType.TvSeries) {
+                        this.posterUrl = fixUrlNull(it.selectFirst("img")?.attr("data-src")) ?: fixUrlNull(it.selectFirst("img")?.attr("src"))
+                    }
+                }
             }
         }
     }
@@ -225,7 +180,6 @@ class HDFilmCehennemi : MainAPI() {
         val selectors = "iframe, div[data-frame], [data-embed], " +
                 "nav.player-tabs a, div.player-tab-sources button"
                 
-        // Val/Var atama hatasını imkansız kılan doğrudan akış mimarisi
         document.select(selectors).forEach { element ->
             element.attr("src").ifEmpty { 
                 element.attr("data-src").ifEmpty { 
@@ -290,5 +244,3 @@ class HDFilmCehennemi : MainAPI() {
         }
     }
 }
-
-        
