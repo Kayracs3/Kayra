@@ -225,8 +225,9 @@ class HDFilmCehennemi : MainAPI() {
         val selectors = "iframe, div[data-frame], [data-embed], " +
                 "nav.player-tabs a, div.player-tab-sources button"
                 
+        // Val/Var atama hatasını imkansız kılan doğrudan akış mimarisi
         document.select(selectors).forEach { element ->
-            val src = element.attr("src").ifEmpty { 
+            element.attr("src").ifEmpty { 
                 element.attr("data-src").ifEmpty { 
                     element.attr("data-frame").ifEmpty { 
                         element.attr("data-embed").ifEmpty { 
@@ -234,23 +235,21 @@ class HDFilmCehennemi : MainAPI() {
                         } 
                     } 
                 } 
-            }
-            
-            if (src.isNotEmpty()) {
-                val fixedUrl = fixUrl(src)
-                
-                if (fixedUrl.contains("hdfilmcehennemi") || 
-                    fixedUrl.contains("moly") || 
-                    fixedUrl.contains("cdnimages")
-                ) {
-                    extractHdStream(fixedUrl, callback)
-                } else {
-                    loadExtractor(
-                        fixedUrl, 
-                        data, 
-                        subtitleCallback, 
-                        callback
-                    )
+            }.takeIf { it.isNotEmpty() }?.let { rawSrc ->
+                fixUrl(rawSrc).let { fixedUrl ->
+                    if (fixedUrl.contains("hdfilmcehennemi") || 
+                        fixedUrl.contains("moly") || 
+                        fixedUrl.contains("cdnimages")
+                    ) {
+                        extractHdStream(fixedUrl, callback)
+                    } else {
+                        loadExtractor(
+                            fixedUrl, 
+                            data, 
+                            subtitleCallback, 
+                            callback
+                        )
+                    }
                 }
             }
         }
@@ -292,3 +291,4 @@ class HDFilmCehennemi : MainAPI() {
     }
 }
 
+        
