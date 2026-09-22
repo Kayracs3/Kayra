@@ -254,15 +254,18 @@ class HDFilmCehennemi : MainAPI() {
                     """(?:master\.txt|master\.m3u8)""" +
                     """[^"']*)["']"""
             
-            val match = Regex(pattern).find(responseText)?.groupValues?.first()
-            if (match != null) {
-                val cleanUrl = match.removeSurrounding("\"").removeSurrounding("'")
+            val foundMatch = Regex(pattern).find(responseText)?.groupValues?.first()
+            
+            if (foundMatch != null) {
+                val finalUrl = foundMatch
+                    .replace("\"", "")
+                    .replace("'", "")
                 
                 callback.invoke(
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
-                        url = cleanUrl
+                        url = finalUrl
                     ) {
                         this.referer = playerUrl
                         this.quality = Qualities.P1080.value
