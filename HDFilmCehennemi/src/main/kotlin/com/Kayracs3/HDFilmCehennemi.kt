@@ -168,61 +168,66 @@ class HDFilmCehennemi : MainAPI() {
         }
     }
 
-    override suspend fun loadLinks(
+       override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        Log.d("HDCH", "data » $data")
+        // Film veya bölüm sayfasının HTML dökümanını alıyoruz
         val document = app.get(data).document
-
-        for (element in document.select("div.alternative-links")) {
-            val langCode = element.attr("data-lang").uppercase()
-
-            for (button in element.select("button.alternative-link")) {
-                val source = button.text().replace("(HDrip Xbet)", "").trim() + " $langCode"
-                val videoID = button.attr("data-video")
-                if (videoID.isBlank()) continue
-
-                val apiGet = app.get(
-                    "${mainUrl}/video/$videoID/",
-                    headers = mapOf(
-                        "Content-Type"     to "application/json",
-                        "X-Requested-With" to "fetch"
-                    ),
-                    referer = data
-                ).text
-
-                // Sunucudan gelen JSON/HTML içindeki kaçış tırnaklarını temizle
-val cleanHtml = apiGet.replace("\\\"", "\"")
-
-// Jsoup ile iframe etiketini bul ve data-src (yoksa src) değerini güvenle al
-val iframeTag = Jsoup.parse(cleanHtml).selectFirst("iframe")
-val rawIframe = iframeTag?.attr("data-src")?.takeIf { it.isNotBlank() } 
-    ?: iframeTag?.attr("src")?.takeIf { it.isNotBlank() } 
-    ?: continue
-
-var iframe = rawIframe
-if (iframe.contains("?rapidrame_id=")) {
-    iframe = "${mainUrl}/playerr/" + iframe.substringAfter("?rapidrame_id=")
-}
-
-                Log.d("HDCH", "$source » $videoID » $iframe")
-                invokeLocalSource(source, iframe, subtitleCallback, callback)
+        
+        // Sitedeki tüm player sekmelerini, butonları veya iframe yapılarını tarıyoruz
+        val playerElements = document.select("iframe, div[data-frame], [data-embed], nav.player-tabs a, div.player-tab-sources button")
+        
+        playerElements.forEach { element ->
+            var targetUrl = element.attr("src").ifEmpty { 
+                element.attr("data-src").ifEmpty { 
+                    element.attr("data-frame").ifEmpty { 
+                        element.attr("data-embed").ifEmpty { element.attr("href") ?: "" } 
+                    } 
+                } 
+            }
+            
+            if (targetUrl.isNotEmpty()) {
+                targetUrl = fixUrl(targetUrl)
+                
+                // Eğer harici bir sağlayıcıysa (Vidmoly, Rapidrame vb.) Cloudstream'in kendi ayıklayıcılarına gönder
+                if (!targetUrl.contains("hdfilmcehennemi") && !targetUrl.contains("moly") && !targetUrl.contains("cdnimages")) {
+                    loadExtractor(targetUrl, data, subtitleCallback, callback)
+                } else {
+                    // Sitenin kendi gizli .txt / .m3u8 sunucusu ise içeriği kazı
+                    fetchLocalStream(targetUrl, data, callback)
+                }
             }
         }
-
         return true
     }
 
-    private data class SubSource(
-        @JsonProperty("file")  val file: String?  = null,
-        @JsonProperty("label") val label: String? = null,
-        @JsonProperty("kind")  val kind: String?  = null
-    )
-
-    data class Results(
-        @JsonProperty("results") val results: List<String> = arrayListOf()
-    )
-}
+    private suspend fun fetchLocalStream(playerUrl: String, pageUrl: String, callback: (ExtractorLink) -> Unit) {
+        try {
+            // Player sayfasına istek atarken sitenin ana adresini referer olarak gösteriyoruz
+            val response = app.get(playerUrl, referer = "$mainUrl/").text
+            
+            // Sizin yakaladığınız cdnimages sunucularını ve master.txt / master.m3u8 yapılarını bulan gelişmiş Regex
+            val m3u8Regex = Regex("""["']?(https?://[^"']+(?:cdnimages|shop)[^"']+(?:master\.txt|master\.m3u8)[^"']*)["']""")
+            val match = m3u8Regex.find(response)
+            
+            if (match != null) {
+                val finalVideoUrl = match.groupValues[1]
+                
+                callback.invoke(
+                    ExtractorLink(
+                        source = "HDFilmCehennemi (CDN)",
+                        name = "FHD Kalite (Yerel)",
+                        url = finalVideoUrl,
+                        referer = playerUrl, // Güvenlik duvarını aşmak için videonun istendiği player URL'si referer olmalı
+                        quality = Qualities.P1080.value,
+                        isM3u8 = true // .txt uzantılı olsa bile Cloudstream'e bunun bir M3U8 yayını olduğunu söylüyoruz
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("HDFilmCehennemi", "Video bağlantısı çözümlenirken hata oluştu: ${e.message}")
+        }
+    }
