@@ -28,6 +28,7 @@ class HDFilmCehennemi : MainAPI() {
             "AppleWebKit/537.36 " +
             "(KHTML, like Gecko) " +
             "Chrome/120.0.0.0"
+
     override val mainPage = mainPageOf(
         mainUrl to "Yeni Eklenen Filmler",
         "$mainUrl/yabancidiziizle-5" to "Yeni Eklenen Diziler",
@@ -217,7 +218,8 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
     }
-           override suspend fun loadLinks(
+
+    override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
