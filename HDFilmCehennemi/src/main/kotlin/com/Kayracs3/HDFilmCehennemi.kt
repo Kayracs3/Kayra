@@ -238,6 +238,7 @@ class HDFilmCehennemi : MainAPI() {
         return true
     }
 
+    @Suppress("DEPRECATION")
     private suspend fun extractHdStream(
         playerUrl: String, 
         callback: (ExtractorLink) -> Unit
@@ -262,7 +263,7 @@ class HDFilmCehennemi : MainAPI() {
                     .replace("'", "")
                 
                 callback.invoke(
-                    newExtractorLink(
+                    ExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
                         url = finalUrl,
