@@ -116,7 +116,7 @@ class HDFilmCehennemi : MainAPI() {
         }
         return searchResults
     }
-    override suspend fun load(url: String): LoadResponse? {
+        override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
             url, 
             headers = mapOf("User-Agent" to userAgent)
@@ -251,7 +251,7 @@ class HDFilmCehennemi : MainAPI() {
                     fixedUrl.contains("moly") || 
                     fixedUrl.contains("cdnimages")
                 ) {
-                    fetchLocalStream(fixedUrl, callback)
+                    extractHdStream(fixedUrl, callback)
                 } else {
                     loadExtractor(
                         fixedUrl, 
@@ -265,7 +265,7 @@ class HDFilmCehennemi : MainAPI() {
         return true
     }
 
-    private suspend fun fetchLocalStream(
+    private suspend fun extractHdStream(
         playerUrl: String, 
         callback: (ExtractorLink) -> Unit
     ) {
