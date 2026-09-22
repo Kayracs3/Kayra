@@ -1,3 +1,4 @@
+```kotlin
 package com.Kayracs3
 
 import android.util.Log
@@ -8,7 +9,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 data class Results(
-    @JsonProperty("results") 
+    @JsonProperty("results")
     val results: List<String>
 )
 
@@ -19,7 +20,7 @@ class HDFilmCehennemi : MainAPI() {
     override var lang = "tr"
     override val hasQuickSearch = true
     override val supportedTypes = setOf(
-        TvType.Movie, 
+        TvType.Movie,
         TvType.TvSeries
     )
 
@@ -47,32 +48,34 @@ class HDFilmCehennemi : MainAPI() {
     )
 
     override suspend fun getMainPage(
-        page: Int, 
+        page: Int,
         request: MainPageRequest
     ): HomePageResponse {
         val document = app.get(
-            request.data, 
+            request.data,
             headers = mapOf("User-Agent" to userAgent)
         ).document
-        
+
         val home = document
             .select("div.section-content a.poster")
             .mapNotNull { it.toSearchResult() }
-            
+
         return newHomePageResponse(request.name, home)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
         val title = this
-            .selectFirst("strong.poster-title")?.text() 
+            .selectFirst("strong.poster-title")?.text()
             ?: return null
+
         val href = fixUrlNull(this.attr("href")) ?: return null
+
         val posterUrl = fixUrlNull(
             this.selectFirst("img")?.attr("data-src")
         )
 
-        return newMovieSearchResponse(title, href, TvType.Movie) { 
-            this.posterUrl = posterUrl 
+        return newMovieSearchResponse(title, href, TvType.Movie) {
+            this.posterUrl = posterUrl
         }
     }
 
@@ -90,28 +93,30 @@ class HDFilmCehennemi : MainAPI() {
                 "User-Agent" to userAgent
             )
         ).parsedSafe<Results>() ?: return emptyList()
-        
+
         return response.results.mapNotNull { resultHtml ->
             val document = Jsoup.parse(resultHtml)
-            val titleText = document.selectFirst("h4.title")?.text() 
+
+            val titleText = document.selectFirst("h4.title")?.text()
                 ?: return@mapNotNull null
+
             val hrefText = fixUrlNull(
                 document.selectFirst("a")?.attr("href")
             ) ?: return@mapNotNull null
-            
+
             val imgEl = document.selectFirst("img")
-            val srcText = fixUrlNull(imgEl?.attr("src")) 
+            val srcText = fixUrlNull(imgEl?.attr("src"))
                 ?: fixUrlNull(imgEl?.attr("data-src"))
 
-            newMovieSearchResponse(titleText, hrefText, TvType.Movie) { 
-                this.posterUrl = srcText?.replace("/thumb/", "/list/") 
+            newMovieSearchResponse(titleText, hrefText, TvType.Movie) {
+                this.posterUrl = srcText?.replace("/thumb/", "/list/")
             }
         }
     }
 
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
-            url, 
+            url,
             headers = mapOf("User-Agent" to userAgent)
         ).document
 
@@ -125,44 +130,72 @@ class HDFilmCehennemi : MainAPI() {
                 type = TvType.TvSeries,
                 episodes = document.select("div.seasons-tab-content a")
                     .mapNotNull {
-                        val epName = it.selectFirst("h4")?.text()?.trim() 
+                        val epName = it.selectFirst("h4")?.text()?.trim()
                             ?: return@mapNotNull null
+
                         newEpisode(fixUrlNull(it.attr("href")) ?: "") {
                             this.name = epName
+
                             this.season = Regex("""(\d+)\. ?Sezon""")
                                 .find(epName)?.groupValues?.get(1)
                                 ?.toIntOrNull() ?: 1
+
                             this.episode = Regex("""(\d+)\. ?Bölüm""")
                                 .find(epName)?.groupValues?.get(1)
                                 ?.toIntOrNull()
                         }
                     }
             ) {
-                this.posterUrl = fixUrlNull(document
-                    .select("aside.post-info-poster img.lazyload")
-                    .lastOrNull()?.attr("data-src"))
-                this.year = document.selectFirst("div.post-info-year-country a")
-                    ?.text()?.trim()?.toIntOrNull()
-                this.plot = document.selectFirst("article.post-info-content > p")
-                    ?.text()?.trim()
-                this.tags = document.select("div.post-info-genres a")
+                this.posterUrl = fixUrlNull(
+                    document
+                        .select("aside.post-info-poster img.lazyload")
+                        .lastOrNull()
+                        ?.attr("data-src")
+                )
+
+                this.year = document.selectFirst(
+                    "div.post-info-year-country a"
+                )?.text()?.trim()?.toIntOrNull()
+
+                this.plot = document.selectFirst(
+                    "article.post-info-content > p"
+                )?.text()?.trim()
+
+                this.tags = document
+                    .select("div.post-info-genres a")
                     .map { it.text() }
-                this.actors = document.select("div.post-info-cast a")
+
+                this.actors = document
+                    .select("div.post-info-cast a")
                     .mapNotNull {
-                        ActorData(Actor(it.selectFirst("strong")?.text() 
-                            ?: return@mapNotNull null, it.selectFirst("img")
-                            ?.attr("data-src")), null, null)
+                        ActorData(
+                            Actor(
+                                it.selectFirst("strong")?.text()
+                                    ?: return@mapNotNull null,
+                                it.selectFirst("img")?.attr("data-src")
+                            ),
+                            null,
+                            null
+                        )
                     }
+
                 this.recommendations = document
                     .select("div.section-slider-container div.slider-slide")
                     .mapNotNull {
-                        newTvSeriesSearchResponse(it.selectFirst("a")
-                            ?.attr("title") ?: return@mapNotNull null, 
-                            fixUrlNull(it.selectFirst("a")?.attr("href")) 
-                            ?: return@mapNotNull null, TvType.TvSeries) {
-                            this.posterUrl = fixUrlNull(it.selectFirst("img")
-                                ?.attr("data-src")) ?: fixUrlNull(it
-                                ?.selectFirst("img")?.attr("src"))
+                        newTvSeriesSearchResponse(
+                            it.selectFirst("a")?.attr("title")
+                                ?: return@mapNotNull null,
+                            fixUrlNull(
+                                it.selectFirst("a")?.attr("href")
+                            ) ?: return@mapNotNull null,
+                            TvType.TvSeries
+                        ) {
+                            this.posterUrl =
+                                fixUrlNull(
+                                    it.selectFirst("img")?.attr("data-src")
+                                ) ?: fixUrlNull(
+                                    it.selectFirst("img")?.attr("src")
+                                )
                         }
                     }
             }
@@ -174,31 +207,56 @@ class HDFilmCehennemi : MainAPI() {
                 type = TvType.Movie,
                 dataUrl = url
             ) {
-                this.posterUrl = fixUrlNull(document
-                    .select("aside.post-info-poster img.lazyload")
-                    .lastOrNull()?.attr("data-src"))
-                this.year = document.selectFirst("div.post-info-year-country a")
-                    ?.text()?.trim()?.toIntOrNull()
-                this.plot = document.selectFirst("article.post-info-content > p")
-                    ?.text()?.trim()
-                this.tags = document.select("div.post-info-genres a")
+                this.posterUrl = fixUrlNull(
+                    document
+                        .select("aside.post-info-poster img.lazyload")
+                        .lastOrNull()
+                        ?.attr("data-src")
+                )
+
+                this.year = document.selectFirst(
+                    "div.post-info-year-country a"
+                )?.text()?.trim()?.toIntOrNull()
+
+                this.plot = document.selectFirst(
+                    "article.post-info-content > p"
+                )?.text()?.trim()
+
+                this.tags = document
+                    .select("div.post-info-genres a")
                     .map { it.text() }
-                this.actors = document.select("div.post-info-cast a")
+
+                this.actors = document
+                    .select("div.post-info-cast a")
                     .mapNotNull {
-                        ActorData(Actor(it.selectFirst("strong")?.text() 
-                            ?: return@mapNotNull null, it.selectFirst("img")
-                            ?.attr("data-src")), null, null)
+                        ActorData(
+                            Actor(
+                                it.selectFirst("strong")?.text()
+                                    ?: return@mapNotNull null,
+                                it.selectFirst("img")?.attr("data-src")
+                            ),
+                            null,
+                            null
+                        )
                     }
+
                 this.recommendations = document
                     .select("div.section-slider-container div.slider-slide")
                     .mapNotNull {
-                        newTvSeriesSearchResponse(it.selectFirst("a")
-                            ?.attr("title") ?: return@mapNotNull null, 
-                            fixUrlNull(it.selectFirst("a")?.attr("href")) 
-                            ?: return@mapNotNull null, TvType.TvSeries) {
-                            this.posterUrl = fixUrlNull(it.selectFirst("img")
-                                ?.attr("data-src")) ?: fixUrlNull(it
-                                ?.selectFirst("img")?.attr("src"))
+                        newTvSeriesSearchResponse(
+                            it.selectFirst("a")?.attr("title")
+                                ?: return@mapNotNull null,
+                            fixUrlNull(
+                                it.selectFirst("a")?.attr("href")
+                            ) ?: return@mapNotNull null,
+                            TvType.TvSeries
+                        ) {
+                            this.posterUrl =
+                                fixUrlNull(
+                                    it.selectFirst("img")?.attr("data-src")
+                                ) ?: fixUrlNull(
+                                    it.selectFirst("img")?.attr("src")
+                                )
                         }
                     }
             }
@@ -212,69 +270,86 @@ class HDFilmCehennemi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(
-            data, 
+            data,
             headers = mapOf("User-Agent" to userAgent)
         ).document
-        
+
         val elements = document.select("iframe")
+
         for (element in elements) {
-            val src = element.attr("src").ifEmpty { 
-                element.attr("data-src").ifEmpty { 
-                    element.attr("data-frame") 
-                } 
+            val src = element.attr("src").ifEmpty {
+                element.attr("data-src").ifEmpty {
+                    element.attr("data-frame")
+                }
             }
+
             if (src.isNotEmpty()) {
                 val fixedUrl = fixUrl(src)
-                if (fixedUrl.contains("hdfilmcehennemi") || 
-                    fixedUrl.contains("moly") || 
+
+                if (
+                    fixedUrl.contains("hdfilmcehennemi") ||
+                    fixedUrl.contains("moly") ||
                     fixedUrl.contains("cdnimages")
                 ) {
                     extractHdStream(fixedUrl, callback)
                 } else {
-                    loadExtractor(fixedUrl, data, subtitleCallback, callback)
+                    loadExtractor(
+                        fixedUrl,
+                        data,
+                        subtitleCallback,
+                        callback
+                    )
                 }
             }
         }
+
         return true
     }
 
-    @Suppress("DEPRECATION")
     private suspend fun extractHdStream(
-        playerUrl: String, 
+        playerUrl: String,
         callback: (ExtractorLink) -> Unit
     ) {
         try {
             val responseText = app.get(
-                playerUrl, 
-                referer = "$mainUrl/", 
+                playerUrl,
+                referer = "$mainUrl/",
                 headers = mapOf("User-Agent" to userAgent)
             ).text
-            
+
             val pattern = """["']?(https?://[^"']+""" +
                     """(?:cdnimages|shop)[^"']+""" +
                     """(?:master\.txt|master\.m3u8)""" +
                     """[^"']*)["']"""
-            
-            val foundMatch = Regex(pattern).find(responseText)?.groupValues?.first()
-            
+
+            val foundMatch = Regex(pattern)
+                .find(responseText)
+                ?.groupValues
+                ?.first()
+
             if (foundMatch != null) {
                 val finalUrl = foundMatch
                     .replace("\"", "")
                     .replace("'", "")
-                
+
                 callback.invoke(
-                    ExtractorLink(
+                    newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
                         url = finalUrl,
-                        referer = playerUrl,
-                        quality = Qualities.P1080.value,
-                        isM3u8 = true
-                    )
+                        type = ExtractorLinkType.M3U8
+                    ) {
+                        referer = playerUrl
+                        quality = Qualities.P1080.value
+                    }
                 )
             }
         } catch (e: Exception) {
-            Log.e("HDFilmCehennemi", "Hata: ${e.message}")
+            Log.e(
+                "HDFilmCehennemi",
+                "Hata: ${e.message}"
+            )
         }
     }
 }
+```
