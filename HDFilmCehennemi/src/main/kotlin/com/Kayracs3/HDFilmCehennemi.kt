@@ -116,7 +116,7 @@ class HDFilmCehennemi : MainAPI() {
         }
         return searchResults
     }
-    override suspend fun load(url: String): LoadResponse? {
+        override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
             url, 
             headers = mapOf("User-Agent" to userAgent)
@@ -287,7 +287,8 @@ class HDFilmCehennemi : MainAPI() {
             val match = m3u8Regex.find(responseText)
             
             if (match != null) {
-                val finalVideoUrl = match.groupValues.first()
+                // val yeniden atama hatasını kaldıran doğrudan atama:
+                var finalVideoUrl = match.groupValues.first()
                 
                 callback.invoke(
                     newExtractorLink(
