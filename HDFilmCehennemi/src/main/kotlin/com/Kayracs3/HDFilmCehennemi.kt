@@ -91,29 +91,21 @@ class HDFilmCehennemi : MainAPI() {
             )
         ).parsedSafe<Results>() ?: return emptyList()
         
-        val searchResults = mutableListOf<SearchResponse>()
-
-        response.results.forEach { resultHtml ->
+        // Değişken çakışmalarını ve val atama hatalarını sıfırlayan mapNotNull mimarisi
+        return response.results.mapNotNull { resultHtml ->
             val document = Jsoup.parse(resultHtml)
-
-            val title = document
-                .selectFirst("h4.title")?.text() 
-                ?: return@forEach
-            val href = fixUrlNull(
-                document.selectFirst("a")?.attr("href")
-            ) ?: return@forEach
+            val titleText = document.selectFirst("h4.title")?.text() ?: return@mapNotNull null
+            val hrefText = fixUrlNull(document.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
             
             val imgEl = document.selectFirst("img")
-            val posterUrl = fixUrlNull(imgEl?.attr("src")) 
-                ?: fixUrlNull(imgEl?.attr("data-src"))
+            val srcText = fixUrlNull(imgEl?.attr("src")) ?: fixUrlNull(imgEl?.attr("data-src"))
 
-            searchResults.add(
-                newMovieSearchResponse(title, href, TvType.Movie) { 
-                    this.posterUrl = posterUrl
-                        ?.replace("/thumb/", "/list/") 
-                }
-            )
+            newMovieSearchResponse(titleText, hrefText, TvType.Movie) { 
+                this.posterUrl = srcText?.replace("/thumb/", "/list/") 
+            }
         }
+    }
+
         return searchResults
     }
         override suspend fun load(url: String): LoadResponse? {
