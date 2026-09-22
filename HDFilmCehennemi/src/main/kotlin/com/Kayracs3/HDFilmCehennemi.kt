@@ -367,10 +367,107 @@ class HDFilmCehennemi : MainAPI() {
                 .replace("\\u002F", "/")
                 .replace("&amp;", "&")
 
+            Log.d(
+                "HDFilmCehennemi",
+                "Rapidrame HTML uzunlugu: ${normalized.length}"
+            )
+
+            val document = Jsoup.parse(normalized)
+
+            val scriptUrls = document
+                .select("script[src]")
+                .mapNotNull { it.attr("src").takeIf(String::isNotBlank) }
+                .distinct()
+                .take(15)
+
+            Log.d(
+                "HDFilmCehennemi",
+                "Rapidrame script sayisi: ${scriptUrls.size}"
+            )
+
+            scriptUrls.forEachIndexed { index, script ->
+                Log.d(
+                    "HDFilmCehennemi",
+                    "Rapidrame script[$index]: $script"
+                )
+            }
+
+            val mediaElements = document.select("video, source, iframe")
+            Log.d(
+                "HDFilmCehennemi",
+                "Rapidrame medya elementleri: ${mediaElements.size}"
+            )
+
+            mediaElements.take(20).forEachIndexed { index, element ->
+                Log.d(
+                    "HDFilmCehennemi",
+                    "Rapidrame media[$index]: tag=${element.tagName()} src=${element.attr("src")} data-src=${element.attr("data-src")} data-file=${element.attr("data-file")}"
+                )
+            }
+
+            val keywords = listOf(
+                "m3u8",
+                "hls",
+                "playlist",
+                "jwplayer",
+                "file",
+                "source",
+                "stream",
+                "rapidrame"
+            )
+
+            keywords.forEach { keyword ->
+                val lower = normalized.lowercase()
+                val index = lower.indexOf(keyword.lowercase())
+
+                if (index >= 0) {
+                    val from = (index - 220).coerceAtLeast(0)
+                    val to = (index + 420).coerceAtMost(normalized.length)
+                    val snippet = normalized
+                        .substring(from, to)
+                        .replace("\n", " ")
+                        .replace("\r", " ")
+
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame keyword[$keyword]: $snippet"
+                    )
+                } else {
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame keyword[$keyword]: YOK"
+                    )
+                }
+            }
+
             val unpacked = try {
                 getAndUnpack(normalized)
             } catch (_: Exception) {
                 normalized
+            }
+
+            if (unpacked != normalized) {
+                Log.d(
+                    "HDFilmCehennemi",
+                    "Rapidrame JS unpack sonrasi uzunluk: ${unpacked.length}"
+                )
+
+                val unpackedLower = unpacked.lowercase()
+                val unpackedM3u8Index = unpackedLower.indexOf("m3u8")
+
+                if (unpackedM3u8Index >= 0) {
+                    val from = (unpackedM3u8Index - 300).coerceAtLeast(0)
+                    val to = (unpackedM3u8Index + 600).coerceAtMost(unpacked.length)
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame unpack m3u8 snippet: ${unpacked.substring(from, to)}"
+                    )
+                } else {
+                    Log.d(
+                        "HDFilmCehennemi",
+                        "Rapidrame unpack sonrasi da m3u8 yok"
+                    )
+                }
             }
 
             val candidates = listOf(normalized, unpacked)
@@ -397,7 +494,7 @@ class HDFilmCehennemi : MainAPI() {
             if (streamUrl.isNullOrBlank()) {
                 Log.d(
                     "HDFilmCehennemi",
-                    "Rapidrame sayfasinda m3u8 bulunamadi"
+                    "Rapidrame tanisi tamamlandi: dogrudan M3U8 bulunamadi"
                 )
                 return false
             }
@@ -436,4 +533,5 @@ class HDFilmCehennemi : MainAPI() {
             false
         }
     }
+
 }
