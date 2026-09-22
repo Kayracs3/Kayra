@@ -188,10 +188,11 @@ class HDFilmCehennemi : MainAPI() {
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
-                        url = finalVideoUrl,
-                        referer = playerUrl,
-                        quality = Qualities.P1080.value,
-                        isM3u8 = true
+                        url = finalVideoUrl
+                        ) {
+                        this.referer = playerUrl,
+                        this.quality = Qualities.P1080.value,
+                        this.isM3u8 = true
                     )
                 )
             }
