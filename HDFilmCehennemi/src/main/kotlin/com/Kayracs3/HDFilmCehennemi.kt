@@ -28,7 +28,6 @@ class HDFilmCehennemi : MainAPI() {
             "AppleWebKit/537.36 " +
             "(KHTML, like Gecko) " +
             "Chrome/120.0.0.0"
-
     override val mainPage = mainPageOf(
         mainUrl to "Yeni Eklenen Filmler",
         "$mainUrl/yabancidiziizle-5" to "Yeni Eklenen Diziler",
@@ -116,7 +115,7 @@ class HDFilmCehennemi : MainAPI() {
         }
         return searchResults
     }
-        override suspend fun load(url: String): LoadResponse? {
+    override suspend fun load(url: String): LoadResponse? {
         val document = app.get(
             url, 
             headers = mapOf("User-Agent" to userAgent)
@@ -218,110 +217,6 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
     }
-
-        override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(
-            url, 
-            headers = mapOf("User-Agent" to userAgent)
-        ).document
-
-        val title = document
-            .selectFirst("h1.section-title")?.text()
-            ?.substringBefore(" izle") ?: return null
-            
-        val poster = fixUrlNull(
-            document.select("aside.post-info-poster img.lazyload")
-                .lastOrNull()?.attr("data-src")
-        )
-        val tags = document
-            .select("div.post-info-genres a")
-            .map { it.text() }
-        val year = document
-            .selectFirst("div.post-info-year-country a")
-            ?.text()?.trim()?.toIntOrNull()
-            
-        val tvType = if (document.select("div.seasons").isEmpty()) 
-            TvType.Movie else TvType.TvSeries
-            
-        val description = document
-            .selectFirst("article.post-info-content > p")
-            ?.text()?.trim()
-        
-        val actors = document
-            .select("div.post-info-cast a")
-            .mapNotNull {
-                val actorName = it.selectFirst("strong")?.text() 
-                    ?: return@mapNotNull null
-                val actorImg = it.selectFirst("img")?.attr("data-src")
-                ActorData(Actor(actorName, actorImg), null, null)
-            }
-
-        val recommendations = document
-            .select("div.section-slider-container div.slider-slide")
-            .mapNotNull {
-                val recName = it.selectFirst("a")?.attr("title") 
-                    ?: return@mapNotNull null
-                val recHref = fixUrlNull(it.selectFirst("a")?.attr("href")) 
-                    ?: return@mapNotNull null
-                val img = it.selectFirst("img")
-                val recPosterUrl = fixUrlNull(img?.attr("data-src")) 
-                    ?: fixUrlNull(img?.attr("src"))
-
-                newTvSeriesSearchResponse(
-                    recName, 
-                    recHref, 
-                    TvType.TvSeries
-                ) {
-                    this.posterUrl = recPosterUrl
-                }
-            }
-
-        return if (tvType == TvType.TvSeries) {
-            val episodes = document
-                .select("div.seasons-tab-content a")
-                .mapNotNull {
-                    val epName = it.selectFirst("h4")?.text()?.trim() 
-                        ?: return@mapNotNull null
-                    val epHref = fixUrlNull(it.attr("href")) 
-                        ?: return@mapNotNull null
-                    val epEpisode = Regex("""(\d+)\. ?Bölüm""")
-                        .find(epName)?.groupValues?.get(1)?.toIntOrNull()
-                    val epSeason = Regex("""(\d+)\. ?Sezon""")
-                        .find(epName)?.groupValues?.get(1)?.toIntOrNull() 
-                        ?: 1
-
-                    newEpisode(epHref) {
-                        this.name = epName
-                        this.season = epSeason
-                        this.episode = epEpisode
-                    }
-                }
-
-            newTvSeriesLoadResponse(
-                title, 
-                url, 
-                TvType.TvSeries, 
-                episodes
-            ) {
-                this.posterUrl = poster
-                this.year = year
-                this.plot = description
-                this.tags = tags
-                this.recommendations = recommendations
-                this.actors = actors
-            }
-        } else {
-            newMovieLoadResponse(title, url, TvType.Movie, url) {
-                this.posterUrl = poster
-                this.year = year
-                this.plot = description
-                this.tags = tags
-                this.recommendations = recommendations
-                this.actors = actors
-            }
-        }
-    }
-
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
