@@ -262,15 +262,14 @@ class HDFilmCehennemi : MainAPI() {
                     .replace("'", "")
                 
                 callback.invoke(
-                    newExtractorLink(
+                    ExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
-                        url = finalUrl
-                    ) {
-                        this.referer = playerUrl
-                        this.quality = Qualities.P1080.value
-                        this.isM3u8 = true
-                    }
+                        url = finalUrl,
+                        referer = playerUrl,
+                        quality = Qualities.P1080.value,
+                        isM3u8 = true
+                    )
                 )
             }
         } catch (e: Exception) {
