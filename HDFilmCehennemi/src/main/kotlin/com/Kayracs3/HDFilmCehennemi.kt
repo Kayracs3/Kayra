@@ -217,7 +217,7 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
     }
-       override suspend fun loadLinks(
+           override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -231,10 +231,8 @@ class HDFilmCehennemi : MainAPI() {
         val selectors = "iframe, div[data-frame], [data-embed], " +
                 "nav.player-tabs a, div.player-tab-sources button"
                 
-        val playerElements = document.select(selectors)
-        
-        playerElements.forEach { element ->
-            var targetUrl = element.attr("src").ifEmpty { 
+        document.select(selectors).forEach { element ->
+            val src = element.attr("src").ifEmpty { 
                 element.attr("data-src").ifEmpty { 
                     element.attr("data-frame").ifEmpty { 
                         element.attr("data-embed").ifEmpty { 
@@ -244,17 +242,17 @@ class HDFilmCehennemi : MainAPI() {
                 } 
             }
             
-            if (targetUrl.isNotEmpty()) {
-                targetUrl = fixUrl(targetUrl)
+            if (src.isNotEmpty()) {
+                val fixedUrl = fixUrl(src)
                 
-                if (targetUrl.contains("hdfilmcehennemi") || 
-                    targetUrl.contains("moly") || 
-                    targetUrl.contains("cdnimages")
+                if (fixedUrl.contains("hdfilmcehennemi") || 
+                    fixedUrl.contains("moly") || 
+                    fixedUrl.contains("cdnimages")
                 ) {
-                    fetchLocalStream(targetUrl, callback)
+                    fetchLocalStream(fixedUrl, callback)
                 } else {
                     loadExtractor(
-                        targetUrl, 
+                        fixedUrl, 
                         data, 
                         subtitleCallback, 
                         callback
@@ -270,11 +268,10 @@ class HDFilmCehennemi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-            val headersMap = mapOf("User-Agent" to userAgent)
             val responseText = app.get(
                 playerUrl, 
                 referer = "$mainUrl/", 
-                headers = headersMap
+                headers = mapOf("User-Agent" to userAgent)
             ).text
             
             val pattern = """["']?(https?://[^"']+""" +
@@ -282,16 +279,12 @@ class HDFilmCehennemi : MainAPI() {
                     """(?:master\.txt|master\.m3u8)""" +
                     """[^"']*)["']"""
             
-            val regex = Regex(pattern)
-            
-            // Atama hatalarını ve cache çakışmalarını tamamen sıfırlayan
-            // doğrudan invoke mimarisi:
-            regex.find(responseText)?.groupValues?.first()?.let { videoUrl ->
+            Regex(pattern).find(responseText)?.groupValues?.first()?.let {
                 callback.invoke(
                     newExtractorLink(
                         source = "HDFilmCehennemi (CDN)",
                         name = "HQ Kalite (Yerel)",
-                        url = videoUrl
+                        url = it
                     ) {
                         this.referer = playerUrl
                         this.quality = Qualities.P1080.value
