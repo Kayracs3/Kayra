@@ -1,218 +1,331 @@
-// ! Bu araç @keyiflerolsun tarafından | @KekikAkademi için yazılmıştır.
-
-package com.keyiflerolsun
+package com.Kayracs3
 
 import android.util.Log
-import android.util.Base64
-import org.jsoup.nodes.Element
-import org.jsoup.nodes.Document
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
-import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 
-class FullHDFilmizlesene : MainAPI() {
-    override var mainUrl              = "https://www.fullhdfilmizlesene.de"
-    override var name                 = "FullHDFilmizlesene"
-    override val hasMainPage          = true
-    override var lang                 = "tr"
-    override val hasQuickSearch       = false
-    override val supportedTypes       = setOf(TvType.Movie)
+class FullDFilmizlesene : MainAPI() {
+    override var mainUrl = "https://www.fullhdfilmizlesene.now"
+    override var name = "FullDFilmizlesene"
+    override val hasMainPage = true
+    override val hasQuickSearch = true
+    override var lang = "tr"
 
-    override val mainPage = mainPageOf(
-        "${mainUrl}/en-cok-izlenen-filmler-izle-hd/"            to "En Çok izlenen Filmler",
-        "${mainUrl}/filmizle/imdb-puani-yuksek-filmler-izle-1/" to "IMDB Puanı Yüksek Filmler",
-        "${mainUrl}/filmizle/aile-filmleri-izle-2/"             to "Aile Filmleri",
-        "${mainUrl}/filmizle/aksiyon-filmler-izle-1/"           to "Aksiyon Filmleri",
-        "${mainUrl}/filmizle/animasyon-filmleri-izle-4/"        to "Animasyon Filmleri",
-        "${mainUrl}/filmizle/belgesel-filmleri-izle-2/"         to "Belgeseller",
-        "${mainUrl}/filmizle/bilim-kurgu-filmleri-izle-1/"      to "Bilim Kurgu Filmleri",
-        "${mainUrl}/filmizle/bluray-filmler-izle-1/"            to "Blu Ray Filmler",
-        "${mainUrl}/filmizle/cizgi-filmler-izle-1/"             to "Çizgi Filmler",
-        "${mainUrl}/filmizle/dram-filmleri-izle/"               to "Dram Filmleri",
-        "${mainUrl}/filmizle/fantastik-filmleri-izle-2/"        to "Fantastik Filmler",
-        "${mainUrl}/filmizle/gerilim-filmleri-izle-3/"          to "Gerilim Filmleri",
-        "${mainUrl}/filmizle/gizem-filmleri-izle/"              to "Gizem Filmleri",
-        "${mainUrl}/filmizle/hint-filmler-fh-hd-izle/"          to "Hint Filmleri",
-        "${mainUrl}/filmizle/komedi-filmleri-izle-2/"           to "Komedi Filmleri",
-        "${mainUrl}/filmizle/korku-filmleri-izle-2/"            to "Korku Filmleri",
-        "${mainUrl}/filmizle/macera-filmleri-izle-1/"           to "Macera Filmleri",
-        "${mainUrl}/filmizle/muzikal-filmleri-izle/"            to "Müzikal Filmler",
-        "${mainUrl}/filmizle/polisiye-filmleri-izle-1/"         to "Polisiye Filmleri",
-        "${mainUrl}/filmizle/psikolojik-filmleri-izle/"         to "Psikolojik Filmler",
-        "${mainUrl}/filmizle/romantik-filmler-izle-1/"          to "Romantik Filmler",
-        "${mainUrl}/filmizle/savas-filmleri-izle-2/"            to "Savaş Filmleri",
-        "${mainUrl}/filmizle/suc-filmleri-izle-3/"              to "Suç Filmleri",
-        "${mainUrl}/filmizle/tarih-filmleri-izle/"              to "Tarih Filmleri",
-        "${mainUrl}/filmizle/western-filmleri-izle/"            to "Western Filmler",
-        "${mainUrl}/filmizle/yerli-filmler-izle-3/"             to "Yerli Filmler",
+    override val supportedTypes = setOf(
+        TvType.Movie
     )
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get("${request.data}${page}").document
-        val home     = document.select("li.film").mapNotNull { it.toSearchResult() }
+    private val userAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+        "AppleWebKit/537.36 (KHTML, like Gecko) " +
+        "Chrome/130.0.0.0 Safari/537.36"
 
-        return newHomePageResponse(request.name, home)
+    override val mainPage = mainPageOf(
+        mainUrl to "Ana Sayfa",
+        "$mainUrl/yeni-filmler" to "Yeni Filmler",
+        "$mainUrl/yil/2026-filmleri-izle" to "2026 Filmleri",
+        "$mainUrl/filmizle/hd-720p-filmler-izle" to "1080p / 720p",
+        "$mainUrl/filmizle/turkce-dublaj-filmler-1" to "Türkçe Dublaj",
+        "$mainUrl/filmizle/turkce-altyazili-filmler-1" to "Türkçe Altyazılı",
+        "$mainUrl/filmizle/yerli-filmler" to "Yerli Filmler"
+    )
+
+    override suspend fun getMainPage(
+        page: Int,
+        request: MainPageRequest
+    ): HomePageResponse {
+        val targetUrl = if (page <= 1) {
+            request.data
+        } else {
+            pageUrl(request.data, page)
+        }
+
+        val document = app.get(
+            targetUrl,
+            headers = mapOf(
+                "User-Agent" to userAgent,
+                "Referer" to "$mainUrl/"
+            )
+        ).document
+
+        val results = document
+            .select("a[href*='/film/']")
+            .mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
+
+        return newHomePageResponse(
+            request.name,
+            results,
+            hasNext = results.isNotEmpty()
+        )
     }
 
-    private fun Element.toSearchResult(): SearchResponse? {
-        val title     = this.selectFirst("span.film-title")?.text() ?: return null
-        val href      = fixUrlNull(this.selectFirst("a")?.attr("href")) ?: return null
-        val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("data-src"))
-
-        return newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = posterUrl }
+    private fun pageUrl(base: String, page: Int): String {
+        if (page <= 1) return base
+        return if (base.endsWith("/")) {
+            "${base}sayfa/$page/"
+        } else {
+            "$base/sayfa/$page/"
+        }
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        val document = app.get("${mainUrl}/arama/${query}").document
+    private fun org.jsoup.nodes.Element.toSearchResult(): SearchResponse? {
+        val href = fixUrlNull(attr("href")) ?: return null
 
-        return document.select("li.film").mapNotNull { it.toSearchResult() }
+        if (!href.contains("/film/")) return null
+
+        val title = (
+            selectFirst("h2")?.text()
+                ?: selectFirst("h3")?.text()
+                ?: selectFirst("[title]")?.attr("title")
+                ?: attr("title")
+                ?: text()
+        )
+            .trim()
+            .removeSuffix(" izle")
+            .removeSuffix(" İzle")
+            .trim()
+
+        if (title.isBlank()) return null
+
+        val posterUrl = fixUrlNull(
+            selectFirst("img")?.attr("data-src")
+                ?: selectFirst("img")?.attr("data-lazy-src")
+                ?: selectFirst("img")?.attr("src")
+        )
+
+        val quality = when {
+            text().contains("4K", ignoreCase = true) -> SearchQuality.HD
+            text().contains("1080", ignoreCase = true) -> SearchQuality.HD
+            text().contains("720", ignoreCase = true) -> SearchQuality.HD
+            else -> null
+        }
+
+        return newMovieSearchResponse(
+            title = title,
+            url = href,
+            type = TvType.Movie
+        ) {
+            this.posterUrl = posterUrl
+            this.quality = quality
+        }
     }
 
-    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+    override suspend fun quickSearch(
+        query: String
+    ): List<SearchResponse> = search(query)
+
+    override suspend fun search(
+        query: String
+    ): List<SearchResponse> {
+        val encoded = query.urlEncoded()
+
+        val searchUrls = listOf(
+            "$mainUrl/search/?q=$encoded",
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/?s=$encoded"
+        )
+
+        for (searchUrl in searchUrls) {
+            try {
+                val document = app.get(
+                    searchUrl,
+                    headers = mapOf(
+                        "User-Agent" to userAgent,
+                        "Referer" to "$mainUrl/"
+                    )
+                ).document
+
+                val results = document
+                    .select("a[href*='/film/']")
+                    .mapNotNull { it.toSearchResult() }
+                    .distinctBy { it.url }
+
+                if (results.isNotEmpty()) {
+                    return results
+                }
+            } catch (e: Exception) {
+                Log.d(name, "Arama denemesi başarısız: $searchUrl -> ${e.message}")
+            }
+        }
+
+        return emptyList()
+    }
 
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url).document
+        return try {
+            val document = app.get(
+                url,
+                headers = mapOf(
+                    "User-Agent" to userAgent,
+                    "Referer" to "$mainUrl/"
+                )
+            ).document
 
-        val title           = document.selectFirst("div[class=izle-titles]")?.text()?.trim() ?: return null
-        val poster          = fixUrlNull(document.selectFirst("div img")?.attr("data-src"))
-        val year            = document.selectFirst("div.dd a.category")?.text()?.split(" ")?.get(0)?.trim()?.toIntOrNull()
-        val description     = document.selectFirst("div.ozet-ic > p")?.text()?.trim()
-        val tags            = document.select("a[rel='category tag']").map { it.text() }
-        val rating          = document.selectFirst("div.puanx-puan")?.text()?.split(" ")?.last()?.toRatingInt()
-        val duration        = document.selectFirst("span.sure")?.text()?.split(" ")?.get(0)?.trim()?.toIntOrNull()
-        val trailer         = Regex("""embedUrl": "(.*)"""").find(document.html())?.groupValues?.get(1)
-        val actors          = document.select("div.film-info ul li:nth-child(2) a > span").map {
-            Actor(it.text())
-        }
+            val title = (
+                document.selectFirst("h1")?.text()
+                    ?: document.selectFirst("meta[property='og:title']")
+                        ?.attr("content")
+                    ?: "FullDFilmizlesene"
+            )
+                .trim()
+                .removeSuffix(" izle")
+                .removeSuffix(" İzle")
+                .trim()
 
+            val posterUrl = fixUrlNull(
+                document.selectFirst("meta[property='og:image']")?.attr("content")
+                    ?: document.selectFirst("meta[name='twitter:image']")?.attr("content")
+                    ?: document.selectFirst("img")?.attr("src")
+            )
 
-        val recommendations = document.selectXpath("//div[span[text()='Benzer Filmler']]/following-sibling::section/ul/li").mapNotNull {
-            val recName      = it.selectFirst("span.film-title")?.text() ?: return@mapNotNull null
-            val recHref      = fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
-            val recPosterUrl = fixUrlNull(it.selectFirst("img")?.attr("data-src"))
-            newMovieSearchResponse(recName, recHref, TvType.Movie) {
-                this.posterUrl = recPosterUrl
+            val plot = document.selectFirst("meta[name='description']")
+                ?.attr("content")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: document.selectFirst("article p")
+                    ?.text()
+                    ?.trim()
+
+            val pageText = document.text()
+
+            val year = Regex("""(?:Yapım|Yıl)\s*(?:[:\-])?\s*(\d{4})""")
+                .find(pageText)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
+                ?: Regex("""\b(19\d{2}|20\d{2})\b""")
+                    .find(pageText)
+                    ?.groupValues
+                    ?.getOrNull(1)
+                    ?.toIntOrNull()
+
+            val tags = document
+                .select("a[href*='/tur/'], a[href*='/genre/']")
+                .map { it.text().trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            newMovieLoadResponse(
+                name = title,
+                url = url,
+                type = TvType.Movie,
+                dataUrl = url
+            ) {
+                this.posterUrl = posterUrl
+                this.plot = plot
+                this.year = year
+                this.tags = tags
             }
-        }
-
-        return newMovieLoadResponse(title, url, TvType.Movie, url) {
-            this.posterUrl       = poster
-            this.year            = year
-            this.plot            = description
-            this.tags            = tags
-            this.rating          = rating
-            this.duration        = duration
-            this.recommendations = recommendations
-            addActors(actors)
-            addTrailer(trailer)
+        } catch (e: Exception) {
+            Log.e(name, "Film sayfası yüklenemedi: ${e.message}", e)
+            null
         }
     }
 
-    private fun atob(s: String): String {
-        return String(Base64.decode(s, Base64.DEFAULT))
-    }
+    private fun findMasterUrl(text: String): String? {
+        val patterns = listOf(
+            Regex(
+                """(?i)["']?selectedMasterUrl["']?\s*[:=]\s*["'](https?://[^"'\\\s]+)["']"""
+            ),
+            Regex(
+                """(?i)["']?(?:masterUrl|master_url)["']?\s*[:=]\s*["'](https?://[^"'\\\s]+)["']"""
+            ),
+            Regex(
+                """(?i)(https?://[^"'<>\\\s]+(?:master\.txt|master\.m3u8)(?:\?[^"'<>\\\s]*)?)"""
+            ),
+            Regex(
+                """(?i)(https?://[^"'<>\\\s]+\.m3u8(?:\?[^"'<>\\\s]*)?)"""
+            )
+        )
 
-    private fun rtt(s: String): String {
-        fun rot13Char(c: Char): Char {
-            return when (c) {
-                in 'a'..'z' -> ((c - 'a' + 13) % 26 + 'a'.code).toChar()
-                in 'A'..'Z' -> ((c - 'A' + 13) % 26 + 'A'.code).toChar()
-                else -> c
+        for (pattern in patterns) {
+            val match = pattern.find(text)?.groupValues?.getOrNull(1)
+            if (!match.isNullOrBlank()) {
+                return match
+                    .replace("\\/", "/")
+                    .replace("\\u002F", "/")
+                    .replace("\\u003A", ":")
             }
         }
 
-        return s.map { rot13Char(it) }.joinToString("")
+        return null
     }
 
-    private fun getVideoLinks(document: Document): List<Map<String, String>> {
-        val scriptElement = document.select("script").firstOrNull { it.data().isNotEmpty() }
-        val scriptContent = scriptElement?.data()?.trim() ?: return emptyList()
+    private suspend fun extractPlayerSource(
+        playerUrl: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        return try {
+            val response = app.get(
+                playerUrl,
+                referer = "$mainUrl/",
+                headers = mapOf(
+                    "User-Agent" to userAgent,
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                )
+            )
 
-        val scxData         = Regex("scx = (.*?);").find(scriptContent)?.groupValues?.get(1) ?: return emptyList()
-        val scxMap: SCXData = jacksonObjectMapper().readValue(scxData)
-        val keys             = listOf("atom", "advid", "advidprox", "proton", "fast", "fastly", "tr", "en")
+            val html = response.text
+            Log.d(name, "Player HTML uzunluğu: ${html.length}")
 
-        val linkList = mutableListOf<Map<String, String>>()
+            val masterUrl = findMasterUrl(html)
 
-        for (key in keys) {
-            val t = when (key) {
-                "atom"      -> scxMap.atom?.sx?.t
-                "advid"     -> scxMap.advid?.sx?.t
-                "advidprox" -> scxMap.advidprox?.sx?.t
-                "proton"    -> scxMap.proton?.sx?.t
-                "fast"      -> scxMap.fast?.sx?.t
-                "fastly"    -> scxMap.fastly?.sx?.t
-                "tr"        -> scxMap.tr?.sx?.t
-                "en"        -> scxMap.en?.sx?.t
-                else        -> null
+            if (masterUrl.isNullOrBlank()) {
+                Log.d(name, "selectedMasterUrl/master URL HTML içinde bulunamadı")
+                Log.d(
+                    name,
+                    "Player URL: $playerUrl | master.txt=${html.contains("master.txt", true)} | m3u8=${html.contains(".m3u8", true)}"
+                )
+                return false
             }
 
-            when (t) {
-                is List<*> -> {
-                    val links = t.filterIsInstance<String>().map { link -> atob(rtt(link)) }
-                    linkList.add(mapOf(key to links.joinToString(",")))
+            Log.d(name, "Bulunan master URL: $masterUrl")
+
+            callback.invoke(
+                newExtractorLink(
+                    source = name,
+                    name = "FullDFilmizlesene",
+                    url = masterUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    referer = playerUrl
+                    quality = Qualities.P1080.value
                 }
-                is Map<*, *> -> {
-                    val links = t.mapValues { (_, value) ->
-                        if (value is String) atob(rtt(value)) else ""
-                    }
-                    val safeLinks = links.mapKeys { (key, _) ->
-                        key?.toString() ?: "Unknown"
-                    }
-                    linkList.add(safeLinks)
-                }
-            }
-        }
+            )
 
-        return linkList
+            true
+        } catch (e: Exception) {
+            Log.e(name, "Player source çıkarılırken hata: ${e.message}", e)
+            false
+        }
     }
 
-    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
-        Log.d("FHD", "data » $data")
-        val document    = app.get(data).document
-        val videoLinks = getVideoLinks(document)
-        Log.d("FHD", "videoLinks » $videoLinks")
-        if (videoLinks.isEmpty()) return false
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        // TEST: DevTools'ta bu film için görülen selectedMasterUrl.
+        // Bu URL film/oturum bazında değişebileceği için kalıcı çözüm değildir.
+        val testUrl = "https://s32.cdnimages6326.shop/mf/ITIlozI0Yx5cozcuYwZhZwNlAF5KEHVgERjhZGN4ZUNhESIOGP5VYwV2AP1VER0d0zxL2EhnJ1uM2ImAwZlAv5mnT9js0xi32avr1"
 
+        Log.d(name, "TEST selectedMasterUrl bulundu: $testUrl")
 
-        for (videoMap in videoLinks) {
-            for ((key, value) in videoMap) {
-                val videoUrl = fixUrlNull(value) ?: continue
-                if (videoUrl.contains("turbo.imgz.me")) {
-                    loadExtractor("${key}||${videoUrl}", "${mainUrl}/", subtitleCallback, callback)
-                } else {
-                    loadExtractor(videoUrl, "${mainUrl}/", subtitleCallback, callback)
-                }
+        callback.invoke(
+            newExtractorLink(
+                source = name,
+                name = "FullDFilmizlesene TEST",
+                url = testUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                referer = "https://rapidvid.org/"
+                quality = Qualities.P1080.value
             }
-        }
+        )
 
         return true
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    data class SCXData(
-        @JsonProperty("atom")      val atom: AtomData?      = null,
-        @JsonProperty("advid")     val advid: AtomData?     = null,
-        @JsonProperty("advidprox") val advidprox: AtomData? = null,
-        @JsonProperty("proton")    val proton: AtomData?    = null,
-        @JsonProperty("fast")      val fast: AtomData?      = null,
-        @JsonProperty("fastly")    val fastly: AtomData?    = null,
-        @JsonProperty("tr")        val tr: AtomData?        = null,
-        @JsonProperty("en")        val en: AtomData?        = null,
-    )
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    data class AtomData(
-        @JsonProperty("sx") var sx: SXData
-    )
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    data class SXData(
-        @JsonProperty("t") var t: Any
-    )
 }
