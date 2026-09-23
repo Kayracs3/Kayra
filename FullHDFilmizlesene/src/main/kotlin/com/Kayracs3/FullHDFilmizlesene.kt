@@ -401,7 +401,7 @@ class FullHDFilmizlesene : MainAPI() {
                 url = url,
                 type = ExtractorLinkType.M3U8
             ) {
-                referer = referer
+                this.referer = referer
                 quality = Qualities.P1080.value
             }
         )
