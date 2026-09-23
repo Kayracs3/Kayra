@@ -4,7 +4,7 @@ import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 
-class FullDFilmizlesene : MainAPI() {
+class FullHDFilmizlesene : MainAPI() {
     override var mainUrl = "https://www.fullhdfilmizlesene.now"
     override var name = "FullDFilmizlesene"
     override val hasMainPage = true
@@ -102,9 +102,9 @@ class FullDFilmizlesene : MainAPI() {
         }
 
         return newMovieSearchResponse(
-            title = title,
-            url = href,
-            type = TvType.Movie
+            title,
+            href,
+            TvType.Movie
         ) {
             this.posterUrl = posterUrl
             this.quality = quality
@@ -118,7 +118,7 @@ class FullDFilmizlesene : MainAPI() {
     override suspend fun search(
         query: String
     ): List<SearchResponse> {
-        val encoded = query.urlEncoded()
+        val encoded = java.net.URLEncoder.encode(query, "UTF-8")
 
         val searchUrls = listOf(
             "$mainUrl/search/?q=$encoded",
@@ -223,109 +223,26 @@ class FullDFilmizlesene : MainAPI() {
         }
     }
 
-    private fun findMasterUrl(text: String): String? {
-        val patterns = listOf(
-            Regex(
-                """(?i)["']?selectedMasterUrl["']?\s*[:=]\s*["'](https?://[^"'\\\s]+)["']"""
-            ),
-            Regex(
-                """(?i)["']?(?:masterUrl|master_url)["']?\s*[:=]\s*["'](https?://[^"'\\\s]+)["']"""
-            ),
-            Regex(
-                """(?i)(https?://[^"'<>\\\s]+(?:master\.txt|master\.m3u8)(?:\?[^"'<>\\\s]*)?)"""
-            ),
-            Regex(
-                """(?i)(https?://[^"'<>\\\s]+\.m3u8(?:\?[^"'<>\\\s]*)?)"""
-            )
-        )
-
-        for (pattern in patterns) {
-            val match = pattern.find(text)?.groupValues?.getOrNull(1)
-            if (!match.isNullOrBlank()) {
-                return match
-                    .replace("\\/", "/")
-                    .replace("\\u002F", "/")
-                    .replace("\\u003A", ":")
-            }
-        }
-
-        return null
-    }
-
-    private suspend fun extractPlayerSource(
-        playerUrl: String,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
-        return try {
-            val response = app.get(
-                playerUrl,
-                referer = "$mainUrl/",
-                headers = mapOf(
-                    "User-Agent" to userAgent,
-                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                )
-            )
-
-            val html = response.text
-            Log.d(name, "Player HTML uzunluğu: ${html.length}")
-
-            val masterUrl = findMasterUrl(html)
-
-            if (masterUrl.isNullOrBlank()) {
-                Log.d(name, "selectedMasterUrl/master URL HTML içinde bulunamadı")
-                Log.d(
-                    name,
-                    "Player URL: $playerUrl | master.txt=${html.contains("master.txt", true)} | m3u8=${html.contains(".m3u8", true)}"
-                )
-                return false
-            }
-
-            Log.d(name, "Bulunan master URL: $masterUrl")
-
-            callback.invoke(
-                newExtractorLink(
-                    source = name,
-                    name = "FullDFilmizlesene",
-                    url = masterUrl,
-                    type = ExtractorLinkType.M3U8
-                ) {
-                    referer = playerUrl
-                    quality = Qualities.P1080.value
-                }
-            )
-
-            true
-        } catch (e: Exception) {
-            Log.e(name, "Player source çıkarılırken hata: ${e.message}", e)
-            false
-        }
-    }
-
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        // TEST: DevTools'ta bu film için görülen selectedMasterUrl.
-        // Bu URL film/oturum bazında değişebileceği için kalıcı çözüm değildir.
-        val testUrl = "https://s32.cdnimages6326.shop/mf/ITIlozI0Yx5cozcuYwZhZwNlAF5KEHVgERjhZGN4ZUNhESIOGP5VYwV2AP1VER0d0zxL2EhnJ1uM2ImAwZlAv5mnT9js0xi32avr1"
+        /*
+         * Video bağlantısı henüz bilinçli olarak burada bırakıldı.
+         *
+         * Sen Network/DevTools üzerinden gerçek video bağlantısının
+         * nereden geldiğini söylediğinde sadece bu bölümü dolduracağız.
+         *
+         * Şu anda plugin:
+         * - ana sayfa/listeleri okur
+         * - arama yapar
+         * - film detayını açar
+         * - metadata/poster/özet/yıl/tür bilgilerini alır
+         */
 
-        Log.d(name, "TEST selectedMasterUrl bulundu: $testUrl")
-
-        callback.invoke(
-            newExtractorLink(
-                source = name,
-                name = "FullDFilmizlesene TEST",
-                url = testUrl,
-                type = ExtractorLinkType.M3U8
-            ) {
-                referer = "https://rapidvid.org/"
-                quality = Qualities.P1080.value
-            }
-        )
-
-        return true
+        Log.d(name, "loadLinks beklemede -> $data")
+        return false
     }
-
 }
