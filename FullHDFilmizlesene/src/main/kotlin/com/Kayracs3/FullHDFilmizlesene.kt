@@ -496,7 +496,7 @@ class FullHDFilmizlesene : MainAPI() {
         return null
     }
 
-    private fun emitRapidVidMaster(
+    private suspend fun emitRapidVidMaster(
         url: String,
         referer: String,
         callback: (ExtractorLink) -> Unit
