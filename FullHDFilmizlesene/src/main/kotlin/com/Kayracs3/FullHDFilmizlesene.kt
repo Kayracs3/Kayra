@@ -306,7 +306,7 @@ class FullHDFilmizlesene : MainAPI() {
                     try {
                         val resolved = resolveRapidVid(embedUrl)
                         Log.d(name, "RapidVid cm=${resolved != null}")
-                        if (!resolved.isNullOrBlank() && emitM3u8(
+                        if (!resolved.isNullOrBlank() && emitRapidVidMaster(
                                 resolved,
                                 refererForMedia(embedUrl),
                                 callback
@@ -494,6 +494,36 @@ class FullHDFilmizlesene : MainAPI() {
         }
 
         return null
+    }
+
+    private fun emitRapidVidMaster(
+        url: String,
+        referer: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val cleanUrl = url.trim()
+        if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+            return false
+        }
+
+        // RapidVid'in güncel cm master URL'leri her zaman .m3u8 ile bitmiyor
+        // (ör. /mp/... veya /mm/... biçimleri). Bu nedenle burada uzantı
+        // kontrolü yapmadan HLS olarak bildiriyoruz.
+        callback(
+            newExtractorLink(
+                source = name,
+                name = "FullDFilmizlesene • RapidVid",
+                url = cleanUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = referer
+                this.headers = browserHeaders
+                quality = Qualities.P1080.value
+            }
+        )
+
+        Log.d(name, "RapidVid cm emit -> $cleanUrl referer=$referer")
+        return true
     }
 
     private suspend fun resolveRapidVid(url: String): String? {
