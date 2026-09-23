@@ -1,6 +1,8 @@
 package com.Kayracs3
 
+import android.util.Base64
 import android.util.Log
+import android.net.Uri
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
@@ -269,24 +271,67 @@ class FullHDFilmizlesene : MainAPI() {
             val pageHtml = document.html()
             var emitted = false
 
+            // Güncel sitede kaynaklar doğrudan iframe HTML'inde bulunmayabiliyor.
+            // Film sayfasındaki scx nesnesinde ROT13 + Base64 ile saklanan embed
+            // URL'lerini önce çözüyoruz.
+            val scxUrls = extractScxUrls(pageHtml)
+            Log.d(name, "scx decoded urls=${scxUrls.size}")
+
+            for (embedUrl in scxUrls) {
+                // Çözülen değer doğrudan bir HLS URL'si ise kullan.
+                if (embedUrl.contains(".m3u8", ignoreCase = true)) {
+                    if (emitM3u8(embedUrl, data, callback)) emitted = true
+                    continue
+                }
+
+                // CloudStream'deki yüklü extractor'ları dene.
+                try {
+                    var extractorEmitted = false
+                    loadExtractor(
+                        embedUrl,
+                        data,
+                        subtitleCallback,
+                    ) { link ->
+                        extractorEmitted = true
+                        callback(link)
+                    }
+                    if (extractorEmitted) emitted = true
+                    Log.d(name, "loadExtractor=$extractorEmitted -> $embedUrl")
+                } catch (e: Exception) {
+                    Log.d(name, "loadExtractor hata -> $embedUrl : ${e.message}")
+                }
+
+                // RapidVid/Atom kaynakları için yerleşik çözümleyici.
+                if (embedUrl.contains("rapidvid", ignoreCase = true)) {
+                    try {
+                        val resolved = resolveRapidVid(embedUrl)
+                        Log.d(name, "RapidVid cm=${resolved != null}")
+                        if (!resolved.isNullOrBlank() && emitM3u8(
+                                resolved,
+                                refererForMedia(embedUrl),
+                                callback
+                            )
+                        ) {
+                            emitted = true
+                        }
+                    } catch (e: Exception) {
+                        Log.d(name, "RapidVid çözümleme hata -> ${e.message}")
+                    }
+                }
+            }
+
+            // Eski sürümlerde video iframe üzerinden geliyorsa bunu da destekle.
             val iframeUrls = document
                 .select("iframe[src], iframe[data-src]")
                 .mapNotNull { frame ->
                     fixUrlNull(
-                        firstNonBlank(
-                            frame.attr("data-src"),
-                            frame.attr("src")
-                        )
+                        firstNonBlank(frame.attr("data-src"), frame.attr("src"))
                     )
                 }
                 .filter { it.isNotBlank() }
                 .distinct()
 
-            Log.d(name, "iframe count=${iframeUrls.size}")
-
             for (iframeUrl in iframeUrls) {
-                // Önce CloudStream extractor sistemini dene. Gerçekten link üretildiyse
-                // emitted=true oluyor; sadece çağrılmış olması yeterli değil.
                 try {
                     var extractorEmitted = false
                     loadExtractor(
@@ -298,12 +343,11 @@ class FullHDFilmizlesene : MainAPI() {
                         callback(link)
                     }
                     if (extractorEmitted) emitted = true
-                    Log.d(name, "loadExtractor sonuc=$extractorEmitted -> $iframeUrl")
                 } catch (e: Exception) {
-                    Log.d(name, "loadExtractor başarısız -> $iframeUrl : ${e.message}")
+                    Log.d(name, "iframe extractor hata -> $iframeUrl : ${e.message}")
                 }
 
-                // Extractor bulunamazsa iframe HTML'sinden doğrudan m3u8/master.txt ara.
+                // Iframe'in kendi HTML'inde görünür bir HLS URL varsa kullan.
                 try {
                     val iframeHtml = app.get(
                         iframeUrl,
@@ -311,28 +355,193 @@ class FullHDFilmizlesene : MainAPI() {
                     ).text
 
                     val candidates = extractMediaCandidates(iframeHtml)
-                    Log.d(name, "iframe candidates=${candidates.size} -> $iframeUrl")
-
                     for (candidate in candidates) {
                         if (emitM3u8(candidate, iframeUrl, callback)) emitted = true
+                    }
+
+                    if (iframeUrl.contains("rapidvid", ignoreCase = true)) {
+                        val resolved = resolveRapidVidFromHtml(iframeHtml)
+                        if (!resolved.isNullOrBlank() && emitM3u8(
+                                resolved,
+                                refererForMedia(iframeUrl),
+                                callback
+                            )
+                        ) {
+                            emitted = true
+                        }
                     }
                 } catch (e: Exception) {
                     Log.d(name, "iframe okunamadı -> $iframeUrl : ${e.message}")
                 }
             }
 
-            // Bazı sürümlerde link iframe yerine doğrudan film sayfasındaki script'tedir.
-            val pageCandidates = extractMediaCandidates(pageHtml)
-            Log.d(name, "page candidates=${pageCandidates.size}")
-
-            for (candidate in pageCandidates) {
+            // Son çare: film sayfasının kendisinde açık bir HLS bağlantısı varsa.
+            for (candidate in extractMediaCandidates(pageHtml)) {
                 if (emitM3u8(candidate, data, callback)) emitted = true
             }
 
+            Log.d(name, "loadLinks emitted=$emitted")
             emitted
         } catch (e: Exception) {
             Log.e(name, "loadLinks hata: ${e.message}", e)
             false
+        }
+    }
+
+    private fun extractScxUrls(html: String): List<String> {
+        val block = extractBalancedObject(html, "scx") ?: return emptyList()
+        val found = linkedSetOf<String>()
+
+        // scx içindeki tüm string değerlerini deniyoruz. Etiket/başlık gibi
+        // kısa değerler doğal olarak URL filtresinden geçmeyecek.
+        val quoted = Regex("""(['\"])(.*?)\1""").findAll(block)
+        for (match in quoted) {
+            val raw = match.groupValues.getOrNull(2) ?: continue
+            if (raw.length < 8) continue
+
+            for (decoded in decodePossibleScxValues(raw)) {
+                val url = decoded
+                    .replace("\\/", "/")
+                    .replace("\\u0026", "&")
+                    .trim()
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    found += url
+                }
+            }
+        }
+
+        return found.toList()
+    }
+
+    private fun decodePossibleScxValues(raw: String): List<String> {
+        val values = linkedSetOf<String>()
+
+        fun addBase64(value: String) {
+            try {
+                val clean = value.replace("-", "+").replace("_", "/")
+                val decoded = Base64.decode(clean, Base64.DEFAULT)
+                    .toString(Charsets.UTF_8)
+                    .trim()
+                if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
+                    values += decoded
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        // Güncel sitede: atob(rot13(kayıt))
+        addBase64(rot13(raw))
+
+        // Eski/alternatif biçim için ters sırayı da dene.
+        addBase64(raw)
+        addBase64(rot13(raw).reversed())
+
+        if (raw.startsWith("http://") || raw.startsWith("https://")) {
+            values += raw
+        }
+
+        return values.toList()
+    }
+
+    private fun rot13(value: String): String = buildString(value.length) {
+        for (c in value) {
+            append(
+                when (c) {
+                    in 'a'..'z' -> ((c.code - 'a'.code + 13) % 26 + 'a'.code).toChar()
+                    in 'A'..'Z' -> ((c.code - 'A'.code + 13) % 26 + 'A'.code).toChar()
+                    else -> c
+                }
+            )
+        }
+    }
+
+    private fun extractBalancedObject(html: String, variable: String): String? {
+        val marker = Regex("""\b(?:var|let|const)\s+$variable\s*=\s*""").find(html)
+            ?: return null
+        val start = html.indexOf('{', marker.range.last + 1)
+        if (start < 0) return null
+
+        var depth = 0
+        var quote: Char? = null
+        var escaped = false
+
+        for (i in start until html.length) {
+            val c = html[i]
+
+            if (quote != null) {
+                if (escaped) {
+                    escaped = false
+                } else if (c == '\\') {
+                    escaped = true
+                } else if (c == quote) {
+                    quote = null
+                }
+                continue
+            }
+
+            if (c == '\"' || c == '\'') {
+                quote = c
+                continue
+            }
+
+            when (c) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return html.substring(start, i + 1)
+                }
+            }
+        }
+
+        return null
+    }
+
+    private suspend fun resolveRapidVid(url: String): String? {
+        val html = app.get(
+            url,
+            headers = browserHeaders + ("Referer" to mainUrl + "/")
+        ).text
+        return resolveRapidVidFromHtml(html)
+    }
+
+    private fun resolveRapidVidFromHtml(html: String): String? {
+        val encoded = Regex(
+            """(?:window\.)?_p8\s*=\s*['\"]([^'\"]+)['\"]"""
+        ).find(html)?.groupValues?.getOrNull(1) ?: return null
+
+        return try {
+            val stage1 = Base64.decode(
+                encoded.reversed(),
+                Base64.DEFAULT
+            ).toString(Charsets.UTF_8)
+
+            val unshifted = buildString(stage1.length) {
+                val key = "K9L"
+                for (i in stage1.indices) {
+                    val shift = key[i % key.length].code % 5 + 1
+                    append((stage1[i].code - shift).toChar())
+                }
+            }
+
+            val json = Base64.decode(unshifted, Base64.DEFAULT)
+                .toString(Charsets.UTF_8)
+
+            Regex(
+                """[\"']cm[\"']\s*:\s*[\"']([^\"']+)[\"']"""
+            ).find(json)?.groupValues?.getOrNull(1)
+                ?.replace("\\/", "/")
+        } catch (e: Exception) {
+            Log.d(name, "RapidVid _p8 decode başarısız: ${e.message}")
+            null
+        }
+    }
+
+    private fun refererForMedia(embedUrl: String): String {
+        return try {
+            val uri = Uri.parse(embedUrl)
+            "${uri.scheme ?: "https"}://${uri.host ?: "rapidvid.net"}/"
+        } catch (_: Exception) {
+            "https://rapidvid.net/"
         }
     }
 
@@ -406,7 +615,7 @@ class FullHDFilmizlesene : MainAPI() {
             }
         )
 
-        Log.d(name, "M3U8 emit -> $url")
+        Log.d(name, "M3U8 emit -> $url referer=$referer")
         return true
     }
 }
