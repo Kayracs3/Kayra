@@ -3,6 +3,7 @@ package com.Kayracs3
 import android.util.Base64
 import android.util.Log
 import android.net.Uri
+import java.net.URI
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
@@ -270,10 +271,18 @@ class FullHDFilmizlesene : MainAPI() {
             val document = app.get(data, headers = browserHeaders).document
             val pageHtml = document.html()
             var emitted = false
+            val emittedSubtitleUrls = mutableSetOf<String>()
 
-            // Güncel sitede kaynaklar doğrudan iframe HTML'inde bulunmayabiliyor.
+            // Önce film sayfasındaki olası VTT/SRT bağlantılarını tara.
+            val pageSubtitleCount = emitSubtitleCandidates(
+                html = pageHtml,
+                baseUrl = data,
+                subtitleCallback = subtitleCallback,
+                emittedUrls = emittedSubtitleUrls
+            )
+
             // Film sayfasındaki scx nesnesinde ROT13 + Base64 ile saklanan embed
-            // URL'lerini önce çözüyoruz.
+            // URL'lerini çözüyoruz.
             val scxUrls = extractScxUrls(pageHtml)
             Log.d(name, "scx decoded urls=${scxUrls.size}")
 
@@ -304,8 +313,34 @@ class FullHDFilmizlesene : MainAPI() {
                 // RapidVid/Atom kaynakları için yerleşik çözümleyici.
                 if (embedUrl.contains("rapidvid", ignoreCase = true)) {
                     try {
-                        val resolved = resolveRapidVid(embedUrl)
-                        Log.d(name, "RapidVid cm=${resolved != null}")
+                        val rapidHtml = app.get(
+                            embedUrl,
+                            headers = browserHeaders + ("Referer" to data)
+                        ).text
+
+                        val rapidSubtitleCount = emitSubtitleCandidates(
+                            html = rapidHtml,
+                            baseUrl = embedUrl,
+                            subtitleCallback = subtitleCallback,
+                            emittedUrls = emittedSubtitleUrls
+                        )
+
+                        val rapidConfigSubtitles = extractRapidVidSubtitleCandidates(rapidHtml)
+                        for ((subtitleUrl, subtitleLang) in rapidConfigSubtitles) {
+                            emitSubtitle(
+                                url = subtitleUrl,
+                                lang = subtitleLang,
+                                baseUrl = embedUrl,
+                                subtitleCallback = subtitleCallback,
+                                emittedUrls = emittedSubtitleUrls
+                            )
+                        }
+
+                        val resolved = resolveRapidVidFromHtml(rapidHtml)
+                        Log.d(
+                            name,
+                            "RapidVid cm=${resolved != null} subs=${rapidSubtitleCount + rapidConfigSubtitles.size}"
+                        )
                         if (!resolved.isNullOrBlank() && emitRapidVidMaster(
                                 resolved,
                                 refererForMedia(embedUrl),
@@ -347,12 +382,19 @@ class FullHDFilmizlesene : MainAPI() {
                     Log.d(name, "iframe extractor hata -> $iframeUrl : ${e.message}")
                 }
 
-                // Iframe'in kendi HTML'inde görünür bir HLS URL varsa kullan.
+                // Iframe'in kendi HTML'inde medya ve altyazı bağlantıları olabilir.
                 try {
                     val iframeHtml = app.get(
                         iframeUrl,
                         headers = browserHeaders + ("Referer" to data)
                     ).text
+
+                    emitSubtitleCandidates(
+                        html = iframeHtml,
+                        baseUrl = iframeUrl,
+                        subtitleCallback = subtitleCallback,
+                        emittedUrls = emittedSubtitleUrls
+                    )
 
                     val candidates = extractMediaCandidates(iframeHtml)
                     for (candidate in candidates) {
@@ -380,11 +422,179 @@ class FullHDFilmizlesene : MainAPI() {
                 if (emitM3u8(candidate, data, callback)) emitted = true
             }
 
-            Log.d(name, "loadLinks emitted=$emitted")
+            Log.d(
+                name,
+                "loadLinks emitted=$emitted subtitles=${emittedSubtitleUrls.size} pageSubs=$pageSubtitleCount"
+            )
             emitted
         } catch (e: Exception) {
             Log.e(name, "loadLinks hata: ${e.message}", e)
             false
+        }
+    }
+
+
+    private fun emitSubtitleCandidates(
+        html: String,
+        baseUrl: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        emittedUrls: MutableSet<String>
+    ): Int {
+        var count = 0
+
+        // <track src="..." srclang="tr" label="Türkçe"> biçimi.
+        val trackRegex = Regex("""(?is)<track\b([^>]+)>""")
+        for (match in trackRegex.findAll(html)) {
+            val attrs = match.groupValues.getOrNull(1) ?: continue
+            val src = Regex("""(?i)\bsrc\s*=\s*[\"']([^\"']+)[\"']""")
+                .find(attrs)?.groupValues?.getOrNull(1) ?: continue
+            val lang = Regex("""(?i)\bsrclang\s*=\s*[\"']([^\"']+)[\"']""")
+                .find(attrs)?.groupValues?.getOrNull(1)
+                ?: Regex("""(?i)\blabel\s*=\s*[\"']([^\"']+)[\"']""")
+                    .find(attrs)?.groupValues?.getOrNull(1)
+                ?: guessSubtitleLanguage(src)
+
+            if (emitSubtitle(src, lang, baseUrl, subtitleCallback, emittedUrls)) count++
+        }
+
+        // JS/JSON içinde subtitle/subtitles/caption/captions/track anahtarlarından
+        // sonra gelen VTT/SRT URL'lerini tara.
+        val keyedRegex = Regex(
+            """(?is)(?:subtitle(?:s)?|caption(?:s)?|textTrack(?:s)?)\s*[:=]\s*[^\n]{0,700}?(https?://[^\"'\s<>]+\.(?:vtt|srt)(?:\?[^\"'\s<>]+)?)"""
+        )
+        for (match in keyedRegex.findAll(html)) {
+            val url = match.groupValues.getOrNull(1) ?: continue
+            val context = match.value
+            val lang = Regex("""(?i)(?:lang|language|label|srclang|name)\s*[:=]\s*[\"']([^\"']+)[\"']""")
+                .find(context)?.groupValues?.getOrNull(1)
+                ?: guessSubtitleLanguage(url)
+            if (emitSubtitle(url, lang, baseUrl, subtitleCallback, emittedUrls)) count++
+        }
+
+        // Son çare: sayfadaki tüm mutlak VTT/SRT URL'lerini tara.
+        val directRegex = Regex(
+            """https?://[^\"'\s<>]+\.(?:vtt|srt)(?:\?[^\"'\s<>]+)?""",
+            RegexOption.IGNORE_CASE
+        )
+        for (match in directRegex.findAll(html)) {
+            val url = match.value
+            if (emitSubtitle(
+                    url,
+                    guessSubtitleLanguage(url),
+                    baseUrl,
+                    subtitleCallback,
+                    emittedUrls
+                )
+            ) count++
+        }
+
+        return count
+    }
+
+    private fun emitSubtitle(
+        url: String,
+        lang: String?,
+        baseUrl: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        emittedUrls: MutableSet<String>
+    ): Boolean {
+        val resolved = resolveSubtitleUrl(url, baseUrl) ?: return false
+        if (!resolved.startsWith("http://") && !resolved.startsWith("https://")) return false
+        if (!resolved.contains(".vtt", ignoreCase = true) && !resolved.contains(".srt", ignoreCase = true)) {
+            return false
+        }
+        if (!emittedUrls.add(resolved)) return false
+
+        val displayLang = normalizeSubtitleLanguage(lang ?: guessSubtitleLanguage(resolved))
+        subtitleCallback(SubtitleFile(displayLang, resolved))
+        Log.d(name, "subtitle emit -> $displayLang $resolved")
+        return true
+    }
+
+    private fun resolveSubtitleUrl(raw: String, baseUrl: String): String? {
+        val value = raw
+            .replace("\\/", "/")
+            .replace("\\u0026", "&")
+            .trim(' ', '\'', '"', '`')
+
+        if (value.startsWith("http://") || value.startsWith("https://")) return value
+        if (value.startsWith("//")) return "https:$value"
+
+        return try {
+            URI(baseUrl).resolve(value).toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun guessSubtitleLanguage(value: String): String {
+        val lower = value.lowercase()
+        return when {
+            Regex("(?:^|[^a-z])(tr|tur|turkish)(?:[^a-z]|$)").containsMatchIn(lower) -> "Türkçe"
+            Regex("(?:^|[^a-z])(en|eng|english)(?:[^a-z]|$)").containsMatchIn(lower) -> "English"
+            Regex("(?:^|[^a-z])(fr|fra|fre|french|francais)(?:[^a-z]|$)").containsMatchIn(lower) -> "Français"
+            Regex("(?:^|[^a-z])(de|ger|deu|german)(?:[^a-z]|$)").containsMatchIn(lower) -> "Deutsch"
+            Regex("(?:^|[^a-z])(es|spa|spanish)(?:[^a-z]|$)").containsMatchIn(lower) -> "Español"
+            else -> "Altyazı"
+        }
+    }
+
+    private fun normalizeSubtitleLanguage(language: String): String {
+        return when (language.lowercase().trim()) {
+            "tr", "tur", "turkish", "türkçe", "turkce" -> "Türkçe"
+            "en", "eng", "english" -> "English"
+            "fr", "fra", "fre", "french", "français", "francais" -> "Français"
+            "de", "ger", "deu", "german", "deutsch" -> "Deutsch"
+            "es", "spa", "spanish", "español", "espanol" -> "Español"
+            else -> language.trim().ifBlank { "Altyazı" }
+        }
+    }
+
+    private fun extractRapidVidSubtitleCandidates(html: String): List<Pair<String, String?>> {
+        val config = decodeRapidVidConfig(html) ?: return emptyList()
+        val found = linkedMapOf<String, String?>()
+
+        Regex(
+            """https?://[^\"'\s<>]+\.(?:vtt|srt)(?:\?[^\"'\s<>]+)?""",
+            RegexOption.IGNORE_CASE
+        ).findAll(config).forEach { match ->
+            val url = match.value
+            val start = maxOf(0, match.range.first - 250)
+            val end = minOf(config.length, match.range.last + 250)
+            val context = config.substring(start, end)
+            val lang = Regex("""(?i)(?:lang|language|label|name|srclang)\s*[:=]\s*[\"']([^\"']+)[\"']""")
+                .find(context)?.groupValues?.getOrNull(1)
+                ?: guessSubtitleLanguage(url)
+            found[url] = lang
+        }
+
+        return found.entries.map { it.key to it.value }
+    }
+
+    private fun decodeRapidVidConfig(html: String): String? {
+        val encoded = Regex(
+            """(?:window\.)?_p8\s*=\s*['"]([^'"]+)['"]"""
+        ).find(html)?.groupValues?.getOrNull(1) ?: return null
+
+        return try {
+            val stage1 = Base64.decode(
+                encoded.reversed(),
+                Base64.DEFAULT
+            ).toString(Charsets.UTF_8)
+
+            val unshifted = buildString(stage1.length) {
+                val key = "K9L"
+                for (i in stage1.indices) {
+                    val shift = key[i % key.length].code % 5 + 1
+                    append((stage1[i].code - shift).toChar())
+                }
+            }
+
+            Base64.decode(unshifted, Base64.DEFAULT)
+                .toString(Charsets.UTF_8)
+        } catch (e: Exception) {
+            Log.d(name, "RapidVid config decode başarısız: ${e.message}")
+            null
         }
     }
 
@@ -535,35 +745,11 @@ class FullHDFilmizlesene : MainAPI() {
     }
 
     private fun resolveRapidVidFromHtml(html: String): String? {
-        val encoded = Regex(
-            """(?:window\.)?_p8\s*=\s*['\"]([^'\"]+)['\"]"""
-        ).find(html)?.groupValues?.getOrNull(1) ?: return null
-
-        return try {
-            val stage1 = Base64.decode(
-                encoded.reversed(),
-                Base64.DEFAULT
-            ).toString(Charsets.UTF_8)
-
-            val unshifted = buildString(stage1.length) {
-                val key = "K9L"
-                for (i in stage1.indices) {
-                    val shift = key[i % key.length].code % 5 + 1
-                    append((stage1[i].code - shift).toChar())
-                }
-            }
-
-            val json = Base64.decode(unshifted, Base64.DEFAULT)
-                .toString(Charsets.UTF_8)
-
-            Regex(
-                """[\"']cm[\"']\s*:\s*[\"']([^\"']+)[\"']"""
-            ).find(json)?.groupValues?.getOrNull(1)
-                ?.replace("\\/", "/")
-        } catch (e: Exception) {
-            Log.d(name, "RapidVid _p8 decode başarısız: ${e.message}")
-            null
-        }
+        val json = decodeRapidVidConfig(html) ?: return null
+        return Regex(
+            """[\"']cm[\"']\s*:\s*[\"']([^\"']+)[\"']"""
+        ).find(json)?.groupValues?.getOrNull(1)
+            ?.replace("\\/", "/")
     }
 
     private fun refererForMedia(embedUrl: String): String {
