@@ -9,6 +9,7 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
+        mavenLocal()
         google()
         mavenCentral()
         maven("https://jitpack.io")
@@ -23,12 +24,8 @@ val disabled = setOf(
 
 rootDir
     .listFiles()
-    ?.filter {
-        it.isDirectory
-    }
-    ?.filter {
-        !disabled.contains(it.name)
-    }
+    ?.filter { it.isDirectory }
+    ?.filter { !disabled.contains(it.name) }
     ?.filter {
         File(
             it,
