@@ -1,10 +1,19 @@
 package com.Kayracs3
 
+import android.util.Base64
 import android.util.Log
-import org.jsoup.nodes.Element
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
+import com.lagradost.cloudstream3.utils.*
+import org.json.JSONArray
+import org.json.JSONObject
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import java.net.URLEncoder
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 class Dizilla : MainAPI() {
 
@@ -13,150 +22,380 @@ class Dizilla : MainAPI() {
     override val hasMainPage = true
     override var lang = "tr"
     override val hasQuickSearch = true
-    override val supportedTypes = setOf(
-        TvType.TvSeries
-    )
+    override val supportedTypes = setOf(TvType.TvSeries)
 
-    // CloudFlare bypass
     override var sequentialMainPage = true
 
-    override val mainPage = mainPageOf(
-        "${mainUrl}/arsiv" to "Yeni Eklenen Bölümler",
-        "${mainUrl}/yabanci-dizi-izle" to "Öne Çıkan Diziler",
-        "${mainUrl}/anime-izle" to "Asya Dizileri",
-        "${mainUrl}/kdrama-izle" to "Anime Dizileri",
-        
-    )
+    companion object {
+
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+
+        private const val SEARCH_PATH =
+            "/api/bg/searchContent?searchterm="
+
+        private const val NEXT_DATA_PATH =
+            "_next/data"
+
+        /*
+         * Güncel Dizilla veri şifrelemesinde kullanılan seed.
+         *
+         * SHA-256(seed)
+         * -> Base64
+         * -> ilk 32 karakter
+         * -> UTF-8 byte
+         */
+        private const val AES_SEED =
+            "!!22xx!!90!!"
+
+        private val SEASON_REGEX =
+            Regex("""-(\d+)-sezon""", RegexOption.IGNORE_CASE)
+
+        private val EPISODE_REGEX =
+            Regex("""-(\d+)-bolum""", RegexOption.IGNORE_CASE)
+
+        private val EPISODE_SLUG_REGEX =
+            Regex(
+                """^(?:[a-z0-9]+-)*\d+-sezon-\d+-bolum(?:-[a-z0-9]+)?$""",
+                RegexOption.IGNORE_CASE
+            )
+    }
+
+    // =========================================================
+    // AES
+    // =========================================================
+
+    private val aesKey: ByteArray by lazy {
+
+        val digest =
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(
+                    AES_SEED.toByteArray(
+                        Charsets.UTF_8
+                    )
+                )
+
+        val base64 =
+            Base64.encodeToString(
+                digest,
+                Base64.NO_WRAP
+            )
+
+        base64
+            .substring(0, 32)
+            .toByteArray(
+                Charsets.UTF_8
+            )
+    }
+
+    private fun decryptSecureData(
+        encryptedBase64: String
+    ): JSONObject? {
+
+        if (encryptedBase64.isBlank()) {
+            return null
+        }
+
+        return try {
+
+            val cipher =
+                Cipher.getInstance(
+                    "AES/CBC/PKCS5Padding"
+                )
+
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                SecretKeySpec(
+                    aesKey,
+                    "AES"
+                ),
+                IvParameterSpec(
+                    ByteArray(16)
+                )
+            )
+
+            val decoded =
+                Base64.decode(
+                    encryptedBase64,
+                    Base64.DEFAULT
+                )
+
+            val plain =
+                cipher.doFinal(
+                    decoded
+                )
+
+            JSONObject(
+                String(
+                    plain,
+                    Charsets.UTF_8
+                )
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                "Dizilla",
+                "AES decrypt failed: ${e.message}"
+            )
+
+            null
+        }
+    }
+
+    // =========================================================
+    // NEXT.JS BUILD ID
+    // =========================================================
+
+    private fun extractBuildId(
+        html: String
+    ): String? {
+
+        if (html.isBlank()) {
+            return null
+        }
+
+        return try {
+
+            val script =
+                Jsoup
+                    .parse(html)
+                    .selectFirst(
+                        "script#__NEXT_DATA__"
+                    )
+                    ?.data()
+                    ?: return null
+
+            JSONObject(
+                script
+            )
+                .optString(
+                    "buildId"
+                )
+                .takeIf {
+                    it.isNotBlank()
+                }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                "Dizilla",
+                "buildId parse failed: ${e.message}"
+            )
+
+            null
+        }
+    }
+
+    private suspend fun getBuildId(
+        fallbackHtml: String? = null
+    ): String? {
+
+        if (!fallbackHtml.isNullOrBlank()) {
+
+            extractBuildId(
+                fallbackHtml
+            )?.let {
+                return it
+            }
+        }
+
+        return try {
+
+            val html =
+                app.get(
+                    mainUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT
+                    )
+                ).text
+
+            extractBuildId(
+                html
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                "Dizilla",
+                "Homepage buildId failed: ${e.message}"
+            )
+
+            null
+        }
+    }
+
+    // =========================================================
+    // MAIN PAGE
+    // =========================================================
+
+    override val mainPage =
+        mainPageOf(
+
+            "${mainUrl}/arsiv"
+                    to "Yeni Eklenen Diziler",
+
+            "${mainUrl}/yabanci-dizi-izle"
+                    to "Yabancı Diziler",
+
+            "${mainUrl}/anime-izle"
+                    to "Asya Dizileri",
+
+            "${mainUrl}/kdrama-izle"
+                    to "Kore Dizileri"
+        )
 
     override suspend fun getMainPage(
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
 
-        val document = app.get(
+        val pageUrl =
             request.data
-        ).document
 
-        val home =
-            if (request.data.contains("dizi-turu")) {
+        val document =
+            try {
 
-                document
-                    .select("div.grid-cols-3 a")
-                    .mapNotNull {
-                        it.diziler()
-                    }
+                app.get(
+                    pageUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT
+                    )
+                ).document
 
-            } else {
+            } catch (e: Exception) {
 
-                document
-                    .select("div.grid a")
-                    .mapNotNull {
-                        it.sonBolumler()
-                    }
+                Log.e(
+                    "Dizilla",
+                    "MainPage failed: ${e.message}"
+                )
+
+                return newHomePageResponse(
+                    request.name,
+                    emptyList()
+                )
             }
+
+        val results =
+            LinkedHashMap<String, SearchResponse>()
+
+        /*
+         * Güncel sitede seri kartları genellikle
+         * /dizi/... bağlantıları üzerinden geliyor.
+         */
+        document
+            .select(
+                "a[href*='/dizi/']"
+            )
+            .forEach { element ->
+
+                val response =
+                    element.toDizillaSearchResponse()
+                        ?: return@forEach
+
+                results[
+                    response.url
+                ] = response
+            }
+
+        /*
+         * Bazı sayfalarda kartların href'i doğrudan
+         * /dizi/ şeklinde olmayabilir.
+         * Görsel + başlık taşıyan kartları da deniyoruz.
+         */
+        if (results.isEmpty()) {
+
+            document
+                .select(
+                    "a"
+                )
+                .filter {
+                    it.selectFirst("img") != null
+                }
+                .forEach { element ->
+
+                    val href =
+                        fixUrlNull(
+                            element.attr("href")
+                        )
+                            ?: return@forEach
+
+                    if (
+                        href.contains(
+                            "-sezon-"
+                        )
+                        ||
+                        href.contains(
+                            "-bolum-"
+                        )
+                    ) {
+                        return@forEach
+                    }
+
+                    val response =
+                        element
+                            .toDizillaSearchResponse(
+                                forceHref = href
+                            )
+                            ?: return@forEach
+
+                    results[
+                        response.url
+                    ] = response
+                }
+        }
 
         return newHomePageResponse(
             request.name,
-            home
+            results.values.toList()
         )
     }
 
     // =========================================================
-    // DİZİLER
+    // MAIN PAGE CARD
     // =========================================================
 
-    private fun Element.diziler(): SearchResponse? {
-
-        val title =
-            this
-                .selectFirst("h2")
-                ?.text()
-                ?: return null
+    private fun Element.toDizillaSearchResponse(
+        forceHref: String? = null
+    ): SearchResponse? {
 
         val href =
-            fixUrlNull(
-                this.attr("href")
-            )
-                ?: return null
-
-        val posterUrl =
-            fixUrlNull(
-                this
-                    .selectFirst("img")
-                    ?.attr("data-src")
-            )
+            forceHref
                 ?: fixUrlNull(
-                    this
-                        .selectFirst("img")
-                        ?.attr("src")
+                    attr("href")
                 )
+                ?: return null
 
-        return newTvSeriesSearchResponse(
-            title,
-            href,
-            TvType.TvSeries
+        if (
+            href.contains(
+                "-sezon-"
+            )
+            ||
+            href.contains(
+                "-bolum-"
+            )
         ) {
-            this.posterUrl = posterUrl
+            return null
         }
-    }
-
-    // =========================================================
-    // SON BÖLÜMLER
-    // =========================================================
-
-    private suspend fun Element.sonBolumler(): SearchResponse? {
-
-        val name =
-            this
-                .selectFirst("h2")
-                ?.text()
-                ?: return null
-
-        val epName =
-            this
-                .selectFirst("div.opacity-80")
-                ?.text()
-                ?.replace(
-                    ". Sezon ",
-                    "x"
-                )
-                ?.replace(
-                    ". Bölüm",
-                    ""
-                )
-                ?: return null
 
         val title =
-            "$name - $epName"
-
-        val epDoc =
-            app.get(
-                this.attr("href")
-            ).document
-
-        val href =
-            fixUrlNull(
-                epDoc
-                    .selectFirst(
-                        "a.relative"
-                    )
-                    ?.attr("href")
-            )
+            selectFirst("h2")?.text()?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: selectFirst("h3")?.text()?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                ?: attr("title").trim()
+                    .takeIf { it.isNotBlank() }
+                ?: selectFirst("img")
+                    ?.attr("alt")
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
                 ?: return null
 
-        val posterUrl =
-            fixUrlNull(
-                epDoc
-                    .selectFirst(
-                        "img.imgt"
-                    )
-                    ?.attr("onerror")
-                    ?.substringAfter(
-                        "= '"
-                    )
-                    ?.substringBefore(
-                        "';"
-                    )
+        val poster =
+            extractPoster(
+                this
             )
 
         return newTvSeriesSearchResponse(
@@ -164,27 +403,70 @@ class Dizilla : MainAPI() {
             href,
             TvType.TvSeries
         ) {
-            this.posterUrl = posterUrl
+            this.posterUrl = poster
         }
     }
 
     // =========================================================
-    // SEARCH ITEM
+    // POSTER
     // =========================================================
 
-    private fun SearchItem.toSearchResponse():
-        SearchResponse? {
+    private fun extractPoster(
+        element: Element
+    ): String? {
 
-        return newTvSeriesSearchResponse(
-            title
-                ?: return null,
-            "${mainUrl}/${slug}",
-            TvType.TvSeries,
-        ) {
+        val image =
+            element.selectFirst(
+                "img"
+            )
+                ?: return null
 
-            this.posterUrl =
-                poster
+        val values =
+            listOf(
+                image.attr("src"),
+                image.attr("data-src"),
+                image.attr("data-lazy-src"),
+                image.attr("data-original")
+            )
+
+        for (value in values) {
+
+            val fixed =
+                fixUrlNull(
+                    value
+                )
+
+            if (!fixed.isNullOrBlank()) {
+                return fixed
+            }
         }
+
+        val srcset =
+            image
+                .attr("srcset")
+                .trim()
+
+        if (srcset.isNotBlank()) {
+
+            val first =
+                srcset
+                    .split(",")
+                    .firstOrNull()
+                    ?.trim()
+                    ?.split(" ")
+                    ?.firstOrNull()
+
+            val fixed =
+                fixUrlNull(
+                    first
+                )
+
+            if (!fixed.isNullOrBlank()) {
+                return fixed
+            }
+        }
+
+        return null
     }
 
     // =========================================================
@@ -195,531 +477,587 @@ class Dizilla : MainAPI() {
         query: String
     ): List<SearchResponse> {
 
-        val mainReq =
-            app.get(
-                mainUrl
+        val encodedQuery =
+            URLEncoder.encode(
+                query,
+                "UTF-8"
             )
 
-        val mainPage =
-            mainReq.document
+        val searchUrl =
+            mainUrl +
+                    SEARCH_PATH +
+                    encodedQuery
 
-        val cKey =
-            mainPage
-                .selectFirst(
-                    "input[name='cKey']"
+        val response =
+            try {
+
+                app.post(
+                    searchUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Accept" to
+                            "application/json, text/plain, */*",
+                        "X-Requested-With" to
+                            "XMLHttpRequest",
+                        "Referer" to
+                            "$mainUrl/"
+                    ),
+                    referer = "$mainUrl/"
                 )
-                ?.attr("value")
-                ?: return emptyList()
 
-        val cValue =
-            mainPage
-                .selectFirst(
-                    "input[name='cValue']"
+            } catch (e: Exception) {
+
+                Log.e(
+                    "Dizilla",
+                    "Search request failed: ${e.message}"
                 )
-                ?.attr("value")
-                ?: return emptyList()
 
-        val veriler =
-            mutableListOf<SearchResponse>()
-
-        val searchReq =
-            app.post(
-                "${mainUrl}/bg/searchcontent",
-
-                data = mapOf(
-                    "cKey" to cKey,
-                    "cValue" to cValue,
-                    "searchterm" to query
-                ),
-
-                headers = mapOf(
-                    "Accept" to
-                        "application/json, text/javascript, */*; q=0.01",
-
-                    "X-Requested-With" to
-                        "XMLHttpRequest"
-                ),
-
-                referer =
-                    "${mainUrl}/",
-
-                cookies = mapOf(
-                    "showAllDaFull" to
-                        "true",
-
-                    "PHPSESSID" to
-                        mainReq
-                            .cookies["PHPSESSID"]
-                            .toString(),
-                )
-            )
-                .parsedSafe<SearchResult>()
-
-        if (
-            searchReq?.data?.state != true
-        ) {
-
-            throw ErrorLoadingException(
-                "Invalid Json response"
-            )
-        }
-
-        searchReq
-            .data
-            .result
-            ?.forEach { searchItem ->
-
-                veriler.add(
-                    searchItem
-                        .toSearchResponse()
-                        ?: return@forEach
-                )
+                return emptyList()
             }
 
-        return veriler
+        val outer =
+            try {
+
+                JSONObject(
+                    response.text
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "Dizilla",
+                    "Search JSON parse failed: ${e.message}"
+                )
+
+                return emptyList()
+            }
+
+        if (
+            !outer.optBoolean(
+                "success",
+                false
+            )
+        ) {
+            return emptyList()
+        }
+
+        val encrypted =
+            outer
+                .optString(
+                    "response"
+                )
+                .trim()
+
+        if (encrypted.isBlank()) {
+            return emptyList()
+        }
+
+        val decrypted =
+            decryptSecureData(
+                encrypted
+            )
+                ?: return emptyList()
+
+        val result =
+            decrypted.optJSONArray(
+                "result"
+            )
+                ?: return emptyList()
+
+        val responses =
+            ArrayList<SearchResponse>()
+
+        for (
+            index in 0 until result.length()
+        ) {
+
+            val item =
+                result.optJSONObject(
+                    index
+                )
+                    ?: continue
+
+            val title =
+                item
+                    .optString(
+                        "object_name"
+                    )
+                    .trim()
+
+            if (title.isBlank()) {
+                continue
+            }
+
+            var slug =
+                item
+                    .optString(
+                        "used_slug"
+                    )
+                    .trim()
+
+            if (slug.isBlank()) {
+                continue
+            }
+
+            slug =
+                slug.trimStart('/')
+
+            val url =
+                if (
+                    slug.startsWith(
+                        "http://"
+                    )
+                    ||
+                    slug.startsWith(
+                        "https://"
+                    )
+                ) {
+                    slug
+                } else {
+                    "$mainUrl/$slug"
+                }
+
+            val poster =
+                item
+                    .optString(
+                        "object_poster_url"
+                    )
+                    .trim()
+                    .takeIf {
+                        it.isNotBlank()
+                    }
+
+            responses +=
+                newTvSeriesSearchResponse(
+                    title,
+                    url,
+                    TvType.TvSeries
+                ) {
+                    this.posterUrl =
+                        poster
+                }
+        }
+
+        return responses
+            .distinctBy {
+                it.url
+            }
     }
 
     override suspend fun quickSearch(
         query: String
-    ): List<SearchResponse> {
-        return search(query)
-    }
+    ): List<SearchResponse> =
+        search(query)
 
     // =========================================================
-    // LOAD
+    // LOAD SERIES
     // =========================================================
 
     override suspend fun load(
         url: String
     ): LoadResponse? {
 
-        val document =
-            app.get(url).document
+        val html =
+            try {
 
-        // -----------------------------------------------------
-        // BAŞLIK
-        // -----------------------------------------------------
+                app.get(
+                    url,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT
+                    )
+                ).text
+
+            } catch (e: Exception) {
+
+                throw ErrorLoadingException(
+                    "Dizilla sayfası alınamadı: ${e.message}"
+                )
+            }
+
+        if (html.isBlank()) {
+
+            throw ErrorLoadingException(
+                "Dizilla boş cevap döndürdü."
+            )
+        }
+
+        val document =
+            Jsoup.parse(
+                html
+            )
 
         val title =
-            document
-                .selectFirst(
-                    "div.page-top h1"
-                )
-                ?.text()
-                ?: return null
-
-        // -----------------------------------------------------
-        // POSTER
-        // -----------------------------------------------------
-
-        val poster =
-            fixUrlNull(
-                document
-                    .selectFirst(
-                        "div.page-top img"
-                    )
-                    ?.attr("src")
+            extractMeta(
+                document,
+                "og:title"
             )
-                ?: fixUrlNull(
-                    document
-                        .selectFirst(
-                            "div.page-top img"
-                        )
-                        ?.attr("data-src")
+                ?.removeSuffix(
+                    " - Dizilla"
                 )
-
-        // -----------------------------------------------------
-        // YIL
-        // -----------------------------------------------------
-
-        val year =
-            document
-                .selectXpath(
-                    "//span[text()='Yayın tarihi']//following-sibling::span"
-                )
-                .text()
-                .trim()
-                .split(" ")
-                .lastOrNull()
-                ?.toIntOrNull()
-
-        // -----------------------------------------------------
-        // AÇIKLAMA
-        // -----------------------------------------------------
-
-        val description =
-            document
-                .selectFirst(
-                    "div.mv-det-p"
-                )
-                ?.text()
                 ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
                 ?: document
                     .selectFirst(
-                        "div.w-full div.text-base"
+                        "h1"
                     )
                     ?.text()
                     ?.trim()
-
-        // -----------------------------------------------------
-        // ETİKETLER
-        // -----------------------------------------------------
-
-        val tags =
-            document
-                .select(
-                    "[href*='dizi-turu']"
-                )
-                .map {
-                    it.text()
-                }
-
-        // -----------------------------------------------------
-        // IMDb PUANI
-        // -----------------------------------------------------
-        //
-        // Eski:
-        //
-        // .toRatingInt()
-        //
-        // yerine güncel Score API:
-        //
-        // Score.from10()
-        //
-        // IMDb değerleri zaten 10 üzerinden geldiğinden
-        // doğrudan from10 kullanıyoruz.
-        // -----------------------------------------------------
-
-        val rating =
-            document
-                .selectFirst(
-                    "a[href*='imdb.com'] span"
-                )
-                ?.text()
-                ?.trim()
-                ?.replace(
-                    ",",
-                    "."
-                )
-                ?.toDoubleOrNull()
-
-        // -----------------------------------------------------
-        // SÜRE
-        // -----------------------------------------------------
-
-        val duration =
-            document
-                .select(
-                    "div.gap-3 span.text-sm"
-                )
-                .getOrNull(1)
-                ?.text()
-                ?.let {
-                    Regex(
-                        "(\\d+)"
+                ?: url
+                    .trimEnd('/')
+                    .substringAfterLast('/')
+                    .replace(
+                        "-",
+                        " "
                     )
-                        .find(it)
-                        ?.value
-                        ?.toIntOrNull()
-                }
 
-        // -----------------------------------------------------
-        // OYUNCULAR
-        // -----------------------------------------------------
-
-        val actors =
-            document
-                .select(
-                    "[href*='oyuncu']"
-                )
-                .map {
-                    Actor(
-                        it.text()
-                    )
-                }
-
-        // -----------------------------------------------------
-        // BÖLÜMLER
-        // -----------------------------------------------------
-
-        val episodeList =
-            mutableListOf<Episode>()
-
-        document
-            .selectXpath(
-                "//div[contains(@class, 'gap-2')]/a[contains(@href, '-sezon')]"
+        val poster =
+            extractMeta(
+                document,
+                "og:image"
             )
-            .forEach { seasonElement ->
+                ?: extractPoster(
+                    document
+                )
 
-                val seasonHref =
-                    fixUrlNull(
-                        seasonElement.attr(
-                            "href"
-                        )
+        val description =
+            extractMeta(
+                document,
+                "og:description"
+            )
+                ?: document
+                    .selectFirst(
+                        "meta[name=description]"
                     )
-                        ?: return@forEach
+                    ?.attr("content")
+                    ?.trim()
 
-                val epDoc =
-                    app.get(
-                        seasonHref
-                    ).document
+        val buildId =
+            getBuildId(
+                html
+            )
+                ?: throw ErrorLoadingException(
+                    "Dizilla buildId bulunamadı."
+                )
 
-                // =================================================
-                // ALTYAZILI
-                // =================================================
+        val episodeSlugs =
+            extractEpisodeSlugs(
+                document
+            )
 
-                epDoc
-                    .select(
-                        "div.episodes div.cursor-pointer"
-                    )
-                    .forEach ep@ { episodeElement ->
+        val episodes =
+            ArrayList<Episode>()
 
-                        val epName =
-                            episodeElement
-                                .select("a")
-                                .lastOrNull()
-                                ?.text()
-                                ?.trim()
-                                ?: return@ep
+        val seen =
+            HashSet<String>()
 
-                        val epHref =
-                            fixUrlNull(
-                                episodeElement
-                                    .selectFirst(
-                                        "a.opacity-60"
-                                    )
-                                    ?.attr("href")
-                            )
-                                ?: return@ep
+        for (
+            slug in episodeSlugs
+        ) {
 
-                        val epDescription =
-                            episodeElement
-                                .selectFirst(
-                                    "span.t-content"
-                                )
-                                ?.text()
-                                ?.trim()
+            val episode =
+                loadEpisode(
+                    buildId,
+                    slug
+                )
+                    ?: continue
 
-                        val epPoster =
-                            fixUrlNull(
-                                epDoc
-                                    .selectFirst(
-                                        "img.object-cover"
-                                    )
-                                    ?.attr("src")
-                            )
+            val key =
+                "${episode.season ?: 0}-${episode.episode ?: 0}-${episode.name}"
 
-                        val epEpisode =
-                            episodeElement
-                                .selectFirst(
-                                    "a.opacity-60"
-                                )
-                                ?.text()
-                                ?.toIntOrNull()
-
-                        val parentDiv =
-                            episodeElement.parent()
-
-                        val seasonClass =
-                            parentDiv
-                                ?.className()
-                                ?.split(" ")
-                                ?.find {
-                                    it.startsWith(
-                                        "szn"
-                                    )
-                                }
-
-                        val epSeason =
-                            seasonClass
-                                ?.substringAfter(
-                                    "szn"
-                                )
-                                ?.toIntOrNull()
-
-                        episodeList.add(
-                            newEpisode(
-                                epHref
-                            ) {
-
-                                this.name =
-                                    epName
-
-                                this.season =
-                                    epSeason
-
-                                this.episode =
-                                    epEpisode
-
-                                this.description =
-                                    epDescription
-
-                                this.posterUrl =
-                                    epPoster
-                            }
-                        )
-                    }
-
-                // =================================================
-                // DUBLAJ
-                // =================================================
-
-                epDoc
-                    .select(
-                        "div.dub-episodes div.cursor-pointer"
-                    )
-                    .forEach epDub@ { dubEpisodeElement ->
-
-                        val epName =
-                            dubEpisodeElement
-                                .select("a")
-                                .lastOrNull()
-                                ?.text()
-                                ?.trim()
-                                ?: return@epDub
-
-                        val epHref =
-                            fixUrlNull(
-                                dubEpisodeElement
-                                    .selectFirst(
-                                        "a.opacity-60"
-                                    )
-                                    ?.attr("href")
-                            )
-                                ?: return@epDub
-
-                        val epDescription =
-                            dubEpisodeElement
-                                .selectFirst(
-                                    "span.t-content"
-                                )
-                                ?.text()
-                                ?.trim()
-
-                        val epPoster =
-                            fixUrlNull(
-                                epDoc
-                                    .selectFirst(
-                                        "img.object-cover"
-                                    )
-                                    ?.attr("src")
-                            )
-
-                        val epEpisode =
-                            dubEpisodeElement
-                                .selectFirst(
-                                    "a.opacity-60"
-                                )
-                                ?.text()
-                                ?.toIntOrNull()
-
-                        val parentDiv =
-                            dubEpisodeElement.parent()
-
-                        val seasonClass =
-                            parentDiv
-                                ?.className()
-                                ?.split(" ")
-                                ?.find {
-                                    it.startsWith(
-                                        "szn"
-                                    )
-                                }
-
-                        val epSeason =
-                            seasonClass
-                                ?.substringAfter(
-                                    "szn"
-                                )
-                                ?.toIntOrNull()
-
-                        episodeList.add(
-                            newEpisode(
-                                epHref
-                            ) {
-
-                                this.name =
-                                    "$epName Dublaj"
-
-                                this.season =
-                                    epSeason
-
-                                this.episode =
-                                    epEpisode
-
-                                this.description =
-                                    epDescription
-
-                                this.posterUrl =
-                                    epPoster
-                            }
-                        )
-                    }
+            if (
+                !seen.add(
+                    key
+                )
+            ) {
+                continue
             }
 
-        // =====================================================
-        // RESPONSE
-        // =====================================================
+            episodes +=
+                episode
+        }
+
+        if (episodes.isEmpty()) {
+
+            throw ErrorLoadingException(
+                "Dizilla bölüm listesi bulunamadı."
+            )
+        }
 
         return newTvSeriesLoadResponse(
             title,
             url,
             TvType.TvSeries,
-            episodeList
+            episodes.sortedWith(
+                compareBy(
+                    { it.season ?: 0 },
+                    { it.episode ?: 0 }
+                )
+            )
         ) {
-
-            // -------------------------------------------------
-            // DİZİ POSTERİ
-            // -------------------------------------------------
 
             this.posterUrl =
                 poster
 
-            // -------------------------------------------------
-            // YIL
-            // -------------------------------------------------
-
-            this.year =
-                year
-
-            // -------------------------------------------------
-            // AÇIKLAMA
-            // -------------------------------------------------
-
             this.plot =
                 description
+        }
+    }
 
-            // -------------------------------------------------
-            // ETİKETLER
-            // -------------------------------------------------
+    // =========================================================
+    // META
+    // =========================================================
 
-            this.tags =
-                tags
+    private fun extractMeta(
+        document: org.jsoup.nodes.Document,
+        property: String
+    ): String? {
 
-            // -------------------------------------------------
-            // PUAN
-            // -------------------------------------------------
+        return document
+            .selectFirst(
+                "meta[property='$property']"
+            )
+            ?.attr("content")
+            ?.trim()
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?: document
+                .selectFirst(
+                    "meta[name='$property']"
+                )
+                ?.attr("content")
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+    }
 
-            rating?.let {
-                this.score =
-                    Score.from10(it)
+    // =========================================================
+    // EPISODE SLUGS
+    // =========================================================
+
+    private fun extractEpisodeSlugs(
+        document: org.jsoup.nodes.Document
+    ): List<String> {
+
+        return document
+            .select(
+                "a[href]"
+            )
+            .mapNotNull {
+
+                val href =
+                    it.attr(
+                        "href"
+                    )
+                        .trim()
+                        .trimEnd('/')
+
+                if (
+                    href.isBlank()
+                ) {
+                    return@mapNotNull null
+                }
+
+                val slug =
+                    href
+                        .substringAfterLast('/')
+                        .removePrefix(
+                            "/"
+                        )
+
+                slug
+            }
+            .filter {
+
+                EPISODE_SLUG_REGEX.matches(
+                    it
+                )
+            }
+            .distinct()
+    }
+
+    // =========================================================
+    // LOAD EPISODE
+    // =========================================================
+
+    private suspend fun loadEpisode(
+        buildId: String,
+        episodeSlug: String
+    ): Episode? {
+
+        return try {
+
+            val dataUrl =
+                "$mainUrl/$NEXT_DATA_PATH/" +
+                        "$buildId/" +
+                        "$episodeSlug.json"
+
+            val json =
+                app.get(
+                    dataUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to "$mainUrl/"
+                    )
+                ).text
+
+            val page =
+                JSONObject(
+                    json
+                )
+
+            val pageProps =
+                page.optJSONObject(
+                    "pageProps"
+                )
+                    ?: return null
+
+            val secureData =
+                pageProps
+                    .optString(
+                        "secureData"
+                    )
+                    .trim()
+
+            if (
+                secureData.isBlank()
+            ) {
+                return null
             }
 
-            // -------------------------------------------------
-            // SÜRE
-            // -------------------------------------------------
+            val decrypted =
+                decryptSecureData(
+                    secureData
+                )
+                    ?: return null
 
-            this.duration =
-                duration
+            val contentItem =
+                decrypted.optJSONObject(
+                    "contentItem"
+                )
 
-            // -------------------------------------------------
-            // OYUNCULAR
-            // -------------------------------------------------
+            val season =
+                contentItem
+                    ?.optInt(
+                        "season_no"
+                    )
+                    ?.takeIf {
+                        it > 0
+                    }
+                    ?: SEASON_REGEX
+                        .find(
+                            episodeSlug
+                        )
+                        ?.groupValues
+                        ?.getOrNull(1)
+                        ?.toIntOrNull()
+                    ?: 1
 
-            addActors(
-                actors
+            val episode =
+                contentItem
+                    ?.optInt(
+                        "episode_no"
+                    )
+                    ?.takeIf {
+                        it > 0
+                    }
+                    ?: EPISODE_REGEX
+                        .find(
+                            episodeSlug
+                        )
+                        ?.groupValues
+                        ?.getOrNull(1)
+                        ?.toIntOrNull()
+
+            val episodeName =
+                firstNonBlank(
+                    contentItem,
+                    "episode_title",
+                    "original_title",
+                    "post_title",
+                    "title",
+                    "name"
+                )
+                    ?.removeSuffix(
+                        " - Dizilla"
+                    )
+                    ?.trim()
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?: "${episode ?: 0}. Bölüm"
+
+            val episodeDescription =
+                firstNonBlank(
+                    contentItem,
+                    "description",
+                    "overview",
+                    "plot"
+                )
+
+            newEpisode(
+                "$mainUrl/$episodeSlug"
+            ) {
+
+                this.name =
+                    episodeName
+
+                this.season =
+                    season
+
+                this.episode =
+                    episode
+
+                this.description =
+                    episodeDescription
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                "Dizilla",
+                "Episode parse failed: ${e.message}"
             )
+
+            null
         }
+    }
+
+    // =========================================================
+    // JSON VALUE HELPER
+    // =========================================================
+
+    private fun firstNonBlank(
+        obj: JSONObject?,
+        vararg keys: String
+    ): String? {
+
+        if (obj == null) {
+            return null
+        }
+
+        for (key in keys) {
+
+            val value =
+                obj
+                    .optString(
+                        key
+                    )
+                    .trim()
+
+            if (
+                value.isNotBlank()
+                &&
+                value != "null"
+            ) {
+                return value
+            }
+        }
+
+        return null
     }
 
     // =========================================================
@@ -734,120 +1072,925 @@ class Dizilla : MainAPI() {
         ) -> Unit,
         callback: (
             ExtractorLink
-        ) -> Unit,
+        ) -> Unit
     ): Boolean {
 
         Log.d(
-            "DZL",
-            "data » $data"
+            "Dizilla",
+            "loadLinks data = $data"
         )
 
-        val document =
-            app.get(
-                data
-            ).document
+        val episodeHtml =
+            try {
 
-        val iframes =
-            mutableSetOf<String>()
+                app.get(
+                    data,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT
+                    )
+                ).text
 
-        // -----------------------------------------------------
-        // ALTERNATİF PLAYERLAR
-        // -----------------------------------------------------
+            } catch (e: Exception) {
 
-        val alternatifler =
-            document.select(
-                "a[href*='player']"
+                Log.e(
+                    "Dizilla",
+                    "Episode page failed: ${e.message}"
+                )
+
+                return false
+            }
+
+        val episodeDocument =
+            Jsoup.parse(
+                episodeHtml
             )
 
-        // -----------------------------------------------------
-        // ALTERNATİF YOK
-        // -----------------------------------------------------
+        val buildId =
+            getBuildId(
+                episodeHtml
+            )
+                ?: return false
+
+        val episodeSlug =
+            data
+                .trimEnd('/')
+                .substringAfterLast('/')
 
         if (
-            alternatifler.isEmpty()
+            episodeSlug.isBlank()
+        ) {
+            return false
+        }
+
+        val jsonUrl =
+            "$mainUrl/$NEXT_DATA_PATH/" +
+                    "$buildId/" +
+                    "$episodeSlug.json"
+
+        val pageJson =
+            try {
+
+                app.get(
+                    jsonUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to data
+                    )
+                ).text
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "Dizilla",
+                    "NEXT data failed: ${e.message}"
+                )
+
+                return false
+            }
+
+        val page =
+            try {
+
+                JSONObject(
+                    pageJson
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "Dizilla",
+                    "NEXT JSON parse failed: ${e.message}"
+                )
+
+                return false
+            }
+
+        val pageProps =
+            page.optJSONObject(
+                "pageProps"
+            )
+                ?: return fallbackIframe(
+                    episodeDocument,
+                    subtitleCallback,
+                    callback
+                )
+
+        val secureData =
+            pageProps
+                .optString(
+                    "secureData"
+                )
+                .trim()
+
+        if (
+            secureData.isBlank()
         ) {
 
-            val iframe =
-                fixUrlNull(
-                    document
-                        .selectFirst(
-                            "div#playerLsDizilla iframe"
-                        )
-                        ?.attr("src")
-                )
-                    ?: return false
-
-            Log.d(
-                "DZL",
-                "iframe » $iframe"
-            )
-
-            loadExtractor(
-                iframe,
-                "${mainUrl}/",
+            return fallbackIframe(
+                episodeDocument,
                 subtitleCallback,
                 callback
             )
+        }
 
-        } else {
-
-            // -------------------------------------------------
-            // ALTERNATİFLER
-            // -------------------------------------------------
-
-            alternatifler.forEach { alternative ->
-
-                val playerUrl =
-                    fixUrlNull(
-                        alternative.attr(
-                            "href"
-                        )
-                    )
-                        ?: return@forEach
-
-                val playerDoc =
-                    app.get(
-                        playerUrl
-                    ).document
-
-                val iframe =
-                    fixUrlNull(
-                        playerDoc
-                            .selectFirst(
-                                "div#playerLsDizilla iframe"
-                            )
-                            ?.attr("src")
-                    )
-                        ?: return@forEach
-
-                // ---------------------------------------------
-                // Duplicate iframe engelle
-                // ---------------------------------------------
-
-                if (
-                    iframe in iframes
-                ) {
-                    return@forEach
-                }
-
-                iframes.add(
-                    iframe
-                )
-
-                Log.d(
-                    "DZL",
-                    "iframe » $iframe"
-                )
-
-                loadExtractor(
-                    iframe,
-                    "${mainUrl}/",
+        val decrypted =
+            decryptSecureData(
+                secureData
+            )
+                ?: return fallbackIframe(
+                    episodeDocument,
                     subtitleCallback,
                     callback
+                )
+
+        /*
+         * Güncel Dizilla yapısında:
+         *
+         * RelatedResults
+         *   -> getEpisodeSources
+         *      -> result[]
+         */
+
+        val sources =
+            decrypted
+                .optJSONObject(
+                    "RelatedResults"
+                )
+                ?.optJSONObject(
+                    "getEpisodeSources"
+                )
+                ?.optJSONArray(
+                    "result"
+                )
+                ?: decrypted
+                    .optJSONObject(
+                        "content"
+                    )
+                    ?.optJSONObject(
+                        "result"
+                    )
+                    ?.optJSONObject(
+                        "RelatedResults"
+                    )
+                    ?.optJSONObject(
+                        "getEpisodeSources"
+                    )
+                    ?.optJSONArray(
+                        "result"
+                    )
+
+        if (
+            sources == null
+            ||
+            sources.length() == 0
+        ) {
+
+            return fallbackIframe(
+                episodeDocument,
+                subtitleCallback,
+                callback
+            )
+        }
+
+        var delivered =
+            false
+
+        for (
+            index in 0 until sources.length()
+        ) {
+
+            val item =
+                sources.optJSONObject(
+                    index
+                )
+                    ?: continue
+
+            val sourceContent =
+                item
+                    .optString(
+                        "source_content"
+                    )
+                    .trim()
+
+            if (
+                sourceContent.isBlank()
+            ) {
+                continue
+            }
+
+            val iframeUrl =
+                extractIframeUrl(
+                    sourceContent
+                )
+                    ?: continue
+
+            val sourceName =
+                item
+                    .optString(
+                        "source_name"
+                    )
+                    .trim()
+
+            val languageName =
+                item
+                    .optString(
+                        "language_name"
+                    )
+                    .trim()
+
+            val qualityName =
+                item
+                    .optString(
+                        "quality_name"
+                    )
+                    .trim()
+
+            val label =
+                buildString {
+
+                    append(
+                        name
+                    )
+
+                    if (
+                        sourceName.isNotBlank()
+                    ) {
+                        append(
+                            " • "
+                        )
+                        append(
+                            sourceName
+                        )
+                    }
+
+                    if (
+                        languageName.isNotBlank()
+                    ) {
+                        append(
+                            " • "
+                        )
+                        append(
+                            languageName
+                        )
+                    }
+
+                    if (
+                        qualityName.isNotBlank()
+                    ) {
+                        append(
+                            " • "
+                        )
+                        append(
+                            qualityName
+                        )
+                    }
+                }
+
+            try {
+
+                if (
+                    extractFromIframe(
+                        iframeUrl,
+                        label,
+                        qualityName,
+                        subtitleCallback,
+                        callback
+                    )
+                ) {
+
+                    delivered =
+                        true
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "Dizilla",
+                    "Source failed: ${e.message}"
                 )
             }
         }
 
-        return true
+        return delivered
+    }
+
+    // =========================================================
+    // IFRAME
+    // =========================================================
+
+    private fun extractIframeUrl(
+        sourceContent: String
+    ): String? {
+
+        if (
+            sourceContent.isBlank()
+        ) {
+            return null
+        }
+
+        try {
+
+            val parsed =
+                Jsoup.parse(
+                    sourceContent
+                )
+
+            val iframe =
+                parsed
+                    .selectFirst(
+                        "iframe"
+                    )
+                    ?.attr(
+                        "src"
+                    )
+                    ?.trim()
+
+            val fixed =
+                fixUrlNull(
+                    iframe
+                )
+
+            if (
+                !fixed.isNullOrBlank()
+            ) {
+                return fixed
+            }
+
+        } catch (_: Exception) {
+        }
+
+        val regex =
+            Regex(
+                """(?:https?:)?//([a-zA-Z0-9.-]+/iframe\.php\?v=[A-Za-z0-9+/=]+)"""
+            )
+
+        val match =
+            regex.find(
+                sourceContent
+            )
+
+        return match
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let {
+                "https://$it"
+            }
+    }
+
+    // =========================================================
+    // IFRAME -> PLAYER -> SOURCE2 -> M3U8
+    // =========================================================
+
+    private suspend fun extractFromIframe(
+        iframeUrl: String,
+        label: String,
+        qualityName: String,
+        subtitleCallback: (
+            SubtitleFile
+        ) -> Unit,
+        callback: (
+            ExtractorLink
+        ) -> Unit
+    ): Boolean {
+
+        val iframeHtml =
+            try {
+
+                app.get(
+                    iframeUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to "$mainUrl/"
+                    ),
+                    referer = "$mainUrl/"
+                ).text
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "Dizilla",
+                    "Iframe failed: ${e.message}"
+                )
+
+                return false
+            }
+
+        if (
+            iframeHtml.isBlank()
+        ) {
+            return false
+        }
+
+        // =====================================================
+        // SUBTITLES
+        // =====================================================
+
+        extractSubtitles(
+            iframeHtml,
+            subtitleCallback
+        )
+
+        // =====================================================
+        // OPEN PLAYER TOKEN
+        // =====================================================
+
+        val token =
+            Regex(
+                """window\.openPlayer\(['"]([^'"]+)['"]"""
+            )
+                .find(
+                    iframeHtml
+                )
+                ?.groupValues
+                ?.getOrNull(1)
+                ?: Regex(
+                    """openPlayer\(['"]([^'"]+)['"]"""
+                )
+                    .find(
+                        iframeHtml
+                    )
+                    ?.groupValues
+                    ?.getOrNull(1)
+                ?: return false
+
+        Log.d(
+            "Dizilla",
+            "player token bulundu."
+        )
+
+        // =====================================================
+        // SOURCE2
+        // =====================================================
+
+        val host =
+            iframeUrl
+                .removePrefix(
+                    "https://"
+                )
+                .removePrefix(
+                    "http://"
+                )
+                .substringBefore(
+                    "/"
+                )
+
+        if (
+            host.isBlank()
+        ) {
+            return false
+        }
+
+        val source2Url =
+            "https://$host/source2.php?v=$token"
+
+        val source2Text =
+            try {
+
+                app.get(
+                    source2Url,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to iframeUrl
+                    ),
+                    referer = iframeUrl
+                ).text
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "Dizilla",
+                    "source2 failed: ${e.message}"
+                )
+
+                return false
+            }
+
+        val source2 =
+            try {
+
+                JSONObject(
+                    source2Text
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "Dizilla",
+                    "source2 JSON failed: ${e.message}"
+                )
+
+                return false
+            }
+
+        if (
+            source2.optBoolean(
+                "state",
+                true
+            ).not()
+        ) {
+            return false
+        }
+
+        val playlist =
+            source2.optJSONArray(
+                "playlist"
+            )
+                ?: return false
+
+        var delivered =
+            false
+
+        // =====================================================
+        // PLAYLIST
+        // =====================================================
+
+        for (
+            playlistIndex in
+            0 until playlist.length()
+        ) {
+
+            val playlistItem =
+                playlist.optJSONObject(
+                    playlistIndex
+                )
+                    ?: continue
+
+            val videoSources =
+                playlistItem.optJSONArray(
+                    "sources"
+                )
+                    ?: continue
+
+            for (
+                sourceIndex in
+                0 until videoSources.length()
+            ) {
+
+                val source =
+                    videoSources.optJSONObject(
+                        sourceIndex
+                    )
+                        ?: continue
+
+                val type =
+                    source
+                        .optString(
+                            "type"
+                        )
+                        .trim()
+                        .lowercase()
+
+                if (
+                    type != "hls"
+                    &&
+                    type != "m3u8"
+                ) {
+                    continue
+                }
+
+                var file =
+                    source
+                        .optString(
+                            "file"
+                        )
+                        .trim()
+
+                if (
+                    file.isBlank()
+                ) {
+                    continue
+                }
+
+                file =
+                    file.replace(
+                        "\\",
+                        ""
+                    )
+
+                if (
+                    file.startsWith(
+                        "//"
+                    )
+                ) {
+                    file =
+                        "https:$file"
+                } else if (
+                    file.startsWith(
+                        "/"
+                    )
+                ) {
+                    file =
+                        "https://$host$file"
+                } else if (
+                    !file.startsWith(
+                        "http://"
+                    )
+                    &&
+                    !file.startsWith(
+                        "https://"
+                    )
+                ) {
+                    file =
+                        "https://$host/$file"
+                }
+
+                /*
+                 * Dizilla player kaynağında
+                 *
+                 * m.php
+                 *
+                 * yerine
+                 *
+                 * master.m3u8
+                 *
+                 * kullanılıyor.
+                 */
+
+                val masterUrl =
+                    file.replace(
+                        "m.php",
+                        "master.m3u8"
+                    )
+
+                Log.d(
+                    "Dizilla",
+                    "M3U8 » $masterUrl"
+                )
+
+                val quality =
+                    parseQuality(
+                        qualityName
+                    )
+
+                callback.invoke(
+                    newExtractorLink(
+                        source = name,
+                        name = label,
+                        url = masterUrl,
+                        type = ExtractorLinkType.M3U8
+                    ) {
+
+                        this.referer =
+                            iframeUrl
+
+                        this.headers =
+                            mapOf(
+                                "User-Agent" to
+                                    USER_AGENT,
+                                "Referer" to
+                                    iframeUrl
+                            )
+
+                        this.quality =
+                            quality
+                    }
+                )
+
+                /*
+                 * M3U8 içindeki kalite varyantlarını da
+                 * CloudStream'e bildir.
+                 */
+
+                try {
+
+                    M3u8Helper
+                        .generateM3u8(
+                            label,
+                            masterUrl,
+                            iframeUrl
+                        )
+                        .forEach(
+                            callback
+                        )
+
+                } catch (e: Exception) {
+
+                    Log.d(
+                        "Dizilla",
+                        "M3U8 variant parse failed: ${e.message}"
+                    )
+                }
+
+                delivered =
+                    true
+            }
+        }
+
+        return delivered
+    }
+
+    // =========================================================
+    // SUBTITLES
+    // =========================================================
+
+    private fun extractSubtitles(
+        html: String,
+        subtitleCallback: (
+            SubtitleFile
+        ) -> Unit
+    ) {
+
+        val seen =
+            HashSet<String>()
+
+        val regex =
+            Regex(
+                """"file":"([^"]+)","label":"([^"]+)""""
+            )
+
+        regex
+            .findAll(
+                html
+            )
+            .forEach { match ->
+
+                val rawUrl =
+                    match
+                        .groupValues
+                        .getOrNull(1)
+                        ?: return@forEach
+
+                val rawLabel =
+                    match
+                        .groupValues
+                        .getOrNull(2)
+                        ?: return@forEach
+
+                val cleanUrl =
+                    rawUrl
+                        .replace(
+                            "\\",
+                            ""
+                        )
+
+                if (
+                    cleanUrl.isBlank()
+                    ||
+                    !seen.add(
+                        cleanUrl
+                    )
+                ) {
+                    return@forEach
+                }
+
+                val language =
+                    rawLabel
+                        .replace(
+                            "\\u0131",
+                            "ı"
+                        )
+                        .replace(
+                            "\\u0130",
+                            "İ"
+                        )
+                        .replace(
+                            "\\u00fc",
+                            "ü"
+                        )
+                        .replace(
+                            "\\u00e7",
+                            "ç"
+                        )
+                        .replace(
+                            "\\u00f6",
+                            "ö"
+                        )
+                        .replace(
+                            "\\u011f",
+                            "ğ"
+                        )
+                        .replace(
+                            "\\u015f",
+                            "ş"
+                        )
+                        .replace(
+                            "\\u00dc",
+                            "Ü"
+                        )
+                        .replace(
+                            "\\u00d6",
+                            "Ö"
+                        )
+                        .replace(
+                            "\\u00c7",
+                            "Ç"
+                        )
+                        .replace(
+                            "\\u011e",
+                            "Ğ"
+                        )
+                        .replace(
+                            "\\u015e",
+                            "Ş"
+                        )
+
+                try {
+
+                    subtitleCallback.invoke(
+                        newSubtitleFile(
+                            lang = language,
+                            url = fixUrl(
+                                cleanUrl
+                            )
+                        )
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.d(
+                        "Dizilla",
+                        "Subtitle failed: ${e.message}"
+                    )
+                }
+            }
+    }
+
+    // =========================================================
+    // FALLBACK IFRAME
+    // =========================================================
+
+    private suspend fun fallbackIframe(
+        document: org.jsoup.nodes.Document,
+        subtitleCallback: (
+            SubtitleFile
+        ) -> Unit,
+        callback: (
+            ExtractorLink
+        ) -> Unit
+    ): Boolean {
+
+        /*
+         * Yeni API akışı bulunamazsa sayfanın içine
+         * gömülmüş iframe'i yine deniyoruz.
+         */
+
+        val iframe =
+            document
+                .select(
+                    "iframe"
+                )
+                .firstOrNull {
+                    val src =
+                        it.attr("src")
+
+                    src.contains(
+                        "player",
+                        ignoreCase = true
+                    )
+                    ||
+                    src.contains(
+                        "embed",
+                        ignoreCase = true
+                    )
+                    ||
+                    src.contains(
+                        "watch",
+                        ignoreCase = true
+                    )
+                }
+                ?.attr(
+                    "src"
+                )
+
+        val iframeUrl =
+            fixUrlNull(
+                iframe
+            )
+                ?: return false
+
+        Log.d(
+            "Dizilla",
+            "Fallback iframe » $iframeUrl"
+        )
+
+        return extractFromIframe(
+            iframeUrl,
+            name,
+            "",
+            subtitleCallback,
+            callback
+        )
+    }
+
+    // =========================================================
+    // QUALITY
+    // =========================================================
+
+    private fun parseQuality(
+        value: String
+    ): Int {
+
+        val number =
+            Regex(
+                """\d{3,4}"""
+            )
+                .find(
+                    value
+                )
+                ?.value
+                ?.toIntOrNull()
+
+        return number
+            ?: Qualities.Unknown.value
     }
 }
