@@ -71,14 +71,14 @@ class DiziKorea : MainAPI() {
     // =========================================================
 
     override val mainPage = mainPageOf(
-        "$mainUrl/kore-dizileri-izle-dq" to "Kore Dizileri",
-        "$mainUrl/cin-dizileri" to "Çin Dizileri",
-        "$mainUrl/japon-dizileri" to "Japon Dizileri",
-        "$mainUrl/tayland-dizileri" to "Tayland Dizileri",
-        "$mainUrl/tayvan-dizileri" to "Tayvan Dizileri",
-        "$mainUrl/filipin-dizileri" to "Filipin Dizileri",
-        "$mainUrl/filmler" to "Filmler",
-        "$mainUrl/dizi-arsivi" to "Dizi Arşivi",
+        "$mainUrl/kore-dizileri-izle-dq1/sayfa/1" to "Kore Dizileri",
+        "$mainUrl/cin-dizileri/sayfa/1" to "Çin Dizileri",
+        "$mainUrl/japon-dizileri/sayfa/1" to "Japon Dizileri",
+        "$mainUrl/tayland-dizileri/sayfa/1" to "Tayland Dizileri",
+        "$mainUrl/tayvan-dizileri/sayfa/1" to "Tayvan Dizileri",
+        "$mainUrl/filipin-dizileri/sayfa/1" to "Filipin Dizileri",
+        "$mainUrl/filmler/sayfa/1" to "Filmler",
+        "$mainUrl/dizi-arsivi/sayfa/1" to "Dizi Arşivi",
     )
 
     override suspend fun getMainPage(
