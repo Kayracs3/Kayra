@@ -40,6 +40,26 @@
         "name": "DiziKorea"
     },
     {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=dizilla.club&sz=%size%",
+        "fileHash": "sha256-926b7398dc2a4fd1fc77e44c7408bdd8d2372ca2eecda15a85c188f04a993b6c",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 29320,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 14,
+        "internalName": "Dizilla",
+        "description": "Dizilla t\u00fcm yabanc\u0131 dizileri \u00fccretsiz olarak T\u00fcrk\u00e7e Dublaj ve altyaz\u0131l\u0131 se\u00e7enekleri ile 1080P kalite izleyebilece\u011finiz yeni nesil yabanc\u0131 dizi izleme siteniz.",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizilla.cs3",
+        "name": "Dizilla"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=www.fullhdfilmizlesene.de&sz=%size%",
         "fileHash": "sha256-3627b2feba17a1f970b12aa777780b8d1457fdc88f5475b188cf30ba40713e18",
         "apiVersion": 1,
