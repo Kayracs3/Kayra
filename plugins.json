@@ -1,5 +1,45 @@
 [
     {
+        "iconUrl": "https://diziboxizle.com/favicon.ico",
+        "fileHash": "sha256-f2210c744cc981fd213b996ce8b38c32c99d684f343e4507062ef311ddb39e3d",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 34084,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "DiziBoxizle",
+        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziBoxizle.cs3",
+        "name": "DiziBoxizle"
+    },
+    {
+        "iconUrl": "https://dizikorea3.com//favicon.ico",
+        "fileHash": "sha256-c3ff0eedbb4eb0cce32c3b104c397bc3a85657b1f1190980b50f97f7f051ca3b",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 23582,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "DiziKorea",
+        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziKorea.cs3",
+        "name": "DiziKorea"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=www.fullhdfilmizlesene.de&sz=%size%",
         "fileHash": "sha256-ebd3e4149e81c61410b3b0698f9d6ea3711e5f88e8be11308ca25a9c9d17fd07",
         "apiVersion": 1,
