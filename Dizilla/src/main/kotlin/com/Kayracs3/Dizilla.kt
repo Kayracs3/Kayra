@@ -1,6 +1,6 @@
 // ! Bu araç @keyiflerolsun tarafından | @KekikAkademi için yazılmıştır.
 
-package com.keyiflerolsun
+package com.Kayracs3
 
 import android.util.Log
 import org.jsoup.nodes.Element
@@ -9,7 +9,7 @@ import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 
 class Dizilla : MainAPI() {
-    override var mainUrl              = "https://dizilla.nl"
+    override var mainUrl              = "https://dizilla.now"
     override var name                 = "Dizilla"
     override val hasMainPage          = true
     override var lang                 = "tr"
