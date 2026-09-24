@@ -7,17 +7,34 @@ pluginManagement {
     }
 }
 
-rootProject.name = "CloudstreamPlugins"
-
-// Bu liste içerisine yazılan klasörler derlemeye dahil edilmez
-val disabled = listOf("__Temel")
-
-File(rootDir, ".").eachDir { dir ->
-    if (!disabled.contains(dir.name) && File(dir, "build.gradle.kts").exists()) {
-        include(dir.name)
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven("https://jitpack.io")
     }
 }
 
-fun File.eachDir(block: (File) -> Unit) {
-    listFiles()?.filter { it.isDirectory }?.forEach { block(it) }
-}
+rootProject.name = "CloudstreamPlugins"
+
+val disabled = setOf(
+    "__Temel"
+)
+
+rootDir
+    .listFiles()
+    ?.filter {
+        it.isDirectory
+    }
+    ?.filter {
+        !disabled.contains(it.name)
+    }
+    ?.filter {
+        File(
+            it,
+            "build.gradle.kts"
+        ).exists()
+    }
+    ?.forEach {
+        include(":${it.name}")
+    }
