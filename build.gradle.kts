@@ -14,7 +14,8 @@ buildscript {
     dependencies {
         classpath("com.android.tools.build:gradle:8.7.3")
 
-        // CloudStream Gradle plugin local Maven'dan gelecek
+        // CloudStream Gradle plugin artık JitPack'ten değil,
+        // GitHub Actions sırasında mavenLocal() içine yayınlanacak.
         classpath(
             "com.lagradost.cloudstream3:gradle:local-SNAPSHOT"
         )
@@ -83,7 +84,9 @@ subprojects {
         }
 
         tasks.withType<KotlinJvmCompile> {
+
             compilerOptions {
+
                 jvmTarget.set(
                     JvmTarget.JVM_11
                 )
