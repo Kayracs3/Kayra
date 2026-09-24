@@ -16,7 +16,7 @@ import java.net.URLEncoder
  *
  * https://dizikorea3.com/
  *
- * Desteklenen:
+ * Destek:
  * - Dizi
  * - Film
  * - Sezon / Bölüm
@@ -36,7 +36,6 @@ class DiziKorea : MainAPI() {
 
     override val hasMainPage = true
     override val hasQuickSearch = true
-
     override var sequentialMainPage = true
 
     override val supportedTypes = setOf(
@@ -72,7 +71,7 @@ class DiziKorea : MainAPI() {
     )
 
     // =========================================================
-    // ANA SAYFA
+    // ANA SAYFA / PAGINATION
     // =========================================================
 
     override suspend fun getMainPage(
@@ -91,24 +90,134 @@ class DiziKorea : MainAPI() {
         ).document
 
         /*
-         * Sayfadaki bütün a[href] bağlantılarını tarıyoruz.
+         * DiziKorea'da pagination:
          *
-         * FAKAT:
-         * toSearchResponse() içinde
-         * site-sidebar-trend-list tamamen dışarıda bırakılıyor.
+         * /kore-dizileri-izle-dq1
+         * /kore-dizileri-izle-dq1/sayfa/2
+         * /kore-dizileri-izle-dq1/sayfa/3
          *
-         * Böylece:
+         * şeklinde.
          *
-         * Haftanın Trendleri
-         * ↓
-         * Dream to You
-         * A Bona Fide Killer
-         * My Bias, My Boss
-         * ...
-         *
-         * kategori listesine karışmıyor.
+         * Bu nedenle sayfadaki tüm A etiketlerini doğrudan
+         * almak yerine pagination bağlantısının bulunduğu
+         * ana içerik bloğunu buluyoruz.
          */
-        val results = document
+        val results = extractPaginatedResults(
+            document
+        )
+
+        /*
+         * Artık:
+         *
+         * results.isNotEmpty()
+         *
+         * kullanmıyoruz.
+         *
+         * Gerçek "Sonraki" bağlantısını kontrol ediyoruz.
+         */
+        val hasNext = hasNextPage(
+            document,
+            page
+        )
+
+        return newHomePageResponse(
+            request.name,
+            results.distinctBy {
+                it.url
+            },
+            hasNext = hasNext,
+        )
+    }
+
+    /**
+     * Pagination'ın bulunduğu içerik bölümünü bulur.
+     *
+     * Böylece:
+     *
+     * - Haftanın Trendleri
+     * - Header
+     * - Footer
+     * - Navigation
+     * - Devam Eden / ayrı widget'lar
+     *
+     * mümkün olduğunca ana sayfalama sonucuna karışmaz.
+     */
+    private fun extractPaginatedResults(
+        document: Document
+    ): List<SearchResponse> {
+
+        /*
+         * Önce "Sonraki" bağlantısını bul.
+         */
+        val nextLink = document
+            .select("a[href]")
+            .firstOrNull { element ->
+
+                val text =
+                    element.text()
+                        .trim()
+                        .lowercase()
+
+                val href =
+                    element.attr("href")
+                        .trim()
+                        .lowercase()
+
+                text.contains("sonraki") ||
+                    href.contains("/sayfa/")
+            }
+
+        /*
+         * Sonraki bağlantının bulunduğu en küçük
+         * içerik container'ını bul.
+         */
+        val container =
+            nextLink?.let {
+                findPaginationContainer(it)
+            }
+
+        /*
+         * Container bulunduysa yalnızca onun içindeki
+         * dizi/film bağlantılarını al.
+         */
+        if (container != null) {
+
+            val results = container
+                .select("a[href]")
+                .mapNotNull {
+                    it.toSearchResponse()
+                }
+                .filter {
+                    it.url.isNotBlank()
+                }
+                .distinctBy {
+                    it.url
+                }
+
+            if (results.isNotEmpty()) {
+                return results
+            }
+        }
+
+        /*
+         * Fallback:
+         *
+         * Bazı kategori sayfalarında pagination yapısı
+         * farklı olabilir.
+         *
+         * Bu durumda bütün sayfayı tarıyoruz ama
+         * toSearchResponse() zaten:
+         *
+         * - trend
+         * - sidebar
+         * - navigation
+         * - footer
+         * - pagination
+         * - bölüm linkleri
+         *
+         * filtreliyor.
+         */
+        return document
             .select("a[href]")
             .mapNotNull {
                 it.toSearchResponse()
@@ -116,12 +225,232 @@ class DiziKorea : MainAPI() {
             .distinctBy {
                 it.url
             }
+    }
 
-        return newHomePageResponse(
-            request.name,
-            results,
-            hasNext = results.isNotEmpty(),
+    /**
+     * "Sonraki" pagination bağlantısından yukarı doğru çıkar
+     * ve yeterli sayıda dizi/film kartı içeren en küçük
+     * parent'ı seçer.
+     */
+    private fun findPaginationContainer(
+        nextLink: Element
+    ): Element? {
+
+        var current =
+            nextLink.parent()
+
+        var depth = 0
+
+        while (
+            current != null &&
+            depth < 8
+        ) {
+
+            val validCount =
+                current
+                    .select("a[href]")
+                    .count {
+                        isMainContentLink(it)
+                    }
+
+            /*
+             * Sayfadaki kart listesine ulaştık.
+             *
+             * DiziKorea sayfalarında liste genellikle
+             * 20+ kart içerdiği için 8 yeterli.
+             */
+            if (
+                validCount >= 10
+            ) {
+
+                return current
+            }
+
+            current =
+                current.parent()
+
+            depth++
+        }
+
+        return null
+    }
+
+    /**
+     * Bir A etiketinin gerçek içerik kartı olup olmadığını
+     * kontrol eder.
+     */
+    private fun isMainContentLink(
+        element: Element
+    ): Boolean {
+
+        val href =
+            element
+                .attr("href")
+                .trim()
+
+        if (href.isBlank()) {
+            return false
+        }
+
+        val path =
+            href.lowercase()
+
+        /*
+         * Sadece dizi / film.
+         */
+        if (
+            !path.contains("/dizi/") &&
+            !path.contains("/film/")
+        ) {
+            return false
+        }
+
+        /*
+         * Bölüm bağlantıları yok.
+         */
+        if (
+            path.contains("/sezon-") ||
+            path.contains("/bolum-")
+        ) {
+            return false
+        }
+
+        /*
+         * Trend.
+         */
+        if (
+            element.hasClass(
+                "site-sidebar-trend-item"
+            )
+        ) {
+            return false
+        }
+
+        /*
+         * Trend parent.
+         */
+        if (
+            element.parents().any {
+                it.hasClass(
+                    "site-sidebar-trend-list"
+                )
+            }
+        ) {
+            return false
+        }
+
+        /*
+         * Pagination bağlantıları.
+         */
+        if (
+            path.contains("/sayfa/")
+        ) {
+            return false
+        }
+
+        /*
+         * Yaygın navigation/sidebar/footer alanları.
+         */
+        val parentInfo =
+            buildString {
+
+                var parent =
+                    element.parent()
+
+                var count = 0
+
+                while (
+                    parent != null &&
+                    count < 8
+                ) {
+
+                    append(" ")
+                    append(
+                        parent.tagName()
+                    )
+                    append(" ")
+                    append(
+                        parent.id()
+                    )
+                    append(" ")
+                    append(
+                        parent.className()
+                    )
+
+                    parent =
+                        parent.parent()
+
+                    count++
+                }
+            }.lowercase()
+
+        val forbiddenAreas = listOf(
+            "sidebar",
+            "site-sidebar",
+            "trend",
+            "site-sidebar-trend",
+            "footer",
+            "header",
+            "navbar",
+            "navigation",
+            "menu",
+            "pagination",
+            "pager",
         )
+
+        if (
+            forbiddenAreas.any {
+                parentInfo.contains(it)
+            }
+        ) {
+            return false
+        }
+
+        return true
+    }
+
+    /**
+     * Gerçek "Sonraki" sayfa var mı?
+     *
+     * Örnek:
+     *
+     * Sayfa 1:
+     * /sayfa/2
+     *
+     * Sayfa 2:
+     * /sayfa/3
+     */
+    private fun hasNextPage(
+        document: Document,
+        currentPage: Int,
+    ): Boolean {
+
+        val expectedPath =
+            "/sayfa/${currentPage + 1}"
+
+        return document
+            .select("a[href]")
+            .any { element ->
+
+                val href =
+                    element
+                        .attr("href")
+                        .trim()
+
+                val text =
+                    element
+                        .text()
+                        .trim()
+                        .lowercase()
+
+                href.contains(
+                    expectedPath,
+                    ignoreCase = true
+                ) ||
+                    text.contains(
+                        "sonraki"
+                    )
+            }
     }
 
     // =========================================================
@@ -132,10 +461,11 @@ class DiziKorea : MainAPI() {
         query: String
     ): List<SearchResponse> {
 
-        val encoded = URLEncoder.encode(
-            query.trim(),
-            "UTF-8"
-        )
+        val encoded =
+            URLEncoder.encode(
+                query.trim(),
+                "UTF-8"
+            )
 
         val candidates = listOf(
             "$mainUrl/arama?q=$encoded",
@@ -147,23 +477,30 @@ class DiziKorea : MainAPI() {
 
         for (url in candidates) {
 
-            val document = runCatching {
-                app.get(
-                    url,
-                    headers = requestHeaders,
-                ).document
-            }.getOrNull() ?: continue
+            val document =
+                runCatching {
 
-            val results = document
-                .select("a[href]")
-                .mapNotNull {
-                    it.toSearchResponse()
-                }
-                .distinctBy {
-                    it.url
-                }
+                    app.get(
+                        url,
+                        headers = requestHeaders,
+                    ).document
 
-            if (results.isNotEmpty()) {
+                }.getOrNull()
+                    ?: continue
+
+            val results =
+                document
+                    .select("a[href]")
+                    .mapNotNull {
+                        it.toSearchResponse()
+                    }
+                    .distinctBy {
+                        it.url
+                    }
+
+            if (
+                results.isNotEmpty()
+            ) {
                 return results
             }
         }
@@ -179,63 +516,58 @@ class DiziKorea : MainAPI() {
         url: String
     ): LoadResponse? {
 
-        val document = app.get(
-            url,
-            headers = requestHeaders,
-        ).document
+        val document =
+            app.get(
+                url,
+                headers = requestHeaders,
+            ).document
 
-        val normalized = url.lowercase()
+        val normalized =
+            url.lowercase()
 
         // -----------------------------------------------------
-        // BAŞLIK
+        // TITLE
         // -----------------------------------------------------
 
-        val title = document
-            .selectFirst("h1")
-            ?.text()
-            ?.trim()
-            ?.takeIf {
-                it.isNotBlank()
-            }
-            ?: document
-                .selectFirst(
-                    "meta[property='og:title']"
-                )
-                ?.attr("content")
+        val title =
+            document
+                .selectFirst("h1")
+                ?.text()
                 ?.trim()
-            ?: return null
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: document
+                    .selectFirst(
+                        "meta[property='og:title']"
+                    )
+                    ?.attr("content")
+                    ?.trim()
+                ?: return null
 
         // -----------------------------------------------------
         // POSTER
         // -----------------------------------------------------
 
-        /*
-         * Dizi için doğrudan:
-         *
-         * /assets/uploads/series/{slug}.webp
-         * /assets/uploads/series/{slug}.jpg
-         *
-         * deneniyor.
-         *
-         * Böylece detay sayfasındaki sidebar trend
-         * görselleri poster olarak seçilmiyor.
-         */
-        val poster = when {
+        val poster =
+            when {
 
-            "/dizi/" in normalized -> {
-                findSeriesPoster(url)
-            }
+                "/dizi/" in normalized -> {
+                    findSeriesPoster(
+                        url
+                    )
+                }
 
-            else -> {
-                findMoviePoster(
-                    document = document,
-                    title = title,
-                )
+                else -> {
+                    findMoviePoster(
+                        document = document,
+                        title = title,
+                    )
+                }
             }
-        }
 
         // -----------------------------------------------------
-        // KONUSU
+        // PLOT
         // -----------------------------------------------------
 
         val plot =
@@ -256,10 +588,11 @@ class DiziKorea : MainAPI() {
                     ?.trim()
 
         // -----------------------------------------------------
-        // YIL
+        // YEAR
         // -----------------------------------------------------
 
-        val text = document.text()
+        val text =
+            document.text()
 
         val year =
             Regex(
@@ -270,7 +603,7 @@ class DiziKorea : MainAPI() {
                 ?.toIntOrNull()
 
         // -----------------------------------------------------
-        // PUAN
+        // SCORE
         // -----------------------------------------------------
 
         val score =
@@ -280,14 +613,19 @@ class DiziKorea : MainAPI() {
                 .find(text)
                 ?.groupValues
                 ?.getOrNull(1)
-                ?.replace(',', '.')
+                ?.replace(
+                    ',',
+                    '.'
+                )
                 ?.toDoubleOrNull()
 
         // =====================================================
         // FILM
         // =====================================================
 
-        if ("/film/" in normalized) {
+        if (
+            "/film/" in normalized
+        ) {
 
             return newMovieLoadResponse(
                 title,
@@ -296,14 +634,18 @@ class DiziKorea : MainAPI() {
                 url,
             ) {
 
-                posterUrl = poster
+                posterUrl =
+                    poster
 
-                this.plot = plot
+                this.plot =
+                    plot
 
-                this.year = year
+                this.year =
+                    year
 
                 score?.let {
-                    this.score = Score.from10(it)
+                    this.score =
+                        Score.from10(it)
                 }
             }
         }
@@ -312,22 +654,15 @@ class DiziKorea : MainAPI() {
         // DİZİ
         // =====================================================
 
-        if ("/dizi/" in normalized) {
+        if (
+            "/dizi/" in normalized
+        ) {
 
-            /*
-             * Sadece gerçek dizi posteri episode'lara aktarılıyor.
-             *
-             * Bölüm içindeki img:
-             *
-             * KULLANILMIYOR.
-             *
-             * Böylece bölüm kartlarında başka dizinin veya
-             * trend alanının posteri çıkması engelleniyor.
-             */
-            val episodes = parseEpisodes(
-                document = document,
-                seriesPoster = poster,
-            )
+            val episodes =
+                parseEpisodes(
+                    document = document,
+                    seriesPoster = poster,
+                )
 
             return newTvSeriesLoadResponse(
                 title,
@@ -336,14 +671,18 @@ class DiziKorea : MainAPI() {
                 episodes,
             ) {
 
-                posterUrl = poster
+                posterUrl =
+                    poster
 
-                this.plot = plot
+                this.plot =
+                    plot
 
-                this.year = year
+                this.year =
+                    year
 
                 score?.let {
-                    this.score = Score.from10(it)
+                    this.score =
+                        Score.from10(it)
                 }
             }
         }
@@ -352,24 +691,27 @@ class DiziKorea : MainAPI() {
     }
 
     // =========================================================
-    // DİZİ POSTERİ
+    // DİZİ POSTER
     // =========================================================
 
     private suspend fun findSeriesPoster(
         pageUrl: String,
     ): String? {
 
-        var slug = pageUrl
-            .substringAfter(
-                "/dizi/",
-                ""
-            )
-            .substringBefore("?")
-            .substringBefore("#")
-            .trim()
-            .lowercase()
+        var slug =
+            pageUrl
+                .substringAfter(
+                    "/dizi/",
+                    ""
+                )
+                .substringBefore("?")
+                .substringBefore("#")
+                .trim()
+                .lowercase()
 
-        if (slug.isBlank()) {
+        if (
+            slug.isBlank()
+        ) {
             return null
         }
 
@@ -377,48 +719,60 @@ class DiziKorea : MainAPI() {
          * Örnek:
          *
          * the-hidden-shadow-izle
-         * ->
+         * =>
          * the-hidden-shadow
          *
          * my-bias-my-boss-izle-dq6
-         * ->
+         * =>
          * my-bias-my-boss
          */
-        slug = slug.replace(
-            Regex(
-                "(?i)-izle(?:-dq\\d+)?$"
-            ),
-            ""
-        )
+        slug =
+            slug.replace(
+                Regex(
+                    "(?i)-izle(?:-dq\\d+)?$"
+                ),
+                ""
+            )
 
-        if (slug.isBlank()) {
+        if (
+            slug.isBlank()
+        ) {
             return null
         }
 
-        val extensions = listOf(
-            "webp",
-            "jpg",
-            "jpeg",
-            "png",
-        )
+        val extensions =
+            listOf(
+                "webp",
+                "jpg",
+                "jpeg",
+                "png",
+            )
 
-        for (extension in extensions) {
+        for (
+            extension in extensions
+        ) {
 
             val posterUrl =
                 "$mainUrl/assets/uploads/series/$slug.$extension"
 
-            val found = runCatching {
+            val found =
+                runCatching {
 
-                val response = app.get(
-                    posterUrl,
-                    headers = requestHeaders,
+                    val response =
+                        app.get(
+                            posterUrl,
+                            headers = requestHeaders,
+                        )
+
+                    response.code in 200..299
+
+                }.getOrDefault(
+                    false
                 )
 
-                response.code in 200..299
-
-            }.getOrDefault(false)
-
-            if (found) {
+            if (
+                found
+            ) {
                 return posterUrl
             }
         }
@@ -427,7 +781,7 @@ class DiziKorea : MainAPI() {
     }
 
     // =========================================================
-    // FİLM POSTERİ
+    // FİLM POSTER
     // =========================================================
 
     private fun findMoviePoster(
@@ -436,37 +790,46 @@ class DiziKorea : MainAPI() {
     ): String? {
 
         val normalizedTitle =
-            normalizePosterText(title)
+            normalizePosterText(
+                title
+            )
 
         // -----------------------------------------------------
-        // ALT = BAŞLIK
+        // ALT
         // -----------------------------------------------------
 
-        val altPoster = document
-            .select("img[alt]")
-            .asSequence()
-            .firstOrNull { img ->
+        val altPoster =
+            document
+                .select("img[alt]")
+                .asSequence()
+                .firstOrNull { img ->
 
-                val alt =
-                    normalizePosterText(
-                        img.attr("alt")
-                    )
-
-                alt.isNotBlank() &&
-                    (
-                        alt == normalizedTitle ||
-                            alt.contains(normalizedTitle) ||
-                            normalizedTitle.contains(alt)
+                    val alt =
+                        normalizePosterText(
+                            img.attr("alt")
                         )
-            }
-            ?.let {
-                posterSource(it)
-            }
-            ?.takeIf {
-                isValidPosterUrl(it)
-            }
 
-        if (altPoster != null) {
+                    alt.isNotBlank() &&
+                        (
+                            alt == normalizedTitle ||
+                                alt.contains(
+                                    normalizedTitle
+                                ) ||
+                                normalizedTitle.contains(
+                                    alt
+                                )
+                            )
+                }
+                ?.let {
+                    posterSource(it)
+                }
+                ?.takeIf {
+                    isValidPosterUrl(it)
+                }
+
+        if (
+            altPoster != null
+        ) {
 
             return fixUrl(
                 altPoster
@@ -474,20 +837,23 @@ class DiziKorea : MainAPI() {
         }
 
         // -----------------------------------------------------
-        // OG IMAGE
+        // OG
         // -----------------------------------------------------
 
-        val ogImage = document
-            .selectFirst(
-                "meta[property='og:image']"
-            )
-            ?.attr("content")
-            ?.trim()
-            ?.takeIf {
-                isValidPosterUrl(it)
-            }
+        val ogImage =
+            document
+                .selectFirst(
+                    "meta[property='og:image']"
+                )
+                ?.attr("content")
+                ?.trim()
+                ?.takeIf {
+                    isValidPosterUrl(it)
+                }
 
-        if (ogImage != null) {
+        if (
+            ogImage != null
+        ) {
 
             return fixUrl(
                 ogImage
@@ -498,31 +864,38 @@ class DiziKorea : MainAPI() {
         // TITLE
         // -----------------------------------------------------
 
-        val titlePoster = document
-            .select("img[title]")
-            .asSequence()
-            .firstOrNull { img ->
+        val titlePoster =
+            document
+                .select("img[title]")
+                .asSequence()
+                .firstOrNull { img ->
 
-                val imageTitle =
-                    normalizePosterText(
-                        img.attr("title")
-                    )
-
-                imageTitle.isNotBlank() &&
-                    (
-                        imageTitle == normalizedTitle ||
-                            imageTitle.contains(normalizedTitle) ||
-                            normalizedTitle.contains(imageTitle)
+                    val imageTitle =
+                        normalizePosterText(
+                            img.attr("title")
                         )
-            }
-            ?.let {
-                posterSource(it)
-            }
-            ?.takeIf {
-                isValidPosterUrl(it)
-            }
 
-        if (titlePoster != null) {
+                    imageTitle.isNotBlank() &&
+                        (
+                            imageTitle == normalizedTitle ||
+                                imageTitle.contains(
+                                    normalizedTitle
+                                ) ||
+                                normalizedTitle.contains(
+                                    imageTitle
+                                )
+                            )
+                }
+                ?.let {
+                    posterSource(it)
+                }
+                ?.takeIf {
+                    isValidPosterUrl(it)
+                }
+
+        if (
+            titlePoster != null
+        ) {
 
             return fixUrl(
                 titlePoster
@@ -530,32 +903,38 @@ class DiziKorea : MainAPI() {
         }
 
         // -----------------------------------------------------
-        // DETAY ALANI
+        // DETAY
         // -----------------------------------------------------
 
-        val selectors = listOf(
-            "main img",
-            "article img",
-            ".detail img",
-            ".details img",
-            ".movie-detail img",
-            ".poster img",
-            ".cover img",
-        )
+        val selectors =
+            listOf(
+                "main img",
+                "article img",
+                ".detail img",
+                ".details img",
+                ".movie-detail img",
+                ".poster img",
+                ".cover img",
+            )
 
-        for (selector in selectors) {
+        for (
+            selector in selectors
+        ) {
 
-            val poster = document
-                .select(selector)
-                .asSequence()
-                .mapNotNull {
-                    posterSource(it)
-                }
-                .firstOrNull {
-                    isValidPosterUrl(it)
-                }
+            val poster =
+                document
+                    .select(selector)
+                    .asSequence()
+                    .mapNotNull {
+                        posterSource(it)
+                    }
+                    .firstOrNull {
+                        isValidPosterUrl(it)
+                    }
 
-            if (poster != null) {
+            if (
+                poster != null
+            ) {
 
                 return fixUrl(
                     poster
@@ -567,7 +946,7 @@ class DiziKorea : MainAPI() {
     }
 
     // =========================================================
-    // LINKLER
+    // LOAD LINKS
     // =========================================================
 
     override suspend fun loadLinks(
@@ -592,7 +971,9 @@ class DiziKorea : MainAPI() {
             referer: String,
         ) {
 
-            if (rawUrl.isNullOrBlank()) {
+            if (
+                rawUrl.isNullOrBlank()
+            ) {
                 return
             }
 
@@ -601,38 +982,41 @@ class DiziKorea : MainAPI() {
                     rawUrl.trim()
                 )
 
-            url = url
-                .replace(
-                    "\\/",
-                    "/"
-                )
-                .replace(
-                    "\\u002F",
-                    "/",
-                    ignoreCase = true
-                )
-                .replace(
-                    "\\u003A",
-                    ":",
-                    ignoreCase = true
-                )
-                .replace(
-                    "\\u0026",
-                    "&",
-                    ignoreCase = true
-                )
+            url =
+                url
+                    .replace(
+                        "\\/",
+                        "/"
+                    )
+                    .replace(
+                        "\\u002F",
+                        "/",
+                        ignoreCase = true
+                    )
+                    .replace(
+                        "\\u003A",
+                        ":",
+                        ignoreCase = true
+                    )
+                    .replace(
+                        "\\u0026",
+                        "&",
+                        ignoreCase = true
+                    )
 
             if (
                 url.startsWith("//")
             ) {
 
-                url = "https:$url"
+                url =
+                    "https:$url"
 
             } else if (
                 url.startsWith("/")
             ) {
 
-                url = fixUrl(url)
+                url =
+                    fixUrl(url)
             }
 
             if (
@@ -646,16 +1030,19 @@ class DiziKorea : MainAPI() {
                 return
             }
 
-            url = url.trimEnd(
-                ')',
-                ']',
-                ';',
-                ',',
-                '"',
-                '\''
-            )
+            url =
+                url.trimEnd(
+                    ')',
+                    ']',
+                    ';',
+                    ',',
+                    '"',
+                    '\''
+                )
 
-            if (url.isBlank()) {
+            if (
+                url.isBlank()
+            ) {
                 return
             }
 
@@ -682,55 +1069,45 @@ class DiziKorea : MainAPI() {
                     html
                 )
 
-            // -----------------------------------------------
-            // \uXXXX
-            // -----------------------------------------------
+            decoded =
+                decoded.replace(
+                    Regex(
+                        """\\u([0-9a-fA-F]{4})"""
+                    )
+                ) { match ->
 
-            decoded = decoded.replace(
-                Regex(
-                    """\\u([0-9a-fA-F]{4})"""
-                )
-            ) { match ->
+                    runCatching {
 
-                runCatching {
+                        match
+                            .groupValues[1]
+                            .toInt(16)
+                            .toChar()
+                            .toString()
 
-                    match
-                        .groupValues[1]
-                        .toInt(16)
-                        .toChar()
-                        .toString()
+                    }.getOrDefault(
+                        match.value
+                    )
+                }
 
-                }.getOrDefault(
-                    match.value
-                )
-            }
+            decoded =
+                decoded.replace(
+                    Regex(
+                        """\\x([0-9a-fA-F]{2})"""
+                    )
+                ) { match ->
 
-            // -----------------------------------------------
-            // \xXX
-            // -----------------------------------------------
+                    runCatching {
 
-            decoded = decoded.replace(
-                Regex(
-                    """\\x([0-9a-fA-F]{2})"""
-                )
-            ) { match ->
+                        match
+                            .groupValues[1]
+                            .toInt(16)
+                            .toChar()
+                            .toString()
 
-                runCatching {
-
-                    match
-                        .groupValues[1]
-                        .toInt(16)
-                        .toChar()
-                        .toString()
-
-                }.getOrDefault(
-                    match.value
-                )
-            }
-
-            // -----------------------------------------------
-            // Genel HTTP URL
-            // -----------------------------------------------
+                    }.getOrDefault(
+                        match.value
+                    )
+                }
 
             Regex(
                 """https?://[^\s"'<>\\]+"""
@@ -744,10 +1121,6 @@ class DiziKorea : MainAPI() {
                     )
                 }
 
-            // -----------------------------------------------
-            // Vmbox
-            // -----------------------------------------------
-
             Regex(
                 """(?i)https?://[a-z0-9.-]+\.vmbox\.space[^\s"'<>\\]*"""
             )
@@ -759,10 +1132,6 @@ class DiziKorea : MainAPI() {
                         referer
                     )
                 }
-
-            // -----------------------------------------------
-            // Dplayer
-            // -----------------------------------------------
 
             Regex(
                 """(?i)https?://[a-z0-9.-]*dplayer82\.site[^\s"'<>\\]*"""
@@ -776,10 +1145,6 @@ class DiziKorea : MainAPI() {
                     )
                 }
 
-            // -----------------------------------------------
-            // M3U8
-            // -----------------------------------------------
-
             Regex(
                 """(?i)https?://[^\s"'<>\\]+\.m3u8(?:\?[^\s"'<>\\]*)?"""
             )
@@ -791,10 +1156,6 @@ class DiziKorea : MainAPI() {
                         referer
                     )
                 }
-
-            // -----------------------------------------------
-            // master.m3u8
-            // -----------------------------------------------
 
             Regex(
                 """(?i)https?://[^\s"'<>\\]+/master\.m3u8(?:\?[^\s"'<>\\]*)?"""
@@ -818,31 +1179,36 @@ class DiziKorea : MainAPI() {
             referer: String,
         ) {
 
-            val attributes = listOf(
-                "href",
-                "src",
-                "data-src",
-                "data-url",
-                "data-href",
-                "data-link",
-                "data-video",
-                "data-iframe",
-                "data-embed",
-                "data-player",
-                "data-file",
-                "data-stream",
-                "data-source",
-                "onclick",
-            )
+            val attributes =
+                listOf(
+                    "href",
+                    "src",
+                    "data-src",
+                    "data-url",
+                    "data-href",
+                    "data-link",
+                    "data-video",
+                    "data-iframe",
+                    "data-embed",
+                    "data-player",
+                    "data-file",
+                    "data-stream",
+                    "data-source",
+                    "onclick",
+                )
 
-            for (attribute in attributes) {
+            for (
+                attribute in attributes
+            ) {
 
                 val value =
                     element
                         .attr(attribute)
                         .trim()
 
-                if (value.isBlank()) {
+                if (
+                    value.isBlank()
+                ) {
                     continue
                 }
 
@@ -873,33 +1239,28 @@ class DiziKorea : MainAPI() {
         // 1. BÖLÜM SAYFASI
         // =====================================================
 
-        val response = runCatching {
+        val response =
+            runCatching {
 
-            app.get(
-                data,
-                headers = requestHeaders + mapOf(
-                    "Referer" to mainUrl
+                app.get(
+                    data,
+                    headers =
+                        requestHeaders +
+                            mapOf(
+                                "Referer" to mainUrl
+                            )
                 )
-            )
 
-        }.getOrNull()
-            ?: return false
+            }.getOrNull()
+                ?: return false
 
         val document =
             response.document
-
-        // -----------------------------------------------------
-        // HTML
-        // -----------------------------------------------------
 
         scanHtml(
             response.text,
             data
         )
-
-        // -----------------------------------------------------
-        // ELEMENTLER
-        // -----------------------------------------------------
 
         document
             .select(
@@ -916,10 +1277,6 @@ class DiziKorea : MainAPI() {
                     data
                 )
             }
-
-        // -----------------------------------------------------
-        // SCRIPT
-        // -----------------------------------------------------
 
         document
             .select(
@@ -975,7 +1332,9 @@ class DiziKorea : MainAPI() {
                         "vmbox.space"
                     )
 
-            if (!isPlayer) {
+            if (
+                !isPlayer
+            ) {
                 continue
             }
 
@@ -992,9 +1351,12 @@ class DiziKorea : MainAPI() {
 
                     app.get(
                         url,
-                        headers = requestHeaders + mapOf(
-                            "Referer" to candidate.referer
-                        )
+                        headers =
+                            requestHeaders +
+                                mapOf(
+                                    "Referer" to
+                                        candidate.referer
+                                )
                     )
 
                 }.getOrNull()
@@ -1105,7 +1467,9 @@ class DiziKorea : MainAPI() {
             callback(
                 newExtractorLink(
                     source = name,
-                    name = hostLabel(url),
+                    name = hostLabel(
+                        url
+                    ),
                     url = url,
                     type = type,
                 ) {
@@ -1140,13 +1504,17 @@ class DiziKorea : MainAPI() {
                                 Qualities.Unknown.value
                         }
 
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to mediaReferer,
-                        "Accept" to "*/*",
-                        "Accept-Language" to
-                            "tr-TR,tr;q=0.9,en;q=0.8",
-                    )
+                    headers =
+                        mapOf(
+                            "User-Agent" to
+                                USER_AGENT,
+                            "Referer" to
+                                mediaReferer,
+                            "Accept" to
+                                "*/*",
+                            "Accept-Language" to
+                                "tr-TR,tr;q=0.9,en;q=0.8",
+                        )
                 }
             )
 
@@ -1194,7 +1562,9 @@ class DiziKorea : MainAPI() {
                         "filemoon.sx"
                     )
 
-            if (!supportedExtractor) {
+            if (
+                !supportedExtractor
+            ) {
                 continue
             }
 
@@ -1212,7 +1582,9 @@ class DiziKorea : MainAPI() {
                     false
                 )
 
-            if (ok) {
+            if (
+                ok
+            ) {
                 found =
                     true
             }
@@ -1286,7 +1658,9 @@ class DiziKorea : MainAPI() {
                     Regex(
                         "(?i)/sezon-(\\d+)/bolum-(\\d+)"
                     )
-                        .find(absolute)
+                        .find(
+                            absolute
+                        )
                         ?: return@mapNotNull null
 
                 val season =
@@ -1323,9 +1697,8 @@ class DiziKorea : MainAPI() {
                         episode
 
                     /*
-                     * Bölümün kendi img'sini ALMIYORUZ.
-                     *
-                     * Sadece dizi afişi.
+                     * Bölümün kendi görselini almıyoruz.
+                     * Dizi ana posteri kullanılıyor.
                      */
                     posterUrl =
                         seriesPoster
@@ -1351,42 +1724,13 @@ class DiziKorea : MainAPI() {
         SearchResponse? {
 
         /*
-         * =====================================================
-         * ANA DÜZELTME BURASI
-         * =====================================================
-         *
-         * DiziKorea her kategori sayfasında:
-         *
-         * <ul class="site-sidebar-trend-list">
-         *
-         * kullanıyor.
-         *
-         * İçindeki:
-         *
-         * <a class="site-sidebar-trend-item">
-         *
-         * bağlantıları kategori sonucu DEĞİL.
-         *
-         * Bunları tamamen yok sayıyoruz.
+         * Önce gerçek içerik bağlantısı kontrolü.
          */
-
-        val isTrendItem =
-            hasClass(
-                "site-sidebar-trend-item"
-            ) ||
-                parents().any {
-                    it.hasClass(
-                        "site-sidebar-trend-list"
-                    )
-                }
-
-        if (isTrendItem) {
+        if (
+            !isMainContentLink(this)
+        ) {
             return null
         }
-
-        // -----------------------------------------------------
-        // HREF
-        // -----------------------------------------------------
 
         val href =
             attr("href")
@@ -1398,28 +1742,6 @@ class DiziKorea : MainAPI() {
 
         val path =
             absolute.lowercase()
-
-        // -----------------------------------------------------
-        // Episode linklerini çıkar
-        // -----------------------------------------------------
-
-        if (
-            path == mainUrl ||
-            absolute.contains(
-                "/sezon-",
-                ignoreCase = true
-            ) ||
-            absolute.contains(
-                "/bolum-",
-                ignoreCase = true
-            )
-        ) {
-            return null
-        }
-
-        // -----------------------------------------------------
-        // SADECE DİZİ / FİLM
-        // -----------------------------------------------------
 
         val type =
             when {
@@ -1434,10 +1756,9 @@ class DiziKorea : MainAPI() {
                     return null
             }
 
-        // -----------------------------------------------------
-        // BAŞLIK
-        // -----------------------------------------------------
-
+        /*
+         * Başlık.
+         */
         val title =
             text()
                 .trim()
@@ -1455,16 +1776,9 @@ class DiziKorea : MainAPI() {
             return null
         }
 
-        // -----------------------------------------------------
-        // POSTER
-        // -----------------------------------------------------
-
         /*
-         * Burada sadece bu A elementinin içindeki IMG
-         * kullanılıyor.
-         *
-         * Başka bir sayfadaki / başka bir karttaki resim
-         * buraya gelemez.
+         * Yalnızca mevcut A elementinin
+         * kendi posterini al.
          */
         val poster =
             selectFirst("img")
@@ -1472,11 +1786,9 @@ class DiziKorea : MainAPI() {
                     posterOf(it)
                 }
 
-        // -----------------------------------------------------
-        // RESULT
-        // -----------------------------------------------------
-
-        return when (type) {
+        return when (
+            type
+        ) {
 
             TvType.Movie -> {
 
@@ -1529,8 +1841,11 @@ class DiziKorea : MainAPI() {
                 ) ?: return null
             }
 
-        return posterSource(img)
-            ?.let(::fixUrl)
+        return posterSource(
+            img
+        )?.let(
+            ::fixUrl
+        )
     }
 
     private fun posterSource(
@@ -1568,7 +1883,9 @@ class DiziKorea : MainAPI() {
                 it.trim()
             }
             .firstOrNull {
-                isValidPosterUrl(it)
+                isValidPosterUrl(
+                    it
+                )
             }
     }
 
@@ -1609,7 +1926,9 @@ class DiziKorea : MainAPI() {
             )
 
         return forbidden.none {
-            lower.contains(it)
+            lower.contains(
+                it
+            )
         }
     }
 
@@ -1628,7 +1947,7 @@ class DiziKorea : MainAPI() {
     }
 
     // =========================================================
-    // MEDIA
+    // MEDIA URL
     // =========================================================
 
     private fun isMediaUrl(
@@ -1790,7 +2109,7 @@ class DiziKorea : MainAPI() {
     }
 
     // =========================================================
-    // PAGINATION
+    // PAGINATION URL
     // =========================================================
 
     private fun withPage(
@@ -1798,21 +2117,97 @@ class DiziKorea : MainAPI() {
         page: Int
     ): String {
 
+        /*
+         * İlk sayfa:
+         *
+         * /kore-dizileri-izle-dq1
+         */
+
         if (
             page <= 1
         ) {
             return url
         }
 
-        return if (
-            url.contains("?")
+        /*
+         * Query ve hash'i ayır.
+         */
+        val hash =
+            url
+                .substringAfter(
+                    "#",
+                    ""
+                )
+                .takeIf {
+                    it.isNotBlank()
+                }
+
+        val withoutHash =
+            url
+                .substringBefore(
+                    "#"
+                )
+
+        val query =
+            withoutHash
+                .substringAfter(
+                    "?",
+                    ""
+                )
+                .takeIf {
+                    it.isNotBlank()
+                }
+
+        var base =
+            withoutHash
+                .substringBefore("?")
+                .trimEnd('/')
+
+        /*
+         * Eğer URL zaten:
+         *
+         * /sayfa/2
+         *
+         * şeklindeyse sayfa numarasını değiştir.
+         */
+        base =
+            base.replace(
+                Regex(
+                    "/sayfa/\\d+$"
+                ),
+                ""
+            )
+
+        /*
+         * DiziKorea gerçek pagination:
+         *
+         * /sayfa/2
+         */
+        var result =
+            "$base/sayfa/$page"
+
+        /*
+         * Query varsa koru.
+         */
+        if (
+            query != null
         ) {
 
-            "$url&page=$page"
-
-        } else {
-
-            "$url?page=$page"
+            result +=
+                "?$query"
         }
+
+        /*
+         * Hash varsa koru.
+         */
+        if (
+            hash != null
+        ) {
+
+            result +=
+                "#$hash"
+        }
+
+        return result
     }
 }
