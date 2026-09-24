@@ -1,6 +1,6 @@
 // ! Bu araç @keyiflerolsun tarafından | @KekikAkademi için yazılmıştır.
 
-package com.keyiflerolsun
+package com.Kayracs3
 
 class Hotlinger : ContentX() {
     override var name    = "Hotlinger"
