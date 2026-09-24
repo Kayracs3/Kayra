@@ -1,4 +1,3 @@
-```kotlin
 package com.Kayracs3
 
 import com.lagradost.cloudstream3.*
@@ -1086,4 +1085,3 @@ class DiziBoxizle : MainAPI() {
         )
     }
 }
-```
