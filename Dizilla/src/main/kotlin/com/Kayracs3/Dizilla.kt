@@ -3,11 +3,10 @@ package com.Kayracs3
 import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.utils.*
-import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 import java.security.MessageDigest
@@ -38,22 +37,20 @@ class Dizilla : MainAPI() {
         private const val NEXT_DATA_PATH =
             "_next/data"
 
-        /*
-         * Güncel Dizilla veri şifrelemesinde kullanılan seed.
-         *
-         * SHA-256(seed)
-         * -> Base64
-         * -> ilk 32 karakter
-         * -> UTF-8 byte
-         */
         private const val AES_SEED =
             "!!22xx!!90!!"
 
         private val SEASON_REGEX =
-            Regex("""-(\d+)-sezon""", RegexOption.IGNORE_CASE)
+            Regex(
+                """-(\d+)-sezon""",
+                RegexOption.IGNORE_CASE
+            )
 
         private val EPISODE_REGEX =
-            Regex("""-(\d+)-bolum""", RegexOption.IGNORE_CASE)
+            Regex(
+                """-(\d+)-bolum""",
+                RegexOption.IGNORE_CASE
+            )
 
         private val EPISODE_SLUG_REGEX =
             Regex(
@@ -281,10 +278,6 @@ class Dizilla : MainAPI() {
         val results =
             LinkedHashMap<String, SearchResponse>()
 
-        /*
-         * Güncel sitede seri kartları genellikle
-         * /dizi/... bağlantıları üzerinden geliyor.
-         */
         document
             .select(
                 "a[href*='/dizi/']"
@@ -300,11 +293,6 @@ class Dizilla : MainAPI() {
                 ] = response
             }
 
-        /*
-         * Bazı sayfalarda kartların href'i doğrudan
-         * /dizi/ şeklinde olmayabilir.
-         * Görsel + başlık taşıyan kartları da deniyoruz.
-         */
         if (results.isEmpty()) {
 
             document
@@ -323,22 +311,17 @@ class Dizilla : MainAPI() {
                             ?: return@forEach
 
                     if (
-                        href.contains(
-                            "-sezon-"
-                        )
+                        href.contains("-sezon-")
                         ||
-                        href.contains(
-                            "-bolum-"
-                        )
+                        href.contains("-bolum-")
                     ) {
                         return@forEach
                     }
 
                     val response =
-                        element
-                            .toDizillaSearchResponse(
-                                forceHref = href
-                            )
+                        element.toDizillaSearchResponse(
+                            forceHref = href
+                        )
                             ?: return@forEach
 
                     results[
@@ -369,28 +352,37 @@ class Dizilla : MainAPI() {
                 ?: return null
 
         if (
-            href.contains(
-                "-sezon-"
-            )
+            href.contains("-sezon-")
             ||
-            href.contains(
-                "-bolum-"
-            )
+            href.contains("-bolum-")
         ) {
             return null
         }
 
         val title =
-            selectFirst("h2")?.text()?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?: selectFirst("h3")?.text()?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                ?: attr("title").trim()
-                    .takeIf { it.isNotBlank() }
+            selectFirst("h2")
+                ?.text()
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: selectFirst("h3")
+                    ?.text()
+                    ?.trim()
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                ?: attr("title")
+                    .trim()
+                    .takeIf {
+                        it.isNotBlank()
+                    }
                 ?: selectFirst("img")
                     ?.attr("alt")
                     ?.trim()
-                    ?.takeIf { it.isNotBlank() }
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
                 ?: return null
 
         val poster =
@@ -485,8 +477,8 @@ class Dizilla : MainAPI() {
 
         val searchUrl =
             mainUrl +
-                    SEARCH_PATH +
-                    encodedQuery
+                SEARCH_PATH +
+                encodedQuery
 
         val response =
             try {
@@ -604,13 +596,9 @@ class Dizilla : MainAPI() {
 
             val url =
                 if (
-                    slug.startsWith(
-                        "http://"
-                    )
+                    slug.startsWith("http://")
                     ||
-                    slug.startsWith(
-                        "https://"
-                    )
+                    slug.startsWith("https://")
                 ) {
                     slug
                 } else {
@@ -638,10 +626,9 @@ class Dizilla : MainAPI() {
                 }
         }
 
-        return responses
-            .distinctBy {
-                it.url
-            }
+        return responses.distinctBy {
+            it.url
+        }
     }
 
     override suspend fun quickSearch(
@@ -764,7 +751,9 @@ class Dizilla : MainAPI() {
                     ?: continue
 
             val key =
-                "${episode.season ?: 0}-${episode.episode ?: 0}-${episode.name}"
+                "${episode.season ?: 0}-" +
+                    "${episode.episode ?: 0}-" +
+                    episode.name
 
             if (
                 !seen.add(
@@ -810,7 +799,7 @@ class Dizilla : MainAPI() {
     // =========================================================
 
     private fun extractMeta(
-        document: org.jsoup.nodes.Document,
+        document: Document,
         property: String
     ): String? {
 
@@ -839,7 +828,7 @@ class Dizilla : MainAPI() {
     // =========================================================
 
     private fun extractEpisodeSlugs(
-        document: org.jsoup.nodes.Document
+        document: Document
     ): List<String> {
 
         return document
@@ -855,20 +844,13 @@ class Dizilla : MainAPI() {
                         .trim()
                         .trimEnd('/')
 
-                if (
-                    href.isBlank()
-                ) {
+                if (href.isBlank()) {
                     return@mapNotNull null
                 }
 
-                val slug =
-                    href
-                        .substringAfterLast('/')
-                        .removePrefix(
-                            "/"
-                        )
-
-                slug
+                href
+                    .substringAfterLast('/')
+                    .removePrefix("/")
             }
             .filter {
 
@@ -892,8 +874,8 @@ class Dizilla : MainAPI() {
 
             val dataUrl =
                 "$mainUrl/$NEXT_DATA_PATH/" +
-                        "$buildId/" +
-                        "$episodeSlug.json"
+                    "$buildId/" +
+                    "$episodeSlug.json"
 
             val json =
                 app.get(
@@ -922,9 +904,7 @@ class Dizilla : MainAPI() {
                     )
                     .trim()
 
-            if (
-                secureData.isBlank()
-            ) {
+            if (secureData.isBlank()) {
                 return null
             }
 
@@ -1116,16 +1096,14 @@ class Dizilla : MainAPI() {
                 .trimEnd('/')
                 .substringAfterLast('/')
 
-        if (
-            episodeSlug.isBlank()
-        ) {
+        if (episodeSlug.isBlank()) {
             return false
         }
 
         val jsonUrl =
             "$mainUrl/$NEXT_DATA_PATH/" +
-                    "$buildId/" +
-                    "$episodeSlug.json"
+                "$buildId/" +
+                "$episodeSlug.json"
 
         val pageJson =
             try {
@@ -1182,9 +1160,7 @@ class Dizilla : MainAPI() {
                 )
                 .trim()
 
-        if (
-            secureData.isBlank()
-        ) {
+        if (secureData.isBlank()) {
 
             return fallbackIframe(
                 episodeDocument,
@@ -1202,14 +1178,6 @@ class Dizilla : MainAPI() {
                     subtitleCallback,
                     callback
                 )
-
-        /*
-         * Güncel Dizilla yapısında:
-         *
-         * RelatedResults
-         *   -> getEpisodeSources
-         *      -> result[]
-         */
 
         val sources =
             decrypted
@@ -1272,9 +1240,7 @@ class Dizilla : MainAPI() {
                     )
                     .trim()
 
-            if (
-                sourceContent.isBlank()
-            ) {
+            if (sourceContent.isBlank()) {
                 continue
             }
 
@@ -1308,41 +1274,21 @@ class Dizilla : MainAPI() {
             val label =
                 buildString {
 
-                    append(
-                        name
-                    )
+                    append(name)
 
-                    if (
-                        sourceName.isNotBlank()
-                    ) {
-                        append(
-                            " • "
-                        )
-                        append(
-                            sourceName
-                        )
+                    if (sourceName.isNotBlank()) {
+                        append(" • ")
+                        append(sourceName)
                     }
 
-                    if (
-                        languageName.isNotBlank()
-                    ) {
-                        append(
-                            " • "
-                        )
-                        append(
-                            languageName
-                        )
+                    if (languageName.isNotBlank()) {
+                        append(" • ")
+                        append(languageName)
                     }
 
-                    if (
-                        qualityName.isNotBlank()
-                    ) {
-                        append(
-                            " • "
-                        )
-                        append(
-                            qualityName
-                        )
+                    if (qualityName.isNotBlank()) {
+                        append(" • ")
+                        append(qualityName)
                     }
                 }
 
@@ -1358,8 +1304,7 @@ class Dizilla : MainAPI() {
                     )
                 ) {
 
-                    delivered =
-                        true
+                    delivered = true
                 }
 
             } catch (e: Exception) {
@@ -1375,16 +1320,14 @@ class Dizilla : MainAPI() {
     }
 
     // =========================================================
-    // IFRAME
+    // IFRAME URL
     // =========================================================
 
     private fun extractIframeUrl(
         sourceContent: String
     ): String? {
 
-        if (
-            sourceContent.isBlank()
-        ) {
+        if (sourceContent.isBlank()) {
             return null
         }
 
@@ -1410,9 +1353,7 @@ class Dizilla : MainAPI() {
                     iframe
                 )
 
-            if (
-                !fixed.isNullOrBlank()
-            ) {
+            if (!fixed.isNullOrBlank()) {
                 return fixed
             }
 
@@ -1475,9 +1416,7 @@ class Dizilla : MainAPI() {
                 return false
             }
 
-        if (
-            iframeHtml.isBlank()
-        ) {
+        if (iframeHtml.isBlank()) {
             return false
         }
 
@@ -1534,9 +1473,7 @@ class Dizilla : MainAPI() {
                     "/"
                 )
 
-        if (
-            host.isBlank()
-        ) {
+        if (host.isBlank()) {
             return false
         }
 
@@ -1583,10 +1520,10 @@ class Dizilla : MainAPI() {
             }
 
         if (
-            source2.optBoolean(
+            !source2.optBoolean(
                 "state",
                 true
-            ).not()
+            )
         ) {
             return false
         }
@@ -1605,8 +1542,7 @@ class Dizilla : MainAPI() {
         // =====================================================
 
         for (
-            playlistIndex in
-            0 until playlist.length()
+            playlistIndex in 0 until playlist.length()
         ) {
 
             val playlistItem =
@@ -1622,8 +1558,7 @@ class Dizilla : MainAPI() {
                     ?: continue
 
             for (
-                sourceIndex in
-                0 until videoSources.length()
+                sourceIndex in 0 until videoSources.length()
             ) {
 
                 val source =
@@ -1655,9 +1590,7 @@ class Dizilla : MainAPI() {
                         )
                         .trim()
 
-                if (
-                    file.isBlank()
-                ) {
+                if (file.isBlank()) {
                     continue
                 }
 
@@ -1668,43 +1601,28 @@ class Dizilla : MainAPI() {
                     )
 
                 if (
-                    file.startsWith(
-                        "//"
-                    )
+                    file.startsWith("//")
                 ) {
+
                     file =
                         "https:$file"
+
                 } else if (
-                    file.startsWith(
-                        "/"
-                    )
+                    file.startsWith("/")
                 ) {
+
                     file =
                         "https://$host$file"
+
                 } else if (
-                    !file.startsWith(
-                        "http://"
-                    )
+                    !file.startsWith("http://")
                     &&
-                    !file.startsWith(
-                        "https://"
-                    )
+                    !file.startsWith("https://")
                 ) {
+
                     file =
                         "https://$host/$file"
                 }
-
-                /*
-                 * Dizilla player kaynağında
-                 *
-                 * m.php
-                 *
-                 * yerine
-                 *
-                 * master.m3u8
-                 *
-                 * kullanılıyor.
-                 */
 
                 val masterUrl =
                     file.replace(
@@ -1735,21 +1653,14 @@ class Dizilla : MainAPI() {
 
                         this.headers =
                             mapOf(
-                                "User-Agent" to
-                                    USER_AGENT,
-                                "Referer" to
-                                    iframeUrl
+                                "User-Agent" to USER_AGENT,
+                                "Referer" to iframeUrl
                             )
 
                         this.quality =
                             quality
                     }
                 )
-
-                /*
-                 * M3U8 içindeki kalite varyantlarını da
-                 * CloudStream'e bildir.
-                 */
 
                 try {
 
@@ -1771,8 +1682,7 @@ class Dizilla : MainAPI() {
                     )
                 }
 
-                delivered =
-                    true
+                delivered = true
             }
         }
 
@@ -1783,7 +1693,7 @@ class Dizilla : MainAPI() {
     // SUBTITLES
     // =========================================================
 
-    private fun extractSubtitles(
+    private suspend fun extractSubtitles(
         html: String,
         subtitleCallback: (
             SubtitleFile
@@ -1910,7 +1820,7 @@ class Dizilla : MainAPI() {
     // =========================================================
 
     private suspend fun fallbackIframe(
-        document: org.jsoup.nodes.Document,
+        document: Document,
         subtitleCallback: (
             SubtitleFile
         ) -> Unit,
@@ -1919,19 +1829,17 @@ class Dizilla : MainAPI() {
         ) -> Unit
     ): Boolean {
 
-        /*
-         * Yeni API akışı bulunamazsa sayfanın içine
-         * gömülmüş iframe'i yine deniyoruz.
-         */
-
         val iframe =
             document
                 .select(
                     "iframe"
                 )
                 .firstOrNull {
+
                     val src =
-                        it.attr("src")
+                        it.attr(
+                            "src"
+                        )
 
                     src.contains(
                         "player",
