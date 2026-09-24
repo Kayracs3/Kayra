@@ -62,7 +62,7 @@ class DiziKorea : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "$mainUrl/kore-dizileri-izle-dq1" to "Kore Dizileri",
+        "$mainUrl/kore-dizileri-izle-dq" to "Kore Dizileri",
         "$mainUrl/cin-dizileri" to "Çin Dizileri",
         "$mainUrl/japon-dizileri" to "Japon Dizileri",
         "$mainUrl/tayland-dizileri" to "Tayland Dizileri",
