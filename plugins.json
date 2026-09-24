@@ -1,10 +1,10 @@
 [
     {
         "iconUrl": "https://diziboxizle.com/favicon.ico",
-        "fileHash": "sha256-f2210c744cc981fd213b996ce8b38c32c99d684f343e4507062ef311ddb39e3d",
+        "fileHash": "sha256-15bc3b61c5598693953dade67e6514a32773a8f0d8126646fa3879d308f58500",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 34084,
+        "fileSize": 38000,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -21,10 +21,10 @@
     },
     {
         "iconUrl": "https://dizikorea3.com//favicon.ico",
-        "fileHash": "sha256-ab1ebcbf2765cf92d5f9b7c3a7c1e8366b4cb18eecd93b513eaaaaa56081fa80",
+        "fileHash": "sha256-be93cf41cf458af2a4c51cbf8e0ebf202a100055fcd07bbe6c0b0a5190898a5c",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 27228,
+        "fileSize": 29995,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -41,10 +41,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=www.fullhdfilmizlesene.de&sz=%size%",
-        "fileHash": "sha256-ebd3e4149e81c61410b3b0698f9d6ea3711e5f88e8be11308ca25a9c9d17fd07",
+        "fileHash": "sha256-3627b2feba17a1f970b12aa777780b8d1457fdc88f5475b188cf30ba40713e18",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 29995,
+        "fileSize": 33625,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -58,27 +58,5 @@
         "description": "Sinema zevkini evinize kadar getirdik. T\u00fcrkiye'nin lider Film sitesinde, en yeni filmleri Full HD izleyin.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FullHDFilmizlesene.cs3",
         "name": "FullHDFilmizlesene"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=hdfilmcehennemi.com&sz=%size%",
-        "fileHash": "sha256-545c5653eb0ef85df65058dbb4b13c246b2424747ec700bf004024d75d147909",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 33825,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "hexated",
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 20,
-        "internalName": "HDFilmCehennemi",
-        "description": "T\u00fcrkiye'nin en h\u0131zl\u0131 hd film izleme sitesi",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/HDFilmCehennemi.cs3",
-        "name": "HDFilmCehennemi"
     }
 ]
