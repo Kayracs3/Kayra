@@ -21,13 +21,11 @@ class Dizilla : MainAPI() {
     override var sequentialMainPage = true
 
     override val mainPage = mainPageOf(
-        "${mainUrl}/tum-bolumler" to "Altyazılı Bölümler",
-        "${mainUrl}/dublaj-bolumler" to "Dublaj Bölümler",
-        "${mainUrl}/dizi-turu/aile" to "Aile",
-        "${mainUrl}/dizi-turu/aksiyon" to "Aksiyon",
-        "${mainUrl}/dizi-turu/bilim-kurgu" to "Bilim Kurgu",
-        "${mainUrl}/dizi-turu/romantik" to "Romantik",
-        "${mainUrl}/dizi-turu/komedi" to "Komedi"
+        "${mainUrl}/arsiv" to "Yeni Eklenen Bölümler",
+        "${mainUrl}/yabanci-dizi-izle" to "Öne Çıkan Diziler",
+        "${mainUrl}/anime-izle" to "Asya Dizileri",
+        "${mainUrl}/kdrama-izle" to "Anime Dizileri",
+        
     )
 
     override suspend fun getMainPage(
