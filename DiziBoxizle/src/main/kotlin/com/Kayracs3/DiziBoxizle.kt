@@ -1,3 +1,4 @@
+```kotlin
 package com.Kayracs3
 
 import com.lagradost.cloudstream3.*
@@ -248,6 +249,7 @@ class DiziBoxizle : MainAPI() {
         VMEAS_M3U8_PATTERN.findAll(rawHtml)
             .map { it.value.trimEnd(')', ']', '}', ';') }
             .forEach(candidates::add)
+
         var found = false
 
         for (candidate in candidates) {
@@ -255,12 +257,6 @@ class DiziBoxizle : MainAPI() {
 
             when {
                 isMediaUrl(clean) -> {
-                    val type = when {
-                        Regex("(?i)\\.m3u8(?:$|\\?)").containsMatchIn(clean) -> ExtractorLinkType.M3U8
-                        Regex("(?i)\\.mpd(?:$|\\?)").containsMatchIn(clean) -> ExtractorLinkType.DASH
-                        else -> ExtractorLinkType.VIDEO
-                    }
-
                     emitMediaLink(
                         clean,
                         episodeUrl,
@@ -402,6 +398,7 @@ class DiziBoxizle : MainAPI() {
             // Search both raw and unpacked JavaScript.
             val unpackedHtml = runCatching { getAndUnpack(providerHtml) }
                 .getOrDefault(providerHtml)
+
             val searchableHtml = if (unpackedHtml == providerHtml) {
                 providerHtml
             } else {
@@ -456,6 +453,7 @@ class DiziBoxizle : MainAPI() {
 
     private fun normalizeProviderMediaUrl(raw: String, pageUrl: String): String {
         val source = raw.trim()
+
         return when {
             source.startsWith("//") -> "https:$source"
             source.startsWith("/") -> (originOf(pageUrl) ?: mainUrl) + source
@@ -467,8 +465,15 @@ class DiziBoxizle : MainAPI() {
 
     private fun vidMolyClassicUrl(url: String): String? {
         val path = runCatching { URI(url).path }.getOrNull() ?: return null
-        val id = Regex("(?i)/v/([a-z0-9]+)$").find(path)?.groupValues?.getOrNull(1)
-            ?: Regex("(?i)/embed-([a-z0-9]+)\\.html$").find(path)?.groupValues?.getOrNull(1)
+
+        val id = Regex("(?i)/v/([a-z0-9]+)$")
+            .find(path)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?: Regex("(?i)/embed-([a-z0-9]+)\\.html$")
+                .find(path)
+                ?.groupValues
+                ?.getOrNull(1)
             ?: return null
 
         val origin = originOf(url) ?: "https://vidmoly.biz"
@@ -478,7 +483,10 @@ class DiziBoxizle : MainAPI() {
     private fun originOf(url: String): String? {
         return runCatching {
             val uri = URI(url)
-            if (uri.scheme.isNullOrBlank() || uri.host.isNullOrBlank()) return@runCatching null
+            if (uri.scheme.isNullOrBlank() || uri.host.isNullOrBlank()) {
+                return@runCatching null
+            }
+
             "${uri.scheme}://${uri.host}"
         }.getOrNull()
     }
@@ -487,14 +495,20 @@ class DiziBoxizle : MainAPI() {
         return document.select("a[href]")
             .mapNotNull { element ->
                 val href = fixUrlNull(element.attr("href")) ?: return@mapNotNull null
+
                 val match = EPISODE_PATTERN.find(href)
                     ?: ALT_EPISODE_PATTERN.find(href)
                     ?: return@mapNotNull null
 
-                val season = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
-                val episode = match.groupValues.getOrNull(2)?.toIntOrNull() ?: return@mapNotNull null
+                val season = match.groupValues.getOrNull(1)?.toIntOrNull()
+                    ?: return@mapNotNull null
 
-                val label = element.text().trim().ifBlank { "$season. Sezon $episode. Bölüm" }
+                val episode = match.groupValues.getOrNull(2)?.toIntOrNull()
+                    ?: return@mapNotNull null
+
+                val label = element.text().trim().ifBlank {
+                    "$season. Sezon $episode. Bölüm"
+                }
 
                 newEpisode(href) {
                     name = label
@@ -532,9 +546,11 @@ class DiziBoxizle : MainAPI() {
         val rawTitle = text().trim().ifBlank {
             selectFirst("img")?.attr("alt")?.trim().orEmpty()
         }
+
         if (rawTitle.isBlank()) return null
 
         val posterFromDom = posterFromElement(this, absolute)
+
         // Real DiziBOX content cards have a poster image in the same card/container.
         // Header alphabet entries and login/navigation links do not, so this prevents
         // those links from appearing as fake content cards.
@@ -542,6 +558,7 @@ class DiziBoxizle : MainAPI() {
 
         val poster = posterFromDom ?: guessedPoster(absolute)
         val title = cleanCardTitle(rawTitle)
+
         if (title.isBlank()) return null
 
         if (isEpisodeUrl(absolute)) {
@@ -549,10 +566,13 @@ class DiziBoxizle : MainAPI() {
 
             val match = EPISODE_PATTERN.find(absolute)
                 ?: ALT_EPISODE_PATTERN.find(absolute)
+
             val season = match?.groupValues?.getOrNull(1)?.toIntOrNull()
             val episode = match?.groupValues?.getOrNull(2)?.toIntOrNull()
+
             val episodeName = buildString {
                 append(title)
+
                 if (season != null && episode != null) {
                     append(" - ")
                     append(season)
@@ -562,25 +582,40 @@ class DiziBoxizle : MainAPI() {
                 }
             }
 
-            return newTvSeriesSearchResponse(episodeName, absolute, TvType.TvSeries) {
+            return newTvSeriesSearchResponse(
+                episodeName,
+                absolute,
+                TvType.TvSeries,
+            ) {
                 posterUrl = poster
             }
         }
 
         if (path.contains("/film/")) {
-            return newMovieSearchResponse(title, absolute, TvType.Movie) {
+            return newMovieSearchResponse(
+                title,
+                absolute,
+                TvType.Movie,
+            ) {
                 posterUrl = poster
             }
         }
 
         // DiziBOX series pages are root-level slugs.
-        return newTvSeriesSearchResponse(title, absolute, TvType.TvSeries) {
+        return newTvSeriesSearchResponse(
+            title,
+            absolute,
+            TvType.TvSeries,
+        ) {
             posterUrl = poster
         }
     }
 
     private fun Element.isSiteChromeLink(): Boolean {
-        val value = text().trim().replace(Regex("\\s+"), " ").lowercase()
+        val value = text()
+            .trim()
+            .replace(Regex("\\s+"), " ")
+            .lowercase()
 
         if (value == "dizibox" ||
             value == "dizibox izle" ||
@@ -611,9 +646,15 @@ class DiziBoxizle : MainAPI() {
 
         var current: Element? = this
         var depth = 0
+
         while (current != null && depth < 8) {
             val tag = current.tagName().lowercase()
-            if (tag == "header" || tag == "nav" || tag == "footer" || tag == "aside") {
+
+            if (tag == "header" ||
+                tag == "nav" ||
+                tag == "footer" ||
+                tag == "aside"
+            ) {
                 return true
             }
 
@@ -623,9 +664,13 @@ class DiziBoxizle : MainAPI() {
                 append(current.classNames().joinToString(" "))
             }.lowercase()
 
-            if (Regex("\\b(site[-_]?header|site[-_]?footer|navbar|navigation|main[-_]?menu|mobile[-_]?menu|side[-_]?bar|sidebar|widget|login|register|alphabet|social|user[-_]?menu)\\b")
-                    .containsMatchIn(marker)
-            ) return true
+            if (
+                Regex(
+                    "\\b(site[-_]?header|site[-_]?footer|navbar|navigation|main[-_]?menu|mobile[-_]?menu|side[-_]?bar|sidebar|widget|login|register|alphabet|social|user[-_]?menu)\\b"
+                ).containsMatchIn(marker)
+            ) {
+                return true
+            }
 
             current = current.parent()
             depth++
@@ -634,14 +679,24 @@ class DiziBoxizle : MainAPI() {
         return false
     }
 
-    private fun posterFromElement(element: Element, targetUrl: String? = null): String? {
+    private fun posterFromElement(
+        element: Element,
+        targetUrl: String? = null,
+    ): String? {
         // 1) Most DiziBOX cards put the poster directly inside the <a>.
         element.selectFirst("img, picture img")?.let { image ->
             posterOfElement(image)?.let { return it }
         }
 
         val targetSlug = targetUrl
-            ?.let { runCatching { URI(it).path.trimEnd('/').substringAfterLast('/') }.getOrNull() }
+            ?.let {
+                runCatching {
+                    URI(it)
+                        .path
+                        .trimEnd('/')
+                        .substringAfterLast('/')
+                }.getOrNull()
+            }
             ?.lowercase()
             ?.replace(Regex("-(?:\\d+x\\d+|\\d+)$"), "")
             .orEmpty()
@@ -650,19 +705,37 @@ class DiziBoxizle : MainAPI() {
         //    Only inspect a few nearby ancestors and never climb into header/nav/sidebar.
         var current: Element? = element.parent()
         var depth = 0
+
         while (current != null && depth < 4) {
             val tag = current.tagName().lowercase()
-            if (tag == "header" || tag == "nav" || tag == "footer" || tag == "aside") break
 
-            val marker = (current.id() + " " + current.classNames().joinToString(" ")).lowercase()
-            val looksLikeCard = Regex("\\b(card|item|post|entry|movie|film|series|dizi|content|thumbnail|list|archive)\\b")
-                .containsMatchIn(marker)
+            if (tag == "header" ||
+                tag == "nav" ||
+                tag == "footer" ||
+                tag == "aside"
+            ) {
+                break
+            }
+
+            val marker = (
+                current.id() + " " +
+                    current.classNames().joinToString(" ")
+                ).lowercase()
+
+            val looksLikeCard = Regex(
+                "\\b(card|item|post|entry|movie|film|series|dizi|content|thumbnail|list|archive)\\b"
+            ).containsMatchIn(marker)
 
             val images = current.select("img")
+
             if (images.size == 1 || looksLikeCard) {
                 val preferred = images.firstOrNull { image ->
-                    val imageUrl = posterOfElement(image).orEmpty().lowercase()
-                    targetSlug.isNotBlank() && imageUrl.contains(targetSlug)
+                    val imageUrl = posterOfElement(image)
+                        .orEmpty()
+                        .lowercase()
+
+                    targetSlug.isNotBlank() &&
+                        imageUrl.contains(targetSlug)
                 } ?: images.firstOrNull()
 
                 preferred?.let { image ->
@@ -678,18 +751,29 @@ class DiziBoxizle : MainAPI() {
     }
 
     private fun cleanCardTitle(raw: String): String {
-        var title = raw.trim().replace(Regex("\\s+"), " ")
+        var title = raw
+            .trim()
+            .replace(Regex("\\s+"), " ")
+
         title = title.replace(
             Regex("(?i)^IMDb\\s*[0-9]+(?:[.,][0-9]+)?(?:\\s*/\\s*10)?\\s*"),
             "",
         )
-        title = title.replace(Regex("\\s+(?:19|20)\\d{2}\\s*$"), "")
+
+        title = title.replace(
+            Regex("\\s+(?:19|20)\\d{2}\\s*$"),
+            "",
+        )
+
         return title.trim()
     }
 
     private fun guessedPoster(url: String): String? {
         val slug = runCatching {
-            URI(url).path.trimEnd('/').substringAfterLast('/')
+            URI(url)
+                .path
+                .trimEnd('/')
+                .substringAfterLast('/')
         }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
 
         if (slug.contains("-sezon-") || slug.contains("-bolum")) {
@@ -719,10 +803,15 @@ class DiziBoxizle : MainAPI() {
 
         for (attribute in attrs) {
             val raw = element.attr(attribute).trim()
+
             if (raw.isBlank()) continue
 
             val decoded = raw.decodeEmbeddedText()
-            val direct = Regex("https?://[^\\s\\\"'<>]+", RegexOption.IGNORE_CASE)
+
+            val direct = Regex(
+                "https?://[^\\s\\\"'<>]+",
+                RegexOption.IGNORE_CASE,
+            )
                 .find(decoded)
                 ?.value
                 ?.trimEnd(')', ']', '}', ';', ',')
@@ -738,11 +827,13 @@ class DiziBoxizle : MainAPI() {
     }
 
     private fun isEpisodeUrl(url: String): Boolean {
-        return EPISODE_PATTERN.containsMatchIn(url) || ALT_EPISODE_PATTERN.containsMatchIn(url)
+        return EPISODE_PATTERN.containsMatchIn(url) ||
+            ALT_EPISODE_PATTERN.containsMatchIn(url)
     }
 
     private fun isExternalPlayer(url: String): Boolean {
         val value = url.lowercase()
+
         return value.contains("vidmoly") ||
             value.contains("moly") ||
             value.contains("ok.ru") ||
@@ -756,7 +847,10 @@ class DiziBoxizle : MainAPI() {
 
     private fun isMediaUrl(url: String): Boolean {
         val value = url.lowercase()
-        return Regex("(?i)\\.(m3u8|mpd|mp4|webm)(?:$|[?#])").containsMatchIn(value) ||
+
+        return Regex(
+            "(?i)\\.(m3u8|mpd|mp4|webm)(?:$|[?#])"
+        ).containsMatchIn(value) ||
             (value.contains("/hls2/") && value.contains(".m3u8")) ||
             (value.contains(".vmeas.cloud/") && value.contains(".m3u8"))
     }
@@ -775,17 +869,27 @@ class DiziBoxizle : MainAPI() {
     }
 
     private fun pageTitle(document: Document): String? {
-        return document.selectFirst("h1")?.text()?.trim()
+        return document.selectFirst("h1")
+            ?.text()
+            ?.trim()
             ?.takeIf { it.isNotBlank() }
-            ?: document.selectFirst("meta[property='og:title']")?.attr("content")?.trim()
-            ?.takeIf { it.isNotBlank() }
+            ?: document.selectFirst("meta[property='og:title']")
+                ?.attr("content")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
     }
 
     private fun pagePlot(document: Document): String? {
-        return document.selectFirst("meta[name='description']")?.attr("content")?.trim()
+        return document.selectFirst("meta[name='description']")
+            ?.attr("content")
+            ?.trim()
             ?.takeIf { it.isNotBlank() }
-            ?: document.selectFirst(".description, .plot, article p, main p")?.text()?.trim()
-            ?.takeIf { it.isNotBlank() }
+            ?: document.selectFirst(
+                ".description, .plot, article p, main p"
+            )
+                ?.text()
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
     }
 
     private fun pageYear(document: Document): Int? {
@@ -793,16 +897,30 @@ class DiziBoxizle : MainAPI() {
 
         // First use fields that are normally the actual release/year label on the title card.
         val visibleYearSelectors = listOf(
-            ".year", ".release-year", ".release_date", ".release-date",
-            ".meta .year", ".post-meta .year", ".movie-year", ".dizi-year",
-            "[itemprop='copyrightYear']", "[itemprop='releaseDate']"
+            ".year",
+            ".release-year",
+            ".release_date",
+            ".release-date",
+            ".meta .year",
+            ".post-meta .year",
+            ".movie-year",
+            ".dizi-year",
+            "[itemprop='copyrightYear']",
+            "[itemprop='releaseDate']",
         )
 
         for (selector in visibleYearSelectors) {
-            val value = document.select(selector).joinToString(" ") { element ->
-                element.text() + " " + element.attr("content")
-            }
-            yearRegex.find(value)?.value?.toIntOrNull()?.let { return it }
+            val value = document
+                .select(selector)
+                .joinToString(" ") { element ->
+                    element.text() + " " + element.attr("content")
+                }
+
+            yearRegex
+                .find(value)
+                ?.value
+                ?.toIntOrNull()
+                ?.let { return it }
         }
 
         // Some cards put the year in the title/description rather than a dedicated field.
@@ -813,26 +931,42 @@ class DiziBoxizle : MainAPI() {
             document.selectFirst("meta[property='og:description']")?.attr("content"),
         ).joinToString(" ")
 
-        yearRegex.find(focusedText)?.value?.toIntOrNull()?.let { return it }
+        yearRegex
+            .find(focusedText)
+            ?.value
+            ?.toIntOrNull()
+            ?.let { return it }
 
         // Prefer releaseDate in JSON-LD. datePublished is deliberately not used because it
         // is often the site's upload date rather than the series/movie release year.
         for (script in document.select("script[type='application/ld+json']")) {
             val json = script.data().ifBlank { script.html() }
+
             val release = Regex(
                 """(?is)[\\\"']?releaseDate[\\\"']?\\s*:\\s*[\\\"']([^\\\"']+)"""
-            ).find(json)?.groupValues?.getOrNull(1)
-            yearRegex.find(release.orEmpty())?.value?.toIntOrNull()?.let { return it }
+            )
+                .find(json)
+                ?.groupValues
+                ?.getOrNull(1)
+
+            yearRegex
+                .find(release.orEmpty())
+                ?.value
+                ?.toIntOrNull()
+                ?.let { return it }
         }
 
         // Do not scan the entire document as a final fallback: that often returns the
-        // website footer/copyright year (for example 2026) instead of the title's year.
+        // website footer/copyright year instead of the title's year.
         return null
     }
 
     private fun pageRating(document: Document): Double? {
         val text = document.text()
-        return Regex("(?i)(?:IMDb|IMDB)\\s*[:/]?\\s*([0-9]+(?:[.,][0-9]+)?)")
+
+        return Regex(
+            "(?i)(?:IMDb|IMDB)\\s*[:/]?\\s*([0-9]+(?:[.,][0-9]+)?)"
+        )
             .find(text)
             ?.groupValues
             ?.getOrNull(1)
@@ -841,7 +975,8 @@ class DiziBoxizle : MainAPI() {
     }
 
     private fun posterOf(document: Document): String? {
-        return document.selectFirst("meta[property='og:image']")?.attr("content")
+        return document.selectFirst("meta[property='og:image']")
+            ?.attr("content")
             ?.takeIf { it.isNotBlank() }
             ?.let(::fixUrl)
             ?: document.selectFirst("img")?.let(::posterOfElement)
@@ -857,7 +992,10 @@ class DiziBoxizle : MainAPI() {
             .ifBlank { element.attr("srcset") }
             .ifBlank { element.attr("src") }
 
-        val firstUrl = Regex("https?://[^\\s,]+", RegexOption.IGNORE_CASE)
+        val firstUrl = Regex(
+            "https?://[^\\s,]+",
+            RegexOption.IGNORE_CASE,
+        )
             .find(raw)
             ?.value
             ?.trimEnd(',')
@@ -884,6 +1022,7 @@ class DiziBoxizle : MainAPI() {
 
     private fun qualityFromUrl(url: String): Int {
         val value = url.lowercase()
+
         return when {
             "2160" in value || "4k" in value -> Qualities.P2160.value
             "1440" in value -> Qualities.P1440.value
@@ -897,11 +1036,13 @@ class DiziBoxizle : MainAPI() {
 
     private fun withPage(url: String, page: Int): String {
         if (page <= 1) return url
+
         return "${url.trimEnd('/')}/page/$page/"
     }
 
     private fun hasNextPage(document: Document, page: Int): Boolean {
         val nextPage = page + 1
+
         return document.select("a[href]").any { element ->
             val href = fixUrlNull(element.attr("href")).orEmpty()
             val label = element.text().trim().lowercase()
@@ -915,10 +1056,8 @@ class DiziBoxizle : MainAPI() {
     }
 
     companion object {
-        // VidMoly classic embeds commonly expose:
-        // sources: [{ file: "https://.../master.m3u8?..." }]
         private val PROVIDER_SOURCE_PATTERN = Regex(
-            "(?is)\\bsources\\s*:\\s*\\[\\s*\\{\\s*[\"']?file[\"']?[\\s:\=]*[\"']([^\"']+)[\"']"
+            "(?is)\\bsources\\s*:\\s*\\[\\s*\\{\\s*[\"']?file[\"']?[\\s:=]*[\"']([^\"']+)[\"']"
         )
 
         // Fallback for variants using src/url/source/hls directly.
@@ -947,3 +1086,4 @@ class DiziBoxizle : MainAPI() {
         )
     }
 }
+```
