@@ -19,6 +19,7 @@ paths-ignore:
 jobs:
 CloudStreamDerleyici:
 
+```
 runs-on: ubuntu-latest
 
 steps:
@@ -72,22 +73,6 @@ steps:
 
   # ============================================================
   # CLOUDSTREAM GRADLE PLUGIN
-  # ============================================================
-  #
-  # JitPack'teki:
-  #
-  # com.github.recloudstream:gradle:-SNAPSHOT
-  #
-  # bağımlılığı kullanılmıyor.
-  #
-  # CloudStream Gradle plugini GitHub'dan kaynak olarak çekiliyor
-  # ve runner'ın local Maven repository'sine kuruluyor.
-  #
-  # Bu commit:
-  #
-  # 81b1d424d236a447d9f2e95a229faef79002f761
-  #
-  # Gradle 8.9 + AGP 8.7.3 yapısıyla uyumlu.
   # ============================================================
 
   - name: CloudStream Gradle Plugin Hazırla
@@ -172,7 +157,7 @@ steps:
       rm -rf ~/.gradle/caches/modules-2/files-2.1/com.lagradost.cloudstream3
 
   # ============================================================
-  # LOCAL MAVEN'ı SON KEZ KONTROL ET
+  # LOCAL MAVEN SON KONTROL
   # ============================================================
 
   - name: CloudStream Plugin Son Kontrol
@@ -344,3 +329,4 @@ steps:
       echo "=========================================="
 
       git push origin builds
+```
