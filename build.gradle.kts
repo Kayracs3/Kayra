@@ -21,7 +21,7 @@ buildscript {
         )
 
         classpath(
-            "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.21"
+            "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0"
         )
     }
 }
