@@ -1,12 +1,12 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "DiziPal Türkiye katalog ve bölüm sağlayıcısı"
-    authors = listOf("DiziKorea")
+    authors = listOf("HDFilmCehennemi")
     status = 1
     tvTypes = listOf("TvSeries")
     language = "tr"
-    iconUrl = "https://dizikorea3.com//favicon.ico"
+    iconUrl = "https://HDFilmCehennemi.nl//favicon.ico"
 }
 
 android {
