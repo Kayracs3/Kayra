@@ -47,35 +47,47 @@ class HDFilmCehennemi : MainAPI() {
     }
 
     // =========================================================
-    // SEARCH
+    // MAIN PAGE
     // =========================================================
 
-    override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun getMainPage(
+        page: Int,
+        request: MainPageRequest
+    ): HomePageResponse {
 
-        val encodedQuery = query
-            .trim()
-            .replace(" ", "+")
+        return try {
 
-        val searchUrls = listOf(
-            "$mainUrl/?s=$encodedQuery",
-            "$mainUrl/arama/$encodedQuery/",
-            "$mainUrl/arama?q=$encodedQuery"
-        )
+            val baseUrl = request.data
 
-        val results = mutableListOf<SearchResponse>()
+            val targetUrl =
+                if (page <= 1) {
+                    baseUrl
+                } else {
+                    if (baseUrl.contains("?")) {
+                        "$baseUrl&page=$page"
+                    } else {
+                        "$baseUrl?page=$page"
+                    }
+                }
 
-        for (searchUrl in searchUrls) {
+            hdLog(
+                "HDCH D MAIN PAGE » $targetUrl"
+            )
 
-            try {
-
-                val response = app.get(
-                    searchUrl,
+            val response =
+                app.get(
+                    targetUrl,
                     headers = requestHeaders
                 )
 
-                val document = response.document
+            val document =
+                response.document
 
-                val elements = document.select(
+            val results =
+                mutableListOf<SearchResponse>()
+
+            val elements =
+                document.select(
                     """
                     article,
                     .film,
@@ -87,9 +99,228 @@ class HDFilmCehennemi : MainAPI() {
                     .film-container,
                     .film-item,
                     .movie-item,
-                    .post
+                    .post,
+                    .item,
+                    .movie-box,
+                    .film-list-item
                     """.trimIndent()
                 )
+
+            hdLog(
+                "HDCH D MAIN PAGE ELEMENTS » ${elements.size}"
+            )
+
+            for (element in elements) {
+
+                try {
+
+                    val linkElement =
+                        element.selectFirst("a[href]")
+                            ?: continue
+
+                    val href =
+                        fixUrl(
+                            linkElement.attr("href")
+                        )
+
+                    if (
+                        href.isBlank() ||
+                        href == mainUrl ||
+                        href == "$mainUrl/"
+                    ) {
+                        continue
+                    }
+
+                    val title =
+                        element
+                            .selectFirst(
+                                """
+                                h2,
+                                h3,
+                                h4,
+                                h5,
+                                .title,
+                                .film-title,
+                                .movie-title,
+                                .name,
+                                .film-name
+                                """.trimIndent()
+                            )
+                            ?.text()
+                            ?.trim()
+                            .takeUnless {
+                                it.isNullOrBlank()
+                            }
+                            ?: linkElement
+                                .attr("title")
+                                .trim()
+                                .takeUnless {
+                                    it.isBlank()
+                                }
+                            ?: linkElement
+                                .text()
+                                .trim()
+
+                    if (title.isBlank()) {
+                        continue
+                    }
+
+                    val poster =
+                        element
+                            .selectFirst("img")
+                            ?.let { img ->
+
+                                img.attr("data-src")
+                                    .ifBlank {
+                                        img.attr("data-lazy-src")
+                                    }
+                                    .ifBlank {
+                                        img.attr("data-original")
+                                    }
+                                    .ifBlank {
+                                        img.attr("data-original-src")
+                                    }
+                                    .ifBlank {
+                                        img.attr("src")
+                                    }
+                            }
+                            ?.let {
+                                fixUrlNull(it)
+                            }
+
+                    val lowerUrl =
+                        href.lowercase(
+                            Locale.ROOT
+                        )
+
+                    val lowerText =
+                        element
+                            .text()
+                            .lowercase(
+                                Locale.ROOT
+                            )
+
+                    val isSeries =
+                        lowerUrl.contains("/dizi/") ||
+                        lowerUrl.contains("/series/") ||
+                        lowerUrl.contains("/tv/") ||
+                        lowerText.contains("dizi") ||
+                        lowerText.contains("sezon") ||
+                        lowerText.contains("bölüm") ||
+                        lowerText.contains("bolum")
+
+                    if (isSeries) {
+
+                        results +=
+                            newTvSeriesSearchResponse(
+                                name = title,
+                                url = href,
+                                type = TvType.TvSeries,
+                                fix = false
+                            ) {
+
+                                this.posterUrl =
+                                    poster
+                            }
+
+                    } else {
+
+                        results +=
+                            newMovieSearchResponse(
+                                name = title,
+                                url = href,
+                                type = TvType.Movie,
+                                fix = false
+                            ) {
+
+                                this.posterUrl =
+                                    poster
+                            }
+                    }
+
+                } catch (e: Exception) {
+
+                    logError(e)
+                }
+            }
+
+            val distinctResults =
+                results.distinctBy {
+                    it.url
+                }
+
+            hdLog(
+                "HDCH D MAIN PAGE RESULTS » ${distinctResults.size}"
+            )
+
+            newHomePageResponse(
+                request.name,
+                distinctResults
+            )
+
+        } catch (e: Exception) {
+
+            logError(e)
+
+            newHomePageResponse(
+                request.name,
+                emptyList()
+            )
+        }
+    }
+
+    // =========================================================
+    // SEARCH
+    // =========================================================
+
+    override suspend fun search(
+        query: String
+    ): List<SearchResponse> {
+
+        val encodedQuery =
+            query
+                .trim()
+                .replace(" ", "+")
+
+        val searchUrls =
+            listOf(
+                "$mainUrl/?s=$encodedQuery",
+                "$mainUrl/arama/$encodedQuery/",
+                "$mainUrl/arama?q=$encodedQuery"
+            )
+
+        val results =
+            mutableListOf<SearchResponse>()
+
+        for (searchUrl in searchUrls) {
+
+            try {
+
+                val response =
+                    app.get(
+                        searchUrl,
+                        headers = requestHeaders
+                    )
+
+                val document =
+                    response.document
+
+                val elements =
+                    document.select(
+                        """
+                        article,
+                        .film,
+                        .movie,
+                        .dizi,
+                        .serie,
+                        .poster,
+                        .film-box,
+                        .film-container,
+                        .film-item,
+                        .movie-item,
+                        .post
+                        """.trimIndent()
+                    )
 
                 for (element in elements) {
 
@@ -97,9 +328,10 @@ class HDFilmCehennemi : MainAPI() {
                         element.selectFirst("a[href]")
                             ?: continue
 
-                    val href = fixUrl(
-                        linkElement.attr("href")
-                    )
+                    val href =
+                        fixUrl(
+                            linkElement.attr("href")
+                        )
 
                     if (href.isBlank()) {
                         continue
@@ -112,11 +344,15 @@ class HDFilmCehennemi : MainAPI() {
                             )
                             ?.text()
                             ?.trim()
-                            .takeUnless { it.isNullOrBlank() }
+                            .takeUnless {
+                                it.isNullOrBlank()
+                            }
                             ?: linkElement
                                 .attr("title")
                                 .trim()
-                                .takeUnless { it.isBlank() }
+                                .takeUnless {
+                                    it.isBlank()
+                                }
                             ?: linkElement
                                 .text()
                                 .trim()
@@ -125,20 +361,25 @@ class HDFilmCehennemi : MainAPI() {
                         continue
                     }
 
-                    val poster = element
-                        .selectFirst("img")
-                        ?.let {
-                            it.attr("data-src")
-                                .ifBlank {
-                                    it.attr("data-lazy-src")
-                                }
-                                .ifBlank {
-                                    it.attr("src")
-                                }
-                        }
-                        ?.let {
-                            fixUrlNull(it)
-                        }
+                    val poster =
+                        element
+                            .selectFirst("img")
+                            ?.let {
+
+                                it.attr("data-src")
+                                    .ifBlank {
+                                        it.attr("data-lazy-src")
+                                    }
+                                    .ifBlank {
+                                        it.attr("data-original")
+                                    }
+                                    .ifBlank {
+                                        it.attr("src")
+                                    }
+                            }
+                            ?.let {
+                                fixUrlNull(it)
+                            }
 
                     val isSeries =
                         href.contains(
@@ -148,25 +389,31 @@ class HDFilmCehennemi : MainAPI() {
 
                     if (isSeries) {
 
-                        results += newTvSeriesSearchResponse(
-                            name = title,
-                            url = href,
-                            type = TvType.TvSeries,
-                            fix = false
-                        ) {
-                            this.posterUrl = poster
-                        }
+                        results +=
+                            newTvSeriesSearchResponse(
+                                name = title,
+                                url = href,
+                                type = TvType.TvSeries,
+                                fix = false
+                            ) {
+
+                                this.posterUrl =
+                                    poster
+                            }
 
                     } else {
 
-                        results += newMovieSearchResponse(
-                            name = title,
-                            url = href,
-                            type = TvType.Movie,
-                            fix = false
-                        ) {
-                            this.posterUrl = poster
-                        }
+                        results +=
+                            newMovieSearchResponse(
+                                name = title,
+                                url = href,
+                                type = TvType.Movie,
+                                fix = false
+                            ) {
+
+                                this.posterUrl =
+                                    poster
+                            }
                     }
                 }
 
@@ -175,6 +422,7 @@ class HDFilmCehennemi : MainAPI() {
                 }
 
             } catch (e: Exception) {
+
                 logError(e)
             }
         }
@@ -194,28 +442,35 @@ class HDFilmCehennemi : MainAPI() {
 
         return try {
 
-            val fixedUrl = fixUrl(url)
+            val fixedUrl =
+                fixUrl(url)
 
-            val response = app.get(
-                fixedUrl,
-                headers = requestHeaders
-            )
+            val response =
+                app.get(
+                    fixedUrl,
+                    headers = requestHeaders
+                )
 
-            val document = response.document
+            val document =
+                response.document
 
             val title =
                 document
                     .selectFirst("h1")
                     ?.text()
                     ?.trim()
-                    .takeUnless { it.isNullOrBlank() }
+                    .takeUnless {
+                        it.isNullOrBlank()
+                    }
                     ?: document
                         .selectFirst(
                             "meta[property=og:title]"
                         )
                         ?.attr("content")
                         ?.trim()
-                        .takeUnless { it.isNullOrBlank() }
+                        .takeUnless {
+                            it.isNullOrBlank()
+                        }
                     ?: document.title()
 
             val poster =
@@ -238,6 +493,7 @@ class HDFilmCehennemi : MainAPI() {
                             """.trimIndent()
                         )
                         ?.let {
+
                             it.attr("data-src")
                                 .ifBlank {
                                     it.attr("data-lazy-src")
@@ -264,7 +520,9 @@ class HDFilmCehennemi : MainAPI() {
                     )
                     ?.text()
                     ?.trim()
-                    .takeUnless { it.isNullOrBlank() }
+                    .takeUnless {
+                        it.isNullOrBlank()
+                    }
                     ?: document
                         .selectFirst(
                             "meta[name=description]"
@@ -276,7 +534,9 @@ class HDFilmCehennemi : MainAPI() {
                 Regex(
                     """\b(19\d{2}|20\d{2})\b"""
                 )
-                    .find(document.text())
+                    .find(
+                        document.text()
+                    )
                     ?.groupValues
                     ?.getOrNull(1)
                     ?.toIntOrNull()
@@ -285,53 +545,59 @@ class HDFilmCehennemi : MainAPI() {
                 Regex(
                     """(?i)(?:imdb|puan|rating)[^\d]{0,20}(\d+(?:[.,]\d+)?)"""
                 )
-                    .find(document.text())
+                    .find(
+                        document.text()
+                    )
                     ?.groupValues
                     ?.getOrNull(1)
-                    ?.replace(",", ".")
+                    ?.replace(
+                        ",",
+                        "."
+                    )
                     ?.toDoubleOrNull()
 
             // =================================================
             // ACTORS
             // =================================================
 
-            val actors = document
-                .select(
-                    """
-                    .cast a,
-                    .actors a,
-                    .actor a,
-                    .oyuncular a,
-                    .cast .name,
-                    .actors .name
-                    """.trimIndent()
-                )
-                .mapNotNull { actorElement ->
+            val actors =
+                document
+                    .select(
+                        """
+                        .cast a,
+                        .actors a,
+                        .actor a,
+                        .oyuncular a,
+                        .cast .name,
+                        .actors .name
+                        """.trimIndent()
+                    )
+                    .mapNotNull { actorElement ->
 
-                    val actorName =
-                        actorElement
-                            .text()
-                            .trim()
+                        val actorName =
+                            actorElement
+                                .text()
+                                .trim()
 
-                    if (actorName.isBlank()) {
+                        if (actorName.isBlank()) {
 
-                        null
+                            null
 
-                    } else {
+                        } else {
 
-                        ActorData(
-                            Actor(
-                                actorName,
-                                actorElement
-                                    .selectFirst("img")
-                                    ?.attr("src")
+                            ActorData(
+                                Actor(
+                                    actorName,
+                                    actorElement
+                                        .selectFirst("img")
+                                        ?.attr("src")
+                                )
                             )
-                        )
+                        }
                     }
-                }
-                .distinctBy {
-                    it.actor.name
-                }
+                    .distinctBy {
+                        it.actor.name
+                    }
 
             // =================================================
             // TRAILER
@@ -428,22 +694,25 @@ class HDFilmCehennemi : MainAPI() {
                             ?: Regex(
                                 """(\d+)"""
                             )
-                                .find(episodeTitle)
+                                .find(
+                                    episodeTitle
+                                )
                                 ?.groupValues
                                 ?.getOrNull(1)
                                 ?.toIntOrNull()
                             ?: (index + 1)
 
-                    episodes += newEpisode(
-                        episodeUrl
-                    ) {
+                    episodes +=
+                        newEpisode(
+                            episodeUrl
+                        ) {
 
-                        this.name =
-                            episodeTitle
+                            this.name =
+                                episodeTitle
 
-                        this.episode =
-                            episodeNumber
-                    }
+                            this.episode =
+                                episodeNumber
+                        }
                 }
 
                 return newTvSeriesLoadResponse(
@@ -453,10 +722,17 @@ class HDFilmCehennemi : MainAPI() {
                     episodes = episodes
                 ) {
 
-                    this.posterUrl = poster
-                    this.plot = plot
-                    this.year = year
-                    this.actors = actors
+                    this.posterUrl =
+                        poster
+
+                    this.plot =
+                        plot
+
+                    this.year =
+                        year
+
+                    this.actors =
+                        actors
 
                     if (rating != null) {
 
@@ -491,10 +767,17 @@ class HDFilmCehennemi : MainAPI() {
                 dataUrl = fixedUrl
             ) {
 
-                this.posterUrl = poster
-                this.plot = plot
-                this.year = year
-                this.actors = actors
+                this.posterUrl =
+                    poster
+
+                this.plot =
+                    plot
+
+                this.year =
+                    year
+
+                this.actors =
+                    actors
 
                 if (rating != null) {
 
@@ -546,10 +829,11 @@ class HDFilmCehennemi : MainAPI() {
 
         return try {
 
-            val response = app.get(
-                fixUrl(data),
-                headers = requestHeaders
-            )
+            val response =
+                app.get(
+                    fixUrl(data),
+                    headers = requestHeaders
+                )
 
             val document =
                 response.document
@@ -671,7 +955,9 @@ class HDFilmCehennemi : MainAPI() {
                         """rapidrame_id=([^&#"\s]+)""",
                         RegexOption.IGNORE_CASE
                     )
-                        .find(playerUrl)
+                        .find(
+                            playerUrl
+                        )
                         ?.groupValues
                         ?.getOrNull(1)
 
@@ -848,9 +1134,15 @@ class HDFilmCehennemi : MainAPI() {
                         .removeSuffix("\"")
 
                 if (
-                    !decoded.startsWith("http://") &&
-                    !decoded.startsWith("https://") &&
-                    !decoded.startsWith("/")
+                    !decoded.startsWith(
+                        "http://"
+                    ) &&
+                    !decoded.startsWith(
+                        "https://"
+                    ) &&
+                    !decoded.startsWith(
+                        "/"
+                    )
                 ) {
                     return
                 }
@@ -938,7 +1230,7 @@ class HDFilmCehennemi : MainAPI() {
             }
 
             // =================================================
-            // DIRECT .M3U8 / .MP4 / .M3U
+            // DIRECT M3U8 / MP4 / M3U
             // =================================================
 
             Regex(
@@ -947,6 +1239,7 @@ class HDFilmCehennemi : MainAPI() {
             )
                 .findAll(html)
                 .forEach {
+
                     addCandidate(
                         it.groupValues[0]
                     )
@@ -962,13 +1255,14 @@ class HDFilmCehennemi : MainAPI() {
             )
                 .findAll(html)
                 .forEach {
+
                     addCandidate(
                         it.groupValues[1]
                     )
                 }
 
             // =================================================
-            // SCRIPTLER
+            // SCRIPTS
             // =================================================
 
             val scripts =
@@ -1039,70 +1333,85 @@ class HDFilmCehennemi : MainAPI() {
                 )
 
                 // -------------------------------------------------
-                // file: "..."
+                // file
                 // -------------------------------------------------
 
                 Regex(
                     """(?i)\bfile\s*:\s*["']([^"']+)["']"""
                 )
-                    .findAll(scriptText)
+                    .findAll(
+                        scriptText
+                    )
                     .forEach {
+
                         addCandidate(
                             it.groupValues[1]
                         )
                     }
 
                 // -------------------------------------------------
-                // source: "..."
+                // source
                 // -------------------------------------------------
 
                 Regex(
                     """(?i)\bsource\s*:\s*["']([^"']+)["']"""
                 )
-                    .findAll(scriptText)
+                    .findAll(
+                        scriptText
+                    )
                     .forEach {
+
                         addCandidate(
                             it.groupValues[1]
                         )
                     }
 
                 // -------------------------------------------------
-                // src: "..."
+                // src
                 // -------------------------------------------------
 
                 Regex(
                     """(?i)\bsrc\s*:\s*["']([^"']+)["']"""
                 )
-                    .findAll(scriptText)
+                    .findAll(
+                        scriptText
+                    )
                     .forEach {
+
                         addCandidate(
                             it.groupValues[1]
                         )
                     }
 
                 // -------------------------------------------------
-                // url: "..."
+                // url
                 // -------------------------------------------------
 
                 Regex(
                     """(?i)\burl\s*:\s*["']([^"']+)["']"""
                 )
-                    .findAll(scriptText)
+                    .findAll(
+                        scriptText
+                    )
                     .forEach {
+
                         addCandidate(
                             it.groupValues[1]
                         )
                     }
 
                 // -------------------------------------------------
-                // file/source/src/url JSON
+                // JSON
                 // -------------------------------------------------
 
                 Regex(
                     """(?i)"(?:file|source|src|url)"\s*:\s*"([^"]+)""""
                 )
-                    .findAll(scriptText)
+                    .findAll(
+                        scriptText
+                    )
                     .forEach {
+
                         addCandidate(
                             it.groupValues[1]
                         )
@@ -1115,8 +1424,11 @@ class HDFilmCehennemi : MainAPI() {
                 Regex(
                     """(?i)\bsources\s*:\s*\[[^\]]*?\bfile\s*:\s*["']([^"']+)["']"""
                 )
-                    .findAll(scriptText)
+                    .findAll(
+                        scriptText
+                    )
                     .forEach {
+
                         addCandidate(
                             it.groupValues[1]
                         )
@@ -1130,8 +1442,11 @@ class HDFilmCehennemi : MainAPI() {
                     """https?://[^"'\s]+\.(m3u8|mp4|m3u)(\?[^"'\s]*)?""",
                     RegexOption.IGNORE_CASE
                 )
-                    .findAll(scriptText)
+                    .findAll(
+                        scriptText
+                    )
                     .forEach {
+
                         addCandidate(
                             it.groupValues[0]
                         )
@@ -1166,90 +1481,122 @@ class HDFilmCehennemi : MainAPI() {
                         )
 
                         // file
+
                         Regex(
                             """(?i)\bfile\s*:\s*["']([^"']+)["']"""
                         )
-                            .findAll(unpacked)
+                            .findAll(
+                                unpacked
+                            )
                             .forEach {
+
                                 addCandidate(
                                     it.groupValues[1]
                                 )
                             }
 
                         // source
+
                         Regex(
                             """(?i)\bsource\s*:\s*["']([^"']+)["']"""
                         )
-                            .findAll(unpacked)
+                            .findAll(
+                                unpacked
+                            )
                             .forEach {
+
                                 addCandidate(
                                     it.groupValues[1]
                                 )
                             }
 
                         // src
+
                         Regex(
                             """(?i)\bsrc\s*:\s*["']([^"']+)["']"""
                         )
-                            .findAll(unpacked)
+                            .findAll(
+                                unpacked
+                            )
                             .forEach {
+
                                 addCandidate(
                                     it.groupValues[1]
                                 )
                             }
 
                         // url
+
                         Regex(
                             """(?i)\burl\s*:\s*["']([^"']+)["']"""
                         )
-                            .findAll(unpacked)
+                            .findAll(
+                                unpacked
+                            )
                             .forEach {
+
                                 addCandidate(
                                     it.groupValues[1]
                                 )
                             }
 
                         // JSON
+
                         Regex(
                             """(?i)"(?:file|source|src|url)"\s*:\s*"([^"]+)""""
                         )
-                            .findAll(unpacked)
+                            .findAll(
+                                unpacked
+                            )
                             .forEach {
+
                                 addCandidate(
                                     it.groupValues[1]
                                 )
                             }
 
                         // sources
+
                         Regex(
                             """(?i)\bsources\s*:\s*\[[^\]]*?\bfile\s*:\s*["']([^"']+)["']"""
                         )
-                            .findAll(unpacked)
+                            .findAll(
+                                unpacked
+                            )
                             .forEach {
+
                                 addCandidate(
                                     it.groupValues[1]
                                 )
                             }
 
                         // Direct media URL
+
                         Regex(
                             """https?://[^"'\s]+\.(m3u8|mp4|m3u)(\?[^"'\s]*)?""",
                             RegexOption.IGNORE_CASE
                         )
-                            .findAll(unpacked)
+                            .findAll(
+                                unpacked
+                            )
                             .forEach {
+
                                 addCandidate(
                                     it.groupValues[0]
                                 )
                             }
 
                         // Relative media
+
                         Regex(
                             """["'](/[^"'\s]+\.(m3u8|mp4|m3u)(\?[^"'\s]*)?)["']""",
                             RegexOption.IGNORE_CASE
                         )
-                            .findAll(unpacked)
+                            .findAll(
+                                unpacked
+                            )
                             .forEach {
+
                                 addCandidate(
                                     it.groupValues[1]
                                 )
@@ -1303,12 +1650,13 @@ class HDFilmCehennemi : MainAPI() {
                 )
                 .forEach { element ->
 
-                    val values = listOf(
-                        element.attr("data-src"),
-                        element.attr("data-file"),
-                        element.attr("data-url"),
-                        element.attr("data-video")
-                    )
+                    val values =
+                        listOf(
+                            element.attr("data-src"),
+                            element.attr("data-file"),
+                            element.attr("data-url"),
+                            element.attr("data-video")
+                        )
 
                     values.forEach {
                         addCandidate(it)
@@ -1379,7 +1727,6 @@ class HDFilmCehennemi : MainAPI() {
                 hdLog(
                     "HDCH D NO MEDIA CANDIDATE FOUND"
                 )
-
             }
 
             for (
@@ -1428,31 +1775,41 @@ class HDFilmCehennemi : MainAPI() {
                         Regex(
                             "(?i)2160|4k"
                         )
-                            .containsMatchIn(candidate) ->
+                            .containsMatchIn(
+                                candidate
+                            ) ->
                             Qualities.P2160.value
 
                         Regex(
                             "(?i)1080"
                         )
-                            .containsMatchIn(candidate) ->
+                            .containsMatchIn(
+                                candidate
+                            ) ->
                             Qualities.P1080.value
 
                         Regex(
                             "(?i)720"
                         )
-                            .containsMatchIn(candidate) ->
+                            .containsMatchIn(
+                                candidate
+                            ) ->
                             Qualities.P720.value
 
                         Regex(
                             "(?i)480"
                         )
-                            .containsMatchIn(candidate) ->
+                            .containsMatchIn(
+                                candidate
+                            ) ->
                             Qualities.P480.value
 
                         Regex(
                             "(?i)360"
                         )
-                            .containsMatchIn(candidate) ->
+                            .containsMatchIn(
+                                candidate
+                            ) ->
                             Qualities.P360.value
 
                         else ->
@@ -1509,24 +1866,64 @@ class HDFilmCehennemi : MainAPI() {
         value: String
     ): String {
 
-        var result = value
+        var result =
+            value
 
         try {
 
             result =
                 result
-                    .replace("\\/", "/")
-                    .replace("\\u002F", "/")
-                    .replace("\\u002f", "/")
-                    .replace("\\u003A", ":")
-                    .replace("\\u003a", ":")
-                    .replace("\\\"", "\"")
-                    .replace("\\'", "'")
+                    .replace(
+                        "\\/",
+                        "/"
+                    )
+                    .replace(
+                        "\\u002F",
+                        "/"
+                    )
+                    .replace(
+                        "\\u002f",
+                        "/"
+                    )
+                    .replace(
+                        "\\u003A",
+                        ":"
+                    )
+                    .replace(
+                        "\\u003a",
+                        ":"
+                    )
+                    .replace(
+                        "\\\"",
+                        "\""
+                    )
+                    .replace(
+                        "\\'",
+                        "'"
+                    )
+                    .replace(
+                        "&amp;",
+                        "&"
+                    )
+                    .replace(
+                        "&sol;",
+                        "/"
+                    )
+                    .replace(
+                        "&#x2F;",
+                        "/"
+                    )
+                    .replace(
+                        "&#47;",
+                        "/"
+                    )
 
             Regex(
                 """\\u([0-9a-fA-F]{4})"""
             )
-                .findAll(result)
+                .findAll(
+                    result
+                )
                 .toList()
                 .reversed()
                 .forEach { match ->
@@ -1546,7 +1943,9 @@ class HDFilmCehennemi : MainAPI() {
             Regex(
                 """\\x([0-9a-fA-F]{2})"""
             )
-                .findAll(result)
+                .findAll(
+                    result
+                )
                 .toList()
                 .reversed()
                 .forEach { match ->
