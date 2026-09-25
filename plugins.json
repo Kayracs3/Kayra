@@ -78,5 +78,25 @@
         "description": "Sinema zevkini evinize kadar getirdik. T\u00fcrkiye'nin lider Film sitesinde, en yeni filmleri Full HD izleyin.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FullHDFilmizlesene.cs3",
         "name": "FullHDFilmizlesene"
+    },
+    {
+        "iconUrl": "https://HDFilmCehennemi.nl//favicon.ico",
+        "fileHash": "sha256-a23630270716ae3fec149d51d8c40b1e0c4d76b251476d5eed9b258edf588f9b",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 33856,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "HDFilmCehennemi"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 2,
+        "internalName": "HDFilmCehennemi",
+        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/HDFilmCehennemi.cs3",
+        "name": "HDFilmCehennemi"
     }
 ]
