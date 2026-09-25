@@ -11,7 +11,6 @@ mavenCentral()
 maven("https://jitpack.io")
 }
 
-```
 dependencies {
     classpath("com.android.tools.build:gradle:8.7.3")
 
@@ -25,7 +24,6 @@ dependencies {
         "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0"
     )
 }
-```
 
 }
 
@@ -56,7 +54,6 @@ extensions
 
 subprojects {
 
-```
 apply(plugin = "com.android.library")
 apply(plugin = "kotlin-android")
 apply(plugin = "com.lagradost.cloudstream3.gradle")
@@ -139,7 +136,6 @@ dependencies {
         "com.github.teamnewpipe:NewPipeExtractor:v0.25.2"
     )
 }
-```
 
 }
 
