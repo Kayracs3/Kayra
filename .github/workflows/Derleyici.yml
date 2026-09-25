@@ -19,7 +19,6 @@ paths-ignore:
 jobs:
 CloudStreamDerleyici:
 
-```
 runs-on: ubuntu-latest
 
 steps:
@@ -329,4 +328,3 @@ steps:
       echo "=========================================="
 
       git push origin builds
-```
