@@ -1,479 +1,380 @@
 package com.Kayracs3
 
-import android.util.Log
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
-import com.fasterxml.jackson.module.kotlin.readValue
-import com.lagradost.cloudstream3.Actor
-import com.lagradost.cloudstream3.ActorData
-import com.lagradost.cloudstream3.HomePageResponse
-import com.lagradost.cloudstream3.LoadResponse
-import com.lagradost.cloudstream3.MainAPI
-import com.lagradost.cloudstream3.MainPageRequest
-import com.lagradost.cloudstream3.Score
-import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.TrailerData
-import com.lagradost.cloudstream3.TvType
-import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.fixUrlNull
-import com.lagradost.cloudstream3.mainPageOf
-import com.lagradost.cloudstream3.newEpisode
-import com.lagradost.cloudstream3.newHomePageResponse
-import com.lagradost.cloudstream3.newMovieLoadResponse
-import com.lagradost.cloudstream3.newMovieSearchResponse
-import com.lagradost.cloudstream3.newSubtitleFile
-import com.lagradost.cloudstream3.newTvSeriesLoadResponse
-import com.lagradost.cloudstream3.newTvSeriesSearchResponse
-import com.lagradost.cloudstream3.network.CloudflareKiller
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.getAndUnpack
-import com.lagradost.cloudstream3.utils.loadExtractor
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import okhttp3.Interceptor
-import okhttp3.Response
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import java.net.URLDecoder
+import java.util.Locale
 
 class HDFilmCehennemi : MainAPI() {
 
     override var mainUrl = "https://www.hdfilmcehennemi.nl"
+
     override var name = "HDFilmCehennemi"
+
+    override val lang = "tr"
+
     override val hasMainPage = true
-    override var lang = "tr"
+
     override val hasQuickSearch = true
 
+    override val sequentialMainPage = true
+
     override val supportedTypes = setOf(
-        TvType.Movie,
-        TvType.TvSeries
-    )
-
-    override var sequentialMainPage = true
-    override var sequentialMainPageDelay = 1L
-    override var sequentialMainPageScrollDelay = 1L
-
-    private val cloudflareKiller by lazy {
-        CloudflareKiller()
-    }
-
-    private val interceptor by lazy {
-        CloudflareInterceptor(cloudflareKiller)
-    }
-
-    private val requestHeaders = mapOf(
-        "User-Agent" to USER_AGENT,
-        "user-agent" to USER_AGENT,
-        "Accept" to "*/*",
-        "X-Requested-With" to "fetch"
+        TvSeries,
+        Movie
     )
 
     override val mainPage = mainPageOf(
-        "${mainUrl}/load/page/sayfano/home/" to "Yeni Eklenen Filmler",
-        "${mainUrl}/load/page/sayfano/home-series/" to "Yeni Eklenen Diziler",
-        "${mainUrl}/load/page/sayfano/categories/tavsiye-filmler-izle3/" to "Tavsiye Filmler",
-        "${mainUrl}/load/page/sayfano/imdb7/" to "IMDB 7+ Filmler",
-        "${mainUrl}/load/page/sayfano/mostCommented/" to "En Çok Yorumlananlar",
-        "${mainUrl}/load/page/sayfano/mostLiked/" to "En Çok Beğenilenler"
+        "$mainUrl/film/" to "Filmler",
+        "$mainUrl/dizi/" to "Diziler",
+        "$mainUrl/yeni-filmler/" to "Yeni Filmler",
+        "$mainUrl/yeni-diziler/" to "Yeni Diziler"
     )
 
-    override suspend fun getMainPage(
-        page: Int,
-        request: MainPageRequest
-    ): HomePageResponse {
+    private val requestHeaders = mapOf(
+        "User-Agent" to USER_AGENT,
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+        "Referer" to "$mainUrl/"
+    )
 
-        val mapper = ObjectMapper()
-            .registerModule(KotlinModule.Builder().build())
-            .apply {
-                configure(
-                    DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
-                    false
-                )
-            }
+    // ---------------------------------------------------------
+    // SEARCH
+    // ---------------------------------------------------------
 
-        val url = request.data.replace(
-            "sayfano",
-            page.toString()
+    override suspend fun search(query: String): List<SearchResponse> {
+        val encodedQuery = query.trim().replace(" ", "+")
+
+        val searchUrls = listOf(
+            "$mainUrl/?s=$encodedQuery",
+            "$mainUrl/arama/$encodedQuery/",
+            "$mainUrl/arama?q=$encodedQuery"
         )
 
-        val response = app.get(
-            url,
-            headers = requestHeaders,
-            referer = mainUrl,
-            interceptor = interceptor
-        )
+        val results = mutableListOf<SearchResponse>()
 
-        if (response.text.contains("Sayfa Bulunamadı")) {
-            return newHomePageResponse(
-                request.name,
-                emptyList()
-            )
-        }
-
-        return runCatching {
-            val payload: HDFC = mapper.readValue(response.text)
-            val document = Jsoup.parse(payload.html)
-
-            val items = document
-                .select("a")
-                .mapNotNull { it.toSearchResult() }
-
-            newHomePageResponse(
-                request.name,
-                items
-            )
-        }.getOrElse {
-            Log.e(
-                "HDCH",
-                "getMainPage parse error: ${it.message}"
-            )
-
-            newHomePageResponse(
-                request.name,
-                emptyList()
-            )
-        }
-    }
-
-    private fun Element.toSearchResult(): SearchResponse? {
-
-        val title = attr("title").trim()
-
-        val href = fixUrlNull(
-            attr("href")
-        ) ?: return null
-
-        if (title.isBlank() || href.isBlank()) {
-            return null
-        }
-
-        val poster = fixUrlNull(
-            selectFirst("img")
-                ?.attr("data-src")
-                .takeUnless { it.isNullOrBlank() }
-                ?: selectFirst("img")
-                    ?.attr("src")
-        )
-
-        val score = selectFirst("span.imdb")
-            ?.text()
-            ?.trim()
-
-        return newMovieSearchResponse(
-            title,
-            href,
-            TvType.Movie
-        ) {
-            posterUrl = poster
-            this.score = Score.from10(score)
-        }
-    }
-
-    override suspend fun quickSearch(
-        query: String
-    ): List<SearchResponse> = search(query)
-
-    override suspend fun search(
-        query: String
-    ): List<SearchResponse> {
-
-        val response = app.get(
-            "${mainUrl}/search?q=$query",
-            headers = mapOf(
-                "X-Requested-With" to "fetch"
-            ),
-            referer = mainUrl,
-            interceptor = interceptor
-        ).parsedSafe<Results>() ?: return emptyList()
-
-        return response.results.mapNotNull { resultHtml ->
-
-            runCatching {
-
-                val document = Jsoup.parse(
-                    resultHtml
+        for (searchUrl in searchUrls) {
+            try {
+                val response = app.get(
+                    searchUrl,
+                    headers = requestHeaders
                 )
 
-                val title = document
-                    .selectFirst("h4.title")
-                    ?.text()
-                    ?.trim()
-                    .takeUnless { it.isNullOrBlank() }
-                    ?: return@runCatching null
+                val document = response.document
 
-                val href = fixUrlNull(
-                    document
-                        .selectFirst("a")
-                        ?.attr("href")
-                ) ?: return@runCatching null
+                val elements = document.select(
+                    """
+                    article,
+                    .film,
+                    .movie,
+                    .dizi,
+                    .serie,
+                    .poster,
+                    .film-box,
+                    .film-container,
+                    .film-item,
+                    .movie-item,
+                    .post
+                    """.trimIndent()
+                )
 
-                val poster = fixUrlNull(
-                    document
+                for (element in elements) {
+                    val linkElement = element.selectFirst("a[href]") ?: continue
+
+                    val href = fixUrl(linkElement.attr("href"))
+                    if (href.isBlank()) continue
+
+                    val title =
+                        element.selectFirst("h2, h3, h4, .title, .film-title, .movie-title")
+                            ?.text()
+                            ?.trim()
+                            .takeUnless { it.isNullOrBlank() }
+                            ?: linkElement.attr("title").trim()
+                                .takeUnless { it.isBlank() }
+                            ?: linkElement.text().trim()
+
+                    if (title.isBlank()) continue
+
+                    val poster = element
                         .selectFirst("img")
-                        ?.attr("src")
-                ) ?: fixUrlNull(
-                    document
-                        .selectFirst("img")
-                        ?.attr("data-src")
-                )
+                        ?.let {
+                            it.attr("data-src")
+                                .ifBlank { it.attr("data-lazy-src") }
+                                .ifBlank { it.attr("src") }
+                        }
+                        ?.let { fixUrlNull(it) }
 
-                newMovieSearchResponse(
-                    title,
-                    href,
-                    TvType.Movie
-                ) {
-                    posterUrl = poster?.replace(
-                        "/thumb/",
-                        "/list/"
-                    )
+                    val isSeries = href.contains("/dizi/", ignoreCase = true)
+
+                    results += if (isSeries) {
+                        newTvSeriesSearchResponse(
+                            title = title,
+                            url = href,
+                            fix = false
+                        ) {
+                            this.posterUrl = poster
+                        }
+                    } else {
+                        newMovieSearchResponse(
+                            title = title,
+                            url = href,
+                            fix = false
+                        ) {
+                            this.posterUrl = poster
+                        }
+                    }
                 }
 
-            }.getOrNull()
+                if (results.isNotEmpty()) {
+                    break
+                }
+            } catch (e: Exception) {
+                logError("SEARCH ERROR » ${e.message}")
+            }
         }
+
+        return results.distinctBy { it.url }
     }
 
-    override suspend fun load(
-        url: String
-    ): LoadResponse? {
+    // ---------------------------------------------------------
+    // LOAD
+    // ---------------------------------------------------------
 
-        val document = app.get(
-            url,
-            interceptor = interceptor
-        ).document
+    override suspend fun load(url: String): LoadResponse? {
+        return try {
+            val fixedUrl = fixUrl(url)
 
-        val title = document
-            .selectFirst("h1.section-title")
-            ?.text()
-            ?.substringBefore(" izle")
-            ?.trim()
-            ?: return null
+            val response = app.get(
+                fixedUrl,
+                headers = requestHeaders
+            )
 
-        val poster = fixUrlNull(
-            document
-                .select("aside.post-info-poster img.lazyload")
-                .lastOrNull()
-                ?.attr("data-src")
+            val document = response.document
+
+            val title = document
+                .selectFirst("h1")
+                ?.text()
+                ?.trim()
                 .takeUnless { it.isNullOrBlank() }
                 ?: document
-                    .select("aside.post-info-poster img")
-                    .lastOrNull()
-                    ?.attr("src")
-        )
-
-        val tags = document
-            .select("div.post-info-genres a")
-            .map {
-                it.text().trim()
-            }
-            .filter {
-                it.isNotBlank()
-            }
-
-        val year = document
-            .selectFirst("div.post-info-year-country a")
-            ?.text()
-            ?.trim()
-            ?.toIntOrNull()
-
-        val isSeries = document
-            .select("div.seasons")
-            .isNotEmpty()
-
-        val description = document
-            .selectFirst("article.post-info-content > p")
-            ?.text()
-            ?.trim()
-
-        val rating = document
-            .selectFirst("div.post-info-imdb-rating span")
-            ?.text()
-            ?.substringBefore("(")
-            ?.trim()
-
-        val actors = document
-            .select("div.post-info-cast a")
-            .mapNotNull { actor ->
-
-                val actorName = actor
-                    .selectFirst("strong")
-                    ?.text()
+                    .selectFirst("meta[property=og:title]")
+                    ?.attr("content")
                     ?.trim()
                     .takeUnless { it.isNullOrBlank() }
-                    ?: return@mapNotNull null
+                ?: document.title()
 
-                Actor(
-                    actorName,
-                    fixUrlNull(
-                        actor
-                            .selectFirst("img")
-                            ?.attr("data-src")
+            val poster = document
+                .selectFirst("meta[property=og:image]")
+                ?.attr("content")
+                ?.trim()
+                ?.let { fixUrlNull(it) }
+                ?: document
+                    .selectFirst(
+                        "img.poster, .poster img, .film-poster img, .movie-poster img"
                     )
+                    ?.let {
+                        it.attr("data-src")
+                            .ifBlank { it.attr("data-lazy-src") }
+                            .ifBlank { it.attr("src") }
+                    }
+                    ?.let { fixUrlNull(it) }
+
+            val plot = document
+                .selectFirst(
+                    ".description, .plot, .film-description, .movie-description, article p, main p"
                 )
-            }
-
-        val recommendations = document
-            .select(
-                "div.section-slider-container div.slider-slide"
-            )
-            .mapNotNull { slide ->
-
-                val recName = slide
-                    .selectFirst("a")
-                    ?.attr("title")
+                ?.text()
+                ?.trim()
+                .takeUnless { it.isNullOrBlank() }
+                ?: document
+                    .selectFirst("meta[name=description]")
+                    ?.attr("content")
                     ?.trim()
-                    .takeUnless { it.isNullOrBlank() }
-                    ?: return@mapNotNull null
 
-                val recHref = fixUrlNull(
-                    slide
-                        .selectFirst("a")
-                        ?.attr("href")
-                ) ?: return@mapNotNull null
+            val year = Regex("""\b(19\d{2}|20\d{2})\b""")
+                .find(document.text())
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
 
-                val recPoster = fixUrlNull(
-                    slide
-                        .selectFirst("img")
-                        ?.attr("data-src")
-                ) ?: fixUrlNull(
-                    slide
-                        .selectFirst("img")
-                        ?.attr("src")
+            val rating = Regex(
+                """(?i)(?:imdb|puan|rating)[^\d]{0,20}(\d+(?:[.,]\d+)?)"""
+            )
+                .find(document.text())
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.replace(",", ".")
+                ?.toDoubleOrNull()
+
+            // -------------------------------------------------
+            // ACTORS
+            // -------------------------------------------------
+
+            val actors = document
+                .select(
+                    """
+                    .cast a,
+                    .actors a,
+                    .actor a,
+                    .oyuncular a,
+                    .cast .name,
+                    .actors .name
+                    """.trimIndent()
                 )
-
-                newTvSeriesSearchResponse(
-                    recName,
-                    recHref,
-                    TvType.TvSeries
-                ) {
-                    posterUrl = recPoster
+                .mapNotNull { actorElement ->
+                    val actorName = actorElement.text().trim()
+                    if (actorName.isBlank()) {
+                        null
+                    } else {
+                        ActorData(
+                            Actor(
+                                actorName,
+                                actorElement
+                                    .selectFirst("img")
+                                    ?.attr("src")
+                            )
+                        )
+                    }
                 }
-            }
+                .distinctBy { it.name }
 
-        val trailer = document
-            .selectFirst(
-                "div.post-info-trailer button"
+            // -------------------------------------------------
+            // TRAILER
+            // -------------------------------------------------
+
+            val trailer = document
+                .select(
+                    """
+                    a[href*="youtube.com"],
+                    a[href*="youtu.be"],
+                    iframe[src*="youtube.com"],
+                    iframe[src*="youtu.be"]
+                    """.trimIndent()
+                )
+                .firstOrNull()
+                ?.let { element ->
+                    when (element.tagName()) {
+                        "iframe" -> element.attr("src")
+                        else -> element.attr("href")
+                    }
+                }
+                ?.let { decodeUrl(it) }
+
+            val isSeries = fixedUrl.contains(
+                "/dizi/",
+                ignoreCase = true
             )
-            ?.attr("data-modal")
-            ?.substringAfter(
-                "trailer/",
-                ""
-            )
-            ?.takeIf {
-                it.isNotBlank()
-            }
-            ?.let {
-                "https://www.youtube.com/watch?v=$it"
-            }
 
-        return if (isSeries) {
+            if (isSeries) {
 
-            val episodes = document
-                .select("div.seasons-tab-content a")
-                .mapNotNull { episodeElement ->
+                val episodes = mutableListOf<Episode>()
 
-                    val episodeName = episodeElement
-                        .selectFirst("h4")
-                        ?.text()
-                        ?.trim()
-                        .takeUnless {
-                            it.isNullOrBlank()
-                        }
-                        ?: return@mapNotNull null
+                val episodeElements = document.select(
+                    """
+                    .episode,
+                    .episodes a,
+                    .episode-list a,
+                    .bolum-list a,
+                    .bolumler a,
+                    a[href*="/bolum-"],
+                    a[href*="/bolum/"]
+                    """.trimIndent()
+                )
 
-                    val episodeUrl = fixUrlNull(
+                for ((index, episodeElement) in episodeElements.withIndex()) {
+                    val episodeUrl = fixUrl(
                         episodeElement.attr("href")
-                    ) ?: return@mapNotNull null
-
-                    val episodeNumber = Regex(
-                        """(\d+)\. ?Bölüm"""
                     )
-                        .find(episodeName)
-                        ?.groupValues
-                        ?.getOrNull(1)
-                        ?.toIntOrNull()
 
-                    val seasonNumber = Regex(
-                        """(\d+)\. ?Sezon"""
-                    )
-                        .find(episodeName)
-                        ?.groupValues
-                        ?.getOrNull(1)
-                        ?.toIntOrNull()
-                        ?: 1
+                    if (episodeUrl.isBlank()) continue
 
-                    newEpisode(
-                        episodeUrl
-                    ) {
-                        name = episodeName
-                        season = seasonNumber
+                    val episodeTitle = episodeElement
+                        .text()
+                        .trim()
+                        .ifBlank {
+                            "Bölüm ${index + 1}"
+                        }
+
+                    val episodeNumber =
+                        Regex("""(?:bölüm|bolum|episode)[^\d]*(\d+)""")
+                            .find(
+                                episodeTitle.lowercase(Locale.ROOT)
+                            )
+                            ?.groupValues
+                            ?.getOrNull(1)
+                            ?.toIntOrNull()
+                            ?: Regex("""(\d+)""")
+                                .find(episodeTitle)
+                                ?.groupValues
+                                ?.getOrNull(1)
+                                ?.toIntOrNull()
+                            ?: (index + 1)
+
+                    episodes += newEpisode(episodeUrl) {
+                        this.name = episodeTitle
                         this.episode = episodeNumber
                     }
                 }
 
-            newTvSeriesLoadResponse(
-                title,
-                url,
-                TvType.TvSeries,
-                episodes
-            ) {
+                newTvSeriesLoadResponse(
+                    name = title,
+                    url = fixedUrl,
+                    apiName = this.name,
+                    episodes = episodes
+                ) {
+                    this.posterUrl = poster
+                    this.plot = plot
+                    this.year = year
+                    this.rating = rating?.times(10)?.toInt()
+                    this.actors = actors
 
-                posterUrl = poster
-                this.year = year
-                plot = description
-                this.tags = tags
-                score = Score.from10(rating)
-                this.recommendations = recommendations
-
-                this.actors = actors.map {
-                    ActorData(it)
-                }
-
-                if (!trailer.isNullOrBlank()) {
-                    this.trailers.add(
-                        TrailerData(
-                            extractorUrl = trailer,
-                            referer = null,
-                            raw = false
+                    if (!trailer.isNullOrBlank()) {
+                        this.trailers.add(
+                            TrailerData(
+                                extractorUrl = trailer,
+                                referer = null,
+                                raw = false
+                            )
                         )
-                    )
+                    }
+                }
+            } else {
+
+                newMovieLoadResponse(
+                    name = title,
+                    url = fixedUrl,
+                    type = TvType.Movie
+                ) {
+                    this.posterUrl = poster
+                    this.plot = plot
+                    this.year = year
+                    this.rating = rating?.times(10)?.toInt()
+                    this.actors = actors
+
+                    if (!trailer.isNullOrBlank()) {
+                        this.trailers.add(
+                            TrailerData(
+                                extractorUrl = trailer,
+                                referer = null,
+                                raw = false
+                            )
+                        )
+                    }
                 }
             }
 
-        } else {
-
-            newMovieLoadResponse(
-                title,
-                url,
-                TvType.Movie,
-                url
-            ) {
-
-                posterUrl = poster
-                this.year = year
-                plot = description
-                this.tags = tags
-                score = Score.from10(rating)
-                this.recommendations = recommendations
-
-                this.actors = actors.map {
-                    ActorData(it)
-                }
-
-                if (!trailer.isNullOrBlank()) {
-                    this.trailers.add(
-                        TrailerData(
-                            extractorUrl = trailer,
-                            referer = null,
-                            raw = false
-                        )
-                    )
-                }
-            }
+        } catch (e: Exception) {
+            logError("LOAD ERROR » ${e.message}")
+            null
         }
     }
+
+    // ---------------------------------------------------------
+    // LOAD LINKS
+    // ---------------------------------------------------------
 
     override suspend fun loadLinks(
         data: String,
@@ -482,397 +383,370 @@ class HDFilmCehennemi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
 
-        Log.d("HDCH", "==========================================")
-        Log.d("HDCH", "LOAD LINKS START")
-        Log.d("HDCH", "data » $data")
+        logDebug("HDCH D LOAD LINKS START")
+        logDebug("HDCH D data » $data")
 
-        val document = app.get(
-            data,
-            referer = mainUrl,
-            interceptor = interceptor
-        ).document
+        return try {
 
-        Log.d(
-            "HDCH",
-            "PAGE TITLE » ${document.title()}"
-        )
-
-        document
-            .select(
-                "div.video-container iframe[data-src], " +
-                    "div.video-container iframe[src]"
+            val response = app.get(
+                fixUrl(data),
+                headers = requestHeaders
             )
-            .forEach { frame ->
 
-                val iframe = frame
-                    .attr("data-src")
-                    .ifBlank {
-                        frame.attr("src")
-                    }
+            val document = response.document
 
-                Log.d(
-                    "HDCH",
-                    "IFRAME FOUND » $iframe"
-                )
+            logDebug(
+                "HDCH D PAGE TITLE » ${document.title()}"
+            )
 
-                if (iframe.isNotBlank()) {
-                    runCatching {
-                        loadExtractor(
-                            iframe,
-                            data,
-                            subtitleCallback,
-                            callback
-                        )
-                    }.onSuccess {
-                        Log.d(
-                            "HDCH",
-                            "loadExtractor SUCCESS » $iframe"
-                        )
-                    }.onFailure {
-                        Log.e(
-                            "HDCH",
-                            "loadExtractor FAILED » ${it.message}"
-                        )
-                    }
+            val playerUrls = linkedSetOf<Pair<String, String?>>()
+
+            // -------------------------------------------------
+            // MAIN IFRAME
+            // -------------------------------------------------
+
+            document.select(
+                "div.video-container iframe, iframe"
+            ).forEach { iframe ->
+
+                val iframeUrl = iframe.attr("src")
+
+                if (iframeUrl.isNotBlank()) {
+
+                    val fixedIframe = fixUrl(iframeUrl)
+
+                    logDebug(
+                        "HDCH D IFRAME FOUND » $fixedIframe"
+                    )
+
+                    playerUrls.add(
+                        fixedIframe to data
+                    )
                 }
             }
 
-        document
-            .select("div.alternative-links")
-            .forEach { group ->
+            // -------------------------------------------------
+            // ALTERNATIVE LINKS
+            // -------------------------------------------------
 
-                val langCode = group
-                    .attr("data-lang")
-                    .uppercase()
+            document
+                .select(
+                    "div.alternative-links button.alternative-link"
+                )
+                .forEach { button ->
 
-                group
-                    .select("button.alternative-link")
-                    .forEach { button ->
-
-                        val label = button
-                            .text()
-                            .replace(
-                                "(HDrip Xbet)",
-                                ""
-                            )
-                            .trim()
-
-                        val sourceName = listOf(
-                            label,
-                            langCode
-                        )
-                            .filter {
-                                it.isNotBlank()
-                            }
-                            .joinToString(" ")
-
-                        val videoId = button
-                            .attr("data-video")
-                            .trim()
-
-                        Log.d(
-                            "HDCH",
-                            "ALTERNATIVE » source=$sourceName id=$videoId"
-                        )
-
-                        if (videoId.isBlank()) {
-                            Log.d(
-                                "HDCH",
-                                "VIDEO ID EMPTY"
-                            )
-                            return@forEach
-                        }
-
-                        runCatching {
-
-                            val apiResponse = app.get(
-                                "${mainUrl}/video/$videoId/",
-                                interceptor = interceptor,
-                                headers = mapOf(
-                                    "Content-Type" to "application/json",
-                                    "X-Requested-With" to "fetch"
-                                ),
-                                referer = data
-                            ).text
-
-                            Log.d(
-                                "HDCH",
-                                "VIDEO API LENGTH » ${apiResponse.length}"
-                            )
-
-                            var iframe = extractIframe(
-                                apiResponse
-                            )
-
-                            Log.d(
-                                "HDCH",
-                                "EXTRACTED IFRAME » $iframe"
-                            )
-
-                            if (iframe.isNullOrBlank()) {
-                                Log.d(
-                                    "HDCH",
-                                    "NO IFRAME FOR VIDEO ID » $videoId"
-                                )
-                                return@runCatching
+                    val videoId =
+                        button.attr("data-video-id")
+                            .ifBlank {
+                                button.attr("data-id")
                             }
 
-                            iframe = decodeUrl(
-                                iframe
+                    logDebug(
+                        "HDCH D ALTERNATIVE » source=${button.text()} id=$videoId"
+                    )
+
+                    if (videoId.isNotBlank()) {
+
+                        try {
+
+                            val videoResponse = app.get(
+                                "$mainUrl/video/$videoId/",
+                                headers = requestHeaders
                             )
 
-                            if (
-                                iframe.contains(
-                                    "rapidrame",
-                                    ignoreCase = true
-                                )
-                            ) {
-
-                                val id = Regex(
-                                    "rapidrame_id=([A-Za-z0-9_-]+)"
-                                )
-                                    .find(iframe)
-                                    ?.groupValues
-                                    ?.getOrNull(1)
-
-                                if (!id.isNullOrBlank()) {
-                                    iframe =
-                                        "${mainUrl}/rplayer/$id"
-                                }
-                            }
-
-                            Log.d(
-                                "HDCH",
-                                "FINAL PLAYER » $iframe"
+                            logDebug(
+                                "HDCH D VIDEO API LENGTH » ${videoResponse.text.length}"
                             )
 
-                            runCatching {
-                                loadExtractor(
-                                    iframe,
-                                    data,
-                                    subtitleCallback,
-                                    callback
+                            val iframeUrl = videoResponse.document
+                                .selectFirst("iframe")
+                                ?.attr("src")
+                                ?.let { decodeUrl(it) }
+
+                            if (!iframeUrl.isNullOrBlank()) {
+
+                                val fixedIframe = fixUrl(
+                                    iframeUrl
                                 )
-                            }.onSuccess {
-                                Log.d(
-                                    "HDCH",
-                                    "PLAYER loadExtractor SUCCESS » $iframe"
+
+                                logDebug(
+                                    "HDCH D EXTRACTED IFRAME » $fixedIframe"
                                 )
-                            }.onFailure {
-                                Log.e(
-                                    "HDCH",
-                                    "PLAYER loadExtractor FAILED » ${it.message}"
+
+                                playerUrls.add(
+                                    fixedIframe to data
                                 )
                             }
 
-                            extractDirectPlayer(
-                                iframe,
-                                sourceName,
-                                data,
-                                subtitleCallback,
-                                callback
-                            )
+                        } catch (e: Exception) {
 
-                        }.onFailure {
-                            Log.e(
-                                "HDCH",
-                                "alternative source FAILED » ${it.message}"
+                            logDebug(
+                                "HDCH D VIDEO API ERROR » ${e.message}"
                             )
                         }
                     }
+                }
+
+            // -------------------------------------------------
+            // RAPIDRAME
+            // -------------------------------------------------
+
+            val rapidPlayers = playerUrls.toList()
+
+            for ((playerUrl, referer) in rapidPlayers) {
+
+                var finalPlayerUrl = playerUrl
+
+                val rapidrameId =
+                    Regex(
+                        """rapidrame_id=([^&#"\s]+)""",
+                        RegexOption.IGNORE_CASE
+                    )
+                        .find(playerUrl)
+                        ?.groupValues
+                        ?.getOrNull(1)
+
+                if (!rapidrameId.isNullOrBlank()) {
+
+                    finalPlayerUrl =
+                        "$mainUrl/rplayer/$rapidrameId"
+
+                    logDebug(
+                        "HDCH D FINAL PLAYER » $finalPlayerUrl"
+                    )
+                }
+
+                // -------------------------------------------------
+                // LOAD EXTRACTOR
+                // -------------------------------------------------
+
+                try {
+
+                    logDebug(
+                        "HDCH D loadExtractor » $finalPlayerUrl"
+                    )
+
+                    loadExtractor(
+                        finalPlayerUrl,
+                        referer,
+                        subtitleCallback,
+                        callback
+                    )
+
+                    logDebug(
+                        "HDCH D loadExtractor SUCCESS » $finalPlayerUrl"
+                    )
+
+                } catch (e: Exception) {
+
+                    logDebug(
+                        "HDCH D loadExtractor ERROR » ${e.message}"
+                    )
+                }
+
+                // -------------------------------------------------
+                // DIRECT PLAYER PARSER
+                // -------------------------------------------------
+
+                extractDirectPlayer(
+                    playerUrl = finalPlayerUrl,
+                    referer = referer ?: data,
+                    subtitleCallback = subtitleCallback,
+                    callback = callback
+                )
             }
 
-        Log.d(
-            "HDCH",
-            "LOAD LINKS END"
-        )
+            true
 
-        return true
+        } catch (e: Exception) {
+
+            logError(
+                "HDCH D LOAD LINKS ERROR » ${e.message}"
+            )
+
+            false
+        }
     }
+
+    // ---------------------------------------------------------
+    // DIRECT PLAYER EXTRACTION
+    // ---------------------------------------------------------
 
     private suspend fun extractDirectPlayer(
         playerUrl: String,
-        sourceName: String,
         referer: String,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
 
-        Log.d(
-            "HDCH",
-            "------------------------------------------"
-        )
+        try {
 
-        Log.d(
-            "HDCH",
-            "PLAYER INSPECT START"
-        )
+            logDebug("HDCH D PLAYER INSPECT START")
+            logDebug("HDCH D PLAYER URL » $playerUrl")
 
-        Log.d(
-            "HDCH",
-            "PLAYER URL » $playerUrl"
-        )
-
-        Log.d(
-            "HDCH",
-            "PLAYER REFERER » $referer"
-        )
-
-        val response = runCatching {
-            app.get(
+            val response = app.get(
                 playerUrl,
-                referer = referer,
-                interceptor = interceptor,
                 headers = mapOf(
-                    "Accept" to "*/*"
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                    "Referer" to referer
                 )
             )
-        }.onFailure {
-            Log.e(
-                "HDCH",
-                "PLAYER REQUEST FAILED » ${it.message}"
+
+            val html = response.text
+
+            logDebug("HDCH D PLAYER HTTP RESPONSE RECEIVED")
+            logDebug("HDCH D PLAYER HTML LENGTH » ${html.length}")
+
+            logDebug(
+                "HDCH D PLAYER HAS M3U8 » ${
+                    html.contains(
+                        ".m3u8",
+                        ignoreCase = true
+                    )
+                }"
             )
-        }.getOrNull()
 
-        if (response == null) {
-            Log.e(
-                "HDCH",
-                "PLAYER RESPONSE = NULL"
+            logDebug(
+                "HDCH D PLAYER HAS MP4 » ${
+                    html.contains(
+                        ".mp4",
+                        ignoreCase = true
+                    )
+                }"
             )
-            return
-        }
 
-        val raw = response.text
+            logDebug(
+                "HDCH D PLAYER HAS SOURCE » ${
+                    html.contains(
+                        "source",
+                        ignoreCase = true
+                    )
+                }"
+            )
 
-        Log.d(
-            "HDCH",
-            "PLAYER HTTP RESPONSE RECEIVED"
-        )
+            logDebug(
+                "HDCH D PLAYER HAS FILE » ${
+                    html.contains(
+                        "file",
+                        ignoreCase = true
+                    )
+                }"
+            )
 
-        Log.d(
-            "HDCH",
-            "PLAYER HTML LENGTH » ${raw.length}"
-        )
+            logDebug(
+                "HDCH D PLAYER HAS SOURCES » ${
+                    html.contains(
+                        "sources",
+                        ignoreCase = true
+                    )
+                }"
+            )
 
-        Log.d(
-            "HDCH",
-            "PLAYER HAS M3U8 » " +
-                raw.contains(
-                    ".m3u8",
-                    ignoreCase = true
-                )
-        )
+            if (html.isNotBlank()) {
 
-        Log.d(
-            "HDCH",
-            "PLAYER HAS MP4 » " +
-                raw.contains(
-                    ".mp4",
-                    ignoreCase = true
-                )
-        )
-
-        Log.d(
-            "HDCH",
-            "PLAYER HAS SOURCE » " +
-                raw.contains(
-                    "source",
-                    ignoreCase = true
-                )
-        )
-
-        Log.d(
-            "HDCH",
-            "PLAYER HAS FILE » " +
-                raw.contains(
-                    "file:",
-                    ignoreCase = true
-                )
-        )
-
-        Log.d(
-            "HDCH",
-            "PLAYER HAS SOURCES » " +
-                raw.contains(
-                    "sources",
-                    ignoreCase = true
-                )
-        )
-
-        val preview = raw
-            .replace("\n", " ")
-            .replace("\r", " ")
-            .take(1000)
-
-        Log.d(
-            "HDCH",
-            "PLAYER HTML PREVIEW » $preview"
-        )
-
-        val document = Jsoup.parse(
-            raw
-        )
-
-        val candidates = linkedSetOf<String>()
-
-        candidates += Regex(
-            """https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""",
-            RegexOption.IGNORE_CASE
-        )
-            .findAll(raw)
-            .map {
-                decodeUrl(it.value)
-            }
-
-        candidates += Regex(
-            """['"]([^'"]+\.m3u8[^'"]*)['"]""",
-            RegexOption.IGNORE_CASE
-        )
-            .findAll(raw)
-            .map {
-                decodeUrl(
-                    it.groupValues[1]
+                logDebug(
+                    "HDCH D PLAYER HTML PREVIEW » ${
+                        html.take(2500)
+                    }"
                 )
             }
 
-        candidates += Regex(
-            """(?:file|src|source)\s*[:=]\s*['"]([^'"]+)['"]""",
-            RegexOption.IGNORE_CASE
-        )
-            .findAll(raw)
-            .map {
-                decodeUrl(
-                    it.groupValues[1]
-                )
-            }
+            // -------------------------------------------------
+            // REAL MEDIA CANDIDATES ONLY
+            // -------------------------------------------------
 
-        Log.d(
-            "HDCH",
-            "DIRECT CANDIDATES AFTER RAW SCAN » ${candidates.size}"
-        )
+            val candidates = linkedSetOf<String>()
 
-        document
-            .select("script")
-            .forEachIndexed { index, script ->
+            fun addCandidate(value: String?) {
 
-                val scriptText = script
-                    .data()
-                    .ifBlank {
-                        script.html()
-                    }
+                if (value.isNullOrBlank()) return
 
-                Log.d(
-                    "HDCH",
-                    "SCRIPT[$index] LENGTH » ${scriptText.length}"
-                )
+                val decoded = decodeUrl(value)
+                    .trim()
+                    .removeSuffix("\\")
 
                 if (
+                    decoded.startsWith("http://") ||
+                    decoded.startsWith("https://") ||
+                    decoded.startsWith("/")
+                ) {
+
+                    if (
+                        decoded.contains(
+                            ".m3u8",
+                            ignoreCase = true
+                        ) ||
+                        decoded.contains(
+                            ".mp4",
+                            ignoreCase = true
+                        ) ||
+                        decoded.contains(
+                            ".m3u",
+                            ignoreCase = true
+                        )
+                    ) {
+
+                        val fixed =
+                            fixUrlNull(decoded)
+                                ?: decoded
+
+                        candidates.add(fixed)
+                    }
+                }
+            }
+
+            // -------------------------------------------------
+            // DIRECT URL SCAN
+            // -------------------------------------------------
+
+            Regex(
+                """https?://[^"'\\\s<>]+?\.(?:m3u8|mp4|m3u)(?:\?[^"'\\\s<>]*)?""",
+                RegexOption.IGNORE_CASE
+            )
+                .findAll(html)
+                .forEach {
+                    addCandidate(it.groupValues[0])
+                }
+
+            // Relative media paths
+            Regex(
+                """["'](/[^"'\\\s<>]+?\.(?:m3u8|mp4|m3u)(?:\?[^"'\\\s<>]*)?)["']""",
+                RegexOption.IGNORE_CASE
+            )
+                .findAll(html)
+                .forEach {
+                    addCandidate(it.groupValues[1])
+                }
+
+            // -------------------------------------------------
+            // SCRIPT SCAN
+            // -------------------------------------------------
+
+            val scripts = response.document.select("script")
+
+            for ((index, script) in scripts.withIndex()) {
+
+                val scriptText = script.data()
+
+                logDebug(
+                    "HDCH D SCRIPT[$index] LENGTH » ${scriptText.length}"
+                )
+
+                if (scriptText.isBlank()) continue
+
+                val looksLikePlayerScript =
                     scriptText.contains(
-                        "sources:",
+                        "jwplayer",
                         ignoreCase = true
                     ) ||
                     scriptText.contains(
-                        "sources =",
+                        "sources",
+                        ignoreCase = true
+                    ) ||
+                    scriptText.contains(
+                        "playlist",
                         ignoreCase = true
                     ) ||
                     scriptText.contains(
@@ -880,308 +754,400 @@ class HDFilmCehennemi : MainAPI() {
                         ignoreCase = true
                     ) ||
                     scriptText.contains(
-                        "eval(function(p,a,c,k,e,d)"
+                        "eval(function(p,a,c,k,e,d)",
+                        ignoreCase = true
+                    )
+
+                if (!looksLikePlayerScript) {
+                    continue
+                }
+
+                logDebug(
+                    "HDCH D SCRIPT[$index] LOOKS LIKE PLAYER SCRIPT"
+                )
+
+                logDebug(
+                    "HDCH D PLAYER SCRIPT PREVIEW[$index] » ${
+                        scriptText.take(3000)
+                    }"
+                )
+
+                // file: "..."
+                Regex(
+                    """(?i)\bfile\s*:\s*["']([^"']+)["']"""
+                )
+                    .findAll(scriptText)
+                    .forEach {
+                        addCandidate(
+                            it.groupValues[1]
+                        )
+                    }
+
+                // sources: [{file: "..."}]
+                Regex(
+                    """(?i)\bsources\s*:\s*\[[^\]]*?\bfile\s*:\s*["']([^"']+)["']"""
+                )
+                    .findAll(scriptText)
+                    .forEach {
+                        addCandidate(
+                            it.groupValues[1]
+                        )
+                    }
+
+                // Direct media URL
+                Regex(
+                    """https?://[^"' ]+\.(?:m3u8|mp4|m3u)(?:\?[^"' ]*)?"""
+                )
+                    .findAll(scriptText)
+                    .forEach {
+                        addCandidate(
+                            it.groupValues[0]
+                        )
+                    }
+
+                // Packed JavaScript
+                if (
+                    scriptText.contains(
+                        "eval(function(p,a,c,k,e,d)",
+                        ignoreCase = true
                     )
                 ) {
 
-                    Log.d(
-                        "HDCH",
-                        "SCRIPT[$index] LOOKS LIKE PLAYER SCRIPT"
-                    )
+                    try {
 
-                    val unpacked = runCatching {
-                        getAndUnpack(
-                            scriptText
-                        )
-                    }.onFailure {
-                        Log.e(
-                            "HDCH",
-                            "UNPACK FAILED SCRIPT[$index] » ${it.message}"
-                        )
-                    }.getOrNull()
+                        val unpacked =
+                            getAndUnpack(scriptText)
 
-                    if (!unpacked.isNullOrBlank()) {
-
-                        Log.d(
-                            "HDCH",
-                            "UNPACKED LENGTH SCRIPT[$index] » ${unpacked.length}"
+                        logDebug(
+                            "HDCH D UNPACKED LENGTH SCRIPT[$index] » ${unpacked.length}"
                         )
 
-                        candidates += Regex(
-                            """https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""",
-                            RegexOption.IGNORE_CASE
+                        logDebug(
+                            "HDCH D UNPACKED SCRIPT[$index] PREVIEW » ${
+                                unpacked.take(4000)
+                            }"
+                        )
+
+                        Regex(
+                            """(?i)\bfile\s*:\s*["']([^"']+)["']"""
                         )
                             .findAll(unpacked)
-                            .map {
-                                decodeUrl(it.value)
-                            }
-
-                        candidates += Regex(
-                            """(?:file|src|source)\s*[:=]\s*['"]([^'"]+)['"]""",
-                            RegexOption.IGNORE_CASE
-                        )
-                            .findAll(unpacked)
-                            .map {
-                                decodeUrl(
+                            .forEach {
+                                addCandidate(
                                     it.groupValues[1]
                                 )
                             }
+
+                        Regex(
+                            """(?i)\bsources\s*:\s*\[[^\]]*?\bfile\s*:\s*["']([^"']+)["']"""
+                        )
+                            .findAll(unpacked)
+                            .forEach {
+                                addCandidate(
+                                    it.groupValues[1]
+                                )
+                            }
+
+                        Regex(
+                            """https?://[^"' ]+\.(?:m3u8|mp4|m3u)(?:\?[^"' ]*)?"""
+                        )
+                            .findAll(unpacked)
+                            .forEach {
+                                addCandidate(
+                                    it.groupValues[0]
+                                )
+                            }
+
+                        Regex(
+                            """["'](/[^"' ]+\.(?:m3u8|mp4|m3u)(?:\?[^"' ]*)?)["']"""
+                        )
+                            .findAll(unpacked)
+                            .forEach {
+                                addCandidate(
+                                    it.groupValues[1]
+                                )
+                            }
+
+                    } catch (e: Exception) {
+
+                        logDebug(
+                            "HDCH D UNPACK ERROR SCRIPT[$index] » ${e.message}"
+                        )
                     }
                 }
             }
 
-        Log.d(
-            "HDCH",
-            "FINAL CANDIDATE COUNT » ${candidates.size}"
-        )
+            // -------------------------------------------------
+            // HTML SOURCE / VIDEO TAGS
+            // -------------------------------------------------
 
-        candidates
-            .distinct()
-            .forEachIndexed { index, candidate ->
-                Log.d(
-                    "HDCH",
-                    "CANDIDATE[$index] » $candidate"
-                )
-            }
-
-        candidates
-            .filter {
-                it.startsWith("http")
-            }
-            .distinct()
-            .forEach { mediaUrl ->
-
-                Log.d(
-                    "HDCH",
-                    "CREATING EXTRACTOR LINK » $mediaUrl"
-                )
-
-                callback(
-                    newExtractorLink(
-                        source = sourceName.ifBlank {
-                            "HDFilmCehennemi"
-                        },
-                        name = sourceName.ifBlank {
-                            "HDFilmCehennemi"
-                        },
-                        url = mediaUrl,
-                        type = if (
-                            mediaUrl.contains(
-                                ".m3u8",
-                                ignoreCase = true
-                            )
-                        ) {
-                            ExtractorLinkType.M3U8
-                        } else {
-                            ExtractorLinkType.VIDEO
-                        }
-                    ) {
-
-                        this.referer = playerUrl
-
-                        headers = mapOf(
-                            "User-Agent" to USER_AGENT,
-                            "Referer" to playerUrl,
-                            "Accept" to "*/*"
-                        )
-                    }
-                )
-            }
-
-        document
-            .select(
-                "track[src], track[data-src], track[kind=\"captions\"]"
+            response.document.select(
+                "video source, video, source"
             )
-            .forEach { track ->
+                .forEach { element ->
 
-                val subtitle = fixUrlNull(
-                    track
-                        .attr("src")
-                        .takeUnless {
-                            it.isBlank()
-                        }
-                        ?: track.attr("data-src")
-                ) ?: return@forEach
-
-                val language = track
-                    .attr("label")
-                    .ifBlank {
-                        track
-                            .attr("srclang")
+                    val src =
+                        element.attr("src")
                             .ifBlank {
-                                "Türkçe"
+                                element.attr("data-src")
                             }
+                            .ifBlank {
+                                element.attr("data-video")
+                            }
+
+                    addCandidate(src)
+                }
+
+            // -------------------------------------------------
+            // TRACK / SUBTITLE
+            // -------------------------------------------------
+
+            response.document
+                .select(
+                    "track[src], track[data-src]"
+                )
+                .forEach { track ->
+
+                    val subtitleUrl =
+                        track.attr("src")
+                            .ifBlank {
+                                track.attr("data-src")
+                            }
+                            .let {
+                                fixUrlNull(
+                                    decodeUrl(it)
+                                )
+                            }
+
+                    if (!subtitleUrl.isNullOrBlank()) {
+
+                        val label =
+                            track.attr("label")
+                                .ifBlank {
+                                    track.attr("srclang")
+                                }
+                                .ifBlank {
+                                    "Türkçe"
+                                }
+
+                        try {
+
+                            subtitleCallback(
+                                newSubtitleFile(
+                                    label,
+                                    subtitleUrl
+                                )
+                            )
+
+                        } catch (e: Exception) {
+
+                            logDebug(
+                                "HDCH D SUBTITLE ERROR » ${e.message}"
+                            )
+                        }
                     }
+                }
 
-                Log.d(
-                    "HDCH",
-                    "SUBTITLE FOUND » $language » $subtitle"
+            // -------------------------------------------------
+            // SEND REAL MEDIA LINKS
+            // -------------------------------------------------
+
+            logDebug(
+                "HDCH D FINAL CANDIDATE COUNT » ${candidates.size}"
+            )
+
+            for ((index, candidate) in candidates.withIndex()) {
+
+                logDebug(
+                    "HDCH D CANDIDATE[$index] » $candidate"
                 )
 
-                subtitleCallback(
-                    newSubtitleFile(
-                        language,
-                        subtitle
+                val type = when {
+                    candidate.contains(
+                        ".m3u8",
+                        ignoreCase = true
+                    ) ||
+                    candidate.contains(
+                        ".m3u",
+                        ignoreCase = true
+                    ) ->
+                        ExtractorLinkType.M3U8
+
+                    else ->
+                        ExtractorLinkType.VIDEO
+                }
+
+                val quality = when {
+                    Regex(
+                        "(?i)(2160|4k)"
+                    ).containsMatchIn(candidate) ->
+                        Qualities.P2160.value
+
+                    Regex(
+                        "(?i)1080"
+                    ).containsMatchIn(candidate) ->
+                        Qualities.P1080.value
+
+                    Regex(
+                        "(?i)720"
+                    ).containsMatchIn(candidate) ->
+                        Qualities.P720.value
+
+                    Regex(
+                        "(?i)480"
+                    ).containsMatchIn(candidate) ->
+                        Qualities.P480.value
+
+                    Regex(
+                        "(?i)360"
+                    ).containsMatchIn(candidate) ->
+                        Qualities.P360.value
+
+                    else ->
+                        Qualities.Unknown.value
+                }
+
+                try {
+
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = name,
+                            url = candidate,
+                            type = type
+                        ) {
+                            this.referer = playerUrl
+                            this.quality = quality
+
+                            this.headers = mapOf(
+                                "User-Agent" to USER_AGENT,
+                                "Referer" to playerUrl,
+                                "Accept" to "*/*",
+                                "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8"
+                            )
+                        }
                     )
-                )
-            }
 
-        Log.d(
-            "HDCH",
-            "PLAYER INSPECT END"
-        )
-
-        Log.d(
-            "HDCH",
-            "------------------------------------------"
-        )
-    }
-
-    private fun extractIframe(
-        value: String
-    ): String? {
-
-        val patterns = listOf(
-            Regex(
-                """data-src=\\?"([^"]+)""",
-                RegexOption.IGNORE_CASE
-            ),
-            Regex(
-                """data-src=['"]([^'"]+)['"]""",
-                RegexOption.IGNORE_CASE
-            ),
-            Regex(
-                """<iframe[^>]+src=['"]([^'"]+)['"]""",
-                RegexOption.IGNORE_CASE
-            ),
-            Regex(
-                """"iframe"\s*:\s*"([^"]+)"""",
-                RegexOption.IGNORE_CASE
-            )
-        )
-
-        for (regex in patterns) {
-
-            val match = regex.find(
-                value
-            ) ?: continue
-
-            val candidate = decodeUrl(
-                match.groupValues[1]
-            )
-
-            if (candidate.isNotBlank()) {
-                return candidate
-            }
-        }
-
-        return null
-    }
-
-    private fun decodeUrl(
-        value: String
-    ): String {
-
-        return value
-            .replace("\\/", "/")
-            .replace("\\u002F", "/")
-            .replace("\\u003A", ":")
-            .replace("\\\\", "\\")
-            .replace("\\u0026", "&")
-            .replace("&amp;", "&")
-            .let {
-                runCatching {
-                    URLDecoder.decode(
-                        it,
-                        Charsets.UTF_8.name()
+                    logDebug(
+                        "HDCH D EXTRACTOR LINK CREATED » $candidate"
                     )
-                }.getOrDefault(it)
-            }
-            .trim()
-    }
 
-    class CloudflareInterceptor(
-        private val cloudflareKiller: CloudflareKiller
-    ) : Interceptor {
+                } catch (e: Exception) {
 
-        override fun intercept(
-            chain: Interceptor.Chain
-        ): Response {
-
-            val response = chain.proceed(
-                chain.request()
-            )
-
-            val doc = Jsoup.parse(
-                response
-                    .peekBody(
-                        1024L * 1024L
+                    logDebug(
+                        "HDCH D EXTRACTOR LINK ERROR » ${e.message}"
                     )
-                    .string()
-            )
-
-            val title = doc
-                .selectFirst("title")
-                ?.text()
-                .orEmpty()
-
-            return if (
-                title.equals(
-                    "Just a moment...",
-                    ignoreCase = true
-                ) ||
-                title.equals(
-                    "Bir dakika lütfen...",
-                    ignoreCase = true
-                )
-            ) {
-                cloudflareKiller.intercept(
-                    chain
-                )
-            } else {
-                response
+                }
             }
+
+        } catch (e: Exception) {
+
+            logError(
+                "HDCH D PLAYER ERROR » ${e.message}"
+            )
         }
     }
 
-    data class SubSource(
-        @JsonProperty("file")
-        val file: String? = null,
+    // ---------------------------------------------------------
+    // URL HELPERS
+    // ---------------------------------------------------------
 
-        @JsonProperty("label")
-        val label: String? = null,
+    private fun decodeUrl(value: String): String {
 
-        @JsonProperty("language")
-        val language: String? = null,
+        var result = value
 
-        @JsonProperty("kind")
-        val kind: String? = null
-    )
+        try {
 
-    data class Results(
-        @JsonProperty("results")
-        val results: List<String> = emptyList()
-    )
+            result = result
+                .replace("\\/", "/")
+                .replace("\\u002F", "/")
+                .replace("\\u002f", "/")
+                .replace("\\u003A", ":")
+                .replace("\\u003a", ":")
+                .replace("\\\"", "\"")
+                .replace("\\'", "'")
 
-    data class HDFC(
-        @JsonProperty("html")
-        val html: String,
+            Regex(
+                """\\u([0-9a-fA-F]{4})"""
+            )
+                .findAll(result)
+                .toList()
+                .reversed()
+                .forEach { match ->
 
-        @JsonProperty("meta")
-        val meta: Meta
-    )
+                    val code =
+                        match.groupValues[1]
+                            .toInt(16)
 
-    data class Meta(
-        @JsonProperty("title")
-        val title: String,
+                    result = result.replace(
+                        match.value,
+                        code.toChar().toString()
+                    )
+                }
 
-        @JsonProperty("canonical")
-        val canonical: String,
+            Regex(
+                """\\x([0-9a-fA-F]{2})"""
+            )
+                .findAll(result)
+                .toList()
+                .reversed()
+                .forEach { match ->
 
-        @JsonProperty("keywords")
-        val keywords: Boolean
-    )
+                    val code =
+                        match.groupValues[1]
+                            .toInt(16)
+
+                    result = result.replace(
+                        match.value,
+                        code.toChar().toString()
+                    )
+                }
+
+            result = result
+                .removeSuffix("\\")
+                .trim()
+
+            result = try {
+                URLDecoder.decode(
+                    result,
+                    "UTF-8"
+                )
+            } catch (_: Exception) {
+                result
+            }
+
+        } catch (_: Exception) {
+        }
+
+        return result
+    }
+
+    private fun fixUrlNull(url: String?): String? {
+
+        if (url.isNullOrBlank()) {
+            return null
+        }
+
+        val decoded = decodeUrl(url)
+
+        return when {
+            decoded.startsWith("http://") ||
+            decoded.startsWith("https://") ->
+                decoded
+
+            decoded.startsWith("//") ->
+                "https:$decoded"
+
+            decoded.startsWith("/") ->
+                mainUrl + decoded
+
+            else ->
+                decoded
+        }
+    }
+
+    private fun fixUrl(url: String): String {
+
+        return fixUrlNull(url) ?: url
+    }
 }
-
-private const val USER_AGENT =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0"
