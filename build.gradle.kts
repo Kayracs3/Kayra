@@ -14,8 +14,8 @@ maven("https://jitpack.io")
 dependencies {
     classpath("com.android.tools.build:gradle:8.7.3")
 
-    // CloudStream Gradle plugin artık JitPack'ten değil,
-    // GitHub Actions sırasında mavenLocal() içine yayınlanacak.
+    // CloudStream Gradle plugin
+    // GitHub Actions sırasında mavenLocal() üzerinden yayınlanır.
     classpath(
         "com.lagradost.cloudstream3:gradle:local-SNAPSHOT"
     )
@@ -116,7 +116,8 @@ dependencies {
 
     // Kotlin 2.4.0 / CloudStream tarafından kullanılan
     // org.jspecify.annotations.Nullable için derleme zamanı desteği.
-    compileOnly(
+    add(
+        "compileOnly",
         "org.jspecify:jspecify:1.0.1"
     )
 
