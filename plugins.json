@@ -81,7 +81,7 @@
     },
     {
         "iconUrl": "https://HDFilmCehennemi.nl//favicon.ico",
-        "fileHash": "sha256-8991466a7e1678f1e7a2e3949a8f0be932d25e404bac09b28013e644f9b41a7f",
+        "fileHash": "sha256-3ea3614c01f234e8d94dfc97767a6d26677929d4fbbe6cb61b9481ccbb54d7e5",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 31044,
@@ -93,7 +93,7 @@
         "tvTypes": [
             "TvSeries"
         ],
-        "version": 2,
+        "version": 4,
         "internalName": "HDFilmCehennemi",
         "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/HDFilmCehennemi.cs3",
