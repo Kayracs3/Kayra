@@ -1,27 +1,27 @@
 name: CloudStream Derleyici
 
 concurrency:
-group: ${{ github.workflow }}-${{ github.ref }}
-cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
 
-push:
-branches:
-- master
-paths-ignore:
-- "**/*.md"
-- "**/*.jpg"
-- "**/*.png"
-- "**/*.py"
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.jpg"
+      - "**/*.png"
+      - "**/*.py"
 
 jobs:
-CloudStreamDerleyici:
+  CloudStreamDerleyici:
 
-runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
-steps:
+    steps:
 
   # ============================================================
   # SOURCE REPOSITORY
