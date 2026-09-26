@@ -30,7 +30,7 @@ class FullHDFilmizlesene : MainAPI() {
 
     override val mainPage = mainPageOf(        
         "$mainUrl/yeni-filmler" to "Yeni Filmler",
-        "$mainUrl/yil/fantastik-filmler" to "Fantastik Filmleri",
+        "$mainUrl/fantastik-filmler" to "Fantastik Filmleri",
         "$mainUrl/filmizle/aksiyon-filmleri" to "Aksiyo Filmleri",
         "$mainUrl/filmizle/bilim-kurgu-filmleri" to "Bilim Kurgu Filmleri",
         "$mainUrl/filmizle/komedi-filmleri" to "Komedi Filmleri",
