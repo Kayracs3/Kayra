@@ -1312,7 +1312,7 @@ class InatBox : MainAPI() {
                 item.optString("chName").equals(name, ignoreCase = true) &&
                     (type.isBlank() || item.optString("chType").equals(type, ignoreCase = true)) &&
                     (image.isBlank() || item.optString("chImg").equals(image))
-            } ?: candidates.firstOrNull {
+            } ?: candidates.firstOrNull { item ->
                 item.optString("chName").equals(name, ignoreCase = true)
             }
 
