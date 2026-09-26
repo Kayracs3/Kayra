@@ -88,18 +88,9 @@ class RecTV : MainAPI() {
 
             val body =
                 JSONObject()
-                    .put(
-                        "appBuild",
-                        FIREBASE_APP_BUILD
-                    )
-                    .put(
-                        "appInstanceId",
-                        FIREBASE_APP_INSTANCE_ID
-                    )
-                    .put(
-                        "appId",
-                        FIREBASE_APP_ID
-                    )
+                    .put("appBuild", FIREBASE_APP_BUILD)
+                    .put("appInstanceId", FIREBASE_APP_INSTANCE_ID)
+                    .put("appId", FIREBASE_APP_ID)
                     .toString()
 
             val headers =
@@ -118,11 +109,6 @@ class RecTV : MainAPI() {
                     )
                 )
 
-            Log.d(
-                "RecTV",
-                "REMOTE CONFIG HTTP=${response.code}"
-            )
-
             val json =
                 try {
                     JSONObject(response.text)
@@ -130,33 +116,21 @@ class RecTV : MainAPI() {
                     null
                 }
 
-            val entries =
-                json?.optJSONObject("entries")
-
             var apiUrl =
-                entries
+                json
+                    ?.optJSONObject("entries")
                     ?.optString("api_url")
                     ?.trim()
                     .orEmpty()
 
             if (apiUrl.isBlank()) {
-
-                Log.e(
-                    "RecTV",
-                    "Remote Config api_url bulunamadı"
-                )
-
                 return mainUrl
             }
 
-            apiUrl =
-                apiUrl.removeSuffix("/")
+            apiUrl = apiUrl.removeSuffix("/")
 
-            while (
-                apiUrl.endsWith("/api")
-            ) {
-                apiUrl =
-                    apiUrl.removeSuffix("/api")
+            while (apiUrl.endsWith("/api")) {
+                apiUrl = apiUrl.removeSuffix("/api")
             }
 
             if (
@@ -166,11 +140,8 @@ class RecTV : MainAPI() {
                 return mainUrl
             }
 
-            cachedApiBaseUrl =
-                apiUrl
-
-            mainUrl =
-                apiUrl
+            cachedApiBaseUrl = apiUrl
+            mainUrl = apiUrl
 
             Log.d(
                 "RecTV",
@@ -195,18 +166,12 @@ class RecTV : MainAPI() {
     // CRYPTO / SIGNATURE
     // =========================================================
 
-    private fun sha256Hex(
-        data: String
-    ): String {
+    private fun sha256Hex(data: String): String {
 
         val digest =
             MessageDigest
                 .getInstance("SHA-256")
-                .digest(
-                    data.toByteArray(
-                        Charsets.UTF_8
-                    )
-                )
+                .digest(data.toByteArray(Charsets.UTF_8))
 
         return digest.joinToString("") {
             "%02x".format(it)
@@ -219,52 +184,30 @@ class RecTV : MainAPI() {
     ): String {
 
         val mac =
-            Mac.getInstance(
-                "HmacSHA256"
-            )
+            Mac.getInstance("HmacSHA256")
 
         mac.init(
             SecretKeySpec(
-                key.toByteArray(
-                    Charsets.UTF_8
-                ),
+                key.toByteArray(Charsets.UTF_8),
                 "HmacSHA256"
             )
         )
 
-        return mac
-            .doFinal(
-                message.toByteArray(
-                    Charsets.UTF_8
-                )
-            )
-            .joinToString("") {
-                "%02x".format(it)
-            }
+        return mac.doFinal(
+            message.toByteArray(Charsets.UTF_8)
+        ).joinToString("") {
+            "%02x".format(it)
+        }
     }
 
-    private fun hexToBytes(
-        hex: String
-    ): ByteArray {
+    private fun hexToBytes(hex: String): ByteArray {
 
-        val output =
-            ByteArray(
-                hex.length / 2
-            )
+        val output = ByteArray(hex.length / 2)
 
-        for (
-            index in output.indices
-        ) {
-
-            val offset =
-                index * 2
-
+        for (index in output.indices) {
+            val offset = index * 2
             output[index] =
-                hex
-                    .substring(
-                        offset,
-                        offset + 2
-                    )
+                hex.substring(offset, offset + 2)
                     .toInt(16)
                     .toByte()
         }
@@ -279,15 +222,10 @@ class RecTV : MainAPI() {
     private suspend fun getJwt(): String? {
 
         val now =
-            System.currentTimeMillis() /
-                1000L
+            System.currentTimeMillis() / 1000L
 
         cachedJwt?.let { token ->
-
-            if (
-                now <
-                jwtExpirationTimestamp - 300
-            ) {
+            if (now < jwtExpirationTimestamp - 300) {
                 return token
             }
         }
@@ -295,28 +233,20 @@ class RecTV : MainAPI() {
         return try {
 
             val currentNow =
-                System.currentTimeMillis() /
-                    1000L
+                System.currentTimeMillis() / 1000L
 
-            val recheckJwt =
-                cachedJwt
+            val recheckJwt = cachedJwt
 
             if (
                 recheckJwt != null &&
-                currentNow <
-                jwtExpirationTimestamp - 300
+                currentNow < jwtExpirationTimestamp - 300
             ) {
                 return recheckJwt
             }
 
-            val apiBase =
-                getApiBaseUrl()
-
-            val path =
-                "/api/attest/verify"
-
-            val body =
-                "{}"
+            val apiBase = getApiBaseUrl()
+            val path = "/api/attest/verify"
+            val body = "{}"
 
             val headers =
                 getSignedHeaders(
@@ -326,25 +256,16 @@ class RecTV : MainAPI() {
                     includeAuth = false
                 ).toMutableMap()
 
-            headers["Content-Type"] =
-                "application/json"
-
-            val requestBody =
-                body.toRequestBody(
-                    "application/json; charset=utf-8".toMediaType()
-                )
+            headers["Content-Type"] = "application/json"
 
             val response =
                 app.post(
                     "$apiBase$path",
                     headers = headers,
-                    requestBody = requestBody
+                    requestBody = body.toRequestBody(
+                        "application/json; charset=utf-8".toMediaType()
+                    )
                 )
-
-            Log.d(
-                "RecTV",
-                "JWT RESPONSE HTTP=${response.code}"
-            )
 
             val json =
                 try {
@@ -354,16 +275,13 @@ class RecTV : MainAPI() {
                 }
 
             val token =
-                json
-                    ?.optString("jwt")
-                    ?.takeIf {
-                        it.isNotBlank()
-                    }
+                json?.optString("jwt")?.takeIf {
+                    it.isNotBlank()
+                }
 
             if (token != null) {
 
-                cachedJwt =
-                    token
+                cachedJwt = token
 
                 var expiration =
                     json.optLong(
@@ -373,12 +291,9 @@ class RecTV : MainAPI() {
 
                 try {
 
-                    val parts =
-                        token.split(".")
+                    val parts = token.split(".")
 
-                    if (
-                        parts.size >= 2
-                    ) {
+                    if (parts.size >= 2) {
 
                         val payloadBytes =
                             Base64.decode(
@@ -396,10 +311,7 @@ class RecTV : MainAPI() {
 
                         Regex(
                             "\"exp\"\\s*:\\s*(\\d+)"
-                        )
-                            .find(
-                                payloadJson
-                            )
+                        ).find(payloadJson)
                             ?.groupValues
                             ?.getOrNull(1)
                             ?.toLongOrNull()
@@ -411,18 +323,10 @@ class RecTV : MainAPI() {
                 } catch (_: Exception) {
                 }
 
-                jwtExpirationTimestamp =
-                    expiration
-
+                jwtExpirationTimestamp = expiration
                 token
 
             } else {
-
-                Log.e(
-                    "RecTV",
-                    "JWT alınamadı: ${response.text.take(1000)}"
-                )
-
                 cachedJwt
             }
 
@@ -450,18 +354,10 @@ class RecTV : MainAPI() {
     ): Map<String, String> {
 
         val timestamp =
-            (
-                System.currentTimeMillis() /
-                    1000L
-                ).toString()
+            (System.currentTimeMillis() / 1000L).toString()
 
-        val nonce =
-            UUID.randomUUID().toString()
-
-        val bodyHash =
-            sha256Hex(
-                body
-            )
+        val nonce = UUID.randomUUID().toString()
+        val bodyHash = sha256Hex(body)
 
         val message =
             "$method\n$path\n$timestamp\n$nonce\n$bodyHash"
@@ -472,36 +368,23 @@ class RecTV : MainAPI() {
                 message
             )
 
-        val headers =
-            mutableMapOf(
-                "User-Agent" to USER_AGENT,
-                "Referer" to REFERER,
-                "Accept" to "application/json",
-                "X-Timestamp" to timestamp,
-                "X-Nonce" to nonce,
-
-                // Sunucu missing_hmac döndürdüğü için
-                // HMAC başlığını açıkça gönderiyoruz.
-                "X-HMAC" to signature,
-
-                // Eski uyumluluk için bunu da koruyoruz.
-                "X-Signature" to signature,
-
-                "X-App-Version" to APP_VERSION,
-                "X-Client-Id" to CLIENT_ID
-            )
+        val headers = mutableMapOf(
+            "User-Agent" to USER_AGENT,
+            "Referer" to REFERER,
+            "Accept" to "application/json",
+            "X-Timestamp" to timestamp,
+            "X-Nonce" to nonce,
+            "X-HMAC" to signature,
+            "X-Signature" to signature,
+            "X-App-Version" to APP_VERSION,
+            "X-Client-Id" to CLIENT_ID
+        )
 
         if (includeAuth) {
+            val token = getJwt()
 
-            val token =
-                getJwt()
-
-            if (
-                !token.isNullOrBlank()
-            ) {
-
-                headers["Authorization"] =
-                    "Bearer $token"
+            if (!token.isNullOrBlank()) {
+                headers["Authorization"] = "Bearer $token"
             }
         }
 
@@ -524,23 +407,12 @@ class RecTV : MainAPI() {
                     Base64.DEFAULT
                 )
 
-            if (
-                raw.size < 28
-            ) {
+            if (raw.size < 28) {
                 return null
             }
 
-            val iv =
-                raw.copyOfRange(
-                    0,
-                    12
-                )
-
-            val cipherTextAndTag =
-                raw.copyOfRange(
-                    12,
-                    raw.size
-                )
+            val iv = raw.copyOfRange(0, 12)
+            val cipherTextAndTag = raw.copyOfRange(12, raw.size)
 
             val cipher =
                 Cipher.getInstance(
@@ -549,9 +421,7 @@ class RecTV : MainAPI() {
 
             val keySpec =
                 SecretKeySpec(
-                    hexToBytes(
-                        AES_KEY_HEX
-                    ),
+                    hexToBytes(AES_KEY_HEX),
                     "AES"
                 )
 
@@ -567,13 +437,8 @@ class RecTV : MainAPI() {
                 gcmSpec
             )
 
-            val decrypted =
-                cipher.doFinal(
-                    cipherTextAndTag
-                )
-
             String(
-                decrypted,
+                cipher.doFinal(cipherTextAndTag),
                 Charsets.UTF_8
             )
 
@@ -598,14 +463,10 @@ class RecTV : MainAPI() {
 
         return try {
 
-            val apiBase =
-                getApiBaseUrl()
-
+            val apiBase = getApiBaseUrl()
             val path =
                 "/api/source/unlock-ad/$sourceId/$SW_KEY/"
-
-            val body =
-                "{}"
+            val body = "{}"
 
             val headers =
                 getSignedHeaders(
@@ -614,31 +475,20 @@ class RecTV : MainAPI() {
                     body = body
                 ).toMutableMap()
 
-            headers["Content-Type"] =
-                "application/json"
-
-            val requestBody =
-                body.toRequestBody(
-                    "application/json; charset=utf-8"
-                        .toMediaType()
-                )
+            headers["Content-Type"] = "application/json"
 
             val response =
                 app.post(
                     "$apiBase$path",
                     headers = headers,
-                    requestBody = requestBody
+                    requestBody = body.toRequestBody(
+                        "application/json; charset=utf-8".toMediaType()
+                    )
                 )
 
-            JSONObject(
-                response.text
-            )
-                .optString(
-                    "enc_url"
-                )
-                .takeIf {
-                    it.isNotBlank()
-                }
+            JSONObject(response.text)
+                .optString("enc_url")
+                .takeIf { it.isNotBlank() }
 
         } catch (e: Exception) {
 
@@ -655,31 +505,19 @@ class RecTV : MainAPI() {
     // JSON HELPERS
     // =========================================================
 
-    private fun parseObject(
-        text: String
-    ): JSONObject? {
-
-        return try {
-            JSONObject(
-                text
-            )
+    private fun parseObject(text: String): JSONObject? =
+        try {
+            JSONObject(text)
         } catch (_: Exception) {
             null
         }
-    }
 
-    private fun parseArray(
-        text: String
-    ): JSONArray? {
-
-        return try {
-            JSONArray(
-                text
-            )
+    private fun parseArray(text: String): JSONArray? =
+        try {
+            JSONArray(text)
         } catch (_: Exception) {
             null
         }
-    }
 
     private fun optStringOrNull(
         obj: JSONObject,
@@ -688,30 +526,18 @@ class RecTV : MainAPI() {
 
         for (key in keys) {
 
-            if (
-                !obj.has(key)
-            ) {
-                continue
-            }
+            if (!obj.has(key)) continue
 
-            val value =
-                obj.opt(key)
+            val value = obj.opt(key)
 
             if (
                 value == null ||
                 value == JSONObject.NULL
-            ) {
-                continue
-            }
+            ) continue
 
-            val text =
-                value
-                    .toString()
-                    .trim()
+            val text = value.toString().trim()
 
-            if (
-                text.isNotBlank()
-            ) {
+            if (text.isNotBlank()) {
                 return text
             }
         }
@@ -726,27 +552,14 @@ class RecTV : MainAPI() {
 
         for (key in keys) {
 
-            if (
-                !obj.has(key)
-            ) {
-                continue
-            }
+            if (!obj.has(key)) continue
 
-            val value =
-                obj.opt(key)
-
-            when (value) {
-
-                is Number ->
-                    return value.toInt()
-
+            when (val value = obj.opt(key)) {
+                is Number -> return value.toInt()
                 is String ->
-                    value
-                        .trim()
-                        .toIntOrNull()
-                        ?.let {
-                            return it
-                        }
+                    value.trim().toIntOrNull()?.let {
+                        return it
+                    }
             }
         }
 
@@ -760,38 +573,37 @@ class RecTV : MainAPI() {
 
         for (key in keys) {
 
-            if (
-                !obj.has(key)
-            ) {
-                continue
+            if (!obj.has(key)) continue
+
+            when (val value = obj.opt(key)) {
+                is Boolean -> return value
+                is String -> when (value.trim().lowercase()) {
+                    "true", "1", "yes" -> return true
+                    "false", "0", "no" -> return false
+                }
             }
+        }
 
-            val value =
-                obj.opt(key)
+        return null
+    }
 
-            when (value) {
+    private fun optDoubleOrNull(
+        obj: JSONObject,
+        vararg keys: String
+    ): Double? {
 
-                is Boolean ->
-                    return value
+        for (key in keys) {
 
+            if (!obj.has(key)) continue
+
+            when (val value = obj.opt(key)) {
+                is Number -> return value.toDouble()
                 is String -> {
-
-                    when (
-                        value
-                            .trim()
-                            .lowercase()
-                    ) {
-
-                        "true",
-                        "1",
-                        "yes" ->
-                            return true
-
-                        "false",
-                        "0",
-                        "no" ->
-                            return false
-                    }
+                    value
+                        .replace(",", ".")
+                        .trim()
+                        .toDoubleOrNull()
+                        ?.let { return it }
                 }
             }
         }
@@ -805,17 +617,7 @@ class RecTV : MainAPI() {
     ): JSONArray? {
 
         for (key in keys) {
-
-            val array =
-                obj.optJSONArray(
-                    key
-                )
-
-            if (
-                array != null
-            ) {
-                return array
-            }
+            obj.optJSONArray(key)?.let { return it }
         }
 
         return null
@@ -824,76 +626,41 @@ class RecTV : MainAPI() {
     private fun hasArrayItems(
         obj: JSONObject,
         vararg keys: String
-    ): Boolean {
-
-        return optArray(
-            obj,
-            *keys
-        )
-            ?.length()
-            ?.let {
-                it > 0
-            }
-            ?: false
-    }
+    ): Boolean =
+        optArray(obj, *keys)?.length()?.let {
+            it > 0
+        } ?: false
 
     private fun objectToString(
         obj: JSONObject
-    ): String =
-        obj.toString()
+    ): String = obj.toString()
 
     // =========================================================
-    // ITEM EXTRACTION
+    // FLEXIBLE ITEM EXTRACTION
     // =========================================================
 
     private fun extractItemObjects(
         text: String
     ): List<JSONObject> {
 
-        val result =
-            mutableListOf<JSONObject>()
+        val result = mutableListOf<JSONObject>()
 
-        fun addArray(
-            array: JSONArray?
-        ) {
+        fun addArray(array: JSONArray?) {
 
-            if (
-                array == null
-            ) {
-                return
-            }
+            if (array == null) return
 
-            for (
-                index in 0 until array.length()
-            ) {
-
-                val obj =
-                    array.optJSONObject(
-                        index
-                    )
-
-                if (
-                    obj != null
-                ) {
-                    result += obj
+            for (index in 0 until array.length()) {
+                array.optJSONObject(index)?.let {
+                    result += it
                 }
             }
         }
 
         try {
 
-            val directArray =
-                JSONArray(
-                    text
-                )
+            addArray(JSONArray(text))
 
-            addArray(
-                directArray
-            )
-
-            if (
-                result.isNotEmpty()
-            ) {
+            if (result.isNotEmpty()) {
                 return result
             }
 
@@ -902,68 +669,38 @@ class RecTV : MainAPI() {
 
         try {
 
-            val root =
-                JSONObject(
-                    text
-                )
+            val root = JSONObject(text)
 
-            val priorityKeys =
-                listOf(
-                    "data",
-                    "results",
-                    "items",
-                    "movies",
-                    "series",
-                    "channels",
-                    "posters",
-                    "contents",
-                    "records",
-                    "rows",
-                    "list"
-                )
+            val priorityKeys = listOf(
+                "data",
+                "results",
+                "items",
+                "movies",
+                "series",
+                "channels",
+                "posters",
+                "contents",
+                "records",
+                "rows",
+                "list"
+            )
 
             for (key in priorityKeys) {
 
-                val array =
-                    root.optJSONArray(
-                        key
-                    )
+                addArray(root.optJSONArray(key))
 
-                if (
-                    array != null
-                ) {
-
-                    addArray(
-                        array
-                    )
-
-                    if (
-                        result.isNotEmpty()
-                    ) {
-                        return result
-                    }
+                if (result.isNotEmpty()) {
+                    return result
                 }
             }
 
             for (key in priorityKeys) {
 
-                val child =
-                    root.optJSONObject(
-                        key
-                    )
-
-                if (
-                    child != null
-                ) {
-
+                root.optJSONObject(key)?.let { child ->
                     val nested =
-                        extractItemObjects(
-                            child.toString()
-                        )
+                        extractItemObjects(child.toString())
 
-                    if (
-                        nested.isNotEmpty()
-                    ) {
+                    if (nested.isNotEmpty()) {
                         return nested
                     }
                 }
@@ -986,20 +723,12 @@ class RecTV : MainAPI() {
         val url =
             value
                 ?.trim()
-                ?.takeIf {
-                    it.isNotBlank()
-                }
+                ?.takeIf { it.isNotBlank() }
                 ?: return null
 
         return when {
-
-            url.startsWith(
-                "http://"
-            ) ||
-                url.startsWith(
-                    "https://"
-                ) ->
-                url
+            url.startsWith("http://") ||
+                url.startsWith("https://") -> url
 
             url.startsWith("//") ->
                 "https:$url"
@@ -1016,37 +745,28 @@ class RecTV : MainAPI() {
         obj: JSONObject
     ): String? {
 
-        val simpleKeys =
-            listOf(
-                "image",
-                "poster",
-                "poster_url",
-                "posterUrl",
-                "thumbnail",
-                "thumbnail_url",
-                "thumbnailUrl",
-                "thumb",
-                "cover",
-                "cover_url",
-                "coverUrl",
-                "image_url",
-                "imageUrl"
-            )
+        val simpleKeys = listOf(
+            "image",
+            "poster",
+            "poster_url",
+            "posterUrl",
+            "thumbnail",
+            "thumbnail_url",
+            "thumbnailUrl",
+            "thumb",
+            "cover",
+            "cover_url",
+            "coverUrl",
+            "image_url",
+            "imageUrl"
+        )
 
         for (key in simpleKeys) {
 
-            val value =
-                obj.opt(
-                    key
-                )
-
-            when (value) {
+            when (val value = obj.opt(key)) {
 
                 is String -> {
-
-                    normalizeImageUrl(
-                        value
-                    )?.let {
+                    normalizeImageUrl(value)?.let {
                         return it
                     }
                 }
@@ -1066,23 +786,14 @@ class RecTV : MainAPI() {
                             "large"
                         )
 
-                    normalizeImageUrl(
-                        nested
-                    )?.let {
+                    normalizeImageUrl(nested)?.let {
                         return it
                     }
                 }
             }
         }
 
-        val images =
-            obj.optJSONObject(
-                "images"
-            )
-
-        if (
-            images != null
-        ) {
+        obj.optJSONObject("images")?.let { images ->
 
             val nested =
                 optStringOrNull(
@@ -1095,14 +806,365 @@ class RecTV : MainAPI() {
                     "src"
                 )
 
-            normalizeImageUrl(
-                nested
-            )?.let {
+            normalizeImageUrl(nested)?.let {
                 return it
             }
         }
 
         return null
+    }
+
+    // =========================================================
+    // METADATA HELPERS
+    // =========================================================
+
+    private fun parseScore(
+        obj: JSONObject
+    ): Score? {
+
+        var value =
+            optDoubleOrNull(
+                obj,
+                "rating",
+                "score",
+                "imdb_rating",
+                "imdbRating",
+                "imdb_score",
+                "imdbScore",
+                "vote_average",
+                "rating_value"
+            )
+
+        if (value == null) {
+            obj.optJSONObject("ratings")?.let { ratings ->
+                value = optDoubleOrNull(
+                    ratings,
+                    "imdb",
+                    "rating",
+                    "score",
+                    "value"
+                )
+            }
+        }
+
+        if (value == null) return null
+
+        if (value!! > 10.0 && value!! <= 100.0) {
+            value = value!! / 10.0
+        }
+
+        if (value!! > 100.0) {
+            value = value!! / 100.0
+        }
+
+        val normalized =
+            value!!.coerceIn(0.0, 10.0)
+
+        return try {
+            Score.from10(normalized)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseImdbId(
+        obj: JSONObject
+    ): String? {
+
+        val direct =
+            optStringOrNull(
+                obj,
+                "imdb_id",
+                "imdbId",
+                "imdbid",
+                "imdb_code"
+            )
+
+        if (
+            !direct.isNullOrBlank() &&
+            direct.startsWith("tt")
+        ) {
+            return direct
+        }
+
+        val imdbValue =
+            optStringOrNull(
+                obj,
+                "imdb"
+            )
+
+        if (
+            !imdbValue.isNullOrBlank() &&
+            imdbValue.startsWith("tt")
+        ) {
+            return imdbValue
+        }
+
+        return null
+    }
+
+    private fun parseActors(
+        obj: JSONObject
+    ): List<Actor>? {
+
+        val result = mutableListOf<Actor>()
+
+        fun addActor(
+            value: Any?
+        ) {
+
+            when (value) {
+
+                is String -> {
+
+                    val name = value.trim()
+
+                    if (name.isNotBlank()) {
+                        result += Actor(name)
+                    }
+                }
+
+                is JSONObject -> {
+
+                    val name =
+                        optStringOrNull(
+                            value,
+                            "name",
+                            "title",
+                            "actor",
+                            "character_name",
+                            "character"
+                        ) ?: return
+
+                    val image =
+                        optStringOrNull(
+                            value,
+                            "image",
+                            "image_url",
+                            "imageUrl",
+                            "photo",
+                            "photo_url",
+                            "profile_path",
+                            "profile",
+                            "avatar",
+                            "poster"
+                        )
+
+                    result += Actor(
+                        name = name,
+                        image = normalizeImageUrl(image)
+                    )
+                }
+            }
+        }
+
+        val arrays = listOf(
+            "actors",
+            "cast",
+            "credits",
+            "crew"
+        )
+
+        for (key in arrays) {
+
+            val array = obj.optJSONArray(key)
+                ?: continue
+
+            for (index in 0 until array.length()) {
+                addActor(array.opt(index))
+            }
+
+            if (result.isNotEmpty() && key != "crew") {
+                break
+            }
+        }
+
+        if (result.isEmpty()) {
+
+            obj.optJSONObject("credits")?.let { credits ->
+                credits.optJSONArray("cast")?.let { cast ->
+                    for (index in 0 until cast.length()) {
+                        addActor(cast.opt(index))
+                    }
+                }
+            }
+        }
+
+        return result
+            .distinctBy {
+                it.name.lowercase()
+            }
+            .take(30)
+            .takeIf {
+                it.isNotEmpty()
+            }
+    }
+
+    private fun parseTrailerUrls(
+        obj: JSONObject
+    ): List<String> {
+
+        val result = mutableListOf<String>()
+
+        fun addUrl(value: Any?) {
+
+            when (value) {
+
+                is String -> {
+                    val url = value.trim()
+
+                    if (
+                        url.startsWith("http://") ||
+                        url.startsWith("https://")
+                    ) {
+                        result += url
+                    }
+                }
+
+                is JSONObject -> {
+
+                    val url =
+                        optStringOrNull(
+                            value,
+                            "url",
+                            "link",
+                            "src",
+                            "href",
+                            "trailer_url",
+                            "trailerUrl",
+                            "youtube",
+                            "youtube_url",
+                            "youtubeUrl",
+                            "key"
+                        )
+
+                    addUrl(url)
+                }
+            }
+        }
+
+        val directKeys = listOf(
+            "trailer",
+            "trailer_url",
+            "trailerUrl",
+            "trailer_link",
+            "trailerLink",
+            "youtube_trailer",
+            "youtube_url",
+            "youtubeUrl"
+        )
+
+        for (key in directKeys) {
+            addUrl(obj.opt(key))
+        }
+
+        listOf(
+            "trailers",
+            "videos",
+            "video"
+        ).forEach { key ->
+
+            when (val value = obj.opt(key)) {
+
+                is JSONArray -> {
+                    for (index in 0 until value.length()) {
+                        addUrl(value.opt(index))
+                    }
+                }
+
+                is JSONObject -> {
+                    addUrl(value)
+                }
+            }
+        }
+
+        return result
+            .map { it.trim() }
+            .distinct()
+            .take(5)
+    }
+
+    private fun parseBackgroundUrl(
+        obj: JSONObject
+    ): String? {
+
+        val direct =
+            optStringOrNull(
+                obj,
+                "background",
+                "background_url",
+                "backgroundUrl",
+                "backdrop",
+                "backdrop_url",
+                "backdropUrl",
+                "backdrop_path",
+                "fanart",
+                "fanart_url",
+                "cover_background"
+            )
+
+        if (direct != null) {
+            return normalizeImageUrl(direct)
+        }
+
+        obj.optJSONObject("images")?.let { images ->
+
+            val nested =
+                optStringOrNull(
+                    images,
+                    "background",
+                    "backdrop",
+                    "backdrop_url",
+                    "fanart",
+                    "cover"
+                )
+
+            normalizeImageUrl(nested)?.let {
+                return it
+            }
+        }
+
+        return null
+    }
+
+    private suspend fun applyMetadata(
+        response: LoadResponse,
+        data: JSONObject
+    ) {
+
+        parseScore(data)?.let {
+            response.addScore(it)
+        }
+
+        parseActors(data)?.let {
+            response.addActors(it)
+        }
+
+        parseImdbId(data)?.let {
+            response.addImdbId(it)
+        }
+
+        parseBackgroundUrl(data)?.let {
+            response.backgroundPosterUrl = it
+        }
+
+        val trailers =
+            parseTrailerUrls(data)
+
+        if (trailers.isNotEmpty()) {
+            try {
+                response.addTrailer(
+                    trailers,
+                    referer = null,
+                    addRaw = true
+                )
+            } catch (e: Exception) {
+                Log.e(
+                    "RecTV",
+                    "Trailer metadata failed: ${e.message}"
+                )
+            }
+        }
     }
 
     // =========================================================
@@ -1155,10 +1217,8 @@ class RecTV : MainAPI() {
         mainPageOf(
             "channel|1|0" to "Spor",
             "channel|0|0" to "Canlı TV",
-
             "movie|0|created" to "Son Filmler",
             "serie|0|created" to "Son Diziler",
-
             "movie|14|created" to "Aile",
             "movie|1|created" to "Aksiyon",
             "movie|13|created" to "Animasyon",
@@ -1177,19 +1237,11 @@ class RecTV : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
 
-        val apiBase =
-            getApiBaseUrl()
+        val apiBase = getApiBaseUrl()
+        val pageIndex = page - 1
+        val parts = request.data.split("|")
 
-        val pageIndex =
-            page - 1
-
-        val parts =
-            request.data.split("|")
-
-        if (
-            parts.size < 3
-        ) {
-
+        if (parts.size < 3) {
             return newHomePageResponse(
                 request.name,
                 emptyList(),
@@ -1197,14 +1249,9 @@ class RecTV : MainAPI() {
             )
         }
 
-        val contentType =
-            parts[0]
-
-        val filter =
-            parts[1]
-
-        val sort =
-            parts[2]
+        val contentType = parts[0]
+        val filter = parts[1]
+        val sort = parts[2]
 
         val endpoint =
             when (contentType) {
@@ -1228,13 +1275,8 @@ class RecTV : MainAPI() {
 
         val path =
             try {
-
-                java.net.URI(
-                    endpoint
-                ).rawPath
-
+                java.net.URI(endpoint).rawPath
             } catch (_: Exception) {
-
                 endpoint.substringBefore("?")
             }
 
@@ -1245,7 +1287,6 @@ class RecTV : MainAPI() {
 
         val response =
             try {
-
                 app.get(
                     endpoint,
                     headers = getSignedHeaders(
@@ -1253,9 +1294,7 @@ class RecTV : MainAPI() {
                         path = path
                     )
                 )
-
             } catch (e: Exception) {
-
                 Log.e(
                     "RecTV",
                     "Main page request failed: ${e.message}",
@@ -1285,10 +1324,9 @@ class RecTV : MainAPI() {
                 ignoreCase = true
             )
         ) {
-
             Log.e(
                 "RecTV",
-                "SERVER STILL REPORTS missing_hmac. Headers may not match current API."
+                "SERVER STILL REPORTS missing_hmac"
             )
 
             return newHomePageResponse(
@@ -1299,19 +1337,14 @@ class RecTV : MainAPI() {
         }
 
         val objects =
-            extractItemObjects(
-                response.text
-            )
+            extractItemObjects(response.text)
 
         Log.d(
             "RecTV",
             "MAIN OBJECT COUNT=${objects.size}"
         )
 
-        if (
-            objects.isEmpty()
-        ) {
-
+        if (objects.isEmpty()) {
             return newHomePageResponse(
                 request.name,
                 emptyList(),
@@ -1319,12 +1352,9 @@ class RecTV : MainAPI() {
             )
         }
 
-        val results =
-            mutableListOf<SearchResponse>()
+        val results = mutableListOf<SearchResponse>()
 
-        for (
-            item in objects
-        ) {
+        for (item in objects) {
 
             val id =
                 optIntOrNull(
@@ -1345,15 +1375,8 @@ class RecTV : MainAPI() {
                     "channel_name"
                 ) ?: continue
 
-            val image =
-                optImageUrl(
-                    item
-                )
-
-            val detectedType =
-                detectItemType(
-                    item
-                )
+            val image = optImageUrl(item)
+            val detectedType = detectItemType(item)
 
             val label =
                 optStringOrNull(
@@ -1369,10 +1392,7 @@ class RecTV : MainAPI() {
                         ignoreCase = true
                     )
 
-            if (
-                id > 0
-            ) {
-
+            if (id > 0) {
                 item.put(
                     "_rectv_id",
                     id
@@ -1389,59 +1409,50 @@ class RecTV : MainAPI() {
                 request.name
             )
 
-            val data =
-                item.toString()
+            val data = item.toString()
+            val score = parseScore(item)
 
             when {
 
-                forcedLive ||
-                    detectedType == "live" -> {
-
+                forcedLive || detectedType == "live" -> {
                     results +=
                         newLiveSearchResponse(
                             title,
                             data,
                             TvType.Live
                         ) {
-
-                            this.posterUrl =
-                                image
+                            this.posterUrl = image
+                            this.score = score
                         }
                 }
 
                 contentType == "serie" ||
                     detectedType == "serie" -> {
-
                     results +=
                         newTvSeriesSearchResponse(
                             title,
                             data,
                             TvType.TvSeries
                         ) {
-
-                            this.posterUrl =
-                                image
+                            this.posterUrl = image
+                            this.score = score
                         }
                 }
 
                 else -> {
-
                     results +=
                         newMovieSearchResponse(
                             title,
                             data,
                             TvType.Movie
                         ) {
-
-                            this.posterUrl =
-                                image
+                            this.posterUrl = image
+                            this.score = score
                         }
                 }
             }
 
-            if (
-                results.size >= 24
-            ) {
+            if (results.size >= 24) {
                 break
             }
         }
@@ -1454,8 +1465,7 @@ class RecTV : MainAPI() {
         return newHomePageResponse(
             request.name,
             results,
-            hasNext =
-                objects.size >= 24
+            hasNext = objects.size >= 24
         )
     }
 
@@ -1467,26 +1477,17 @@ class RecTV : MainAPI() {
         query: String
     ): List<SearchResponse> {
 
-        val apiBase =
-            getApiBaseUrl()
+        val apiBase = getApiBaseUrl()
 
         val encoded =
             URLEncoder
-                .encode(
-                    query,
-                    "UTF-8"
-                )
-                .replace(
-                    "+",
-                    "%20"
-                )
+                .encode(query, "UTF-8")
+                .replace("+", "%20")
 
-        val path =
-            "/api/search/$encoded/$SW_KEY/"
+        val path = "/api/search/$encoded/$SW_KEY/"
 
         val response =
             try {
-
                 app.get(
                     "$apiBase$path",
                     headers = getSignedHeaders(
@@ -1494,37 +1495,20 @@ class RecTV : MainAPI() {
                         path = path
                     )
                 )
-
             } catch (e: Exception) {
-
                 Log.e(
                     "RecTV",
                     "Search failed: ${e.message}"
                 )
-
                 return emptyList()
             }
 
-        val results =
-            mutableListOf<SearchResponse>()
+        val results = mutableListOf<SearchResponse>()
+        val json = parseObject(response.text)
 
-        val json =
-            parseObject(
-                response.text
-            )
+        if (json == null) {
 
-        if (
-            json == null
-        ) {
-
-            val objects =
-                extractItemObjects(
-                    response.text
-                )
-
-            for (
-                item in objects
-            ) {
+            for (item in extractItemObjects(response.text)) {
 
                 val title =
                     optStringOrNull(
@@ -1533,56 +1517,44 @@ class RecTV : MainAPI() {
                         "name"
                     ) ?: continue
 
-                val image =
-                    optImageUrl(
-                        item
-                    )
+                val image = optImageUrl(item)
+                val score = parseScore(item)
 
-                when (
-                    detectItemType(
-                        item
-                    )
-                ) {
+                when (detectItemType(item)) {
 
                     "live" -> {
-
                         results +=
                             newLiveSearchResponse(
                                 title,
                                 item.toString(),
                                 TvType.Live
                             ) {
-
-                                this.posterUrl =
-                                    image
+                                this.posterUrl = image
+                                this.score = score
                             }
                     }
 
                     "serie" -> {
-
                         results +=
                             newTvSeriesSearchResponse(
                                 title,
                                 item.toString(),
                                 TvType.TvSeries
                             ) {
-
-                                this.posterUrl =
-                                    image
+                                this.posterUrl = image
+                                this.score = score
                             }
                     }
 
                     else -> {
-
                         results +=
                             newMovieSearchResponse(
                                 title,
                                 item.toString(),
                                 TvType.Movie
                             ) {
-
-                                this.posterUrl =
-                                    image
+                                this.posterUrl = image
+                                this.score = score
                             }
                     }
                 }
@@ -1591,24 +1563,13 @@ class RecTV : MainAPI() {
             return results
         }
 
-        val channels =
-            optArray(
-                json,
-                "channels"
-            )
+        optArray(json, "channels")?.let { channels ->
 
-        if (
-            channels != null
-        ) {
-
-            for (
-                index in 0 until channels.length()
-            ) {
+            for (index in 0 until channels.length()) {
 
                 val item =
-                    channels.optJSONObject(
-                        index
-                    ) ?: continue
+                    channels.optJSONObject(index)
+                        ?: continue
 
                 val title =
                     optStringOrNull(
@@ -1616,11 +1577,6 @@ class RecTV : MainAPI() {
                         "title",
                         "name"
                     ) ?: continue
-
-                val image =
-                    optImageUrl(
-                        item
-                    )
 
                 results +=
                     newLiveSearchResponse(
@@ -1628,34 +1584,25 @@ class RecTV : MainAPI() {
                         item.toString(),
                         TvType.Live
                     ) {
-
-                        this.posterUrl =
-                            image
+                        this.posterUrl = optImageUrl(item)
+                        this.score = parseScore(item)
                     }
             }
         }
 
-        val posters =
-            optArray(
-                json,
-                "posters",
-                "results",
-                "items",
-                "data"
-            )
+        optArray(
+            json,
+            "posters",
+            "results",
+            "items",
+            "data"
+        )?.let { posters ->
 
-        if (
-            posters != null
-        ) {
-
-            for (
-                index in 0 until posters.length()
-            ) {
+            for (index in 0 until posters.length()) {
 
                 val item =
-                    posters.optJSONObject(
-                        index
-                    ) ?: continue
+                    posters.optJSONObject(index)
+                        ?: continue
 
                 val title =
                     optStringOrNull(
@@ -1664,56 +1611,44 @@ class RecTV : MainAPI() {
                         "name"
                     ) ?: continue
 
-                val image =
-                    optImageUrl(
-                        item
-                    )
+                val image = optImageUrl(item)
+                val score = parseScore(item)
 
-                when (
-                    detectItemType(
-                        item
-                    )
-                ) {
+                when (detectItemType(item)) {
 
                     "live" -> {
-
                         results +=
                             newLiveSearchResponse(
                                 title,
                                 item.toString(),
                                 TvType.Live
                             ) {
-
-                                this.posterUrl =
-                                    image
+                                this.posterUrl = image
+                                this.score = score
                             }
                     }
 
                     "serie" -> {
-
                         results +=
                             newTvSeriesSearchResponse(
                                 title,
                                 item.toString(),
                                 TvType.TvSeries
                             ) {
-
-                                this.posterUrl =
-                                    image
+                                this.posterUrl = image
+                                this.score = score
                             }
                     }
 
                     else -> {
-
                         results +=
                             newMovieSearchResponse(
                                 title,
                                 item.toString(),
                                 TvType.Movie
                             ) {
-
-                                this.posterUrl =
-                                    image
+                                this.posterUrl = image
+                                this.score = score
                             }
                     }
                 }
@@ -1726,9 +1661,7 @@ class RecTV : MainAPI() {
     override suspend fun quickSearch(
         query: String
     ): List<SearchResponse> =
-        search(
-            query
-        )
+        search(query)
 
     // =========================================================
     // LOAD
@@ -1738,13 +1671,11 @@ class RecTV : MainAPI() {
         url: String
     ): LoadResponse? {
 
-        val apiBase =
-            getApiBaseUrl()
+        val apiBase = getApiBaseUrl()
 
         val veri =
-            parseObject(
-                url
-            ) ?: return null
+            parseObject(url)
+                ?: return null
 
         val id =
             optIntOrNull(
@@ -1766,10 +1697,7 @@ class RecTV : MainAPI() {
                 "channel_name"
             ) ?: "RecTV"
 
-        val image =
-            optImageUrl(
-                veri
-            )
+        val image = optImageUrl(veri)
 
         val description =
             optStringOrNull(
@@ -1782,7 +1710,9 @@ class RecTV : MainAPI() {
         val year =
             optIntOrNull(
                 veri,
-                "year"
+                "year",
+                "release_year",
+                "releaseYear"
             )
 
         val rawType =
@@ -1805,10 +1735,7 @@ class RecTV : MainAPI() {
                 "_rectv_section"
             ).orEmpty()
 
-        val detectedType =
-            detectItemType(
-                veri
-            )
+        val detectedType = detectItemType(veri)
 
         val isSeries =
             rawType == "serie" ||
@@ -1834,16 +1761,13 @@ class RecTV : MainAPI() {
         // DIZI
         // =====================================================
 
-        if (
-            isSeries
-        ) {
+        if (isSeries) {
 
             val path =
                 "/api/season/by/serie/$id/$SW_KEY/"
 
             val response =
                 try {
-
                     app.get(
                         "$apiBase$path",
                         headers = getSignedHeaders(
@@ -1851,31 +1775,23 @@ class RecTV : MainAPI() {
                             path = path
                         )
                     )
-
                 } catch (e: Exception) {
-
                     Log.e(
                         "RecTV",
                         "Series request failed: ${e.message}",
                         e
                     )
-
                     return null
                 }
 
             val seasons =
-                parseArray(
-                    response.text
-                ) ?: run {
+                parseArray(response.text) ?: run {
 
                     val objectResponse =
-                        parseObject(
-                            response.text
-                        )
+                        parseObject(response.text)
 
                     optArray(
-                        objectResponse
-                            ?: JSONObject(),
+                        objectResponse ?: JSONObject(),
                         "data",
                         "results",
                         "seasons",
@@ -1889,19 +1805,13 @@ class RecTV : MainAPI() {
                     MutableList<Episode>
                 >()
 
-            val numberRegex =
-                Regex(
-                    "\\d+"
-                )
+            val numberRegex = Regex("\\d+")
 
-            for (
-                seasonIndex in 0 until seasons.length()
-            ) {
+            for (seasonIndex in 0 until seasons.length()) {
 
                 val season =
-                    seasons.optJSONObject(
-                        seasonIndex
-                    ) ?: continue
+                    seasons.optJSONObject(seasonIndex)
+                        ?: continue
 
                 val seasonTitle =
                     optStringOrNull(
@@ -1913,32 +1823,25 @@ class RecTV : MainAPI() {
 
                 val dubStatus =
                     when {
-
                         seasonTitle.contains(
                             "altyazı",
                             ignoreCase = true
-                        ) ||
-                            seasonTitle.contains(
-                                "altyazi",
-                                ignoreCase = true
-                            ) ->
-                            DubStatus.Subbed
+                        ) || seasonTitle.contains(
+                            "altyazi",
+                            ignoreCase = true
+                        ) -> DubStatus.Subbed
 
                         seasonTitle.contains(
                             "dublaj",
                             ignoreCase = true
-                        ) ->
-                            DubStatus.Dubbed
+                        ) -> DubStatus.Dubbed
 
-                        else ->
-                            DubStatus.None
+                        else -> DubStatus.None
                     }
 
                 val seasonNumber =
                     numberRegex
-                        .find(
-                            seasonTitle
-                        )
+                        .find(seasonTitle)
                         ?.value
                         ?.toIntOrNull()
 
@@ -1950,14 +1853,11 @@ class RecTV : MainAPI() {
                         "items"
                     ) ?: continue
 
-                for (
-                    episodeIndex in 0 until seasonEpisodes.length()
-                ) {
+                for (episodeIndex in 0 until seasonEpisodes.length()) {
 
                     val episodeJson =
-                        seasonEpisodes.optJSONObject(
-                            episodeIndex
-                        ) ?: continue
+                        seasonEpisodes.optJSONObject(episodeIndex)
+                            ?: continue
 
                     val episodeTitle =
                         optStringOrNull(
@@ -1969,9 +1869,7 @@ class RecTV : MainAPI() {
 
                     val episodeNumber =
                         numberRegex
-                            .find(
-                                episodeTitle
-                            )
+                            .find(episodeTitle)
                             ?.value
                             ?.toIntOrNull()
 
@@ -1982,78 +1880,54 @@ class RecTV : MainAPI() {
                                 ignoreCase = false
                             )
                         ) {
-
-                            seasonTitle.substringAfter(
-                                ".S "
-                            )
-
+                            seasonTitle.substringAfter(".S ")
                         } else {
-
                             seasonTitle
                         }
 
                     episodes
-                        .getOrPut(
-                            dubStatus
-                        ) {
+                        .getOrPut(dubStatus) {
                             mutableListOf()
                         }
                         .add(
                             newEpisode(
                                 episodeJson.toString()
                             ) {
-
-                                this.name =
-                                    episodeTitle
-
-                                this.season =
-                                    seasonNumber
-
-                                this.episode =
-                                    episodeNumber
-
-                                this.description =
-                                    episodeDescription
-
-                                this.posterUrl =
-                                    image
+                                this.name = episodeTitle
+                                this.season = seasonNumber
+                                this.episode = episodeNumber
+                                this.description = episodeDescription
+                                this.posterUrl = image
                             }
                         )
                 }
             }
 
-            if (
-                episodes.isEmpty()
-            ) {
+            if (episodes.isEmpty()) {
                 return null
             }
 
-            return newAnimeLoadResponse(
-                title,
-                url,
-                TvType.TvSeries,
-                comingSoonIfNone = false
-            ) {
+            val series =
+                newAnimeLoadResponse(
+                    title,
+                    url,
+                    TvType.TvSeries,
+                    comingSoonIfNone = false
+                ) {
+                    this.episodes =
+                        episodes
+                            .mapValues { it.value.toList() }
+                            .toMutableMap()
 
-                this.episodes =
-                    episodes
-                        .mapValues {
-                            it.value.toList()
-                        }
-                        .toMutableMap()
+                    this.posterUrl = image
+                    this.plot = description
+                    this.year = year
+                    this.tags = genres
+                }
 
-                this.posterUrl =
-                    image
+            applyMetadata(series, veri)
 
-                this.plot =
-                    description
-
-                this.year =
-                    year
-
-                this.tags =
-                    genres
-            }
+            return series
         }
 
         // =====================================================
@@ -2068,17 +1942,10 @@ class RecTV : MainAPI() {
             ).equals(
                 "CANLI",
                 ignoreCase = true
-            ) ||
-                detectedType == "live" ||
-                rawType.contains(
-                    "channel"
-                ) ||
-                rawType.contains(
-                    "live"
-                ) ||
-                rawType.contains(
-                    "sport"
-                ) ||
+            ) || detectedType == "live" ||
+                rawType.contains("channel") ||
+                rawType.contains("live") ||
+                rawType.contains("sport") ||
                 section.equals(
                     "Spor",
                     ignoreCase = true
@@ -2087,54 +1954,36 @@ class RecTV : MainAPI() {
                     "Canlı TV",
                     ignoreCase = true
                 ) ||
-                veri.has(
-                    "channel_id"
-                )
+                veri.has("channel_id")
 
-        if (
-            isLive
-        ) {
+        if (isLive) {
 
             val fullChannel =
-                if (
-                    !hasArrayItems(
-                        veri,
-                        "sources"
-                    )
-                ) {
+                if (!hasArrayItems(veri, "sources")) {
 
                     val path =
                         "/api/channel/by/$id/$SW_KEY/"
 
                     try {
-
                         app.get(
                             "$apiBase$path",
                             headers = getSignedHeaders(
                                 method = "GET",
                                 path = path
                             )
-                        )
-                            .let {
-                                parseObject(
-                                    it.text
-                                )
-                            }
-                            ?: veri
-
+                        ).let {
+                            parseObject(it.text)
+                        } ?: veri
                     } catch (e: Exception) {
-
                         Log.e(
                             "RecTV",
                             "Channel request failed: ${e.message}",
                             e
                         )
-
                         veri
                     }
 
                 } else {
-
                     veri
                 }
 
@@ -2156,11 +2005,8 @@ class RecTV : MainAPI() {
                 url,
                 fullChannel.toString()
             ) {
-
                 this.posterUrl =
-                    optImageUrl(
-                        fullChannel
-                    ) ?: image
+                    optImageUrl(fullChannel) ?: image
 
                 this.plot =
                     optStringOrNull(
@@ -2170,8 +2016,7 @@ class RecTV : MainAPI() {
                         "overview"
                     ) ?: description
 
-                this.tags =
-                    categories
+                this.tags = categories
             }
         }
 
@@ -2180,87 +2025,77 @@ class RecTV : MainAPI() {
         // =====================================================
 
         val fullMovie =
-            if (
-                !hasArrayItems(
-                    veri,
-                    "sources"
-                )
-            ) {
+            if (!hasArrayItems(veri, "sources")) {
 
                 val path =
                     "/api/movie/by/$id/$SW_KEY/"
 
                 try {
-
                     app.get(
                         "$apiBase$path",
                         headers = getSignedHeaders(
                             method = "GET",
                             path = path
                         )
-                    )
-                        .let {
-                            parseObject(
-                                it.text
-                            )
-                        }
-                        ?: veri
-
+                    ).let {
+                        parseObject(it.text)
+                    } ?: veri
                 } catch (e: Exception) {
-
                     Log.e(
                         "RecTV",
                         "Movie request failed: ${e.message}",
                         e
                     )
-
                     veri
                 }
 
             } else {
-
                 veri
             }
 
-        return newMovieLoadResponse(
-            optStringOrNull(
-                fullMovie,
-                "title",
-                "name",
-                "movie_name"
-            ) ?: title,
-            url,
-            TvType.Movie,
-            fullMovie.toString()
-        ) {
-
-            this.posterUrl =
-                optImageUrl(
-                    fullMovie
-                ) ?: image
-
-            this.plot =
+        val movie =
+            newMovieLoadResponse(
                 optStringOrNull(
                     fullMovie,
-                    "description",
-                    "plot",
-                    "overview"
-                ) ?: description
+                    "title",
+                    "name",
+                    "movie_name"
+                ) ?: title,
+                url,
+                TvType.Movie,
+                fullMovie.toString()
+            ) {
+                this.posterUrl =
+                    optImageUrl(fullMovie) ?: image
 
-            this.year =
-                optIntOrNull(
-                    fullMovie,
-                    "year"
-                ) ?: year
-
-            this.tags =
-                parseGenres(
-                    optArray(
+                this.plot =
+                    optStringOrNull(
                         fullMovie,
-                        "genres"
+                        "description",
+                        "plot",
+                        "overview"
+                    ) ?: description
+
+                this.year =
+                    optIntOrNull(
+                        fullMovie,
+                        "year",
+                        "release_year",
+                        "releaseYear"
+                    ) ?: year
+
+                this.tags =
+                    parseGenres(
+                        optArray(
+                            fullMovie,
+                            "genres"
+                        )
                     )
-                )
-        }
+            }
+
+        applyMetadata(movie, fullMovie)
+
+        return movie
     }
 
     // =========================================================
@@ -2279,31 +2114,23 @@ class RecTV : MainAPI() {
     ): Boolean {
 
         if (
-            data.startsWith(
-                "http://"
-            ) ||
-                data.startsWith(
-                    "https://"
-                )
+            data.startsWith("http://") ||
+            data.startsWith("https://")
         ) {
 
             val linkType =
                 when {
-
                     data.contains(
                         ".m3u8",
                         ignoreCase = true
-                    ) ->
-                        ExtractorLinkType.M3U8
+                    ) -> ExtractorLinkType.M3U8
 
                     data.contains(
                         ".mp4",
                         ignoreCase = true
-                    ) ->
-                        ExtractorLinkType.VIDEO
+                    ) -> ExtractorLinkType.VIDEO
 
-                    else ->
-                        INFER_TYPE
+                    else -> INFER_TYPE
                 }
 
             callback.invoke(
@@ -2313,16 +2140,11 @@ class RecTV : MainAPI() {
                     url = data,
                     type = linkType
                 ) {
-
-                    this.referer =
-                        REFERER
-
-                    this.headers =
-                        mapOf(
-                            "Referer" to REFERER,
-                            "User-Agent" to USER_AGENT
-                        )
-
+                    this.referer = REFERER
+                    this.headers = mapOf(
+                        "Referer" to REFERER,
+                        "User-Agent" to USER_AGENT
+                    )
                     this.quality =
                         Qualities.Unknown.value
                 }
@@ -2331,43 +2153,27 @@ class RecTV : MainAPI() {
             return true
         }
 
-        val sources =
-            mutableListOf<JSONObject>()
+        val sources = mutableListOf<JSONObject>()
+        val item = parseObject(data)
 
-        val item =
-            parseObject(
-                data
-            )
-
-        // Direct sources
         item
-            ?.optJSONArray(
-                "sources"
-            )
+            ?.optJSONArray("sources")
             ?.let { array ->
-
-                for (
-                    index in 0 until array.length()
-                ) {
-
+                for (index in 0 until array.length()) {
                     array
-                        .optJSONObject(
-                            index
-                        )
+                        .optJSONObject(index)
                         ?.let {
                             sources += it
                         }
                 }
             }
 
-        // Full item source fetch
         if (
             sources.isEmpty() &&
             item != null
         ) {
 
-            val apiBase =
-                getApiBaseUrl()
+            val apiBase = getApiBaseUrl()
 
             val id =
                 optIntOrNull(
@@ -2379,9 +2185,7 @@ class RecTV : MainAPI() {
                     "channel_id"
                 ) ?: 0
 
-            if (
-                id > 0
-            ) {
+            if (id > 0) {
 
                 try {
 
@@ -2391,13 +2195,9 @@ class RecTV : MainAPI() {
                             "_rectv_type"
                         )
                             ?.lowercase()
-                            ?: detectItemType(
-                                item
-                            )
+                            ?: detectItemType(item)
 
-                    if (
-                        type == "movie"
-                    ) {
+                    if (type == "movie") {
 
                         val path =
                             "/api/movie/by/$id/$SW_KEY/"
@@ -2411,22 +2211,12 @@ class RecTV : MainAPI() {
                                 )
                             )
 
-                        parseObject(
-                            response.text
-                        )
-                            ?.optJSONArray(
-                                "sources"
-                            )
+                        parseObject(response.text)
+                            ?.optJSONArray("sources")
                             ?.let { array ->
-
-                                for (
-                                    index in 0 until array.length()
-                                ) {
-
+                                for (index in 0 until array.length()) {
                                     array
-                                        .optJSONObject(
-                                            index
-                                        )
+                                        .optJSONObject(index)
                                         ?.let {
                                             sources += it
                                         }
@@ -2451,9 +2241,7 @@ class RecTV : MainAPI() {
                                     "Spor",
                                     ignoreCase = true
                                 ) ||
-                                item.has(
-                                    "channel_id"
-                                ) ||
+                                item.has("channel_id") ||
                                 optStringOrNull(
                                     item,
                                     "label"
@@ -2462,9 +2250,7 @@ class RecTV : MainAPI() {
                                     ignoreCase = true
                                 )
 
-                        if (
-                            isChannel
-                        ) {
+                        if (isChannel) {
 
                             val path =
                                 "/api/channel/by/$id/$SW_KEY/"
@@ -2478,22 +2264,12 @@ class RecTV : MainAPI() {
                                     )
                                 )
 
-                            parseObject(
-                                response.text
-                            )
-                                ?.optJSONArray(
-                                    "sources"
-                                )
+                            parseObject(response.text)
+                                ?.optJSONArray("sources")
                                 ?.let { array ->
-
-                                    for (
-                                        index in 0 until array.length()
-                                    ) {
-
+                                    for (index in 0 until array.length()) {
                                         array
-                                            .optJSONObject(
-                                                index
-                                            )
+                                            .optJSONObject(index)
                                             ?.let {
                                                 sources += it
                                             }
@@ -2503,7 +2279,6 @@ class RecTV : MainAPI() {
                     }
 
                 } catch (e: Exception) {
-
                     Log.e(
                         "RecTV",
                         "Failed to fetch item sources: ${e.message}",
@@ -2513,25 +2288,14 @@ class RecTV : MainAPI() {
             }
         }
 
-        // Episode source array
-        if (
-            sources.isEmpty()
-        ) {
+        if (sources.isEmpty()) {
 
             item
-                ?.optJSONArray(
-                    "source"
-                )
+                ?.optJSONArray("source")
                 ?.let { array ->
-
-                    for (
-                        index in 0 until array.length()
-                    ) {
-
+                    for (index in 0 until array.length()) {
                         array
-                            .optJSONObject(
-                                index
-                            )
+                            .optJSONObject(index)
                             ?.let {
                                 sources += it
                             }
@@ -2539,32 +2303,21 @@ class RecTV : MainAPI() {
                 }
         }
 
-        // Episode single source
-        if (
-            sources.isEmpty()
-        ) {
-
+        if (sources.isEmpty()) {
             item
-                ?.optJSONObject(
-                    "source"
-                )
+                ?.optJSONObject("source")
                 ?.let {
                     sources += it
                 }
         }
 
-        if (
-            sources.isEmpty()
-        ) {
+        if (sources.isEmpty()) {
             return false
         }
 
-        var delivered =
-            false
+        var delivered = false
 
-        for (
-            source in sources
-        ) {
+        for (source in sources) {
 
             val encrypted =
                 optStringOrNull(
@@ -2590,40 +2343,21 @@ class RecTV : MainAPI() {
                 ) == true
 
             val enc =
-                if (
-                    !encrypted.isNullOrBlank()
-                ) {
-
+                if (!encrypted.isNullOrBlank()) {
                     encrypted
-
                 } else if (
-                    (
-                        locked ||
-                            encrypted.isNullOrBlank()
-                        ) &&
-                        sourceId != null
+                    (locked || encrypted.isNullOrBlank()) &&
+                    sourceId != null
                 ) {
-
-                    unlockSource(
-                        sourceId
-                    )
-
+                    unlockSource(sourceId)
                 } else {
-
                     null
                 }
 
             val streamUrl =
-                if (
-                    !enc.isNullOrBlank()
-                ) {
-
-                    decryptEncUrl(
-                        enc
-                    )
-
+                if (!enc.isNullOrBlank()) {
+                    decryptEncUrl(enc)
                 } else {
-
                     optStringOrNull(
                         source,
                         "url",
@@ -2633,9 +2367,7 @@ class RecTV : MainAPI() {
                     )
                 }
 
-            if (
-                streamUrl.isNullOrBlank()
-            ) {
+            if (streamUrl.isNullOrBlank()) {
                 continue
             }
 
@@ -2658,7 +2390,6 @@ class RecTV : MainAPI() {
 
             val linkType =
                 when {
-
                     streamUrl.contains(
                         ".m3u8",
                         ignoreCase = true
@@ -2677,8 +2408,7 @@ class RecTV : MainAPI() {
                         ) ->
                         ExtractorLinkType.VIDEO
 
-                    else ->
-                        INFER_TYPE
+                    else -> INFER_TYPE
                 }
 
             val quality =
@@ -2687,9 +2417,7 @@ class RecTV : MainAPI() {
                     "quality",
                     "resolution"
                 )
-                    ?.filter {
-                        it.isDigit()
-                    }
+                    ?.filter { it.isDigit() }
                     ?.toIntOrNull()
                     ?: Qualities.Unknown.value
 
@@ -2700,23 +2428,16 @@ class RecTV : MainAPI() {
                     url = streamUrl,
                     type = linkType
                 ) {
-
-                    this.referer =
-                        REFERER
-
-                    this.headers =
-                        mapOf(
-                            "Referer" to REFERER,
-                            "User-Agent" to USER_AGENT
-                        )
-
-                    this.quality =
-                        quality
+                    this.referer = REFERER
+                    this.headers = mapOf(
+                        "Referer" to REFERER,
+                        "User-Agent" to USER_AGENT
+                    )
+                    this.quality = quality
                 }
             )
 
-            delivered =
-                true
+            delivered = true
         }
 
         return delivered
@@ -2736,27 +2457,17 @@ class RecTV : MainAPI() {
                 chain
                     .request()
                     .newBuilder()
-                    .removeHeader(
-                        "If-None-Match"
-                    )
-                    .header(
-                        "User-Agent",
-                        USER_AGENT
-                    )
-                    .header(
-                        "Referer",
-                        REFERER
-                    )
+                    .removeHeader("If-None-Match")
+                    .header("User-Agent", USER_AGENT)
+                    .header("Referer", REFERER)
                     .build()
 
-            chain.proceed(
-                modifiedRequest
-            )
+            chain.proceed(modifiedRequest)
         }
     }
 
     // =========================================================
-    // GENRE PARSER
+    // GENRES
     // =========================================================
 
     private fun parseGenres(
@@ -2770,22 +2481,13 @@ class RecTV : MainAPI() {
             return null
         }
 
-        val result =
-            mutableListOf<String>()
+        val result = mutableListOf<String>()
 
-        for (
-            index in 0 until array.length()
-        ) {
+        for (index in 0 until array.length()) {
 
-            val value =
-                array.opt(
-                    index
-                )
-
-            when (value) {
+            when (val value = array.opt(index)) {
 
                 is JSONObject -> {
-
                     optStringOrNull(
                         value,
                         "title",
@@ -2797,7 +2499,6 @@ class RecTV : MainAPI() {
                 }
 
                 is String -> {
-
                     value
                         .trim()
                         .takeIf {
@@ -2818,7 +2519,7 @@ class RecTV : MainAPI() {
     }
 
     // =========================================================
-    // CATEGORY PARSER
+    // CATEGORIES
     // =========================================================
 
     private fun parseCategories(
@@ -2832,22 +2533,13 @@ class RecTV : MainAPI() {
             return null
         }
 
-        val result =
-            mutableListOf<String>()
+        val result = mutableListOf<String>()
 
-        for (
-            index in 0 until array.length()
-        ) {
+        for (index in 0 until array.length()) {
 
-            val value =
-                array.opt(
-                    index
-                )
-
-            when (value) {
+            when (val value = array.opt(index)) {
 
                 is JSONObject -> {
-
                     optStringOrNull(
                         value,
                         "title",
@@ -2859,7 +2551,6 @@ class RecTV : MainAPI() {
                 }
 
                 is String -> {
-
                     value
                         .trim()
                         .takeIf {
