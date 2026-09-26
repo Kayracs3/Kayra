@@ -41,10 +41,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=dizilla.club&sz=%size%",
-        "fileHash": "sha256-708f39a72daaa155d6f5e4fb889805e974d0d3458929181f56ebe5ef45c33d98",
+        "fileHash": "sha256-35de1e2f3a8bb7fa2804a4f61876b2157e0d82a12eb8056a4469c2dfee7b538f",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 50305,
+        "fileSize": 49814,
         "status": 1,
         "language": "tr",
         "authors": [
