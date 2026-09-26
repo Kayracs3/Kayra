@@ -32,8 +32,7 @@ class RecTV : MainAPI() {
     )
 
     companion object {
-
-        private const val USER_AGENT = "okhttp/4.12.0"
+        private const val USER_AGENT = "googleusercontent"
         private const val REFERER = "https://twitter.com/"
         private const val APP_VERSION = "157"
         private const val CLIENT_ID = "rectv-android"
@@ -47,7 +46,6 @@ class RecTV : MainAPI() {
         private const val AES_KEY_HEX =
             "666482389dc76bfa57068407418f7dac9f6c14b6868856b169165b9fac7d812e"
 
-        // RecTV Firebase Remote Config
         private const val FIREBASE_REMOTE_CONFIG_URL =
             "https://firebaseremoteconfig.googleapis.com/v1/projects/791583031279/namespaces/firebase:fetch"
 
@@ -115,93 +113,71 @@ class RecTV : MainAPI() {
                 app.post(
                     FIREBASE_REMOTE_CONFIG_URL,
                     headers = headers,
-                    requestBody =
-                        body.toRequestBody(
-                            "application/json; charset=utf-8".toMediaType()
-                        )
+                    requestBody = body.toRequestBody(
+                        "application/json; charset=utf-8".toMediaType()
+                    )
                 )
 
             Log.d(
                 "RecTV",
-                "REMOTE CONFIG RAW: ${response.text.take(4000)}"
+                "REMOTE CONFIG HTTP=${response.code}"
             )
 
             val json =
-                JSONObject(
-                    response.text
-                )
+                try {
+                    JSONObject(response.text)
+                } catch (_: Exception) {
+                    null
+                }
+
+            val entries =
+                json?.optJSONObject("entries")
 
             var apiUrl =
-                json
-                    .optJSONObject("entries")
+                entries
                     ?.optString("api_url")
                     ?.trim()
                     .orEmpty()
 
-            /*
-             * Örnek Remote Config sonucu:
-             *
-             * https://xxxxx/api/
-             *
-             * Bunu:
-             *
-             * https://xxxxx
-             *
-             * şekline normalize ediyoruz.
-             */
-            if (apiUrl.isNotBlank()) {
-
-                apiUrl =
-                    apiUrl
-                        .removeSuffix("/")
-
-                while (
-                    apiUrl.endsWith(
-                        "/api"
-                    )
-                ) {
-
-                    apiUrl =
-                        apiUrl.removeSuffix(
-                            "/api"
-                        )
-                }
-
-                if (
-                    apiUrl.startsWith(
-                        "http://"
-                    ) ||
-                        apiUrl.startsWith(
-                            "https://"
-                        )
-                ) {
-
-                    cachedApiBaseUrl =
-                        apiUrl
-
-                    mainUrl =
-                        apiUrl
-
-                    Log.d(
-                        "RecTV",
-                        "DYNAMIC API BASE: $apiUrl"
-                    )
-
-                    apiUrl
-                } else {
-
-                    mainUrl
-                }
-
-            } else {
+            if (apiUrl.isBlank()) {
 
                 Log.e(
                     "RecTV",
                     "Remote Config api_url bulunamadı"
                 )
 
-                mainUrl
+                return mainUrl
             }
+
+            apiUrl =
+                apiUrl.removeSuffix("/")
+
+            while (
+                apiUrl.endsWith("/api")
+            ) {
+                apiUrl =
+                    apiUrl.removeSuffix("/api")
+            }
+
+            if (
+                !apiUrl.startsWith("http://") &&
+                !apiUrl.startsWith("https://")
+            ) {
+                return mainUrl
+            }
+
+            cachedApiBaseUrl =
+                apiUrl
+
+            mainUrl =
+                apiUrl
+
+            Log.d(
+                "RecTV",
+                "DYNAMIC API BASE: $apiUrl"
+            )
+
+            apiUrl
 
         } catch (e: Exception) {
 
@@ -333,6 +309,9 @@ class RecTV : MainAPI() {
                 return recheckJwt
             }
 
+            val apiBase =
+                getApiBaseUrl()
+
             val path =
                 "/api/attest/verify"
 
@@ -352,12 +331,8 @@ class RecTV : MainAPI() {
 
             val requestBody =
                 body.toRequestBody(
-                    "application/json; charset=utf-8"
-                        .toMediaType()
+                    "application/json; charset=utf-8".toMediaType()
                 )
-
-            val apiBase =
-                getApiBaseUrl()
 
             val response =
                 app.post(
@@ -366,11 +341,14 @@ class RecTV : MainAPI() {
                     requestBody = requestBody
                 )
 
+            Log.d(
+                "RecTV",
+                "JWT RESPONSE HTTP=${response.code}"
+            )
+
             val json =
                 try {
-                    JSONObject(
-                        response.text
-                    )
+                    JSONObject(response.text)
                 } catch (_: Exception) {
                     null
                 }
@@ -440,6 +418,11 @@ class RecTV : MainAPI() {
 
             } else {
 
+                Log.e(
+                    "RecTV",
+                    "JWT alınamadı: ${response.text.take(1000)}"
+                )
+
                 cachedJwt
             }
 
@@ -447,12 +430,17 @@ class RecTV : MainAPI() {
 
             Log.e(
                 "RecTV",
-                "Failed to fetch JWT: ${e.message}"
+                "Failed to fetch JWT: ${e.message}",
+                e
             )
 
             cachedJwt
         }
     }
+
+    // =========================================================
+    // SIGNED HEADERS
+    // =========================================================
 
     private suspend fun getSignedHeaders(
         method: String,
@@ -488,9 +476,17 @@ class RecTV : MainAPI() {
             mutableMapOf(
                 "User-Agent" to USER_AGENT,
                 "Referer" to REFERER,
+                "Accept" to "application/json",
                 "X-Timestamp" to timestamp,
                 "X-Nonce" to nonce,
+
+                // Sunucu missing_hmac döndürdüğü için
+                // HMAC başlığını açıkça gönderiyoruz.
+                "X-HMAC" to signature,
+
+                // Eski uyumluluk için bunu da koruyoruz.
                 "X-Signature" to signature,
+
                 "X-App-Version" to APP_VERSION,
                 "X-Client-Id" to CLIENT_ID
             )
@@ -664,13 +660,10 @@ class RecTV : MainAPI() {
     ): JSONObject? {
 
         return try {
-
             JSONObject(
                 text
             )
-
         } catch (_: Exception) {
-
             null
         }
     }
@@ -680,13 +673,10 @@ class RecTV : MainAPI() {
     ): JSONArray? {
 
         return try {
-
             JSONArray(
                 text
             )
-
         } catch (_: Exception) {
-
             null
         }
     }
@@ -853,7 +843,7 @@ class RecTV : MainAPI() {
         obj.toString()
 
     // =========================================================
-    // FLEXIBLE ARRAY EXTRACTION
+    // ITEM EXTRACTION
     // =========================================================
 
     private fun extractItemObjects(
@@ -890,11 +880,6 @@ class RecTV : MainAPI() {
             }
         }
 
-        /*
-         * RecTV katalogları doğrudan
-         * JSONArray döndürebildiği için ilk
-         * olarak bunu deniyoruz.
-         */
         try {
 
             val directArray =
@@ -915,17 +900,12 @@ class RecTV : MainAPI() {
         } catch (_: Exception) {
         }
 
-        fun scanObject(
-            obj: JSONObject,
-            depth: Int = 0
-        ) {
+        try {
 
-            if (
-                depth > 6 ||
-                result.isNotEmpty()
-            ) {
-                return
-            }
+            val root =
+                JSONObject(
+                    text
+                )
 
             val priorityKeys =
                 listOf(
@@ -942,12 +922,10 @@ class RecTV : MainAPI() {
                     "list"
                 )
 
-            for (
-                key in priorityKeys
-            ) {
+            for (key in priorityKeys) {
 
                 val array =
-                    obj.optJSONArray(
+                    root.optJSONArray(
                         key
                     )
 
@@ -962,12 +940,15 @@ class RecTV : MainAPI() {
                     if (
                         result.isNotEmpty()
                     ) {
-                        return
+                        return result
                     }
                 }
+            }
+
+            for (key in priorityKeys) {
 
                 val child =
-                    obj.optJSONObject(
+                    root.optJSONObject(
                         key
                     )
 
@@ -975,76 +956,18 @@ class RecTV : MainAPI() {
                     child != null
                 ) {
 
-                    scanObject(
-                        child,
-                        depth + 1
-                    )
+                    val nested =
+                        extractItemObjects(
+                            child.toString()
+                        )
 
                     if (
-                        result.isNotEmpty()
+                        nested.isNotEmpty()
                     ) {
-                        return
+                        return nested
                     }
                 }
             }
-
-            val keys =
-                obj.keys()
-
-            while (
-                keys.hasNext()
-            ) {
-
-                val key =
-                    keys.next()
-
-                val value =
-                    obj.opt(
-                        key
-                    )
-
-                when (value) {
-
-                    is JSONArray -> {
-
-                        addArray(
-                            value
-                        )
-
-                        if (
-                            result.isNotEmpty()
-                        ) {
-                            return
-                        }
-                    }
-
-                    is JSONObject -> {
-
-                        scanObject(
-                            value,
-                            depth + 1
-                        )
-
-                        if (
-                            result.isNotEmpty()
-                        ) {
-                            return
-                        }
-                    }
-                }
-            }
-        }
-
-        try {
-
-            val root =
-                JSONObject(
-                    text
-                )
-
-            scanObject(
-                root
-            )
 
         } catch (_: Exception) {
         }
@@ -1110,9 +1033,7 @@ class RecTV : MainAPI() {
                 "imageUrl"
             )
 
-        for (
-            key in simpleKeys
-        ) {
+        for (key in simpleKeys) {
 
             val value =
                 obj.opt(
@@ -1185,7 +1106,7 @@ class RecTV : MainAPI() {
     }
 
     // =========================================================
-    // TYPE HELPERS
+    // TYPE
     // =========================================================
 
     private fun detectItemType(
@@ -1200,40 +1121,25 @@ class RecTV : MainAPI() {
                 "contentType",
                 "kind",
                 "model_type",
-                "modelType"
+                "modelType",
+                "_rectv_type"
             )
                 ?.lowercase()
                 .orEmpty()
 
         return when {
 
-            explicit.contains(
-                "live"
-            ) ||
-                explicit.contains(
-                    "channel"
-                ) ||
-                explicit.contains(
-                    "sport"
-                ) ||
-                explicit.contains(
-                    "canli"
-                ) ->
+            explicit.contains("live") ||
+                explicit.contains("channel") ||
+                explicit.contains("sport") ||
+                explicit.contains("canli") ->
                 "live"
 
-            explicit.contains(
-                "serie"
-            ) ||
-                explicit.contains(
-                    "series"
-                ) ||
-                explicit.contains(
-                    "tvshow"
-                ) ||
+            explicit.contains("serie") ||
+                explicit.contains("series") ||
+                explicit.contains("tvshow") ||
                 explicit == "tv" ||
-                explicit.contains(
-                    "dizi"
-                ) ->
+                explicit.contains("dizi") ->
                 "serie"
 
             else ->
@@ -1247,51 +1153,23 @@ class RecTV : MainAPI() {
 
     override val mainPage =
         mainPageOf(
+            "channel|1|0" to "Spor",
+            "channel|0|0" to "Canlı TV",
 
-            "channel|1|created"
-                to "Spor",
+            "movie|0|created" to "Son Filmler",
+            "serie|0|created" to "Son Diziler",
 
-            "channel|0|created"
-                to "Canlı TV",
-
-            "movie|0|created"
-                to "Son Filmler",
-
-            "serie|0|created"
-                to "Son Diziler",
-
-            "movie|14|created"
-                to "Aile",
-
-            "movie|1|created"
-                to "Aksiyon",
-
-            "movie|13|created"
-                to "Animasyon",
-
-            "movie|19|created"
-                to "Belgesel",
-
-            "movie|4|created"
-                to "Bilim Kurgu",
-
-            "movie|2|created"
-                to "Dram",
-
-            "movie|10|created"
-                to "Fantastik",
-
-            "movie|3|created"
-                to "Komedi",
-
-            "movie|8|created"
-                to "Korku",
-
-            "movie|17|created"
-                to "Macera",
-
-            "movie|5|created"
-                to "Romantik"
+            "movie|14|created" to "Aile",
+            "movie|1|created" to "Aksiyon",
+            "movie|13|created" to "Animasyon",
+            "movie|19|created" to "Belgesel",
+            "movie|4|created" to "Bilim Kurgu",
+            "movie|2|created" to "Dram",
+            "movie|10|created" to "Fantastik",
+            "movie|3|created" to "Komedi",
+            "movie|8|created" to "Korku",
+            "movie|17|created" to "Macera",
+            "movie|5|created" to "Romantik"
         )
 
     override suspend fun getMainPage(
@@ -1306,9 +1184,7 @@ class RecTV : MainAPI() {
             page - 1
 
         val parts =
-            request.data.split(
-                "|"
-            )
+            request.data.split("|")
 
         if (
             parts.size < 3
@@ -1334,13 +1210,13 @@ class RecTV : MainAPI() {
             when (contentType) {
 
                 "channel" ->
-                    "$apiBase/api/channel/by/filtres/$filter/0/$pageIndex/$SW_KEY"
+                    "$apiBase/api/channel/by/filtres/$filter/$sort/$pageIndex/$SW_KEY/"
 
                 "movie" ->
-                    "$apiBase/api/movie/by/filtres/$filter/$sort/$pageIndex/$SW_KEY"
+                    "$apiBase/api/movie/by/filtres/$filter/$sort/$pageIndex/$SW_KEY/"
 
                 "serie" ->
-                    "$apiBase/api/serie/by/filtres/$filter/$sort/$pageIndex/$SW_KEY"
+                    "$apiBase/api/serie/by/filtres/$filter/$sort/$pageIndex/$SW_KEY/"
 
                 else ->
                     return newHomePageResponse(
@@ -1348,6 +1224,18 @@ class RecTV : MainAPI() {
                         emptyList(),
                         hasNext = false
                     )
+            }
+
+        val path =
+            try {
+
+                java.net.URI(
+                    endpoint
+                ).rawPath
+
+            } catch (_: Exception) {
+
+                endpoint.substringBefore("?")
             }
 
         Log.d(
@@ -1360,10 +1248,9 @@ class RecTV : MainAPI() {
 
                 app.get(
                     endpoint,
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to REFERER,
-                        "Accept" to "application/json"
+                    headers = getSignedHeaders(
+                        method = "GET",
+                        path = path
                     )
                 )
 
@@ -1384,8 +1271,32 @@ class RecTV : MainAPI() {
 
         Log.d(
             "RecTV",
+            "MAIN HTTP=${response.code}"
+        )
+
+        Log.d(
+            "RecTV",
             "MAIN BODY: ${response.text.take(6000)}"
         )
+
+        if (
+            response.text.contains(
+                "\"missing_hmac\"",
+                ignoreCase = true
+            )
+        ) {
+
+            Log.e(
+                "RecTV",
+                "SERVER STILL REPORTS missing_hmac. Headers may not match current API."
+            )
+
+            return newHomePageResponse(
+                request.name,
+                emptyList(),
+                hasNext = false
+            )
+        }
 
         val objects =
             extractItemObjects(
@@ -1439,17 +1350,17 @@ class RecTV : MainAPI() {
                     item
                 )
 
+            val detectedType =
+                detectItemType(
+                    item
+                )
+
             val label =
                 optStringOrNull(
                     item,
                     "label",
                     "status"
                 ).orEmpty()
-
-            val detectedType =
-                detectItemType(
-                    item
-                )
 
             val forcedLive =
                 contentType == "channel" ||
@@ -1469,13 +1380,13 @@ class RecTV : MainAPI() {
             }
 
             item.put(
-                "_rectv_section",
-                request.name
+                "_rectv_type",
+                contentType
             )
 
             item.put(
-                "_rectv_type",
-                contentType
+                "_rectv_section",
+                request.name
             )
 
             val data =
@@ -1578,10 +1489,9 @@ class RecTV : MainAPI() {
 
                 app.get(
                     "$apiBase$path",
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to REFERER,
-                        "Accept" to "application/json"
+                    headers = getSignedHeaders(
+                        method = "GET",
+                        path = path
                     )
                 )
 
@@ -1936,10 +1846,9 @@ class RecTV : MainAPI() {
 
                     app.get(
                         "$apiBase$path",
-                        headers = mapOf(
-                            "User-Agent" to USER_AGENT,
-                            "Referer" to REFERER,
-                            "Accept" to "application/json"
+                        headers = getSignedHeaders(
+                            method = "GET",
+                            path = path
                         )
                     )
 
@@ -2148,7 +2057,7 @@ class RecTV : MainAPI() {
         }
 
         // =====================================================
-        // CANLI TV / SPOR
+        // CANLI TV
         // =====================================================
 
         val isLive =
@@ -2199,19 +2108,19 @@ class RecTV : MainAPI() {
 
                     try {
 
-                        val response =
-                            app.get(
-                                "$apiBase$path",
-                                headers = mapOf(
-                                    "User-Agent" to USER_AGENT,
-                                    "Referer" to REFERER,
-                                    "Accept" to "application/json"
-                                )
+                        app.get(
+                            "$apiBase$path",
+                            headers = getSignedHeaders(
+                                method = "GET",
+                                path = path
                             )
-
-                        parseObject(
-                            response.text
-                        ) ?: veri
+                        )
+                            .let {
+                                parseObject(
+                                    it.text
+                                )
+                            }
+                            ?: veri
 
                     } catch (e: Exception) {
 
@@ -2283,19 +2192,19 @@ class RecTV : MainAPI() {
 
                 try {
 
-                    val response =
-                        app.get(
-                            "$apiBase$path",
-                            headers = mapOf(
-                                "User-Agent" to USER_AGENT,
-                                "Referer" to REFERER,
-                                "Accept" to "application/json"
-                            )
+                    app.get(
+                        "$apiBase$path",
+                        headers = getSignedHeaders(
+                            method = "GET",
+                            path = path
                         )
-
-                    parseObject(
-                        response.text
-                    ) ?: veri
+                    )
+                        .let {
+                            parseObject(
+                                it.text
+                            )
+                        }
+                        ?: veri
 
                 } catch (e: Exception) {
 
@@ -2430,10 +2339,7 @@ class RecTV : MainAPI() {
                 data
             )
 
-        // -----------------------------------------------------
         // Direct sources
-        // -----------------------------------------------------
-
         item
             ?.optJSONArray(
                 "sources"
@@ -2454,10 +2360,7 @@ class RecTV : MainAPI() {
                 }
             }
 
-        // -----------------------------------------------------
-        // Full source fetch
-        // -----------------------------------------------------
-
+        // Full item source fetch
         if (
             sources.isEmpty() &&
             item != null
@@ -2502,10 +2405,9 @@ class RecTV : MainAPI() {
                         val response =
                             app.get(
                                 "$apiBase$path",
-                                headers = mapOf(
-                                    "User-Agent" to USER_AGENT,
-                                    "Referer" to REFERER,
-                                    "Accept" to "application/json"
+                                headers = getSignedHeaders(
+                                    method = "GET",
+                                    path = path
                                 )
                             )
 
@@ -2570,10 +2472,9 @@ class RecTV : MainAPI() {
                             val response =
                                 app.get(
                                     "$apiBase$path",
-                                    headers = mapOf(
-                                        "User-Agent" to USER_AGENT,
-                                        "Referer" to REFERER,
-                                        "Accept" to "application/json"
+                                    headers = getSignedHeaders(
+                                        method = "GET",
+                                        path = path
                                     )
                                 )
 
@@ -2612,10 +2513,7 @@ class RecTV : MainAPI() {
             }
         }
 
-        // -----------------------------------------------------
-        // Episode sources
-        // -----------------------------------------------------
-
+        // Episode source array
         if (
             sources.isEmpty()
         ) {
@@ -2641,6 +2539,7 @@ class RecTV : MainAPI() {
                 }
         }
 
+        // Episode single source
         if (
             sources.isEmpty()
         ) {
@@ -2816,7 +2715,8 @@ class RecTV : MainAPI() {
                 }
             )
 
-            delivered = true
+            delivered =
+                true
         }
 
         return delivered
