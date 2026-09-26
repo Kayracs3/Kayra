@@ -80,23 +80,26 @@
         "name": "FullHDFilmizlesene"
     },
     {
-        "iconUrl": "https://HDFilmCehennemi.nl//favicon.ico",
-        "fileHash": "sha256-d439985e7084c9310dbaee2a1cd12a9aaeed220d658a0409ed409635a1a1027d",
+        "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
+        "fileHash": "sha256-ff3e625bdf971b949b3d30cfa2d5ccb9c02596e2ff092e3c338f9c6913f7fec7",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 42887,
-        "status": 1,
+        "fileSize": 29353,
+        "status": 3,
         "language": "tr",
         "authors": [
-            "HDFilmCehennemi"
+            "JustRelaxable",
+            "Kayracs3"
         ],
         "tvTypes": [
-            "TvSeries"
+            "Movie",
+            "TvSeries",
+            "Live"
         ],
-        "version": 4,
-        "internalName": "HDFilmCehennemi",
-        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/HDFilmCehennemi.cs3",
-        "name": "HDFilmCehennemi"
+        "version": 14,
+        "internalName": "InatBox",
+        "description": "\u0130natBox cloudstream eklentisidir. Sevdi\u011finiz yay\u0131n platformlar\u0131n\u0131 ve canl\u0131 ma\u00e7lar\u0131 burada bulabilirsiniz.",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBox.cs3",
+        "name": "InatBox"
     }
 ]
