@@ -61,7 +61,7 @@ class InatBox : MainAPI() {
     private val urlToSearchResponse = ConcurrentHashMap<String, SearchResponse>()
 
     companion object {
-        private const val CACHE_TTL_MS = 15 * 60 * 1000L
+        private const val CACHE_TTL_MS = 60 * 1000L
         private const val HMK = "x7kkk0qmqz63kj68tla5i7u26192v7zqnnddhjgm"
         private const val LEGACY_AES_KEY = "ywevqtjrurkwtqgz"
         private val SECURE_RANDOM = SecureRandom()
@@ -811,11 +811,44 @@ class InatBox : MainAPI() {
                 else -> ExtractorLinkType.VIDEO
             }
 
-            val finalHeaders = headers.toMutableMap()
-            if (finalHeaders["Referer"].isNullOrBlank()) {
+            val candidateHeaders = mutableListOf<Map<String, String>>()
+            val baseHeaders = headers.toMutableMap()
+            if (baseHeaders["Referer"].isNullOrBlank()) {
                 buildDefaultReferer(cleanUrl).takeIf { it.isNotBlank() }?.let {
-                    finalHeaders["Referer"] = it
+                    baseHeaders["Referer"] = it
                 }
+            }
+            candidateHeaders += baseHeaders.toMap()
+
+            val host = runCatching { URI(cleanUrl).host.orEmpty() }.getOrDefault("")
+            if (host.equals("statusas.xyz", ignoreCase = true)) {
+                val noReferer = baseHeaders.toMutableMap()
+                noReferer.remove("Referer")
+                candidateHeaders += noReferer
+
+                val selfReferer = baseHeaders.toMutableMap()
+                selfReferer["Referer"] = "https://$host/"
+                candidateHeaders += selfReferer
+            }
+
+            var workingHeaders: Map<String, String>? = null
+            if (linkType == ExtractorLinkType.M3U8) {
+                for (candidate in candidateHeaders.distinct()) {
+                    if (probeM3u8(cleanUrl, candidate)) {
+                        workingHeaders = candidate
+                        break
+                    }
+                }
+
+                if (workingHeaders == null) {
+                    Log.w(
+                        "InatBox",
+                        "M3U8 source rejected by server: $cleanUrl"
+                    )
+                    return false
+                }
+            } else {
+                workingHeaders = candidateHeaders.firstOrNull() ?: emptyMap()
             }
 
             callback.invoke(
@@ -825,8 +858,8 @@ class InatBox : MainAPI() {
                     url = cleanUrl,
                     type = linkType
                 ) {
-                    this.referer = finalHeaders["Referer"].orEmpty()
-                    this.headers = finalHeaders
+                    this.referer = workingHeaders?.get("Referer").orEmpty()
+                    this.headers = workingHeaders ?: emptyMap()
                     this.quality = guessQuality(cleanUrl)
                 }
             )
@@ -851,6 +884,38 @@ class InatBox : MainAPI() {
             "No extractor/direct stream found: $cleanUrl"
         )
         return false
+    }
+
+    private suspend fun probeM3u8(
+        url: String,
+        headers: Map<String, String>
+    ): Boolean {
+        return try {
+            val response = app.get(
+                url = url,
+                headers = headers,
+                referer = headers["Referer"]
+            )
+
+            if (!response.isSuccessful) {
+                Log.w(
+                    "InatBox",
+                    "M3U8 probe HTTP ${response.code}: $url"
+                )
+                false
+            } else {
+                val body = response.text.trimStart()
+                body.startsWith("#EXTM3U") ||
+                    body.contains("#EXT-X-STREAM-INF") ||
+                    body.contains("#EXTINF:")
+            }
+        } catch (e: Exception) {
+            Log.w(
+                "InatBox",
+                "M3U8 probe failed: ${e.message} | $url"
+            )
+            false
+        }
     }
 
     private fun guessQuality(url: String): Int {
