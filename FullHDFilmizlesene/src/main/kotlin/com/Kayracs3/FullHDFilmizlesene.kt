@@ -49,6 +49,13 @@ class FullHDFilmizlesene : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
         return try {
+            // Her ana sayfa kategorisinin kendi sayfalama durumunu tutuyoruz.
+            // Sayfa 1 yeniden açıldığında eski/bozuk pagination cache temizlenir.
+            if (page <= 1) {
+                paginationCache.remove(request.data)
+                loadedPageUrls.remove(request.data)
+            }
+
             val candidates = if (page <= 1) {
                 listOf(request.data)
             } else {
@@ -65,15 +72,27 @@ class FullHDFilmizlesene : MainAPI() {
                         headers = browserHeaders + ("Referer" to "$mainUrl/")
                     ).document
 
+                    // Önce gerçek sayfa 1'deki pagination bağlantılarını öğreniyoruz.
+                    // Rastgele /film/ linklerinden pagination üretmiyoruz.
                     cachePaginationLinks(request.data, document)
 
                     val results = extractPageResults(document, request.data)
+                    if (results.isEmpty()) {
+                        Log.d(name, "Sayfa boş: page=$page url=$targetUrl")
+                        continue
+                    }
 
-                    val duplicatePreviousPage = if (page > 1) {
-                        val previousUrls = loadedPageUrls[request.data].orEmpty()
-                        results.isNotEmpty() &&
-                            results.count { it.url in previousUrls } >=
-                            maxOf(3, (results.size * 0.70f).toInt())
+                    // Geçersiz bir sayfa URL'si ana sayfaya yönleniyorsa onu kabul etme.
+                    // Bu, her kategoriye ana sayfanın afişlerinin gelmesine neden olan ana sorunu önler.
+                    if (page > 1 && isHomeFallback(document)) {
+                        Log.d(name, "Ana sayfa fallback reddedildi: page=$page url=$targetUrl")
+                        continue
+                    }
+
+                    val previousUrls = loadedPageUrls[request.data].orEmpty()
+                    val duplicatePreviousPage = if (page > 1 && previousUrls.isNotEmpty()) {
+                        val overlap = results.count { it.url in previousUrls }
+                        overlap >= maxOf(5, (results.size * 0.80f).toInt())
                     } else {
                         false
                     }
@@ -83,7 +102,7 @@ class FullHDFilmizlesene : MainAPI() {
                         "getMainPage page=$page url=$targetUrl results=${results.size} duplicatePrevious=$duplicatePreviousPage"
                     )
 
-                    if (results.isEmpty() || duplicatePreviousPage) continue
+                    if (duplicatePreviousPage) continue
 
                     selectedUrl = targetUrl
                     selectedResults = results
@@ -95,7 +114,9 @@ class FullHDFilmizlesene : MainAPI() {
 
             if (selectedUrl != null) {
                 loadedPageUrls
-                    .getOrPut(request.data) { java.util.Collections.synchronizedSet(mutableSetOf()) }
+                    .getOrPut(request.data) {
+                        java.util.Collections.synchronizedSet(mutableSetOf())
+                    }
                     .addAll(selectedResults.map { it.url })
             }
 
@@ -110,25 +131,49 @@ class FullHDFilmizlesene : MainAPI() {
         }
     }
 
+    private fun isHomeFallback(document: org.jsoup.nodes.Document): Boolean {
+        val title = document
+            .selectFirst("title")
+            ?.text()
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+            .orEmpty()
+
+        val baseUri = document.baseUri()
+            .trim()
+            .lowercase(Locale.ROOT)
+            .substringBefore("?")
+            .substringBefore("#")
+            .trimEnd('/')
+
+        val homeUrl = mainUrl.lowercase(Locale.ROOT).trimEnd('/')
+
+        return baseUri == homeUrl ||
+            title == "film izle | full hd filmler | fullhdfilmizlesene" ||
+            title.startsWith("film izle | full hd filmler | fullhdfilmizlesene")
+    }
+
     private fun buildPageCandidates(base: String, page: Int): List<String> {
         if (page <= 1) return listOf(base)
 
         val result = linkedSetOf<String>()
+
+        // Sayfa 1'den gerçekten keşfedilmiş link varsa her zaman ilk bunu dene.
         paginationCache[base]?.get(page)?.let(result::add)
 
         val clean = base.trimEnd('/')
-
-        // Bu sitenin kategori URL'lerinde -1 biçimi kullanılıyor;
-        // ikinci/üçüncü sayfalar için -2, -3 ... en güçlü aday.
         val numericSuffix = Regex("-(\\d+)$").find(clean)
+
+        // Site bazı kategori URL'lerinde -1/-2/-3 biçimini kullanıyor.
         if (numericSuffix != null) {
             val prefix = clean.substring(0, numericSuffix.range.first)
             result += "$prefix-$page"
-        } else {
-            result += "$clean-$page"
         }
 
-        // Diğer yaygın pagination biçimleri yedek olarak denenir.
+        // Yeni Filmler gibi -1 ile bitmeyen bölümler için yaygın biçimler.
+        result += "$clean/$page/"
+        result += "$clean/$page"
         result += "$clean/sayfa/$page/"
         result += "$clean/sayfa/$page"
         result += "$clean/page/$page/"
@@ -139,53 +184,78 @@ class FullHDFilmizlesene : MainAPI() {
         result += "$clean?sayfa=$page"
         result += "$clean?pg=$page"
 
+        // En son çare olarak -2/-3 biçimini de dene; ana sayfaya yönlenirse
+        // isHomeFallback() bunu otomatik olarak reddedecek.
+        result += "$clean-$page"
+
         return result.toList()
     }
 
     private fun cachePaginationLinks(base: String, document: org.jsoup.nodes.Document) {
-        val cache = paginationCache.getOrPut(
-            base
-        ) { java.util.concurrent.ConcurrentHashMap() }
+        val cache = paginationCache.getOrPut(base) {
+            java.util.concurrent.ConcurrentHashMap()
+        }
 
-        // Sayfadaki gerçek sayfa linklerini mümkün olduğunca doğrudan al.
-        // Özellikle "1 2 3 4 ... İleri" şeklindeki yapıları destekler.
-        document.select("a[href]").forEach { link ->
-            val href = fixUrlNull(link.attr("href")) ?: return@forEach
-            if (!href.contains(mainUrl, ignoreCase = true)) return@forEach
+        // Yalnızca pagination alanındaki linkleri kabul ediyoruz.
+        // Böylece film linklerindeki yıl/sayısal slug değerleri sayfa numarası sanılmıyor.
+        val paginationSelectors = listOf(
+            "nav[aria-label*='pag' i] a[href]",
+            "nav.pagination a[href]",
+            ".pagination a[href]",
+            ".pagination li a[href]",
+            ".pagination-links a[href]",
+            ".page-numbers[href]",
+            ".wp-pagenavi a[href]",
+            ".page-links a[href]",
+            ".pager a[href]",
+            ".paging a[href]",
+            ".paging-navigation a[href]",
+            ".sayfalama a[href]",
+            ".page-nav a[href]",
+            ".pagination-container a[href]",
+            "ul.pagination li a[href]",
+            "ol.pagination li a[href]"
+        )
+
+        val links = linkedSetOf<Element>()
+        paginationSelectors.forEach { selector ->
+            document.select(selector).forEach { links += it }
+        }
+
+        // Bazı temalarda sadece rel=next/prev var; bunları ayrıca yakala.
+        document.select("a[rel='next'], a[rel='prev'], a[aria-label*='next' i], a[aria-label*='sonraki' i], a[aria-label*='ileri' i]")
+            .forEach { links += it }
+
+        for (link in links) {
+            val href = fixUrlNull(link.attr("href")) ?: continue
+            if (!href.startsWith(mainUrl, ignoreCase = true)) continue
 
             val text = link.text().trim()
             val aria = link.attr("aria-label").trim()
             val rel = link.attr("rel").trim()
+            val classes = link.classNames().joinToString(" ").lowercase(Locale.ROOT)
 
-            val pageNumber = when {
-                text.matches(Regex("\\d{1,4}")) -> text.toIntOrNull()
-                else -> {
-                    Regex("(?:^|[-_/=])(\\d{1,4})(?:/?(?:[?#].*)?)$")
-                        .find(href)
-                        ?.groupValues
-                        ?.getOrNull(1)
-                        ?.toIntOrNull()
-                        ?: Regex("(?i)(?:sayfa|page|paged|pg)[=/](\\d{1,4})")
-                            .find(href)
-                            ?.groupValues
-                            ?.getOrNull(1)
-                            ?.toIntOrNull()
-                }
+            val numericPage = text
+                .takeIf { it.matches(Regex("\\d{1,4}")) }
+                ?.toIntOrNull()
+
+            if (numericPage != null && numericPage > 1) {
+                cache[numericPage] = href
+                continue
             }
 
-            if (pageNumber != null && pageNumber > 1) {
-                cache[pageNumber] = href
-            }
-
-            if (
-                text.equals("ileri", ignoreCase = true) ||
+            val isNext = rel.equals("next", ignoreCase = true) ||
+                aria.contains("next", ignoreCase = true) ||
+                aria.contains("sonraki", ignoreCase = true) ||
+                aria.contains("ileri", ignoreCase = true) ||
+                text.equals("next", ignoreCase = true) ||
                 text.equals("sonraki", ignoreCase = true) ||
-                rel.equals("next", ignoreCase = true) ||
-                aria.equals("next", ignoreCase = true) ||
-                text.contains("ileri", ignoreCase = true)
-            ) {
-                val nextNumber = pageNumber ?: ((cache.keys.maxOrNull() ?: 1) + 1)
-                if (nextNumber > 1) cache.putIfAbsent(nextNumber, href)
+                text.equals("ileri", ignoreCase = true) ||
+                classes.contains("next")
+
+            if (isNext) {
+                val knownMax = cache.keys.maxOrNull() ?: 1
+                cache.putIfAbsent(knownMax + 1, href)
             }
         }
     }
@@ -196,20 +266,18 @@ class FullHDFilmizlesene : MainAPI() {
     ): List<SearchResponse> {
         val results = linkedMapOf<String, SearchResponse>()
 
-        // Yalnızca gerçek film kartlarını kabul ediyoruz.
-        // Sayfadaki bütün /film/ bağlantılarını doğrudan taramak "Son Yorumlar"
-        // gibi bölümlerde geçen film bağlantılarını da film sanıyordu.
+        // Sitenin yorum alanı şu yapıda:
+        // <ul class="sidebar-yorum"> ... <a href="/film/..."> ...
+        // Bu alanı tamamen dışarıda bırakıyoruz. Genel "yorum/review" metin
+        // filtreleri kullanmıyoruz; çünkü normal film kartlarının içinde de
+        // "yorum" kelimesi bulunuyor.
         val cards = document.select(
-            "li.film, article.film, .film-card, .film-item, .film, " +
-                ".movies .item, .movie-item, .film-list li, " +
-                ".movie-list .item, .movies-list .item, .film-grid .item, " +
-                ".film-grid article, .movies article, .movie-grid article"
-        )
-            .filter { card ->
-                !hasCommentLikeAncestor(card) &&
-                    card.selectFirst("a[href*='/film/']") != null &&
-                    card.selectFirst("img") != null
-            }
+            "li.film, article.film, .film-card, .film-item"
+        ).filter { card ->
+            !hasCommentLikeAncestor(card) &&
+                card.selectFirst("a[href*='/film/']") != null &&
+                card.selectFirst("img") != null
+        }
 
         cards.forEach { card ->
             val anchor = card.selectFirst("a[href*='/film/']") ?: return@forEach
@@ -226,9 +294,9 @@ class FullHDFilmizlesene : MainAPI() {
         var current: Element? = anchor
         repeat(8) {
             val candidate = current ?: return@repeat
+
             if (isCommentLikeElement(candidate)) {
-                current = candidate.parent()
-                return@repeat
+                return null
             }
 
             val tag = candidate.tagName().lowercase()
@@ -248,27 +316,15 @@ class FullHDFilmizlesene : MainAPI() {
     }
 
     private fun isCommentLikeElement(element: Element): Boolean {
-        // Sadece elemanın kendi kimlik/sınıf işaretlerini kontrol ediyoruz.
-        // Altındaki başlıklara bakmak yanlışlıkla normal film listesini de
-        // "Son Yorumlar" olarak işaretleyebiliyordu.
-        val marker = buildString {
-            append(element.tagName()).append(' ')
-            append(element.id()).append(' ')
-            append(element.classNames().joinToString(" ")).append(' ')
-            append(element.attr("data-section")).append(' ')
-            append(element.attr("data-widget")).append(' ')
-        }.lowercase()
-
-        return listOf(
-            "comment", "comments", "yorum", "yorumlar", "review", "reviews",
-            "latest-comment", "latest-comments", "son-yorum", "son-yorumlar",
-            "recent-comment", "recent-comments", "user-comment"
-        ).any { marker.contains(it) }
+        // Yalnızca sitenin gerçek yorum listesini hedefliyoruz:
+        // <ul class="sidebar-yorum"> ... </ul>
+        return element.tagName().equals("ul", ignoreCase = true) &&
+            element.classNames().any { it.equals("sidebar-yorum", ignoreCase = true) }
     }
 
     private fun hasCommentLikeAncestor(element: Element): Boolean {
         var current: Element? = element
-        repeat(8) {
+        repeat(12) {
             val candidate = current ?: return@repeat
             if (isCommentLikeElement(candidate)) return true
             current = candidate.parent()
