@@ -395,7 +395,7 @@ class InatBox : MainAPI() {
                     val jsonArray = JSONArray(trimmed)
                     for (i in 0 until jsonArray.length()) {
                         val item = jsonArray.optJSONObject(i) ?: continue
-                        if (loadChContentLinks(parseToChContent(item), subtitleCallback, callback)) {
+                        if (loadInatChContentLinks(parseToInatChContent(item), subtitleCallback, callback)) {
                             loaded = true
                         }
                     }
@@ -403,8 +403,8 @@ class InatBox : MainAPI() {
 
                 trimmed.startsWith("{") -> {
                     val item = JSONObject(trimmed)
-                    loaded = loadChContentLinks(
-                        parseToChContent(item),
+                    loaded = loadInatChContentLinks(
+                        parseToInatChContent(item),
                         subtitleCallback,
                         callback
                     )
@@ -614,7 +614,7 @@ class InatBox : MainAPI() {
         item: JSONObject
     ): LiveStreamLoadResponse? {
         return try {
-            val chContent = parseToChContent(item)
+            val chContent = parseToInatChContent(item)
 
             newLiveStreamLoadResponse(
                 chContent.chName,
@@ -622,7 +622,6 @@ class InatBox : MainAPI() {
                 item.toString()
             ) {
                 this.posterUrl = chContent.chImg
-                this.uniqueUrl = "${item.toString()}|${System.currentTimeMillis()}"
             }
         } catch (e: Exception) {
             Log.e("InatBox", "Live sports error: ${e.message}")
@@ -634,7 +633,7 @@ class InatBox : MainAPI() {
         item: JSONObject
     ): LiveStreamLoadResponse? {
         return try {
-            val chContent = parseToChContent(item)
+            val chContent = parseToInatChContent(item)
 
             newLiveStreamLoadResponse(
                 chContent.chName,
@@ -642,7 +641,6 @@ class InatBox : MainAPI() {
                 item.toString()
             ) {
                 this.posterUrl = chContent.chImg
-                this.uniqueUrl = "${item.toString()}|${System.currentTimeMillis()}"
             }
         } catch (e: Exception) {
             Log.e("InatBox", "Live stream error: ${e.message}")
@@ -675,8 +673,8 @@ class InatBox : MainAPI() {
         }
     }
 
-    private fun parseToChContent(item: JSONObject): ChContent {
-        return ChContent(
+    private fun parseToInatChContent(item: JSONObject): InatChContent {
+        return InatChContent(
             chName = item.optString("chName"),
             chUrl = item.optString("chUrl").vkSourceFix(),
             chImg = item.optString("chImg"),
@@ -686,8 +684,8 @@ class InatBox : MainAPI() {
         )
     }
 
-    private suspend fun loadChContentLinks(
-        chContent: ChContent,
+    private suspend fun loadInatChContentLinks(
+        chContent: InatChContent,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
@@ -822,7 +820,36 @@ class InatBox : MainAPI() {
             }
             candidateHeaders += baseHeaders.toMap()
 
-            val workingHeaders = candidateHeaders.firstOrNull() ?: emptyMap()
+            val host = runCatching { URI(cleanUrl).host.orEmpty() }.getOrDefault("")
+            if (host.equals("statusas.xyz", ignoreCase = true)) {
+                val noReferer = baseHeaders.toMutableMap()
+                noReferer.remove("Referer")
+                candidateHeaders += noReferer
+
+                val selfReferer = baseHeaders.toMutableMap()
+                selfReferer["Referer"] = "https://$host/"
+                candidateHeaders += selfReferer
+            }
+
+            var workingHeaders: Map<String, String>? = null
+            if (linkType == ExtractorLinkType.M3U8) {
+                for (candidate in candidateHeaders.distinct()) {
+                    if (probeM3u8(cleanUrl, candidate)) {
+                        workingHeaders = candidate
+                        break
+                    }
+                }
+
+                if (workingHeaders == null) {
+                    Log.w(
+                        "InatBox",
+                        "M3U8 source rejected by server: $cleanUrl"
+                    )
+                    return false
+                }
+            } else {
+                workingHeaders = candidateHeaders.firstOrNull() ?: emptyMap()
+            }
 
             callback.invoke(
                 newExtractorLink(
@@ -831,8 +858,8 @@ class InatBox : MainAPI() {
                     url = cleanUrl,
                     type = linkType
                 ) {
-                    this.referer = workingHeaders["Referer"].orEmpty()
-                    this.headers = workingHeaders
+                    this.referer = workingHeaders?.get("Referer").orEmpty()
+                    this.headers = workingHeaders ?: emptyMap()
                     this.quality = guessQuality(cleanUrl)
                 }
             )
@@ -857,6 +884,38 @@ class InatBox : MainAPI() {
             "No extractor/direct stream found: $cleanUrl"
         )
         return false
+    }
+
+    private suspend fun probeM3u8(
+        url: String,
+        headers: Map<String, String>
+    ): Boolean {
+        return try {
+            val response = app.get(
+                url = url,
+                headers = headers,
+                referer = headers["Referer"]
+            )
+
+            if (!response.isSuccessful) {
+                Log.w(
+                    "InatBox",
+                    "M3U8 probe HTTP ${response.code}: $url"
+                )
+                false
+            } else {
+                val body = response.text.trimStart()
+                body.startsWith("#EXTM3U") ||
+                    body.contains("#EXT-X-STREAM-INF") ||
+                    body.contains("#EXTINF:")
+            }
+        } catch (e: Exception) {
+            Log.w(
+                "InatBox",
+                "M3U8 probe failed: ${e.message} | $url"
+            )
+            false
+        }
     }
 
     private fun guessQuality(url: String): Int {
@@ -1236,3 +1295,13 @@ class InatBox : MainAPI() {
         return searchResults
     }
 }
+
+
+private data class InatChContent(
+    val chName: String,
+    val chUrl: String,
+    val chImg: String,
+    val chHeaders: String,
+    val chReg: String,
+    val chType: String
+)
