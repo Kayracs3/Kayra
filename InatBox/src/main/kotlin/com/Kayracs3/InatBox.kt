@@ -844,11 +844,15 @@ class InatBox : MainAPI() {
         ) {
             cached.second
         } else {
-            val jsonResponse = makeInatPostRequest(url)
+            val jsonResponse = loadCatalogResponse(url)
             if (jsonResponse.isNullOrBlank()) {
                 cached?.second ?: emptyList()
             } else {
-                val results = getSearchResponseList(jsonResponse, url)
+                val results = getSearchResponseList(
+                    jsonResponse,
+                    sourceUrl = url,
+                    allowGeneric4k = is4kCatalogUrl(url)
+                )
                 if (results.isNotEmpty()) {
                     tabCache[url] = Pair(System.currentTimeMillis(), results)
                     results.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
@@ -907,6 +911,64 @@ class InatBox : MainAPI() {
             ),
             hasNext = endIndex < allResults.size
         )
+    }
+
+    private fun is4kCatalogUrl(url: String): Boolean =
+        url.contains("4k.filmizleeeee.cfd", ignoreCase = true) &&
+            url.contains("catalog-exo.php", ignoreCase = true)
+
+    private suspend fun loadCatalogResponse(url: String): String? {
+        // Normal InatBox API path.
+        makeInatPostRequest(url)?.let { response ->
+            if (response.isNotBlank()) return response
+        }
+
+        if (!is4kCatalogUrl(url)) return null
+
+        // 4K catalog is hosted separately and may expose a plain JSON GET endpoint
+        // instead of the encrypted InatBox POST protocol. Keep the existing POST
+        // path first, then fall back to a normal GET without changing other tabs.
+        return runCatching {
+            val response = app.get(
+                url,
+                headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/150.0.0.0 Safari/537.36",
+                    "Accept" to "application/json,text/plain,*/*",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                    "Referer" to "https://4k.filmizleeeee.cfd/"
+                )
+            )
+
+            if (!response.isSuccessful) {
+                Log.w("InatBox", "4K catalog GET HTTP ${response.code}")
+                return@runCatching null
+            }
+
+            extractJsonPayload(response.text)
+        }.getOrElse {
+            Log.w("InatBox", "4K catalog GET failed: ${it.message}")
+            null
+        }
+    }
+
+    private fun extractJsonPayload(raw: String): String? {
+        val text = raw.trim()
+        if (text.isBlank()) return null
+        if (text.startsWith("[") || text.startsWith("{")) return text
+
+        val arrayStart = text.indexOf('[')
+        val arrayEnd = text.lastIndexOf(']')
+        if (arrayStart >= 0 && arrayEnd > arrayStart) {
+            return text.substring(arrayStart, arrayEnd + 1)
+        }
+
+        val objectStart = text.indexOf('{')
+        val objectEnd = text.lastIndexOf('}')
+        if (objectStart >= 0 && objectEnd > objectStart) {
+            return text.substring(objectStart, objectEnd + 1)
+        }
+
+        return null
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -1975,20 +2037,76 @@ class InatBox : MainAPI() {
         }.getOrNull()
     }
 
+    private fun hasStandardInatFields(item: JSONObject): Boolean =
+        item.has("diziType") || (item.has("chName") && item.has("chUrl"))
+
+    private fun normalizeGeneric4kItem(item: JSONObject): JSONObject? {
+        fun firstNonBlank(vararg keys: String): String =
+            keys.asSequence()
+                .map { key -> item.optString(key).trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+
+        val name = firstNonBlank(
+            "diziName", "name", "title", "filmName", "movieName",
+            "film_title", "movie_title", "originalTitle"
+        )
+        val url = firstNonBlank(
+            "diziUrl", "url", "link", "href", "filmUrl", "movieUrl",
+            "playUrl", "playerUrl", "streamUrl"
+        )
+        val image = firstNonBlank(
+            "diziImg", "poster", "posterUrl", "image", "imageUrl",
+            "img", "thumbnail", "thumb"
+        )
+
+        if (name.isBlank() || url.isBlank()) return null
+
+        return JSONObject().apply {
+            put("chName", name)
+            put("chUrl", url)
+            put("chImg", image)
+            put("chType", "4k")
+            put("__inat_4k", true)
+            item.optString("description").takeIf { it.isNotBlank() }?.let { put("chDescription", it) }
+            item.optString("plot").takeIf { it.isNotBlank() }?.let { put("chPlot", it) }
+        }
+    }
+
     private fun getSearchResponseList(
         jsonResponse: String,
-        sourceUrl: String? = null
+        sourceUrl: String? = null,
+        allowGeneric4k: Boolean = false
     ): List<SearchResponse> {
         val searchResults = mutableListOf<SearchResponse>()
 
         try {
-            val jsonArray = JSONArray(jsonResponse)
+            val trimmedJson = jsonResponse.trimStart()
+            val itemsArray = if (trimmedJson.startsWith("[")) {
+                JSONArray(jsonResponse)
+            } else if (allowGeneric4k && trimmedJson.startsWith("{")) {
+                val root = JSONObject(jsonResponse)
+                sequenceOf("data", "results", "items", "movies", "films", "catalog")
+                    .mapNotNull { key -> root.optJSONArray(key) }
+                    .firstOrNull()
+                    ?: JSONArray().apply {
+                        if (hasStandardInatFields(root) || root.has("name") || root.has("title")) {
+                            put(root)
+                        }
+                    }
+            } else {
+                JSONArray()
+            }
 
-            for (i in 0 until jsonArray.length()) {
-                val rawItem = jsonArray.getJSONObject(i)
+            for (i in 0 until itemsArray.length()) {
+                val rawItem = itemsArray.optJSONObject(i) ?: continue
                 if (!inatContentAllowed(rawItem)) continue
 
-                val item = enrichInatItem(rawItem, sourceUrl)
+                val item = if (allowGeneric4k && !hasStandardInatFields(rawItem)) {
+                    normalizeGeneric4kItem(rawItem) ?: continue
+                } else {
+                    rawItem
+                }.let { enrichInatItem(it, sourceUrl) }
 
                 if (item.has("diziType")) {
                     val name = item.optString("diziName", "İsimsiz")
