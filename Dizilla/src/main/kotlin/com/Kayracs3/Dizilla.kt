@@ -432,7 +432,9 @@ class Dizilla : MainAPI() {
                 "Yeni Eklenen Diziler HTML kart sayısı = ${results.size}"
             )
 
-            return results.values.toList()
+            return results.values
+                .take(24)
+                .toList()
         }
 
         // =====================================================
@@ -490,7 +492,9 @@ class Dizilla : MainAPI() {
                 }
         }
 
-        return results.values.toList()
+        return results.values
+            .take(24)
+            .toList()
     }
 
     private fun pageSignature(
@@ -513,6 +517,9 @@ class Dizilla : MainAPI() {
                 request.data,
                 page
             )
+
+        val previousSignature =
+            paginationSignatures[request.data]
 
         var selectedResults =
             emptyList<SearchResponse>()
@@ -542,10 +549,17 @@ class Dizilla : MainAPI() {
                     continue
                 }
 
+            /*
+             * ÖNEMLİ:
+             * candidate sayfa 2/3 URL'si olsa bile parser'a
+             * her zaman orijinal request.data veriyoruz.
+             * Böylece /arsiv + query parametresi hâlâ
+             * .new-added-list filtresini kullanıyor.
+             */
             val results =
                 extractMainPageResults(
                     document,
-                    candidate
+                    request.data
                 )
 
             Log.d(
@@ -557,8 +571,32 @@ class Dizilla : MainAPI() {
                 continue
             }
 
-            selectedResults = results
-            selectedUrl = candidate
+            val signature =
+                pageSignature(results)
+
+            /*
+             * Sayfa 2 için site aynı 24 kartı döndürürse
+             * bu adayı kabul etmiyoruz; sonraki olası pagination
+             * biçimini deniyoruz.
+             */
+            if (
+                page > 1 &&
+                previousSignature != null &&
+                signature == previousSignature
+            ) {
+                Log.d(
+                    "Dizilla",
+                    "Aday aynı 24 kartı döndürdü, sonraki aday deneniyor: $candidate"
+                )
+                continue
+            }
+
+            selectedResults =
+                results.take(24)
+
+            selectedUrl =
+                candidate
+
             break
         }
 
@@ -573,25 +611,6 @@ class Dizilla : MainAPI() {
         val signature =
             pageSignature(selectedResults)
 
-        val previousSignature =
-            paginationSignatures[request.data]
-
-        if (
-            page > 1 &&
-            previousSignature == signature
-        ) {
-            Log.d(
-                "Dizilla",
-                "Page $page aynı sonuçları döndürdü."
-            )
-
-            return newHomePageResponse(
-                request.name,
-                emptyList(),
-                hasNext = false
-            )
-        }
-
         paginationSignatures[request.data] =
             signature
 
@@ -603,19 +622,76 @@ class Dizilla : MainAPI() {
         return newHomePageResponse(
             request.name,
             selectedResults,
-            hasNext = true
+            hasNext = selectedResults.size >= 24
         )
     }
-
-    // =========================================================
-    // SERIES ITEM / JSON
-    // =========================================================
 
     private data class SeriesInfo(
         val title: String?,
         val slug: String?,
         val poster: String?
     )
+
+    private fun normalizeMenuText(
+        value: String?
+    ): String {
+        return value
+            ?.lowercase()
+            ?.replace("ı", "i")
+            ?.replace("ş", "s")
+            ?.replace("ğ", "g")
+            ?.replace("ü", "u")
+            ?.replace("ö", "o")
+            ?.replace("ç", "c")
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?: ""
+    }
+
+    private val menuFilterNames = setOf(
+        "seçimi özelleştir",
+        "filtrele",
+        "yeni eklenenler",
+        "imdb 6.9 üstü",
+        "yerli diziler",
+        "aile",
+        "aksiyon",
+        "animasyon",
+        "bilim kurgu",
+        "dram",
+        "fantastik",
+        "gerilim",
+        "gizem",
+        "komedi",
+        "korku",
+        "macera",
+        "romantik",
+        "savaş",
+        "suç",
+        "western",
+        "amerika",
+        "çin",
+        "endonezya",
+        "filipinler",
+        "fransa",
+        "güney kore",
+        "hindistan",
+        "ingiltere",
+        "ispanya",
+        "japonya",
+        "kore",
+        "malezya",
+        "tayland",
+        "tayvan",
+        "türkiye"
+    )
+
+    private fun isMenuFilterName(
+        title: String?
+    ): Boolean {
+        return normalizeMenuText(title) in
+            menuFilterNames.map { normalizeMenuText(it) }.toSet()
+    }
 
     private fun collectSeriesFromJson(
         json: JSONObject
@@ -655,9 +731,26 @@ class Dizilla : MainAPI() {
                             "poster"
                         )
 
+                    val cleanSlug =
+                        slug
+                            ?.trim()
+                            ?.lowercase()
+                            ?: ""
+
+                    val looksLikeMenuRoute =
+                        cleanSlug.startsWith("tur/") ||
+                            cleanSlug.startsWith("ulke/") ||
+                            cleanSlug.startsWith("imdb") ||
+                            cleanSlug.startsWith("yapim") ||
+                            cleanSlug.startsWith("filtre") ||
+                            cleanSlug.startsWith("/tur/") ||
+                            cleanSlug.startsWith("/ulke/")
+
                     if (
                         !title.isNullOrBlank() &&
-                        !slug.isNullOrBlank()
+                        !slug.isNullOrBlank() &&
+                        !isMenuFilterName(title) &&
+                        !looksLikeMenuRoute
                     ) {
                         output +=
                             SeriesInfo(
