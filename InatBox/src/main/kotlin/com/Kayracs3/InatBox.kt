@@ -59,13 +59,15 @@ private object InatHlsProxy {
 
     private data class Mapping(
         val refreshUrl: String,
+        val initialUrl: String,
         val headers: Map<String, String>,
         val name: String,
         val type: String,
         val image: String,
         val signature: String,
         val createdAt: Long,
-        val targets: MutableMap<String, String> = ConcurrentHashMap()
+        val targets: MutableMap<String, String> = ConcurrentHashMap(),
+        @Volatile var currentUrl: String = initialUrl
     )
 
     private const val MAX_MAPPING_AGE_MS = 6 * 60 * 60 * 1000L
@@ -86,13 +88,14 @@ private object InatHlsProxy {
 
     fun createLink(
         refreshUrl: String,
+        initialUrl: String,
         headers: Map<String, String>,
         name: String,
         type: String,
         image: String,
         signature: String
     ): String? {
-        if (refreshUrl.isBlank()) return null
+        if (refreshUrl.isBlank() || initialUrl.isBlank()) return null
 
         return runCatching {
             ensureServer()
@@ -101,6 +104,7 @@ private object InatHlsProxy {
             val id = UUID.randomUUID().toString().replace("-", "")
             mappings[id] = Mapping(
                 refreshUrl = refreshUrl,
+                initialUrl = initialUrl,
                 headers = headers.toMap(),
                 name = name,
                 type = type,
@@ -229,7 +233,7 @@ private object InatHlsProxy {
         mapping: Mapping,
         mappingId: String
     ) {
-        val result = fetchFreshManifestBlocking(mapping)
+        val result = fetchManifestBlocking(mapping)
 
         if (result == null) {
             writeResponse(
@@ -260,25 +264,80 @@ private object InatHlsProxy {
         )
     }
 
-    private fun fetchFreshManifestBlocking(mapping: Mapping): Pair<String, String>? {
+    private fun fetchManifestBlocking(mapping: Mapping): Pair<String, String>? {
+        val currentUrl = mapping.currentUrl.trim()
+
+        // İlk manifest isteğinde mevcut yayın URL'sini kullan.
+        // Böylece player'ın her manifest yenilemesinde API'den yeni bir akış
+        // alınmaz ve aynı yayın oturumu korunur.
+        fetchManifestFromUrl(mapping, currentUrl)?.let { return it }
+
+        // Mevcut URL gerçekten bozulmuş/süresi dolmuşsa yalnızca o zaman
+        // kaynak API'den yeni URL iste.
+        Log.d(
+            "InatHlsProxy",
+            "Current HLS URL failed for ${mapping.name}; refreshing source"
+        )
+
         return runCatching {
-            val jsonResponse = InatBox.makeProxyRequestBlocking(mapping.refreshUrl) ?: return null
+            val jsonResponse = InatBox.makeProxyRequestBlocking(mapping.refreshUrl)
+                ?: return null
+
             val freshUrl = selectFreshChannelUrl(jsonResponse, mapping)
                 ?.trim()
                 .orEmpty()
 
             if (freshUrl.isBlank()) return null
 
+            fetchManifestFromUrl(mapping, freshUrl)?.also {
+                mapping.currentUrl = freshUrl
+                Log.d(
+                    "InatHlsProxy",
+                    "HLS source refreshed for ${mapping.name}"
+                )
+            }
+        }.getOrElse {
+            Log.w("InatHlsProxy", "Manifest refresh failed: ${it.message}")
+            null
+        }
+    }
+
+    private fun fetchManifestFromUrl(
+        mapping: Mapping,
+        url: String
+    ): Pair<String, String>? {
+        if (url.isBlank()) return null
+
+        return runCatching {
             val response = InatBox.httpGetBlocking(
-                url = freshUrl,
+                url = url,
                 headers = mapping.headers,
                 referer = mapping.headers["Referer"]
             ) ?: return null
 
-            if (response.first !in 200..299) return null
-            Pair(response.second, freshUrl)
+            if (response.first !in 200..299) {
+                Log.w(
+                    "InatHlsProxy",
+                    "Upstream manifest HTTP ${response.first} for ${mapping.name}"
+                )
+                return null
+            }
+
+            val body = response.second
+            if (!body.trimStart().startsWith("#EXTM3U")) {
+                Log.w(
+                    "InatHlsProxy",
+                    "Upstream response is not HLS for ${mapping.name}"
+                )
+                return null
+            }
+
+            Pair(body, url)
         }.getOrElse {
-            Log.w("InatHlsProxy", "Manifest refresh failed: ${it.message}")
+            Log.w(
+                "InatHlsProxy",
+                "Manifest request failed for ${mapping.name}: ${it.message}"
+            )
             null
         }
     }
@@ -1358,6 +1417,7 @@ class InatBox : MainAPI() {
         ) {
             val proxyUrl = InatHlsProxy.createLink(
                 refreshUrl = chContent.refreshUrl,
+                initialUrl = sourceUrl,
                 headers = headers,
                 name = chContent.chName,
                 type = chContent.chType,
