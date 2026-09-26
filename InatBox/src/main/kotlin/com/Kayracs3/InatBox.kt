@@ -46,7 +46,7 @@ class InatBox : MainAPI() {
     // =========================================================
 
     private val contentUrl =
-        "https://diziboxen.help/CDN/001/002/dizibox"
+        "https://diziboxen.help/CDN/001/002/dizibox/v2"
 
     // =========================================================
     // BASIC INFO
