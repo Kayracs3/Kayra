@@ -822,46 +822,116 @@ class RecTV : MainAPI() {
         obj: JSONObject
     ): Score? {
 
+        // IMPORTANT:
+        // Do not treat generic fields such as `rating`, `score` or
+        // `vote_average` as IMDb. RecTV may use those for its own score.
+        // Only explicitly IMDb-labelled numeric fields are accepted.
+
         var value =
             optDoubleOrNull(
                 obj,
-                "rating",
-                "score",
                 "imdb_rating",
                 "imdbRating",
                 "imdb_score",
                 "imdbScore",
-                "vote_average",
-                "rating_value"
+                "imdb_value",
+                "imdbValue",
+                "imdb_rate",
+                "imdbRate"
             )
 
-        if (value == null) {
-            obj.optJSONObject("ratings")?.let { ratings ->
-                value = optDoubleOrNull(
-                    ratings,
-                    "imdb",
-                    "rating",
-                    "score",
-                    "value"
-                )
+        // Some APIs expose IMDb as a numeric `imdb` field.
+        if (value == null && obj.has("imdb")) {
+            val imdbValue = obj.opt("imdb")
+
+            when (imdbValue) {
+                is Number -> {
+                    value = imdbValue.toDouble()
+                }
+
+                is String -> {
+                    val text = imdbValue.trim()
+
+                    // IMDb ids such as tt1234567 are NOT ratings.
+                    if (!text.startsWith("tt", ignoreCase = true)) {
+                        value = text.toDoubleOrNull()
+                    }
+                }
+
+                is JSONObject -> {
+                    value =
+                        optDoubleOrNull(
+                            imdbValue,
+                            "rating",
+                            "score",
+                            "value",
+                            "aggregateRating"
+                        )
+                }
             }
         }
 
-        if (value == null) return null
+        // Nested IMDb rating object.
+        if (value == null) {
+            obj.optJSONObject("ratings")?.let { ratings ->
+                value =
+                    optDoubleOrNull(
+                        ratings,
+                        "imdb_rating",
+                        "imdbRating",
+                        "imdb_score",
+                        "imdbScore",
+                        "imdb_value",
+                        "imdbValue"
+                    )
 
-        if (value!! > 10.0 && value!! <= 100.0) {
-            value = value!! / 10.0
+                if (value == null) {
+                    val imdb = ratings.opt("imdb")
+
+                    when (imdb) {
+                        is Number -> {
+                            value = imdb.toDouble()
+                        }
+
+                        is JSONObject -> {
+                            value =
+                                optDoubleOrNull(
+                                    imdb,
+                                    "rating",
+                                    "score",
+                                    "value",
+                                    "aggregateRating"
+                                )
+                        }
+                    }
+                }
+            }
         }
 
-        if (value!! > 100.0) {
-            value = value!! / 100.0
+        if (value == null) {
+            return null
         }
 
+        // Normalize common rating scales to 0..10.
         val normalized =
-            value!!.coerceIn(0.0, 10.0)
+            when {
+                value!! in 0.0..10.0 ->
+                    value!!
+
+                value!! > 10.0 && value!! <= 100.0 ->
+                    value!! / 10.0
+
+                value!! > 100.0 && value!! <= 1000.0 ->
+                    value!! / 100.0
+
+                else ->
+                    return null
+            }
 
         return try {
-            Score.from10(normalized)
+            Score.from10(
+                normalized.coerceIn(0.0, 10.0)
+            )
         } catch (_: Exception) {
             null
         }
