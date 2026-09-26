@@ -30,6 +30,8 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONException
@@ -47,7 +49,6 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
-import kotlinx.coroutines.runBlocking
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
@@ -228,12 +229,15 @@ private object InatHlsProxy {
         mapping: Mapping,
         mappingId: String
     ) {
-        val result = runBlocking {
-            fetchFreshManifest(mapping)
-        }
+        val result = fetchFreshManifestBlocking(mapping)
 
         if (result == null) {
-            writeResponse(output, 502, "text/plain; charset=utf-8", "Upstream manifest unavailable".toByteArray())
+            writeResponse(
+                output,
+                502,
+                "text/plain; charset=utf-8",
+                "Upstream manifest unavailable".toByteArray()
+            )
             return
         }
 
@@ -256,23 +260,23 @@ private object InatHlsProxy {
         )
     }
 
-    private suspend fun fetchFreshManifest(mapping: Mapping): Pair<String, String>? {
+    private fun fetchFreshManifestBlocking(mapping: Mapping): Pair<String, String>? {
         return runCatching {
-            val jsonResponse = makeInatPostRequestForProxy(mapping.refreshUrl) ?: return null
+            val jsonResponse = InatBox.makeProxyRequestBlocking(mapping.refreshUrl) ?: return null
             val freshUrl = selectFreshChannelUrl(jsonResponse, mapping)
                 ?.trim()
                 .orEmpty()
 
             if (freshUrl.isBlank()) return null
 
-            val response = app.get(
-                freshUrl,
+            val response = InatBox.httpGetBlocking(
+                url = freshUrl,
                 headers = mapping.headers,
                 referer = mapping.headers["Referer"]
-            )
-            if (!response.isSuccessful) return null
+            ) ?: return null
 
-            Pair(response.text, freshUrl)
+            if (response.first !in 200..299) return null
+            Pair(response.second, freshUrl)
         }.getOrElse {
             Log.w("InatHlsProxy", "Manifest refresh failed: ${it.message}")
             null
@@ -318,7 +322,13 @@ private object InatHlsProxy {
 
             (exact ?: named ?: fallback)?.optString("chUrl")
                 ?.takeIf { it.isNotBlank() }
-                ?.let { if (it.startsWith("act", ignoreCase = true)) "https://vk.com/al_video.php?$it" else it }
+                ?.let {
+                    if (it.startsWith("act", ignoreCase = true)) {
+                        "https://vk.com/al_video.php?$it"
+                    } else {
+                        it
+                    }
+                }
         }.getOrNull()
     }
 
@@ -385,7 +395,7 @@ private object InatHlsProxy {
             }
 
             if (line.contains("URI=\"", ignoreCase = true)) {
-                val regex = Regex("URI=\\\"([^\\\"]+)\\\"")
+                val regex = Regex("URI=\"([^\"]+)\"")
                 lines[index] = regex.replace(line) { match ->
                     "URI=\"${registerTarget(match.groupValues[1])}\""
                 }
@@ -405,18 +415,14 @@ private object InatHlsProxy {
             target.contains("/hls/", ignoreCase = true) ||
             target.contains("/playlist", ignoreCase = true)
 
-        val result = runCatching {
-            runBlocking {
-                app.get(
-                    target,
-                    headers = mapping.headers,
-                    referer = mapping.headers["Referer"]
-                )
-            }
-        }.getOrNull()
+        val response = InatBox.httpGetBlocking(
+            url = target,
+            headers = mapping.headers,
+            referer = mapping.headers["Referer"]
+        )
 
-        if (result == null || !result.isSuccessful) {
-            val code = result?.code ?: 502
+        if (response == null || response.first !in 200..299) {
+            val code = response?.first ?: 502
             writeResponse(
                 output,
                 code,
@@ -428,7 +434,7 @@ private object InatHlsProxy {
 
         if (isPlaylist) {
             val rewritten = rewriteManifest(
-                body = result.text,
+                body = response.second,
                 baseUrl = target,
                 mapping = mapping,
                 mappingId = mappingId
@@ -446,10 +452,7 @@ private object InatHlsProxy {
             return
         }
 
-        val bytes = runCatching {
-            result.body?.bytes()
-        }.getOrNull() ?: result.text.toByteArray(StandardCharsets.ISO_8859_1)
-
+        val bodyBytes = response.third ?: response.second.toByteArray(StandardCharsets.ISO_8859_1)
         val contentType = when {
             target.contains(".aac", true) -> "audio/aac"
             target.contains(".m4s", true) -> "video/iso.segment"
@@ -461,7 +464,7 @@ private object InatHlsProxy {
             output,
             200,
             contentType,
-            bytes,
+            bodyBytes,
             extraHeaders = mapOf("Cache-Control" to "no-store")
         )
     }
@@ -498,21 +501,6 @@ private object InatHlsProxy {
         output.flush()
     }
 
-    private suspend fun makeInatPostRequestForProxy(url: String): String? {
-        return InatBox.makeProxyRequest(url)
-    }
-
-    private fun extractChUrlForProxy(rawJson: String?): String? {
-        if (rawJson.isNullOrBlank()) return null
-        return runCatching {
-            val trimmed = rawJson.trim()
-            when {
-                trimmed.startsWith("{") -> JSONObject(trimmed).optString("chUrl", null)
-                trimmed.startsWith("[") -> JSONArray(trimmed).optJSONObject(0)?.optString("chUrl", null)
-                else -> null
-            }
-        }.getOrNull()
-    }
 }
 
 class InatBox : MainAPI() {
@@ -567,11 +555,14 @@ class InatBox : MainAPI() {
             return bytesToHex(mac.doFinal(data.toByteArray(StandardCharsets.UTF_8)))
         }
 
-        internal suspend fun makeProxyRequest(url: String): String? {
-            return makeInatPostRequestStatic(url)
+        private val proxyHttpClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .build()
         }
 
-        private suspend fun makeInatPostRequestStatic(
+        internal fun makeProxyRequestBlocking(
             url: String,
             retryCount: Int = 2
         ): String? {
@@ -589,29 +580,84 @@ class InatBox : MainAPI() {
                         "User-Agent" to "speedrestapi",
                         "X-Requested-With" to "com.bp.box",
                         "Referer" to "https://speedrestapi.com/",
-                        "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
                         "Cache-Control" to "no-cache",
                         "Host" to hostName
                     )
                     headers.putAll(signRequest("POST", url, requestBody))
-                    val response = app.post(
-                        url = url,
-                        headers = headers,
-                        requestBody = requestBody.toRequestBody(
-                            "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
+
+                    val request = Request.Builder()
+                        .url(url)
+                        .post(
+                            requestBody.toRequestBody(
+                                "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
+                            )
                         )
-                    )
-                    if (response.isSuccessful && response.text.isNotBlank()) {
-                        decryptDoubleAes(response.text, dynamicKey)?.let { return it }
+                        .apply {
+                            headers.forEach { (key, value) ->
+                                addHeader(key, value)
+                            }
+                        }
+                        .build()
+
+                    proxyHttpClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) return@use
+                        val body = response.body?.bytes() ?: return@use
+                        if (body.isEmpty()) return@use
+
+                        val decrypted = decryptDoubleAes(
+                            String(body, StandardCharsets.UTF_8),
+                            dynamicKey
+                        )
+
+                        if (!decrypted.isNullOrBlank()) {
+                            throw ProxyResult(decrypted)
+                        }
                     }
+                } catch (result: ProxyResult) {
+                    return result.value
                 } catch (e: Exception) {
                     if (attempt == retryCount - 1) {
-                        Log.w("InatBox", "Proxy refresh request failed: ${e.message}")
+                        Log.w(
+                            "InatBox",
+                            "Proxy refresh request failed: ${e.message}"
+                        )
                     }
                 }
             }
+
             return null
         }
+
+        internal fun httpGetBlocking(
+            url: String,
+            headers: Map<String, String>,
+            referer: String?
+        ): Triple<Int, String, ByteArray>? {
+            return try {
+                val requestBuilder = Request.Builder().url(url).get()
+
+                headers.forEach { (key, value) ->
+                    if (value.isNotBlank()) {
+                        requestBuilder.addHeader(key, value)
+                    }
+                }
+
+                if (!referer.isNullOrBlank() && headers["Referer"].isNullOrBlank()) {
+                    requestBuilder.addHeader("Referer", referer)
+                }
+
+                proxyHttpClient.newCall(requestBuilder.build()).execute().use { response ->
+                    val bytes = response.body?.bytes() ?: ByteArray(0)
+                    val text = String(bytes, StandardCharsets.UTF_8)
+                    Triple(response.code, text, bytes)
+                }
+            } catch (e: Exception) {
+                Log.w("InatBox", "Proxy GET failed: ${e.message}")
+                null
+            }
+        }
+
+        private class ProxyResult(val value: String) : Exception()
 
         fun signRequest(method: String, url: String, body: String): Map<String, String> {
             val uriPath = try {
@@ -1303,7 +1349,7 @@ class InatBox : MainAPI() {
         }
 
         var playbackUrl = sourceUrl
-        var playbackHeaders = headers
+        var playbackHeaders: Map<String, String> = headers
 
         if (
             chContent.refreshUrl.isNotBlank() &&
@@ -1325,7 +1371,7 @@ class InatBox : MainAPI() {
                     "Using renewable local HLS proxy for ${chContent.chName}"
                 )
                 playbackUrl = proxyUrl
-                playbackHeaders = emptyMap()
+                playbackHeaders = emptyMap<String, String>()
             }
         }
 
