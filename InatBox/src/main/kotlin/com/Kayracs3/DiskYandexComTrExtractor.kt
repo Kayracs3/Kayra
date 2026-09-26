@@ -1,4 +1,4 @@
-package com.Kyaracs3
+package com.Kayracs3
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
