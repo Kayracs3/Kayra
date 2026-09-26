@@ -165,7 +165,7 @@ class Dizilla : MainAPI() {
 
             val directRegex =
                 Regex(
-                    "\"secureData\"\\s*:\s*\"([^\"]+)\""
+                    """[\"]secureData[\"]\s*:\s*[\"]([^\"]+)[\"]"""
                 )
 
             val directMatch =
@@ -451,7 +451,7 @@ class Dizilla : MainAPI() {
                                 ?.trim()
                                 ?.replace(
                                     Regex(
-                                        "\\s*-\\s*\\d{4}\\s+izle$"
+                                        """\s*-\s*\d{4}\s+izle$"""
                                     ),
                                     ""
                                 )
@@ -703,7 +703,7 @@ class Dizilla : MainAPI() {
             ?.replace("ü", "u")
             ?.replace("ö", "o")
             ?.replace("ç", "c")
-            ?.replace(Regex("\\s+"), " ")
+            ?.replace(Regex("""\s+"""), " ")
             ?.trim()
             ?: ""
     }
