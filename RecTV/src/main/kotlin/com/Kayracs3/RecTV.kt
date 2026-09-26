@@ -4,7 +4,6 @@ import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import kotlinx.coroutines.sync.Mutex
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -47,8 +46,6 @@ class RecTV : MainAPI() {
         private const val AES_KEY_HEX =
             "666482389dc76bfa57068407418f7dac9f6c14b6868856b169165b9fac7d812e"
     }
-
-    private val jwtMutex = Mutex()
 
     @Volatile
     private var cachedJwt: String? = null
@@ -121,29 +118,22 @@ class RecTV : MainAPI() {
     // =========================================================
 
     private suspend fun getJwt(): String? {
+
         val now =
             System.currentTimeMillis() / 1000L
 
-        val currentJwt =
-            cachedJwt
-
-        if (
-            currentJwt != null &&
-            now < jwtExpirationTimestamp - 300
-        ) {
-            return currentJwt
+        cachedJwt?.let { token ->
+            if (now < jwtExpirationTimestamp - 300) {
+                return token
+            }
         }
 
-        jwtMutex.lock()
-
-        try {
+        return try {
 
             val currentNow =
                 System.currentTimeMillis() / 1000L
 
-            val recheckJwt =
-                cachedJwt
-
+            val recheckJwt = cachedJwt
             if (
                 recheckJwt != null &&
                 currentNow < jwtExpirationTimestamp - 300
@@ -151,115 +141,111 @@ class RecTV : MainAPI() {
                 return recheckJwt
             }
 
-            try {
+            val path =
+                "/api/attest/verify"
 
-                val path =
-                    "/api/attest/verify"
+            val body =
+                "{}"
 
-                val body = "{}"
+            val headers =
+                getSignedHeaders(
+                    method = "POST",
+                    path = path,
+                    body = body,
+                    includeAuth = false
+                ).toMutableMap()
 
-                val headers =
-                    getSignedHeaders(
-                        method = "POST",
-                        path = path,
-                        body = body,
-                        includeAuth = false
-                    ).toMutableMap()
+            headers["Content-Type"] =
+                "application/json"
 
-                headers["Content-Type"] =
-                    "application/json"
+            val requestBody =
+                body.toRequestBody(
+                    "application/json; charset=utf-8".toMediaType()
+                )
 
-                val requestBody =
-                    body.toRequestBody(
-                        "application/json; charset=utf-8".toMediaType()
-                    )
+            val response =
+                app.post(
+                    "$mainUrl$path",
+                    headers = headers,
+                    requestBody = requestBody
+                )
 
-                val response =
-                    app.post(
-                        "$mainUrl$path",
-                        headers = headers,
-                        requestBody = requestBody
-                    )
-
-                val json =
-                    try {
-                        JSONObject(response.text)
-                    } catch (_: Exception) {
-                        null
-                    }
-
-                val token =
-                    json
-                        ?.optString("jwt")
-                        ?.takeIf { it.isNotBlank() }
-
-                if (token != null) {
-
-                    cachedJwt = token
-
-                    var expiration =
-                        json.optLong(
-                            "exp",
-                            currentNow + 7000L
-                        )
-
-                    try {
-
-                        val parts =
-                            token.split(".")
-
-                        if (parts.size >= 2) {
-
-                            val payloadBytes =
-                                Base64.decode(
-                                    parts[1],
-                                    Base64.URL_SAFE or
-                                        Base64.NO_PADDING or
-                                        Base64.NO_WRAP
-                                )
-
-                            val payloadJson =
-                                String(
-                                    payloadBytes,
-                                    Charsets.UTF_8
-                                )
-
-                            Regex(
-                                "\"exp\"\\s*:\\s*(\\d+)"
-                            )
-                                .find(payloadJson)
-                                ?.groupValues
-                                ?.getOrNull(1)
-                                ?.toLongOrNull()
-                                ?.let {
-                                    expiration = it
-                                }
-                        }
-
-                    } catch (_: Exception) {
-                    }
-
-                    jwtExpirationTimestamp =
-                        expiration
-
-                    token
-
-                } else {
+            val json =
+                try {
+                    JSONObject(response.text)
+                } catch (_: Exception) {
                     null
                 }
 
-            } catch (e: Exception) {
+            val token =
+                json
+                    ?.optString("jwt")
+                    ?.takeIf { it.isNotBlank() }
 
-                Log.e(
-                    "RecTV",
-                    "Failed to fetch JWT: ${e.message}"
-                )
+            if (token != null) {
 
+                cachedJwt =
+                    token
+
+                var expiration =
+                    json.optLong(
+                        "exp",
+                        currentNow + 7000L
+                    )
+
+                try {
+
+                    val parts =
+                        token.split(".")
+
+                    if (parts.size >= 2) {
+
+                        val payloadBytes =
+                            Base64.decode(
+                                parts[1],
+                                Base64.URL_SAFE or
+                                    Base64.NO_PADDING or
+                                    Base64.NO_WRAP
+                            )
+
+                        val payloadJson =
+                            String(
+                                payloadBytes,
+                                Charsets.UTF_8
+                            )
+
+                        Regex(
+                            "\"exp\"\\s*:\\s*(\\d+)"
+                        )
+                            .find(payloadJson)
+                            ?.groupValues
+                            ?.getOrNull(1)
+                            ?.toLongOrNull()
+                            ?.let { value ->
+                                expiration = value
+                            }
+                    }
+
+                } catch (_: Exception) {
+                }
+
+                jwtExpirationTimestamp =
+                    expiration
+
+                token
+
+            } else {
                 cachedJwt
             }
 
-        } finally {
-            jwtMutex.unlock()
+        } catch (e: Exception) {
+
+            Log.e(
+                "RecTV",
+                "Failed to fetch JWT: ${e.message}"
+            )
+
+            cachedJwt
         }
     }
 
@@ -571,6 +557,16 @@ class RecTV : MainAPI() {
         }
 
         return null
+    }
+
+    private fun hasArrayItems(
+        obj: JSONObject,
+        vararg keys: String
+    ): Boolean {
+        return optArray(obj, *keys)
+            ?.length()
+            ?.let { it > 0 }
+            ?: false
     }
 
     private fun objectToString(
@@ -1138,19 +1134,19 @@ class RecTV : MainAPI() {
                 "CANLI",
                 ignoreCase = true
             ) ||
-                !optArray(
+                hasArrayItems(
                     veri,
                     "categories"
-                ).isNullOrEmpty()
+                )
 
         if (isLive) {
 
             val fullChannel =
                 if (
-                    optArray(
+                    !hasArrayItems(
                         veri,
                         "sources"
-                    ).isNullOrEmpty()
+                    )
                 ) {
 
                     val path =
@@ -1225,10 +1221,10 @@ class RecTV : MainAPI() {
 
         val fullMovie =
             if (
-                optArray(
+                !hasArrayItems(
                     veri,
                     "sources"
-                ).isNullOrEmpty()
+                )
             ) {
 
                 val path =
@@ -1442,10 +1438,10 @@ class RecTV : MainAPI() {
                                 "CANLI",
                                 ignoreCase = true
                             ) ||
-                                !optArray(
+                                hasArrayItems(
                                     item,
                                     "categories"
-                                ).isNullOrEmpty()
+                                )
 
                         if (isChannel) {
 
