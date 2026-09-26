@@ -2,8 +2,32 @@ package com.Kayracs3
 
 import android.util.Base64
 import android.util.Log
-import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.utils.*
+import com.lagradost.cloudstream3.DubStatus
+import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LiveStreamLoadResponse
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SeasonData
+import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.mainPageOf
+import com.lagradost.cloudstream3.newAnimeLoadResponse
+import com.lagradost.cloudstream3.newEpisode
+import com.lagradost.cloudstream3.newHomePageResponse
+import com.lagradost.cloudstream3.newLiveSearchResponse
+import com.lagradost.cloudstream3.newLiveStreamLoadResponse
+import com.lagradost.cloudstream3.newMovieLoadResponse
+import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newTvSeriesSearchResponse
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -11,7 +35,6 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.net.URI
-import java.util.Locale
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -53,7 +76,7 @@ class InatBox : MainAPI() {
         mutableMapOf<String, SearchResponse>()
 
     // =========================================================
-    // AES
+    // AES KEY
     // =========================================================
 
     private val aesKey =
@@ -127,10 +150,12 @@ class InatBox : MainAPI() {
     )
 
     // =========================================================
-    // DEBUG
+    // LOG
     // =========================================================
 
-    private fun log(message: String) {
+    private fun log(
+        message: String
+    ) {
         Log.d(
             "InatBox",
             message
@@ -157,11 +182,11 @@ class InatBox : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
 
-        log(
-            "MAIN PAGE -> ${request.data}"
-        )
-
         return try {
+
+            log(
+                "MAIN PAGE -> ${request.data}"
+            )
 
             val jsonResponse =
                 makeInatRequest(
@@ -173,34 +198,35 @@ class InatBox : MainAPI() {
                         hasNext = false
                     )
 
-            val results =
+            val searchResults =
                 getSearchResponseList(
                     jsonResponse
                 )
 
-            for (result in results) {
+            for (
+                searchResponse in searchResults
+            ) {
 
                 val url =
-                    result.url
+                    searchResponse.url
 
                 if (
-                    !urlToSearchResponse.containsKey(
-                        url
-                    )
+                    !urlToSearchResponse
+                        .containsKey(url)
                 ) {
 
                     urlToSearchResponse[url] =
-                        result
+                        searchResponse
                 }
             }
 
             log(
-                "MAIN PAGE RESULT -> ${results.size}"
+                "MAIN PAGE RESULT -> ${searchResults.size}"
             )
 
             newHomePageResponse(
                 request.name,
-                results,
+                searchResults,
                 hasNext = false
             )
 
@@ -237,29 +263,36 @@ class InatBox : MainAPI() {
 
                 try {
 
+                    val url =
+                        pageData.data
+
                     val jsonResponse =
                         makeInatRequest(
-                            pageData.data
+                            url
                         )
                             ?: continue
 
-                    val results =
+                    val searchResults =
                         getSearchResponseList(
                             jsonResponse
                         )
 
-                    for (result in results) {
+                    for (
+                        searchResponse in searchResults
+                    ) {
 
-                        val url =
-                            result.url
+                        val contentUrl =
+                            searchResponse.url
 
                         if (
                             !urlToSearchResponse
-                                .containsKey(url)
+                                .containsKey(contentUrl)
                         ) {
 
-                            urlToSearchResponse[url] =
-                                result
+                            urlToSearchResponse[
+                                contentUrl
+                            ] =
+                                searchResponse
                         }
                     }
 
@@ -303,8 +336,9 @@ class InatBox : MainAPI() {
                 )
             ) {
 
-                matchingResults +=
+                matchingResults.add(
                     searchResponse
+                )
             }
         }
 
@@ -357,6 +391,10 @@ class InatBox : MainAPI() {
                 )
             ) {
 
+                item.getString(
+                    "diziName"
+                )
+
                 val type =
                     item.getString(
                         "diziType"
@@ -381,6 +419,7 @@ class InatBox : MainAPI() {
                     }
 
                     else -> {
+
                         null
                     }
                 }
@@ -390,6 +429,10 @@ class InatBox : MainAPI() {
                 item.has("chUrl") &&
                 item.has("chImg")
             ) {
+
+                item.getString(
+                    "chName"
+                )
 
                 val chType =
                     item.getString(
@@ -458,27 +501,28 @@ class InatBox : MainAPI() {
                 data.startsWith("[")
             ) {
 
-                val array =
+                val chContentJsonArray =
                     JSONArray(
                         data
                     )
 
                 for (
-                    i in 0 until array.length()
+                    i in 0 until
+                    chContentJsonArray.length()
                 ) {
 
-                    val item =
-                        array.getJSONObject(
+                    val chContentJsonObject =
+                        chContentJsonArray.getJSONObject(
                             i
                         )
 
-                    val content =
+                    val chContent =
                         parseToChContent(
-                            item
+                            chContentJsonObject
                         )
 
                     loadChContentLinks(
-                        content,
+                        chContent,
                         subtitleCallback,
                         callback
                     )
@@ -486,18 +530,18 @@ class InatBox : MainAPI() {
 
             } else {
 
-                val item =
+                val chContentJsonObject =
                     JSONObject(
                         data
                     )
 
-                val content =
+                val chContent =
                     parseToChContent(
-                        item
+                        chContentJsonObject
                     )
 
                 loadChContentLinks(
-                    content,
+                    chContent,
                     subtitleCallback,
                     callback
                 )
@@ -525,42 +569,42 @@ class InatBox : MainAPI() {
         tvType: TvType = TvType.TvSeries
     ): LoadResponse? {
 
+        val episodes =
+            mutableMapOf<
+                DubStatus,
+                MutableList<Episode>
+            >()
+
+        val seasonDataList =
+            mutableListOf<SeasonData>()
+
+        val name =
+            item.getString(
+                "diziName"
+            )
+
+        val url =
+            item.getString(
+                "diziUrl"
+            )
+
+        val plot =
+            item.getString(
+                "diziDetay"
+            )
+
+        val jsonResponse =
+            makeInatRequest(
+                url
+            )
+                ?: return null
+
+        val jsonArray =
+            JSONArray(
+                jsonResponse
+            )
+
         return try {
-
-            val episodes =
-                mutableMapOf<
-                    DubStatus,
-                    MutableList<Episode>
-                >()
-
-            val seasonDataList =
-                mutableListOf<SeasonData>()
-
-            val name =
-                item.getString(
-                    "diziName"
-                )
-
-            val url =
-                item.getString(
-                    "diziUrl"
-                )
-
-            val plot =
-                item.getString(
-                    "diziDetay"
-                )
-
-            val jsonResponse =
-                makeInatRequest(
-                    url
-                )
-                    ?: return null
-
-            val jsonArray =
-                JSONArray(
-                    jsonResponse
-                )
 
             for (
                 i in 0 until jsonArray.length()
@@ -576,11 +620,15 @@ class InatBox : MainAPI() {
                         "diziName"
                     )
 
-                seasonDataList +=
+                val seasonData =
                     SeasonData(
                         season = i + 1,
                         name = seasonName
                     )
+
+                seasonDataList.add(
+                    seasonData
+                )
 
                 val seasonUrl =
                     seasonItem.getString(
@@ -603,7 +651,7 @@ class InatBox : MainAPI() {
                     } catch (e: Exception) {
 
                         logError(
-                            "EPISODE JSON ERROR -> $seasonName",
+                            "FAILED TO PARSE EPISODE JSON FOR SEASON: $seasonName",
                             e
                         )
 
@@ -611,7 +659,8 @@ class InatBox : MainAPI() {
                     }
 
                 for (
-                    j in 0 until episodeArray.length()
+                    j in 0 until
+                    episodeArray.length()
                 ) {
 
                     try {
@@ -686,9 +735,10 @@ class InatBox : MainAPI() {
             ) {
 
                 this.episodes =
-                    episodes.mapValues {
-                        it.value.toList()
-                    }
+                    episodes
+                        .mapValues {
+                            it.value.toList()
+                        }
                         .toMutableMap()
 
                 this.posterUrl =
@@ -704,7 +754,7 @@ class InatBox : MainAPI() {
         } catch (e: Exception) {
 
             logError(
-                "TV SERIES LOAD ERROR",
+                "FAILED TO PARSE TV SERIES RESPONSE",
                 e
             )
 
@@ -723,7 +773,9 @@ class InatBox : MainAPI() {
         return try {
 
             if (
-                item.has("diziType")
+                item.has(
+                    "diziType"
+                )
             ) {
 
                 val name =
@@ -798,43 +850,7 @@ class InatBox : MainAPI() {
         } catch (e: Exception) {
 
             logError(
-                "MOVIE LOAD ERROR",
-                e
-            )
-
-            null
-        }
-    }
-
-    // =========================================================
-    // LIVE STREAM
-    // =========================================================
-
-    private suspend fun parseLiveStreamLoadResponse(
-        item: JSONObject
-    ): LiveStreamLoadResponse? {
-
-        return try {
-
-            val content =
-                parseToChContent(
-                    item
-                )
-
-            newLiveStreamLoadResponse(
-                content.chName,
-                item.toString(),
-                item.toString()
-            ) {
-
-                this.posterUrl =
-                    content.chImg
-            }
-
-        } catch (e: Exception) {
-
-            logError(
-                "LIVE LOAD ERROR",
+                "FAILED TO PARSE MOVIE RESPONSE",
                 e
             )
 
@@ -852,10 +868,13 @@ class InatBox : MainAPI() {
 
         return try {
 
-            val content =
+            val chContent =
                 parseToChContent(
                     item
                 )
+
+            val posterUrl =
+                chContent.chImg
 
             newLiveStreamLoadResponse(
                 name,
@@ -864,13 +883,55 @@ class InatBox : MainAPI() {
             ) {
 
                 this.posterUrl =
-                    content.chImg
+                    posterUrl
             }
 
         } catch (e: Exception) {
 
             logError(
-                "SPORTS LIVE LOAD ERROR",
+                "FAILED TO PARSE SPORTS LIVE STREAM RESPONSE",
+                e
+            )
+
+            null
+        }
+    }
+
+    // =========================================================
+    // LIVE STREAM
+    // =========================================================
+
+    private suspend fun parseLiveStreamLoadResponse(
+        item: JSONObject
+    ): LiveStreamLoadResponse? {
+
+        return try {
+
+            val chContent =
+                parseToChContent(
+                    item
+                )
+
+            val channelName =
+                chContent.chName
+
+            val posterUrl =
+                chContent.chImg
+
+            newLiveStreamLoadResponse(
+                channelName,
+                item.toString(),
+                item.toString()
+            ) {
+
+                this.posterUrl =
+                    posterUrl
+            }
+
+        } catch (e: Exception) {
+
+            logError(
+                "FAILED TO PARSE LIVE STREAM RESPONSE",
                 e
             )
 
@@ -888,7 +949,9 @@ class InatBox : MainAPI() {
 
         val type =
             if (
-                item.has("diziType")
+                item.has(
+                    "diziType"
+                )
             ) {
 
                 item.getString(
@@ -912,7 +975,7 @@ class InatBox : MainAPI() {
     }
 
     // =========================================================
-    // VK URL FIX
+    // VK SOURCE FIX
     // =========================================================
 
     private fun String.vkSourceFix(): String {
@@ -933,6 +996,12 @@ class InatBox : MainAPI() {
 
     // =========================================================
     // CH CONTENT
+    // =========================================================
+    //
+    // ChContent ayrı dosyada:
+    // InatBoxModels.kt
+    //
+    // Burada yeniden tanımlanmıyor.
     // =========================================================
 
     private fun parseToChContent(
@@ -988,84 +1057,95 @@ class InatBox : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
 
+        val chType =
+            chContent.chType
+
         var contentToProcess =
             chContent
 
         // =====================================================
-        // SPECIAL SPORTS CONTENT
+        // SPECIAL SPORTS SOURCE
         // =====================================================
 
         if (
-            chContent.chType ==
+            chType ==
             "tekli_regex_lb_sh_3"
         ) {
 
-            try {
+            val name =
+                chContent.chName
 
-                val jsonResponse =
-                    runCatching {
-                        makeInatRequest(
-                            chContent.chUrl
-                        )
-                    }.getOrNull()
-                        ?: getJsonFromEncryptedInatResponse(
-                            app.get(
-                                chContent.chUrl
-                            ).text
-                        )
-                        ?: return
+            val url =
+                chContent.chUrl
 
-                val firstItem =
-                    JSONObject(
-                        jsonResponse
+            val posterUrl =
+                chContent.chImg
+
+            val headers =
+                chContent.chHeaders
+
+            val reg =
+                chContent.chReg
+
+            val type =
+                chContent.chType
+
+            val jsonResponse =
+                runCatching {
+
+                    makeInatRequest(
+                        url
                     )
 
-                firstItem.put(
-                    "chHeaders",
-                    chContent.chHeaders
-                )
-
-                firstItem.put(
-                    "chReg",
-                    chContent.chReg
-                )
-
-                firstItem.put(
-                    "chName",
-                    chContent.chName
-                )
-
-                firstItem.put(
-                    "chImg",
-                    chContent.chImg
-                )
-
-                firstItem.put(
-                    "chType",
-                    chContent.chType
-                )
-
-                contentToProcess =
-                    parseToChContent(
-                        firstItem
+                }.getOrNull()
+                    ?: getJsonFromEncryptedInatResponse(
+                        app
+                            .get(url)
+                            .text
                     )
+                    ?: return
 
-            } catch (e: Exception) {
-
-                logError(
-                    "SPORTS SOURCE ERROR",
-                    e
+            val firstItem =
+                JSONObject(
+                    jsonResponse
                 )
 
-                return
-            }
+            firstItem.put(
+                "chHeaders",
+                headers
+            )
+
+            firstItem.put(
+                "chReg",
+                reg
+            )
+
+            firstItem.put(
+                "chName",
+                name
+            )
+
+            firstItem.put(
+                "chImg",
+                posterUrl
+            )
+
+            firstItem.put(
+                "chType",
+                type
+            )
+
+            contentToProcess =
+                parseToChContent(
+                    firstItem
+                )
         }
 
         val sourceUrl =
             contentToProcess.chUrl
 
         // =====================================================
-        // HEADERS
+        // SOURCE HEADERS
         // =====================================================
 
         val headers =
@@ -1093,7 +1173,8 @@ class InatBox : MainAPI() {
                         )
 
                 for (
-                    entry in jsonHeaders.keys()
+                    entry in
+                    jsonHeaders.keys()
                 ) {
 
                     headers[entry] =
@@ -1172,7 +1253,7 @@ class InatBox : MainAPI() {
             !extractorFound
         ) {
 
-            val type =
+            val extractorType =
                 when {
 
                     sourceUrl.contains(
@@ -1201,7 +1282,7 @@ class InatBox : MainAPI() {
                 "DIRECT FALLBACK -> $sourceUrl"
             )
 
-            callback(
+            callback.invoke(
                 newExtractorLink(
                     source =
                         this.name,
@@ -1213,7 +1294,7 @@ class InatBox : MainAPI() {
                         sourceUrl,
 
                     type =
-                        type
+                        extractorType
                 ) {
 
                     this.headers =
@@ -1242,23 +1323,19 @@ class InatBox : MainAPI() {
                     URI(
                         url
                     ).host
+                        ?: throw IllegalArgumentException(
+                            "Invalid URL: $url"
+                        )
 
                 } catch (e: Exception) {
 
-                    throw IllegalArgumentException(
-                        "Invalid URL: $url",
+                    logError(
+                        "FAILED TO EXTRACT HOSTNAME: $url",
                         e
                     )
+
+                    return null
                 }
-
-            if (
-                hostName.isNullOrBlank()
-            ) {
-
-                throw IllegalArgumentException(
-                    "Hostname not found: $url"
-                )
-            }
 
             val headers =
                 mapOf(
@@ -1289,8 +1366,7 @@ class InatBox : MainAPI() {
                 Interceptor { chain ->
 
                     val request =
-                        chain
-                            .request()
+                        chain.request()
 
                     val newRequest =
                         request
@@ -1333,7 +1409,7 @@ class InatBox : MainAPI() {
                     response.text
 
                 log(
-                    "INAT RESPONSE LENGTH -> ${encryptedResponse.length}"
+                    "ENCRYPTED RESPONSE LENGTH -> ${encryptedResponse.length}"
                 )
 
                 getJsonFromEncryptedInatResponse(
@@ -1352,7 +1428,7 @@ class InatBox : MainAPI() {
         } catch (e: Exception) {
 
             logError(
-                "MAKE INAT REQUEST ERROR -> $url",
+                "MAKE INAT REQUEST ERROR",
                 e
             )
 
@@ -1380,7 +1456,7 @@ class InatBox : MainAPI() {
                 )
 
             // =================================================
-            // FIRST LAYER
+            // FIRST DECRYPTION
             // =================================================
 
             val cipher1 =
@@ -1402,7 +1478,7 @@ class InatBox : MainAPI() {
                     .firstOrNull()
                     ?: return null
 
-            val firstDecoded =
+            val firstIterationData =
                 cipher1.doFinal(
                     Base64.decode(
                         firstPart,
@@ -1411,7 +1487,7 @@ class InatBox : MainAPI() {
                 )
 
             // =================================================
-            // SECOND LAYER
+            // SECOND DECRYPTION
             // =================================================
 
             val cipher2 =
@@ -1429,13 +1505,13 @@ class InatBox : MainAPI() {
 
             val secondInput =
                 String(
-                    firstDecoded
+                    firstIterationData
                 )
                     .split(":")
                     .firstOrNull()
                     ?: return null
 
-            val secondDecoded =
+            val secondIterationData =
                 cipher2.doFinal(
                     Base64.decode(
                         secondInput,
@@ -1443,8 +1519,12 @@ class InatBox : MainAPI() {
                     )
                 )
 
+            // =================================================
+            // JSON
+            // =================================================
+
             String(
-                secondDecoded
+                secondIterationData
             )
 
         } catch (e: Exception) {
@@ -1459,14 +1539,14 @@ class InatBox : MainAPI() {
     }
 
     // =========================================================
-    // SEARCH RESULT PARSER
+    // SEARCH RESPONSE PARSER
     // =========================================================
 
     private fun getSearchResponseList(
         jsonResponse: String
     ): List<SearchResponse> {
 
-        val results =
+        val searchResults =
             mutableListOf<SearchResponse>()
 
         try {
@@ -1494,7 +1574,7 @@ class InatBox : MainAPI() {
                 }
 
                 // =================================================
-                // MOVIE / SERIES
+                // SERIES / MOVIES
                 // =================================================
 
                 if (
@@ -1503,72 +1583,62 @@ class InatBox : MainAPI() {
                     )
                 ) {
 
-                    val itemName =
-                        item.optString(
+                    val name =
+                        item.getString(
                             "diziName"
                         )
 
                     val type =
-                        item.optString(
+                        item.getString(
                             "diziType"
                         )
 
-                    val poster =
-                        item.optString(
+                    val posterUrl =
+                        item.getString(
                             "diziImg"
                         )
-
-                    if (
-                        itemName.isBlank()
-                    ) {
-                        continue
-                    }
 
                     when (type) {
 
                         "dizi",
                         "dizi_mode" -> {
 
-                            results +=
+                            val searchResponse =
                                 newTvSeriesSearchResponse(
-                                    name =
-                                        itemName,
-
-                                    url =
-                                        item.toString(),
-
-                                    type =
-                                        TvType.TvSeries
+                                    name,
+                                    item.toString()
                                 ) {
 
                                     this.posterUrl =
-                                        poster
+                                        posterUrl
                                 }
+
+                            searchResults.add(
+                                searchResponse
+                            )
                         }
 
                         "film",
                         "film_mode" -> {
 
-                            results +=
+                            val searchResponse =
                                 newMovieSearchResponse(
-                                    name =
-                                        itemName,
-
-                                    url =
-                                        item.toString(),
-
-                                    type =
-                                        TvType.Movie
+                                    name,
+                                    item.toString()
                                 ) {
 
                                     this.posterUrl =
-                                        poster
+                                        posterUrl
                                 }
+
+                            searchResults.add(
+                                searchResponse
+                            )
                         }
                     }
 
                 // =================================================
-                // CHANNEL
+                // CHANNELS
                 // =================================================
 
                 } else if (
@@ -1577,56 +1647,57 @@ class InatBox : MainAPI() {
                     item.has("chImg")
                 ) {
 
-                    val itemName =
-                        item.optString(
+                    val name =
+                        item.getString(
                             "chName"
                         )
 
-                    val poster =
-                        item.optString(
+                    val posterUrl =
+                        item.getString(
                             "chImg"
                         )
 
                     val chType =
-                        item.optString(
+                        item.getString(
                             "chType"
                         )
-
-                    if (
-                        itemName.isBlank()
-                    ) {
-                        continue
-                    }
 
                     when (chType) {
 
                         "live_url",
                         "tekli_regex_lb_sh_3" -> {
 
-                            results +=
+                            val searchResponse =
                                 newLiveSearchResponse(
-                                    itemName,
+                                    name,
                                     item.toString(),
                                     TvType.Live
                                 ) {
 
                                     this.posterUrl =
-                                        poster
+                                        posterUrl
                                 }
+
+                            searchResults.add(
+                                searchResponse
+                            )
                         }
 
                         else -> {
 
-                            results +=
+                            val searchResponse =
                                 newMovieSearchResponse(
-                                    itemName,
-                                    item.toString(),
-                                    TvType.Movie
+                                    name,
+                                    item.toString()
                                 ) {
 
                                     this.posterUrl =
-                                        poster
+                                        posterUrl
                                 }
+
+                            searchResults.add(
+                                searchResponse
+                            )
                         }
                     }
                 }
@@ -1635,461 +1706,11 @@ class InatBox : MainAPI() {
         } catch (e: Exception) {
 
             logError(
-                "SEARCH PARSER ERROR",
+                "FAILED TO PARSE SEARCH JSON",
                 e
             )
         }
 
-        return results
-    }
-}
-
-
-// =============================================================
-// CH CONTENT MODEL
-// =============================================================
-
-private data class ChContent(
-
-    val chName: String,
-
-    val chUrl: String,
-
-    val chImg: String,
-
-    val chHeaders: String,
-
-    val chReg: String,
-
-    val chType: String
-)
-
-
-// =============================================================
-// DZEN STREAM MODEL
-// =============================================================
-
-private data class InatDzenStream(
-    val url: String?,
-    val type: String?
-)
-
-
-// =============================================================
-// CDN JWPLAYER
-// =============================================================
-
-class CDNJWPlayer : ExtractorApi() {
-
-    override val name =
-        "CDN JWPlayer"
-
-    override val mainUrl =
-        "https://cdn.jwplayer.com"
-
-    override val requiresReferer =
-        false
-
-    override suspend fun getUrl(
-        url: String,
-        referer: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-
-        callback(
-            newExtractorLink(
-                source =
-                    name,
-
-                name =
-                    name,
-
-                url =
-                    url,
-
-                type =
-                    ExtractorLinkType.M3U8
-            ) {
-
-                quality =
-                    Qualities.Unknown.value
-            }
-        )
-    }
-}
-
-
-// =============================================================
-// YANDEX DISK
-// =============================================================
-
-class DiskYandexComTr : ExtractorApi() {
-
-    override val name =
-        "DiskYandexComTr"
-
-    override val mainUrl =
-        "https://disk.yandex.com.tr"
-
-    override val requiresReferer =
-        false
-
-    private val masterPlaylistRegex =
-        Regex(
-            """https?://[^\s"]*?master-playlist\.m3u8"""
-        )
-
-    override suspend fun getUrl(
-        url: String,
-        referer: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-
-        val response =
-            app.get(
-                url =
-                    url,
-
-                referer =
-                    "https://disk.yandex.com.tr/",
-
-                headers =
-                    mapOf(
-                        "X-Requested-With" to
-                            "XMLHttpRequest"
-                    )
-            )
-
-        if (
-            !response.isSuccessful
-        ) {
-
-            throw Exception(
-                "Failed to fetch URL: ${response.code}"
-            )
-        }
-
-        val match =
-            masterPlaylistRegex
-                .find(
-                    response.text
-                )
-
-        if (
-            match == null
-        ) {
-
-            throw Exception(
-                "No master-playlist.m3u8 URL found"
-            )
-        }
-
-        callback(
-            newExtractorLink(
-                source =
-                    "Yandex Disk",
-
-                name =
-                    "Yandex Disk",
-
-                url =
-                    match.value,
-
-                type =
-                    ExtractorLinkType.M3U8
-            ) {
-
-                quality =
-                    Qualities.Unknown.value
-            }
-        )
-    }
-}
-
-
-// =============================================================
-// DZEN.RU
-// =============================================================
-
-class DzenRu : ExtractorApi() {
-
-    override val name =
-        "DzenRu"
-
-    override val mainUrl =
-        "https://dzen.ru/"
-
-    override val requiresReferer =
-        false
-
-    override suspend fun getUrl(
-        url: String,
-        referer: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-
-        try {
-
-            val response =
-                app.get(
-                    url =
-                        url,
-
-                    headers =
-                        mapOf(
-                            "User-Agent" to
-                                "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.7049.38 Mobile Safari/537.36",
-
-                            "X-Requested-With" to
-                                "XMLHttpRequest"
-                        ),
-
-                    referer =
-                        mainUrl
-                )
-
-            val script =
-                response
-                    .document
-                    .select("script")
-                    .firstOrNull {
-                        it.data().contains(
-                            "\"streams\""
-                        )
-                    }
-                    ?.data()
-                    ?: return
-
-            val streamsText =
-                script
-                    .substringAfter(
-                        "\"streams\":",
-                        ""
-                    )
-                    .substringBefore(
-                        "],",
-                        ""
-                    ) + "]"
-
-            if (
-                streamsText == "]"
-            ) {
-                return
-            }
-
-            val streamsArray =
-                JSONArray(
-                    streamsText
-                )
-
-            for (
-                i in 0 until streamsArray.length()
-            ) {
-
-                val stream =
-                    streamsArray.getJSONObject(
-                        i
-                    )
-
-                val streamUrl =
-                    stream.optString(
-                        "url"
-                    )
-
-                val type =
-                    stream.optString(
-                        "type"
-                    )
-
-                if (
-                    streamUrl.isBlank()
-                ) {
-                    continue
-                }
-
-                val quality =
-                    when {
-
-                        type.contains(
-                            "fullhd",
-                            ignoreCase = true
-                        ) ->
-                            Qualities.P1080.value
-
-                        type.contains(
-                            "high",
-                            ignoreCase = true
-                        ) ->
-                            Qualities.P720.value
-
-                        type.contains(
-                            "medium",
-                            ignoreCase = true
-                        ) ->
-                            Qualities.P480.value
-
-                        type.contains(
-                            "low",
-                            ignoreCase = true
-                        ) ->
-                            Qualities.P360.value
-
-                        type.contains(
-                            "lowest",
-                            ignoreCase = true
-                        ) ->
-                            Qualities.P240.value
-
-                        type.contains(
-                            "tiny",
-                            ignoreCase = true
-                        ) ->
-                            Qualities.P144.value
-
-                        else ->
-                            Qualities.Unknown.value
-                    }
-
-                val typeOfLink =
-                    when (
-                        type.lowercase(
-                            Locale.ROOT
-                        )
-                    ) {
-
-                        "hls" ->
-                            ExtractorLinkType.M3U8
-
-                        "dash" ->
-                            ExtractorLinkType.DASH
-
-                        else ->
-                            ExtractorLinkType.VIDEO
-                    }
-
-                callback(
-                    newExtractorLink(
-                        source =
-                            "$name - ${Qualities.getStringByInt(quality)}",
-
-                        name =
-                            "$name - ${Qualities.getStringByInt(quality)}",
-
-                        url =
-                            streamUrl,
-
-                        type =
-                            typeOfLink
-                    ) {
-
-                        this.referer =
-                            ""
-
-                        this.quality =
-                            quality
-                    }
-                )
-            }
-
-        } catch (e: Exception) {
-
-            Log.e(
-                "DzenRu",
-                "Extractor error",
-                e
-            )
-        }
-    }
-}
-
-
-// =============================================================
-// VK
-// =============================================================
-
-class Vk : ExtractorApi() {
-
-    override val name =
-        "Vk"
-
-    override val mainUrl =
-        "https://vk.com/"
-
-    override val requiresReferer =
-        false
-
-    override suspend fun getUrl(
-        url: String,
-        referer: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-
-        val response =
-            app.get(
-                url =
-                    url,
-
-                headers =
-                    mapOf(
-                        "X-Requested-With" to
-                            "XMLHttpRequest"
-                    ),
-
-                referer =
-                    mainUrl
-            )
-
-        val m3u8Regex =
-            Regex(
-                """"([^"]*m3u8[^"]*)""""
-            )
-
-        val m3u8 =
-            m3u8Regex
-                .find(
-                    response.text
-                )
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.replace(
-                    "\\/",
-                    "/"
-                )
-
-        if (
-            m3u8.isNullOrBlank()
-        ) {
-            return
-        }
-
-        callback(
-            newExtractorLink(
-                source =
-                    name,
-
-                name =
-                    name,
-
-                url =
-                    m3u8,
-
-                type =
-                    ExtractorLinkType.M3U8
-            ) {
-
-                headers =
-                    mapOf(
-                        "Referer" to
-                            mainUrl
-                    )
-
-                quality =
-                    Qualities.Unknown.value
-            }
-        )
+        return searchResults
     }
 }
