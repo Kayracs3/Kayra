@@ -28,14 +28,16 @@ class FullHDFilmizlesene : MainAPI() {
         "Referer" to "$mainUrl/"
     )
 
-    override val mainPage = mainPageOf(
-        mainUrl to "Ana Sayfa",
+    override val mainPage = mainPageOf(        
         "$mainUrl/yeni-filmler" to "Yeni Filmler",
-        "$mainUrl/yil/2026-filmleri-izle" to "2026 Filmleri",
-        "$mainUrl/filmizle/hd-720p-filmler-izle" to "1080p / 720p",
-        "$mainUrl/filmizle/turkce-dublaj-filmler-1" to "Türkçe Dublaj",
-        "$mainUrl/filmizle/turkce-altyazili-filmler-1" to "Türkçe Altyazılı",
-        "$mainUrl/filmizle/yerli-filmler" to "Yerli Filmler"
+        "$mainUrl/yil/fantastik-filmler" to "Fantastik Filmleri",
+        "$mainUrl/filmizle/aksiyon-filmleri" to "Aksiyo Filmleri",
+        "$mainUrl/filmizle/bilim-kurgu-filmleri" to "Bilim Kurgu Filmleri",
+        "$mainUrl/filmizle/komedi-filmleri" to "Komedi Filmleri",
+        "$mainUrl/filmizle/gerilim-filmleri" to "Gerilim Filmleri",
+        "$mainUrl/filmizle/korku-filmleri" to "Korku Filmler",
+        "$mainUrl/filmizle/animasyon-filmleri" to "Animasyon Filmleri",
+        "$mainUrl/filmizle/romantik-filmler" to "Romantik Filmler"
     )
 
     override suspend fun getMainPage(
