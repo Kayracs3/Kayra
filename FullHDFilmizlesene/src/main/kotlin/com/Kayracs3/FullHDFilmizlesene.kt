@@ -219,12 +219,12 @@ class FullHDFilmizlesene : MainAPI() {
 
         val links = linkedSetOf<Element>()
         paginationSelectors.forEach { selector ->
-            document.select(selector).forEach { links += it }
+            document.select(selector).forEach { links.add(it) }
         }
 
         // Bazı temalarda sadece rel=next/prev var; bunları ayrıca yakala.
         document.select("a[rel='next'], a[rel='prev'], a[aria-label*='next' i], a[aria-label*='sonraki' i], a[aria-label*='ileri' i]")
-            .forEach { links += it }
+            .forEach { links.add(it) }
 
         for (link in links) {
             val href = fixUrlNull(link.attr("href")) ?: continue
