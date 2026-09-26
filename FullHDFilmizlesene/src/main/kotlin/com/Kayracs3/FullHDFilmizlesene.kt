@@ -196,42 +196,85 @@ class FullHDFilmizlesene : MainAPI() {
     ): List<SearchResponse> {
         val results = linkedMapOf<String, SearchResponse>()
 
-        // Önce gerçek kartları kullanıyoruz.
-        document
-            .select(
-                "li.film, article.film, .film-card, .film-item, .film, " +
-                    ".movies .item, .movie-item, .film-list li"
-            )
-            .filter { it.selectFirst("a[href*='/film/']") != null }
-            .forEach { card ->
-                val anchor = card.selectFirst("a[href*='/film/']") ?: return@forEach
-                val result = card.toSearchResult(anchor, categoryUrl) ?: return@forEach
-                results.putIfAbsent(result.url, result)
+        // Yalnızca gerçek film kartlarını kabul ediyoruz.
+        // Sayfadaki bütün /film/ bağlantılarını doğrudan taramak "Son Yorumlar"
+        // gibi bölümlerde geçen film bağlantılarını da film sanıyordu.
+        val cards = document.select(
+            "li.film, article.film, .film-card, .film-item, .film, " +
+                ".movies .item, .movie-item, .film-list li, " +
+                ".movie-list .item, .movies-list .item, .film-grid .item, " +
+                ".film-grid article, .movies article, .movie-grid article"
+        )
+            .filter { card ->
+                !hasCommentLikeAncestor(card) &&
+                    card.selectFirst("a[href*='/film/']") != null &&
+                    card.selectFirst("img") != null
             }
 
-        // Kart sınıfı sayfa 2'de değişirse doğrudan film linkleri yedek olur.
-        document
-            .select("a[href*='/film/']")
-            .filter { fixUrlNull(it.attr("href"))?.let(::isFilmUrl) == true }
-            .forEach { anchor ->
-                val card = findFilmCard(anchor)
-                val result = card.toSearchResult(anchor, categoryUrl) ?: return@forEach
-                results.putIfAbsent(result.url, result)
-            }
+        cards.forEach { card ->
+            val anchor = card.selectFirst("a[href*='/film/']") ?: return@forEach
+            val result = card.toSearchResult(anchor, categoryUrl) ?: return@forEach
+            results.putIfAbsent(result.url, result)
+        }
 
         return results.values.toList()
     }
 
-    private fun findFilmCard(anchor: Element): Element {
+    private fun findFilmCard(anchor: Element): Element? {
+        if (hasCommentLikeAncestor(anchor)) return null
+
         var current: Element? = anchor
-        repeat(6) {
+        repeat(8) {
             val candidate = current ?: return@repeat
+            if (isCommentLikeElement(candidate)) {
+                current = candidate.parent()
+                return@repeat
+            }
+
             val tag = candidate.tagName().lowercase()
-            if (tag == "li" || tag == "article" || tag == "section") return candidate
-            if (candidate.selectFirst("img") != null && candidate.text().length <= 500) return candidate
+            val hasFilmLink = candidate.selectFirst("a[href*='/film/']") != null
+            val hasImage = candidate.selectFirst("img") != null
+            val shortEnough = candidate.text().trim().length <= 500
+
+            if (hasFilmLink && hasImage && shortEnough &&
+                (tag == "li" || tag == "article" || tag == "div" || tag == "section")
+            ) {
+                return candidate
+            }
+
             current = candidate.parent()
         }
-        return anchor
+        return null
+    }
+
+    private fun isCommentLikeElement(element: Element): Boolean {
+        val marker = buildString {
+            append(element.tagName()).append(' ')
+            append(element.id()).append(' ')
+            append(element.classNames().joinToString(" ")).append(' ')
+            append(element.attr("data-section")).append(' ')
+            append(element.attr("data-widget")).append(' ')
+            append(
+                element.select("h1, h2, h3, h4, .title, .widget-title, .section-title")
+                    .text()
+            )
+        }.lowercase()
+
+        return listOf(
+            "comment", "comments", "yorum", "yorumlar", "review", "reviews",
+            "latest-comment", "latest-comments", "son-yorum", "son-yorumlar",
+            "recent-comment", "recent-comments", "user-comment"
+        ).any { marker.contains(it) }
+    }
+
+    private fun hasCommentLikeAncestor(element: Element): Boolean {
+        var current: Element? = element
+        repeat(8) {
+            val candidate = current ?: return@repeat
+            if (isCommentLikeElement(candidate)) return true
+            current = candidate.parent()
+        }
+        return false
     }
 
     private fun isFilmUrl(url: String): Boolean {
@@ -325,8 +368,8 @@ class FullHDFilmizlesene : MainAPI() {
             else -> null
         }
 
-        val language = extractLanguage(card) ?: extractLanguageFromUrl(categoryUrl)
-        val imdb = extractImdbScore(card)
+        val language = card?.let { extractLanguage(it) } ?: extractLanguageFromUrl(categoryUrl)
+        val imdb = card?.let { extractImdbScore(it) }
         val year = extractYear(cardText)
 
         // MovieSearchResponse'ta genel amaçlı bir poster rozeti alanı yok.
@@ -464,7 +507,7 @@ class FullHDFilmizlesene : MainAPI() {
                     .select("a[href*='/film/']")
                     .filter { fixUrlNull(it.attr("href"))?.let(::isFilmUrl) == true }
                     .mapNotNull { anchor ->
-                        findFilmCard(anchor).toSearchResult(anchor, searchUrl)
+                        findFilmCard(anchor)?.toSearchResult(anchor, searchUrl)
                     }
                     .distinctBy { it.url }
 
