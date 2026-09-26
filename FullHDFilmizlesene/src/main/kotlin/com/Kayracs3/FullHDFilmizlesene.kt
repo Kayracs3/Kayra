@@ -355,9 +355,11 @@ class FullHDFilmizlesene : MainAPI() {
 
         if (title.isBlank()) return null
 
-        val posterUrl = extractPoster(this) ?: anchor?.let { extractPoster(findFilmCard(it)) }
         val card = findFilmCard(anchor ?: this)
-        val cardText = (card.text() + " " + href).replace(Regex("\\s+"), " ").trim()
+        val posterUrl = extractPoster(this) ?: card?.let { extractPoster(it) }
+        val cardText = ((card?.text().orEmpty()) + " " + href)
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
         val quality = when {
             cardText.contains("4K", ignoreCase = true) -> SearchQuality.HD
