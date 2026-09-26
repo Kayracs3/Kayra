@@ -63,6 +63,7 @@ class InatBox : MainAPI() {
     companion object {
         private const val CACHE_TTL_MS = 15 * 60 * 1000L
         private const val HMK = "x7kkk0qmqz63kj68tla5i7u26192v7zqnnddhjgm"
+        private const val LEGACY_AES_KEY = "ywevqtjrurkwtqgz"
         private val SECURE_RANDOM = SecureRandom()
         private val HEX_CHARS = "0123456789abcdef".toCharArray()
 
@@ -386,19 +387,44 @@ class InatBox : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         return try {
-            if (data.startsWith("[")) {
-                val jsonArray = JSONArray(data)
-                for (i in 0 until jsonArray.length()) {
-                    val chContent = parseToChContent(jsonArray.getJSONObject(i))
-                    loadChContentLinks(chContent, subtitleCallback, callback)
+            var loaded = false
+            val trimmed = data.trim()
+
+            when {
+                trimmed.startsWith("[") -> {
+                    val jsonArray = JSONArray(trimmed)
+                    for (i in 0 until jsonArray.length()) {
+                        val item = jsonArray.optJSONObject(i) ?: continue
+                        if (loadChContentLinks(parseToChContent(item), subtitleCallback, callback)) {
+                            loaded = true
+                        }
+                    }
                 }
-            } else {
-                val chContent = parseToChContent(JSONObject(data))
-                loadChContentLinks(chContent, subtitleCallback, callback)
+
+                trimmed.startsWith("{") -> {
+                    val item = JSONObject(trimmed)
+                    loaded = loadChContentLinks(
+                        parseToChContent(item),
+                        subtitleCallback,
+                        callback
+                    )
+                }
+
+                trimmed.startsWith("http://", ignoreCase = true) ||
+                    trimmed.startsWith("https://", ignoreCase = true) -> {
+                    loaded = emitDirectOrRawStream(
+                        name = "InatBox",
+                        url = trimmed,
+                        headers = emptyMap(),
+                        subtitleCallback = subtitleCallback,
+                        callback = callback
+                    )
+                }
             }
-            true
+
+            loaded
         } catch (e: Exception) {
-            Log.e("InatBox", "Error on loadLinks: ${e.message}")
+            Log.e("InatBox", "Error on loadLinks: ${e::class.simpleName} - ${e.message}", e)
             false
         }
     }
@@ -662,165 +688,275 @@ class InatBox : MainAPI() {
         chContent: ChContent,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
-    ) {
-        val resolvedChContent = if (chContent.chUrl.startsWith("NONE/")) {
-            val id = chContent.chUrl.substringAfter("NONE/")
-            chContent.copy(
-                chUrl = "https://sspplus.redzones.icu/CDN/SSP/txt/$id.m3u8"
-            )
-        } else {
-            chContent
+    ): Boolean {
+        var sourceUrl = chContent.chUrl.trim()
+        if (sourceUrl.isBlank()) return false
+
+        if (sourceUrl.startsWith("//")) {
+            sourceUrl = "https:$sourceUrl"
         }
 
-        val chType = resolvedChContent.chType
-        var sourceUrl = resolvedChContent.chUrl
-
-        if (sourceUrl.isBlank()) return
+        if (sourceUrl.startsWith("act", ignoreCase = true)) {
+            sourceUrl = sourceUrl.vkSourceFix()
+        }
 
         val headers = mutableMapOf<String, String>()
-        var regex1: String? = null
-        var regex2: String? = null
-        var regex2p: String? = null
+        parseFirstJsonObject(chContent.chHeaders)?.let { jsonHeaders ->
+            val keys = jsonHeaders.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = jsonHeaders.optString(key)
+                if (value.isBlank()) continue
 
-        try {
-            val chHeaders = resolvedChContent.chHeaders
-            if (chHeaders != "null" && chHeaders.isNotBlank()) {
-                val jsonHeaders = JSONArray(chHeaders).getJSONObject(0)
-                for (key in jsonHeaders.keys()) {
-                    val keyName = when (key) {
-                        "UserAgent" -> "User-Agent"
-                        "XRequestedWith" -> "X-Requested-With"
-                        else -> key
-                    }
-                    headers[keyName] = jsonHeaders.getString(key)
+                val normalizedKey = when (key.lowercase(Locale.ROOT)) {
+                    "useragent", "user_agent" -> "User-Agent"
+                    "xrequestedwith", "x_requested_with" -> "X-Requested-With"
+                    "referrer" -> "Referer"
+                    else -> key
                 }
+                headers[normalizedKey] = value
             }
-        } catch (_: Exception) {
         }
 
-        try {
-            val chReg = resolvedChContent.chReg
-            if (chReg != "null" && chReg.isNotBlank()) {
-                val jsonReg = JSONArray(chReg).getJSONObject(0)
-                regex1 = jsonReg.optString("Regex1", null)
-                regex2 = jsonReg.optString("Regex2", null)
-                regex2p = jsonReg.optString("Regex2p", null)
-
-                if (jsonReg.has("playSH2")) {
-                    headers["Cookie"] = jsonReg.getString("playSH2")
-                }
+        parseFirstJsonObject(chContent.chReg)?.let { jsonReg ->
+            jsonReg.optString("playSH2").takeIf { it.isNotBlank() }?.let {
+                headers["Cookie"] = it
             }
-        } catch (_: Exception) {
         }
 
-        if (!headers.containsKey("Referer")) {
-            headers["Referer"] = "https://google.com/"
-        }
-
-        if (!headers.containsKey("User-Agent")) {
+        if (headers["User-Agent"].isNullOrBlank()) {
             headers["User-Agent"] =
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) " +
                     "Gecko/20100101 Firefox/134.0"
         }
 
-        if (
-            chType.contains("tekli_regex", ignoreCase = true) &&
-            !isDirectStream(sourceUrl) &&
-            !regex1.isNullOrBlank()
-        ) {
+        if (chContent.chType.contains("tekli", ignoreCase = true) && !isDirectStream(sourceUrl)) {
             val resolved = resolveTekliRegexStream(
                 sourceUrl,
                 headers,
-                regex1,
-                regex2,
-                regex2p
+                parseFirstJsonObject(chContent.chReg)?.optString("Regex1"),
+                parseFirstJsonObject(chContent.chReg)?.optString("Regex2"),
+                parseFirstJsonObject(chContent.chReg)?.optString("Regex2p")
             )
 
             if (!resolved.isNullOrBlank()) {
-                sourceUrl = resolved
+                sourceUrl = resolved.trim()
+                if (sourceUrl.startsWith("//")) {
+                    sourceUrl = "https:$sourceUrl"
+                }
             }
         }
 
-        if (
-            sourceUrl.contains("filmizleeeee", ignoreCase = true) &&
-            !isDirectStream(sourceUrl)
-        ) {
+        if (sourceUrl.contains("filmizleeeee", ignoreCase = true) && !isDirectStream(sourceUrl)) {
             val resolved = resolveFilmizleStream(sourceUrl, headers)
             if (!resolved.isNullOrBlank()) {
-                sourceUrl = resolved
+                sourceUrl = resolved.trim()
+                if (sourceUrl.startsWith("//")) {
+                    sourceUrl = "https:$sourceUrl"
+                }
             }
         }
 
-        if (isDirectStream(sourceUrl)) {
+        return emitDirectOrRawStream(
+            name = chContent.chName.ifBlank { "InatBox" },
+            url = sourceUrl,
+            headers = headers,
+            subtitleCallback = subtitleCallback,
+            callback = callback
+        )
+    }
+
+    private fun parseFirstJsonObject(raw: String): JSONObject? {
+        val text = raw.trim()
+        if (text.isBlank() || text.equals("null", ignoreCase = true)) return null
+
+        return runCatching {
+            when {
+                text.startsWith("[") -> JSONArray(text).optJSONObject(0)
+                text.startsWith("{") -> JSONObject(text)
+                else -> null
+            }
+        }.getOrNull()
+    }
+
+    private fun buildDefaultReferer(url: String): String {
+        return runCatching {
+            val uri = URI(url)
+            if (!uri.scheme.isNullOrBlank() && !uri.host.isNullOrBlank()) {
+                "${uri.scheme}://${uri.host}/"
+            } else {
+                ""
+            }
+        }.getOrDefault("")
+    }
+
+    private suspend fun emitDirectOrRawStream(
+        name: String,
+        url: String,
+        headers: Map<String, String>,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (url.isBlank()) return false
+
+        val cleanUrl = url.trim()
+        val direct = isDirectStream(cleanUrl)
+
+        if (direct) {
             val linkType = when {
-                sourceUrl.contains(".m3u8", ignoreCase = true) -> ExtractorLinkType.M3U8
-                sourceUrl.contains(".mpd", ignoreCase = true) -> ExtractorLinkType.DASH
+                cleanUrl.contains(".m3u8", ignoreCase = true) ||
+                    cleanUrl.contains("/hls/", ignoreCase = true) -> ExtractorLinkType.M3U8
+                cleanUrl.contains(".mpd", ignoreCase = true) ||
+                    cleanUrl.contains("/dash/", ignoreCase = true) -> ExtractorLinkType.DASH
                 else -> ExtractorLinkType.VIDEO
+            }
+
+            val finalHeaders = headers.toMutableMap()
+            if (finalHeaders["Referer"].isNullOrBlank()) {
+                buildDefaultReferer(cleanUrl).takeIf { it.isNotBlank() }?.let {
+                    finalHeaders["Referer"] = it
+                }
             }
 
             callback.invoke(
                 newExtractorLink(
                     source = this.name,
-                    name = resolvedChContent.chName,
-                    url = sourceUrl,
+                    name = name,
+                    url = cleanUrl,
                     type = linkType
                 ) {
-                    this.referer = headers["Referer"].orEmpty()
-                    this.headers = headers
-                    this.quality = Qualities.Unknown.value
+                    this.referer = finalHeaders["Referer"].orEmpty()
+                    this.headers = finalHeaders
+                    this.quality = guessQuality(cleanUrl)
                 }
             )
-        } else {
+            return true
+        }
+
+        val referer = headers["Referer"].orEmpty()
+        val extractorFound = runCatching {
             loadExtractor(
-                sourceUrl,
-                headers["Referer"].orEmpty(),
-                subtitleCallback,
-                callback
-            )
+                cleanUrl,
+                referer,
+                subtitleCallback
+            ) {
+                callback.invoke(it)
+            }
+        }.getOrDefault(false)
+
+        if (extractorFound) return true
+
+        Log.w(
+            "InatBox",
+            "No extractor/direct stream found: $cleanUrl"
+        )
+        return false
+    }
+
+    private fun guessQuality(url: String): Int {
+        val lower = url.lowercase(Locale.ROOT)
+        return when {
+            Regex("(?:^|[^0-9])1080(?:p)?(?:[^0-9]|$)").containsMatchIn(lower) -> Qualities.P1080.value
+            Regex("(?:^|[^0-9])720(?:p)?(?:[^0-9]|$)").containsMatchIn(lower) -> Qualities.P720.value
+            Regex("(?:^|[^0-9])480(?:p)?(?:[^0-9]|$)").containsMatchIn(lower) -> Qualities.P480.value
+            Regex("(?:^|[^0-9])360(?:p)?(?:[^0-9]|$)").containsMatchIn(lower) -> Qualities.P360.value
+            else -> Qualities.Unknown.value
         }
     }
 
     private suspend fun resolveTekliRegexStream(
         url: String,
         headers: Map<String, String>,
-        regex1: String,
+        regex1: String?,
         regex2: String?,
         regex2p: String?
     ): String? {
-        return try {
+        // 1) Güncel API akışı: imzalı POST
+        runCatching {
+            val modernJson = makeInatPostRequest(url)
+            extractChUrl(modernJson)?.let {
+                Log.d("InatBox", "tekli_regex resolved via signed POST")
+                return it
+            }
+        }
+
+        // 2) Eski InatBox akışı: sabit AES anahtarlı POST
+        runCatching {
+            val legacyJson = makeLegacyInatRequest(url)
+            extractChUrl(legacyJson)?.let {
+                Log.d("InatBox", "tekli_regex resolved via legacy POST")
+                return it
+            }
+        }
+
+        // 3) Bazı kaynaklar doğrudan GET ile şifreli gövde döndürüyor
+        runCatching {
+            val response = app.get(url, headers = headers).text
+            val decrypted = decryptLegacyInatResponse(response)
+            extractChUrl(decrypted)?.let {
+                Log.d("InatBox", "tekli_regex resolved via legacy GET decrypt")
+                return it
+            }
+        }
+
+        // 4) Regex1/Regex2 tabanlı özel çözüm
+        val r1 = regex1?.takeIf { it.isNotBlank() } ?: return null
+
+        return runCatching {
             val reqHeaders = headers.toMutableMap()
             reqHeaders.putAll(signRequest("GET", url, ""))
             reqHeaders["Cache-Control"] = "no-cache"
 
             val response = app.get(url, headers = reqHeaders)
-            if (!response.isSuccessful) return null
+            if (!response.isSuccessful) return@runCatching null
 
             val raw = response.text.trim()
-            val p1 = decryptAesLayer(raw, regex1) ?: return null
+            val p1 = decryptAesLayer(raw, r1) ?: return@runCatching null
 
-            val key2 = regex2?.takeIf { it.isNotBlank() } ?: regex1
-            var p2 = decryptAesLayer(p1, key2)
+            val keys = buildList {
+                regex2?.takeIf { it.isNotBlank() }?.let(::add)
+                regex2p?.takeIf { it.isNotBlank() }?.let(::add)
+                if (isEmpty()) add(r1)
+            }.distinct()
 
-            if (p2 == null && !regex2p.isNullOrBlank()) {
-                p2 = decryptAesLayer(p1, regex2p)
+            for (key in keys) {
+                val p2 = decryptAesLayer(p1, key) ?: continue
+                val stripped = verifyAndStripHmacSuffix(p2) ?: p2
+                extractChUrl(stripped)?.let { return@runCatching it }
             }
 
-            if (p2 == null) return null
-
-            val stripped = verifyAndStripHmacSuffix(p2) ?: p2
-            val json = JSONObject(stripped)
-            json.optString("chUrl", null)
-        } catch (e: Exception) {
-            Log.e("InatBox", "Failed to resolve stream: ${e.message}")
             null
-        }
+        }.getOrNull()
+    }
+
+    private fun extractChUrl(rawJson: String?): String? {
+        if (rawJson.isNullOrBlank()) return null
+
+        return runCatching {
+            val trimmed = rawJson.trim()
+            when {
+                trimmed.startsWith("{") -> JSONObject(trimmed).optString("chUrl", null)
+                trimmed.startsWith("[") -> JSONArray(trimmed)
+                    .optJSONObject(0)
+                    ?.optString("chUrl", null)
+                else -> null
+            }?.takeIf { !it.isNullOrBlank() }
+        }.getOrNull()
     }
 
     private fun isDirectStream(url: String): Boolean {
-        return url.contains(".m3u8", ignoreCase = true) ||
-            url.contains(".mpd", ignoreCase = true) ||
-            url.contains(".mp4", ignoreCase = true) ||
-            url.contains(".webm", ignoreCase = true)
+        val lower = url.lowercase(Locale.ROOT)
+        return lower.contains(".m3u8") ||
+            lower.contains(".mpd") ||
+            lower.contains(".mp4") ||
+            lower.contains(".webm") ||
+            lower.contains(".mkv") ||
+            lower.contains("/master.m3u8") ||
+            lower.contains("/index.m3u8") ||
+            lower.contains("/playlist.m3u8") ||
+            lower.contains("/manifest.mpd") ||
+            lower.contains("/hls/") ||
+            lower.contains("/dash/")
     }
 
     private suspend fun resolveFilmizleStream(
@@ -845,25 +981,69 @@ class InatBox : MainAPI() {
             val encodedKey = response.substring(separator + 1).trim()
 
             val key = try {
-                String(Base64.decode(encodedKey, Base64.DEFAULT))
+                String(Base64.decode(encodedKey, Base64.DEFAULT), StandardCharsets.UTF_8)
             } catch (_: Exception) {
                 return@repeat
             }
 
             response = decryptAesLayer(encrypted, key) ?: return@repeat
 
-            val json = try {
-                JSONObject(response.trim())
-            } catch (_: Exception) {
-                null
-            }
-
-            if (json != null && json.has("chUrl")) {
-                return json.optString("chUrl")
-            }
+            extractChUrl(response)?.let { return it }
         }
 
         return null
+    }
+
+    private suspend fun makeLegacyInatRequest(url: String): String? {
+        return runCatching {
+            val hostName = URI(url).host ?: return@runCatching null
+            val requestBody = "1=$LEGACY_AES_KEY&0=$LEGACY_AES_KEY"
+            val headers = mapOf(
+                "Cache-Control" to "no-cache",
+                "Content-Length" to requestBody.length.toString(),
+                "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
+                "Host" to hostName,
+                "Referer" to "https://speedrestapi.com/",
+                "User-Agent" to "speedrestapi",
+                "X-Requested-With" to "com.bp.box"
+            )
+
+            val response = app.post(
+                url = url,
+                headers = headers,
+                requestBody = requestBody.toRequestBody(
+                    "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
+                )
+            )
+
+            if (!response.isSuccessful) return@runCatching null
+            decryptLegacyInatResponse(response.text)
+        }.getOrNull()
+    }
+
+    private fun decryptLegacyInatResponse(response: String): String? {
+        return runCatching {
+            val firstPart = response.substringBefore(":")
+            val keySpec = SecretKeySpec(
+                LEGACY_AES_KEY.toByteArray(StandardCharsets.UTF_8),
+                "AES"
+            )
+            val iv = IvParameterSpec(
+                LEGACY_AES_KEY.toByteArray(StandardCharsets.UTF_8)
+            )
+
+            val cipher1 = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher1.init(Cipher.DECRYPT_MODE, keySpec, iv)
+            val layer1 = cipher1.doFinal(Base64.decode(firstPart, Base64.DEFAULT))
+
+            val nested = String(layer1, StandardCharsets.UTF_8).substringBefore(":")
+            val cipher2 = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher2.init(Cipher.DECRYPT_MODE, keySpec, iv)
+            String(
+                cipher2.doFinal(Base64.decode(nested, Base64.DEFAULT)),
+                StandardCharsets.UTF_8
+            ).trim()
+        }.getOrNull()
     }
 
     private suspend fun makeInatPostRequest(
