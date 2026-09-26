@@ -4,6 +4,7 @@ import android.util.Base64
 import android.util.Log
 import android.net.Uri
 import java.net.URI
+import java.util.Locale
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
@@ -40,46 +41,197 @@ class FullHDFilmizlesene : MainAPI() {
         "$mainUrl/filmizle/romantik-filmler" to "Romantik Filmler"
     )
 
+    private val paginationCache = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentHashMap<Int, String>>()
+    private val loadedPageUrls = java.util.concurrent.ConcurrentHashMap<String, MutableSet<String>>()
+
     override suspend fun getMainPage(
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val targetUrl = if (page <= 1) request.data else pageUrl(request.data, page)
-
         return try {
-            val document = app.get(targetUrl, headers = browserHeaders).document
+            val candidates = if (page <= 1) {
+                listOf(request.data)
+            } else {
+                buildPageCandidates(request.data, page)
+            }
 
-            // Afişin bulunduğu kartın tamamını seçiyoruz.
-            // Önce sitenin klasik li.film yapısı, sonra olası alternatif kart sınıfları.
-            val cards = document
-                .select("li.film, article.film, .film-card, .film-item")
-                .filter { it.selectFirst("a[href*='/film/']") != null }
-                .distinctBy {
-                    fixUrlNull(it.selectFirst("a[href*='/film/']")?.attr("href")) ?: it.html()
+            var selectedUrl: String? = null
+            var selectedResults: List<SearchResponse> = emptyList()
+
+            for (targetUrl in candidates.distinct()) {
+                try {
+                    val document = app.get(
+                        targetUrl,
+                        headers = browserHeaders + ("Referer" to "$mainUrl/")
+                    ).document
+
+                    cachePaginationLinks(request.data, document)
+
+                    val results = extractPageResults(document, request.data)
+
+                    val duplicatePreviousPage = if (page > 1) {
+                        val previousUrls = loadedPageUrls[request.data].orEmpty()
+                        results.isNotEmpty() &&
+                            results.count { it.url in previousUrls } >=
+                            maxOf(3, (results.size * 0.70f).toInt())
+                    } else {
+                        false
+                    }
+
+                    Log.d(
+                        name,
+                        "getMainPage page=$page url=$targetUrl results=${results.size} duplicatePrevious=$duplicatePreviousPage"
+                    )
+
+                    if (results.isEmpty() || duplicatePreviousPage) continue
+
+                    selectedUrl = targetUrl
+                    selectedResults = results
+                    break
+                } catch (e: Exception) {
+                    Log.d(name, "Sayfa denemesi başarısız: $targetUrl -> ${e.message}")
                 }
+            }
 
-            val results = cards.mapNotNull { it.toSearchResult() }
-
-            Log.d(name, "getMainPage url=$targetUrl cards=${cards.size} results=${results.size}")
+            if (selectedUrl != null) {
+                loadedPageUrls
+                    .getOrPut(request.data) { java.util.Collections.synchronizedSet(mutableSetOf()) }
+                    .addAll(selectedResults.map { it.url })
+            }
 
             newHomePageResponse(
                 request.name,
-                results,
-                hasNext = results.isNotEmpty()
+                selectedResults,
+                hasNext = selectedResults.isNotEmpty()
             )
         } catch (e: Exception) {
-            Log.e(name, "getMainPage hata: $targetUrl -> ${e.message}", e)
+            Log.e(name, "getMainPage hata page=$page -> ${e.message}", e)
             newHomePageResponse(request.name, emptyList(), hasNext = false)
         }
     }
 
-    private fun pageUrl(base: String, page: Int): String {
-        if (page <= 1) return base
-        return if (base.endsWith("/")) {
-            "${base}sayfa/$page/"
+    private fun buildPageCandidates(base: String, page: Int): List<String> {
+        if (page <= 1) return listOf(base)
+
+        val result = linkedSetOf<String>()
+        paginationCache[base]?.get(page)?.let(result::add)
+
+        val clean = base.trimEnd('/')
+
+        // Bu sitenin kategori URL'lerinde -1 biçimi kullanılıyor;
+        // ikinci/üçüncü sayfalar için -2, -3 ... en güçlü aday.
+        val numericSuffix = Regex("-(\\d+)$").find(clean)
+        if (numericSuffix != null) {
+            val prefix = clean.substring(0, numericSuffix.range.first)
+            result += "$prefix-$page"
         } else {
-            "$base/sayfa/$page/"
+            result += "$clean-$page"
         }
+
+        // Diğer yaygın pagination biçimleri yedek olarak denenir.
+        result += "$clean/sayfa/$page/"
+        result += "$clean/sayfa/$page"
+        result += "$clean/page/$page/"
+        result += "$clean/page/$page"
+        result += "$clean?page=$page"
+        result += "$clean/?page=$page"
+        result += "$clean?paged=$page"
+        result += "$clean?sayfa=$page"
+        result += "$clean?pg=$page"
+
+        return result.toList()
+    }
+
+    private fun cachePaginationLinks(base: String, document: org.jsoup.nodes.Document) {
+        val cache = paginationCache.getOrPut(
+            base
+        ) { java.util.concurrent.ConcurrentHashMap() }
+
+        // Sayfadaki gerçek sayfa linklerini mümkün olduğunca doğrudan al.
+        // Özellikle "1 2 3 4 ... İleri" şeklindeki yapıları destekler.
+        document.select("a[href]").forEach { link ->
+            val href = fixUrlNull(link.attr("href")) ?: return@forEach
+            if (!href.contains(mainUrl, ignoreCase = true)) return@forEach
+
+            val text = link.text().trim()
+            val aria = link.attr("aria-label").trim()
+            val rel = link.attr("rel").trim()
+
+            val pageNumber = when {
+                text.matches(Regex("\\d{1,4}")) -> text.toIntOrNull()
+                else -> {
+                    Regex("(?:^|[-_/=])(\\d{1,4})(?:/?(?:[?#].*)?)$")
+                        .find(href)
+                        ?.groupValues
+                        ?.getOrNull(1)
+                        ?.toIntOrNull()
+                        ?: Regex("(?i)(?:sayfa|page|paged|pg)[=/](\\d{1,4})")
+                            .find(href)
+                            ?.groupValues
+                            ?.getOrNull(1)
+                            ?.toIntOrNull()
+                }
+            }
+
+            if (pageNumber != null && pageNumber > 1) {
+                cache[pageNumber] = href
+            }
+
+            if (
+                text.equals("ileri", ignoreCase = true) ||
+                text.equals("sonraki", ignoreCase = true) ||
+                rel.equals("next", ignoreCase = true) ||
+                aria.equals("next", ignoreCase = true) ||
+                text.contains("ileri", ignoreCase = true)
+            ) {
+                val nextNumber = pageNumber ?: ((cache.keys.maxOrNull() ?: 1) + 1)
+                if (nextNumber > 1) cache.putIfAbsent(nextNumber, href)
+            }
+        }
+    }
+
+    private fun extractPageResults(
+        document: org.jsoup.nodes.Document,
+        categoryUrl: String
+    ): List<SearchResponse> {
+        val results = linkedMapOf<String, SearchResponse>()
+
+        // Önce gerçek kartları kullanıyoruz.
+        document
+            .select(
+                "li.film, article.film, .film-card, .film-item, .film, " +
+                    ".movies .item, .movie-item, .film-list li"
+            )
+            .filter { it.selectFirst("a[href*='/film/']") != null }
+            .forEach { card ->
+                val anchor = card.selectFirst("a[href*='/film/']") ?: return@forEach
+                val result = card.toSearchResult(anchor, categoryUrl) ?: return@forEach
+                results.putIfAbsent(result.url, result)
+            }
+
+        // Kart sınıfı sayfa 2'de değişirse doğrudan film linkleri yedek olur.
+        document
+            .select("a[href*='/film/']")
+            .filter { fixUrlNull(it.attr("href"))?.let(::isFilmUrl) == true }
+            .forEach { anchor ->
+                val card = findFilmCard(anchor)
+                val result = card.toSearchResult(anchor, categoryUrl) ?: return@forEach
+                results.putIfAbsent(result.url, result)
+            }
+
+        return results.values.toList()
+    }
+
+    private fun findFilmCard(anchor: Element): Element {
+        var current: Element? = anchor
+        repeat(6) {
+            val candidate = current ?: return@repeat
+            val tag = candidate.tagName().lowercase()
+            if (tag == "li" || tag == "article" || tag == "section") return candidate
+            if (candidate.selectFirst("img") != null && candidate.text().length <= 500) return candidate
+            current = candidate.parent()
+        }
+        return anchor
     }
 
     private fun isFilmUrl(url: String): Boolean {
@@ -126,9 +278,14 @@ class FullHDFilmizlesene : MainAPI() {
         return null
     }
 
-    private fun Element.toSearchResult(): SearchResponse? {
+    private fun Element.toSearchResult(
+        anchor: Element? = null,
+        categoryUrl: String? = null
+    ): SearchResponse? {
         val href = fixUrlNull(
-            selectFirst("a[href*='/film/']")?.attr("href")
+            (if (anchor?.tagName()?.equals("a", ignoreCase = true) == true) anchor.attr("href") else null)
+                ?: selectFirst("a[href*='/film/']")?.attr("href")
+                ?: if (tagName().equals("a", ignoreCase = true)) attr("href") else null
                 ?: selectFirst("a[href]")?.attr("href")
         ) ?: return null
 
@@ -143,6 +300,8 @@ class FullHDFilmizlesene : MainAPI() {
             selectFirst("a[title]")?.attr("title"),
             selectFirst("img[alt]")?.attr("alt"),
             selectFirst("a")?.attr("title"),
+            if (tagName().equals("a", ignoreCase = true)) attr("title") else null,
+            if (tagName().equals("a", ignoreCase = true)) text() else null,
             selectFirst("a")?.text()
         )
             ?.replace(Regex("\\s+"), " ")
@@ -151,21 +310,140 @@ class FullHDFilmizlesene : MainAPI() {
             ?.trim()
             ?: return null
 
-        val posterUrl = extractPoster(this)
-        val cardText = text()
+        if (title.isBlank()) return null
+
+        val posterUrl = extractPoster(this) ?: anchor?.let { extractPoster(findFilmCard(it)) }
+        val card = findFilmCard(anchor ?: this)
+        val cardText = (card.text() + " " + href).replace(Regex("\\s+"), " ").trim()
 
         val quality = when {
             cardText.contains("4K", ignoreCase = true) -> SearchQuality.HD
+            cardText.contains("2160", ignoreCase = true) -> SearchQuality.HD
             cardText.contains("1080", ignoreCase = true) -> SearchQuality.HD
             cardText.contains("720", ignoreCase = true) -> SearchQuality.HD
             cardText.contains("HD", ignoreCase = true) -> SearchQuality.HD
             else -> null
         }
 
-        return newMovieSearchResponse(title, href, TvType.Movie) {
+        val language = extractLanguage(card) ?: extractLanguageFromUrl(categoryUrl)
+        val imdb = extractImdbScore(card)
+        val year = extractYear(cardText)
+
+        // MovieSearchResponse'ta genel amaçlı bir poster rozeti alanı yok.
+        // Bu nedenle dili başlığın yanında görünür tutuyoruz; IMDb ise
+        // CloudStream'in SearchResponse.score alanına veriliyor.
+        val displayTitle = if (!language.isNullOrBlank() &&
+            !title.contains(language, ignoreCase = true)
+        ) {
+            "$title • $language"
+        } else {
+            title
+        }
+
+        return newMovieSearchResponse(displayTitle, href, TvType.Movie) {
             this.posterUrl = posterUrl
             this.quality = quality
+            this.year = year
+            this.score = imdb?.let { Score.from10(it.toDouble()) }
         }
+    }
+
+    private fun extractLanguage(element: Element): String? {
+        val relevant = buildString {
+            append(element.text()).append(' ')
+            append(element.classNames().joinToString(" ")).append(' ')
+            append(
+                listOf(
+                    "data-lang",
+                    "data-language",
+                    "data-audio",
+                    "data-dil",
+                    "data-label"
+                ).joinToString(" ") { key -> element.attr(key) }
+            )
+        }.lowercase()
+
+        return when {
+            relevant.contains("dublaj - altyazı") ||
+                relevant.contains("dublaj-altyazı") ||
+                relevant.contains("dublaj / altyazı") -> "Türkçe Dublaj + Altyazı"
+
+            relevant.contains("türkçe dublaj") ||
+                relevant.contains("turkce dublaj") ||
+                relevant.contains("dublaj") -> "Türkçe Dublaj"
+
+            relevant.contains("türkçe altyazılı") ||
+                relevant.contains("türkçe altyazı") ||
+                relevant.contains("turkce altyazili") ||
+                relevant.contains("altyazılı") ||
+                relevant.contains("altyazili") -> "Türkçe Altyazılı"
+
+            else -> null
+        }
+    }
+
+
+    private fun extractLanguageFromUrl(url: String?): String? {
+        val lower = url?.lowercase() ?: return null
+        return when {
+            lower.contains("turkce-dublaj") -> "Türkçe Dublaj"
+            lower.contains("türkçe-dublaj") -> "Türkçe Dublaj"
+            lower.contains("turkce-altyazili") -> "Türkçe Altyazılı"
+            lower.contains("türkçe-altyazılı") -> "Türkçe Altyazılı"
+            else -> null
+        }
+    }
+
+    private fun extractImdbScore(element: Element): Float? {
+        val values = mutableListOf<String>()
+
+        listOf(
+            "data-imdb",
+            "data-rating",
+            "data-score",
+            "data-puan",
+            "imdb",
+            "rating",
+            "score"
+        ).forEach { key ->
+            val value = element.attr(key).trim()
+            if (value.isNotBlank()) values += value
+        }
+
+        element.select(
+            ".imdb, .imdb-rating, .imdb-puan, .rating, .score, .puan, " +
+                "[class*='imdb'], [class*='rating'], [class*='score']"
+        ).forEach {
+            values += it.text().trim()
+        }
+
+        values += element.text().trim()
+
+        val regexes = listOf(
+            Regex("(?i)IMDb\\s*[:\\-]?\\s*(\\d{1,2}(?:[.,]\\d{1,2})?)"),
+            Regex("(?i)IMDB\\s*[:\\-]?\\s*(\\d{1,2}(?:[.,]\\d{1,2})?)"),
+            Regex("(?i)puan\\s*[:\\-]?\\s*(\\d{1,2}(?:[.,]\\d{1,2})?)"),
+            Regex("(?:^|\\s)(10(?:[.,]0)?|[0-9](?:[.,][0-9]{1,2})?)(?:\\s*/\\s*10|\\s*\\b)")
+        )
+
+        for (value in values) {
+            for (regex in regexes) {
+                val match = regex.find(value) ?: continue
+                val raw = match.groupValues.lastOrNull()?.replace(',', '.') ?: continue
+                val number = raw.toFloatOrNull() ?: continue
+                if (number in 0.0f..10.0f) return number
+            }
+        }
+
+        return null
+    }
+
+    private fun extractYear(text: String): Int? {
+        return Regex("\\b(19\\d{2}|20\\d{2})\\b")
+            .find(text)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
@@ -183,9 +461,11 @@ class FullHDFilmizlesene : MainAPI() {
             try {
                 val document = app.get(searchUrl, headers = browserHeaders).document
                 val results = document
-                    .select("li.film, article.film, .film-card, .film-item")
-                    .filter { it.selectFirst("a[href*='/film/']") != null }
-                    .mapNotNull { it.toSearchResult() }
+                    .select("a[href*='/film/']")
+                    .filter { fixUrlNull(it.attr("href"))?.let(::isFilmUrl) == true }
+                    .mapNotNull { anchor ->
+                        findFilmCard(anchor).toSearchResult(anchor, searchUrl)
+                    }
                     .distinctBy { it.url }
 
                 Log.d(name, "search url=$searchUrl results=${results.size}")
@@ -242,7 +522,15 @@ class FullHDFilmizlesene : MainAPI() {
                 .filter { it.isNotBlank() }
                 .distinct()
 
-            Log.d(name, "load title=$title poster=$posterUrl")
+            val language = extractLanguage(document) ?: extractLanguageFromUrl(url)
+            val imdb = extractImdbScore(document)
+
+            val finalTags = buildList {
+                addAll(tags)
+                language?.let(::add)
+            }.distinct()
+
+            Log.d(name, "load title=$title poster=$posterUrl imdb=$imdb language=$language")
 
             newMovieLoadResponse(
                 name = title,
@@ -253,7 +541,8 @@ class FullHDFilmizlesene : MainAPI() {
                 this.posterUrl = posterUrl
                 this.plot = plot
                 this.year = year
-                this.tags = tags
+                this.score = imdb?.let { Score.from10(it.toDouble()) }
+                this.tags = finalTags
             }
         } catch (e: Exception) {
             Log.e(name, "Film sayfası yüklenemedi: ${e.message}", e)
