@@ -227,7 +227,7 @@ class InatBox : MainAPI() {
             if (jsonResponse.isNullOrBlank()) {
                 cached?.second ?: emptyList()
             } else {
-                val results = getSearchResponseList(jsonResponse)
+                val results = getSearchResponseList(jsonResponse, url)
                 if (results.isNotEmpty()) {
                     tabCache[url] = Pair(System.currentTimeMillis(), results)
                     results.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
@@ -305,7 +305,7 @@ class InatBox : MainAPI() {
             for (url in keyUrls) {
                 try {
                     val res = makeInatPostRequest(url) ?: continue
-                    val items = getSearchResponseList(res)
+                    val items = getSearchResponseList(res, url)
                     if (items.isNotEmpty()) {
                         tabCache[url] = Pair(System.currentTimeMillis(), items)
                         items.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
@@ -472,7 +472,7 @@ class InatBox : MainAPI() {
                         episodes
                             .getOrPut(DubStatus.None) { mutableListOf() }
                             .add(
-                                newEpisode(episodeItem.toString()) {
+                                newEpisode(buildFreshLoadData(episodeItem)) {
                                     this.name = episodeName
                                     this.posterUrl = episodePoster
                                     this.season = i + 1
@@ -619,7 +619,7 @@ class InatBox : MainAPI() {
             newLiveStreamLoadResponse(
                 chContent.chName,
                 item.toString(),
-                item.toString()
+                buildFreshLoadData(item)
             ) {
                 this.posterUrl = chContent.chImg
             }
@@ -638,7 +638,7 @@ class InatBox : MainAPI() {
             newLiveStreamLoadResponse(
                 chContent.chName,
                 item.toString(),
-                item.toString()
+                buildFreshLoadData(item)
             ) {
                 this.posterUrl = chContent.chImg
             }
@@ -680,7 +680,9 @@ class InatBox : MainAPI() {
             chImg = item.optString("chImg"),
             chHeaders = item.opt("chHeaders")?.toString() ?: "null",
             chReg = item.opt("chReg")?.toString() ?: "null",
-            chType = item.optString("chType")
+            chType = item.optString("chType"),
+            refreshUrl = item.optString("__inat_source_url", ""),
+            refreshSignature = item.optString("__inat_source_signature", "")
         )
     }
 
@@ -728,6 +730,33 @@ class InatBox : MainAPI() {
             headers["User-Agent"] =
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) " +
                     "Gecko/20100101 Firefox/134.0"
+        }
+
+        // Kısa ömürlü imzalı HLS bağlantılarını (ör. expires=...)
+        // doğrudan eski URL ile oynatmak yerine, kayıtlı kaynak API'den
+        // mümkünse yeni URL al. Bu sayede CloudStream eski token'ı
+        // tekrar kullanmaz.
+        if (chContent.refreshUrl.isNotBlank() && isExpiringDirectStream(sourceUrl)) {
+            val refreshedUrl = refreshInatDirectUrl(
+                refreshUrl = chContent.refreshUrl,
+                signature = chContent.refreshSignature,
+                name = chContent.chName,
+                type = chContent.chType,
+                image = chContent.chImg
+            )
+
+            if (!refreshedUrl.isNullOrBlank()) {
+                Log.d(
+                    "InatBox",
+                    "Refreshed expiring stream URL for ${chContent.chName}"
+                )
+                sourceUrl = refreshedUrl.trim()
+            } else {
+                Log.w(
+                    "InatBox",
+                    "Could not refresh expiring stream URL for ${chContent.chName}; using existing URL"
+                )
+            }
         }
 
         if (chContent.chType.contains("tekli", ignoreCase = true) && !isDirectStream(sourceUrl)) {
@@ -867,7 +896,7 @@ class InatBox : MainAPI() {
         }
 
         val referer = headers["Referer"].orEmpty()
-        val extractorFound = runCatching {
+        val extractorFound = try {
             loadExtractor(
                 cleanUrl,
                 referer,
@@ -875,7 +904,10 @@ class InatBox : MainAPI() {
             ) {
                 callback.invoke(it)
             }
-        }.getOrDefault(false)
+        } catch (e: Exception) {
+            Log.w("InatBox", "Extractor failed for $cleanUrl: ${e.message}")
+            false
+        }
 
         if (extractorFound) return true
 
@@ -1038,9 +1070,9 @@ class InatBox : MainAPI() {
             return null
         }
 
-        repeat(3) {
+        for (round in 0 until 3) {
             val separator = response.lastIndexOf(':')
-            if (separator < 1) return@repeat
+            if (separator < 1) break
 
             val encrypted = response.substring(0, separator).trim()
             val encodedKey = response.substring(separator + 1).trim()
@@ -1048,12 +1080,14 @@ class InatBox : MainAPI() {
             val key = try {
                 String(Base64.decode(encodedKey, Base64.DEFAULT), StandardCharsets.UTF_8)
             } catch (_: Exception) {
-                return@repeat
+                break
             }
 
-            response = decryptAesLayer(encrypted, key) ?: return@repeat
+            val decrypted = decryptAesLayer(encrypted, key) ?: break
+            response = decrypted
 
-            extractChUrl(response)?.let { return it }
+            val extractedUrl = extractChUrl(response)
+            if (!extractedUrl.isNullOrBlank()) return extractedUrl
         }
 
         return null
@@ -1178,8 +1212,119 @@ class InatBox : MainAPI() {
         return null
     }
 
+    private fun buildFreshLoadData(item: JSONObject): String {
+        return runCatching {
+            val copy = JSONObject(item.toString())
+            copy.put(
+                "__inat_load_nonce",
+                "${System.currentTimeMillis()}_${SECURE_RANDOM.nextInt(Int.MAX_VALUE)}"
+            )
+            copy.toString()
+        }.getOrElse { item.toString() }
+    }
+
+    private fun enrichInatItem(
+        rawItem: JSONObject,
+        sourceUrl: String?
+    ): JSONObject {
+        return runCatching {
+            val copy = JSONObject(rawItem.toString())
+            val source = sourceUrl?.trim().orEmpty()
+            if (source.isNotBlank()) {
+                copy.put("__inat_source_url", source)
+                copy.put("__inat_source_signature", inatItemSignature(rawItem))
+            }
+            copy
+        }.getOrElse { rawItem }
+    }
+
+    private fun inatItemSignature(item: JSONObject): String {
+        val stableId = sequenceOf(
+            "id",
+            "chId",
+            "channelId",
+            "streamId",
+            "contentId",
+            "videoId"
+        ).mapNotNull { key ->
+            item.optString(key).takeIf { it.isNotBlank() }
+        }.firstOrNull().orEmpty()
+
+        val base = if (stableId.isNotBlank()) {
+            "id:$stableId"
+        } else {
+            listOf(
+                item.optString("chName"),
+                item.optString("chType"),
+                item.optString("chImg")
+            ).joinToString("|")
+        }
+
+        return sha256Hex(base)
+    }
+
+    private fun isExpiringDirectStream(url: String): Boolean {
+        if (!isDirectStream(url)) return false
+
+        return try {
+            val uri = URI(url)
+            val query = uri.rawQuery.orEmpty().lowercase(Locale.ROOT)
+            query.contains("expires=") ||
+                query.contains("expire=") ||
+                query.contains("token=") ||
+                query.contains("md5=") && (query.contains("exp") || query.contains("expires"))
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private suspend fun refreshInatDirectUrl(
+        refreshUrl: String,
+        signature: String,
+        name: String,
+        type: String,
+        image: String
+    ): String? {
+        val jsonResponse = makeInatPostRequest(refreshUrl, retryCount = 2) ?: return null
+
+        return runCatching {
+            val candidates = mutableListOf<JSONObject>()
+            val trimmed = jsonResponse.trim()
+
+            when {
+                trimmed.startsWith("[") -> {
+                    val array = JSONArray(trimmed)
+                    for (i in 0 until array.length()) {
+                        array.optJSONObject(i)?.let(candidates::add)
+                    }
+                }
+                trimmed.startsWith("{") -> {
+                    candidates += JSONObject(trimmed)
+                }
+            }
+
+            val targetSignature = signature.takeIf { it.isNotBlank() }
+            val exactSignatureMatch = candidates.firstOrNull {
+                targetSignature != null && inatItemSignature(it) == targetSignature
+            }
+
+            val fallback = candidates.firstOrNull { item ->
+                item.optString("chName").equals(name, ignoreCase = true) &&
+                    (type.isBlank() || item.optString("chType").equals(type, ignoreCase = true)) &&
+                    (image.isBlank() || item.optString("chImg").equals(image))
+            } ?: candidates.firstOrNull {
+                item.optString("chName").equals(name, ignoreCase = true)
+            }
+
+            (exactSignatureMatch ?: fallback)?.optString("chUrl")
+                ?.takeIf { it.isNotBlank() }
+                ?.vkSourceFix()
+        }.getOrNull()
+    }
+
     private fun getSearchResponseList(
-        jsonResponse: String
+        jsonResponse: String,
+        sourceUrl: String? = null
     ): List<SearchResponse> {
         val searchResults = mutableListOf<SearchResponse>()
 
@@ -1187,9 +1332,10 @@ class InatBox : MainAPI() {
             val jsonArray = JSONArray(jsonResponse)
 
             for (i in 0 until jsonArray.length()) {
-                val item = jsonArray.getJSONObject(i)
+                val rawItem = jsonArray.getJSONObject(i)
+                if (!inatContentAllowed(rawItem)) continue
 
-                if (!inatContentAllowed(item)) continue
+                val item = enrichInatItem(rawItem, sourceUrl)
 
                 if (item.has("diziType")) {
                     val name = item.optString("diziName", "İsimsiz")
@@ -1303,5 +1449,7 @@ private data class InatChContent(
     val chImg: String,
     val chHeaders: String,
     val chReg: String,
-    val chType: String
+    val chType: String,
+    val refreshUrl: String = "",
+    val refreshSignature: String = ""
 )
