@@ -34,16 +34,486 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import kotlinx.coroutines.runBlocking
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
+
+
+private object InatHlsProxy {
+
+    private data class Mapping(
+        val refreshUrl: String,
+        val headers: Map<String, String>,
+        val name: String,
+        val type: String,
+        val image: String,
+        val signature: String,
+        val createdAt: Long,
+        val targets: MutableMap<String, String> = ConcurrentHashMap()
+    )
+
+    private const val MAX_MAPPING_AGE_MS = 6 * 60 * 60 * 1000L
+    private const val MAX_REQUEST_HEADER_BYTES = 32 * 1024
+
+    private val mappings = ConcurrentHashMap<String, Mapping>()
+    private val executor = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "InatHlsProxy").apply { isDaemon = true }
+    }
+
+    @Volatile
+    private var serverSocket: ServerSocket? = null
+
+    @Volatile
+    private var serverPort: Int = -1
+
+    private val lock = Any()
+
+    fun createLink(
+        refreshUrl: String,
+        headers: Map<String, String>,
+        name: String,
+        type: String,
+        image: String,
+        signature: String
+    ): String? {
+        if (refreshUrl.isBlank()) return null
+
+        return runCatching {
+            ensureServer()
+            cleanupMappings()
+
+            val id = UUID.randomUUID().toString().replace("-", "")
+            mappings[id] = Mapping(
+                refreshUrl = refreshUrl,
+                headers = headers.toMap(),
+                name = name,
+                type = type,
+                image = image,
+                signature = signature,
+                createdAt = System.currentTimeMillis()
+            )
+
+            "http://127.0.0.1:$serverPort/hls/$id/index.m3u8"
+        }.getOrElse {
+            Log.e("InatHlsProxy", "Could not create local HLS proxy: ${it.message}", it)
+            null
+        }
+    }
+
+    private fun ensureServer() {
+        if (serverSocket?.isClosed == false && serverPort > 0) return
+
+        synchronized(lock) {
+            if (serverSocket?.isClosed == false && serverPort > 0) return
+
+            val socket = ServerSocket(
+                0,
+                32,
+                InetAddress.getByName("127.0.0.1")
+            )
+            socket.reuseAddress = true
+            serverSocket = socket
+            serverPort = socket.localPort
+
+            executor.execute {
+                while (!socket.isClosed) {
+                    try {
+                        val client = socket.accept()
+                        executor.execute { handleClient(client) }
+                    } catch (e: Exception) {
+                        if (!socket.isClosed) {
+                            Log.w("InatHlsProxy", "Accept failed: ${e.message}")
+                        }
+                    }
+                }
+            }
+
+            Log.d("InatHlsProxy", "Started on 127.0.0.1:$serverPort")
+        }
+    }
+
+    private fun cleanupMappings() {
+        val now = System.currentTimeMillis()
+        mappings.entries.removeIf { now - it.value.createdAt > MAX_MAPPING_AGE_MS }
+    }
+
+    private fun handleClient(socket: Socket) {
+        socket.use { client ->
+            try {
+                client.soTimeout = 15_000
+                val input = BufferedInputStream(client.getInputStream())
+                val output = BufferedOutputStream(client.getOutputStream())
+
+                val requestHeaders = readRequestHeaders(input) ?: return
+                val requestLine = requestHeaders.firstOrNull() ?: return
+                val parts = requestLine.split(' ')
+                if (parts.size < 2 || !parts[0].equals("GET", ignoreCase = true)) {
+                    writeResponse(output, 405, "text/plain; charset=utf-8", "Method Not Allowed".toByteArray())
+                    return
+                }
+
+                val requestTarget = parts[1]
+                val path = requestTarget.substringBefore('?')
+
+                val match = Regex("^/hls/([^/]+)/(.+)$").matchEntire(path)
+                if (match == null) {
+                    writeResponse(output, 404, "text/plain; charset=utf-8", "Not Found".toByteArray())
+                    return
+                }
+
+                val mappingId = match.groupValues[1]
+                val resourcePath = match.groupValues[2]
+                val mapping = mappings[mappingId]
+                if (mapping == null) {
+                    writeResponse(output, 404, "text/plain; charset=utf-8", "Mapping expired".toByteArray())
+                    return
+                }
+
+                if (resourcePath == "index.m3u8") {
+                    serveFreshManifest(output, mapping, mappingId)
+                } else {
+                    val token = resourcePath.removePrefix("resource/")
+                    val target = mapping.targets[token]
+                    if (target.isNullOrBlank()) {
+                        writeResponse(output, 404, "text/plain; charset=utf-8", "Resource not found".toByteArray())
+                        return
+                    }
+                    serveTarget(output, mapping, mappingId, target)
+                }
+            } catch (e: Exception) {
+                Log.w("InatHlsProxy", "Client failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun readRequestHeaders(input: BufferedInputStream): List<String>? {
+        val buffer = ByteArray(MAX_REQUEST_HEADER_BYTES)
+        var size = 0
+
+        while (size < buffer.size) {
+            val b = input.read()
+            if (b == -1) return null
+            buffer[size++] = b.toByte()
+            if (size >= 4 &&
+                buffer[size - 4] == '\r'.code.toByte() &&
+                buffer[size - 3] == '\n'.code.toByte() &&
+                buffer[size - 2] == '\r'.code.toByte() &&
+                buffer[size - 1] == '\n'.code.toByte()
+            ) {
+                return String(buffer, 0, size, StandardCharsets.ISO_8859_1)
+                    .trim()
+                    .split("\\r?\\n".toRegex())
+            }
+        }
+        return null
+    }
+
+    private fun serveFreshManifest(
+        output: BufferedOutputStream,
+        mapping: Mapping,
+        mappingId: String
+    ) {
+        val result = runBlocking {
+            fetchFreshManifest(mapping)
+        }
+
+        if (result == null) {
+            writeResponse(output, 502, "text/plain; charset=utf-8", "Upstream manifest unavailable".toByteArray())
+            return
+        }
+
+        val rewritten = rewriteManifest(
+            body = result.first,
+            baseUrl = result.second,
+            mapping = mapping,
+            mappingId = mappingId
+        )
+
+        writeResponse(
+            output,
+            200,
+            "application/vnd.apple.mpegurl",
+            rewritten.toByteArray(StandardCharsets.UTF_8),
+            extraHeaders = mapOf(
+                "Cache-Control" to "no-cache, no-store, must-revalidate",
+                "Pragma" to "no-cache"
+            )
+        )
+    }
+
+    private suspend fun fetchFreshManifest(mapping: Mapping): Pair<String, String>? {
+        return runCatching {
+            val jsonResponse = makeInatPostRequestForProxy(mapping.refreshUrl) ?: return null
+            val freshUrl = selectFreshChannelUrl(jsonResponse, mapping)
+                ?.trim()
+                .orEmpty()
+
+            if (freshUrl.isBlank()) return null
+
+            val response = app.get(
+                freshUrl,
+                headers = mapping.headers,
+                referer = mapping.headers["Referer"]
+            )
+            if (!response.isSuccessful) return null
+
+            Pair(response.text, freshUrl)
+        }.getOrElse {
+            Log.w("InatHlsProxy", "Manifest refresh failed: ${it.message}")
+            null
+        }
+    }
+
+    private fun selectFreshChannelUrl(
+        rawJson: String,
+        mapping: Mapping
+    ): String? {
+        return runCatching {
+            val candidates = mutableListOf<JSONObject>()
+            val trimmed = rawJson.trim()
+
+            when {
+                trimmed.startsWith("[") -> {
+                    val array = JSONArray(trimmed)
+                    for (i in 0 until array.length()) {
+                        array.optJSONObject(i)?.let(candidates::add)
+                    }
+                }
+                trimmed.startsWith("{") -> {
+                    candidates += JSONObject(trimmed)
+                }
+            }
+
+            val exact = candidates.firstOrNull { item ->
+                mapping.signature.isNotBlank() &&
+                    proxyItemSignature(item) == mapping.signature
+            }
+
+            val named = candidates.firstOrNull { item ->
+                item.optString("chName").equals(mapping.name, ignoreCase = true) &&
+                    (mapping.type.isBlank() ||
+                        item.optString("chType").equals(mapping.type, ignoreCase = true)) &&
+                    (mapping.image.isBlank() ||
+                        item.optString("chImg").equals(mapping.image))
+            }
+
+            val fallback = candidates.firstOrNull { item ->
+                item.optString("chName").equals(mapping.name, ignoreCase = true)
+            }
+
+            (exact ?: named ?: fallback)?.optString("chUrl")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { if (it.startsWith("act", ignoreCase = true)) "https://vk.com/al_video.php?$it" else it }
+        }.getOrNull()
+    }
+
+    private fun proxyItemSignature(item: JSONObject): String {
+        val stableId = sequenceOf(
+            "id",
+            "chId",
+            "channelId",
+            "streamId",
+            "contentId",
+            "videoId"
+        ).mapNotNull { key ->
+            item.optString(key).takeIf { it.isNotBlank() }
+        }.firstOrNull().orEmpty()
+
+        val base = if (stableId.isNotBlank()) {
+            "id:$stableId"
+        } else {
+            listOf(
+                item.optString("chName"),
+                item.optString("chType"),
+                item.optString("chImg")
+            ).joinToString("|")
+        }
+
+        return MessageDigest.getInstance("SHA-256")
+            .digest(base.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte) }
+    }
+
+    private fun rewriteManifest(
+        body: String,
+        baseUrl: String,
+        mapping: Mapping,
+        mappingId: String
+    ): String {
+        val baseUri = runCatching { URI(baseUrl) }.getOrNull()
+
+        fun registerTarget(raw: String): String {
+            val target = raw.trim().trim('"')
+            if (target.isBlank()) return raw
+
+            val absolute = runCatching {
+                if (target.startsWith("http://", true) || target.startsWith("https://", true)) {
+                    target
+                } else {
+                    baseUri?.resolve(target)?.toString() ?: target
+                }
+            }.getOrDefault(target)
+
+            val token = UUID.randomUUID().toString().replace("-", "")
+            mapping.targets[token] = absolute
+            return "/hls/$mappingId/resource/$token"
+        }
+
+        val lines = body.lines().toMutableList()
+        for (index in lines.indices) {
+            val line = lines[index]
+            if (line.isBlank()) continue
+
+            if (!line.startsWith("#")) {
+                lines[index] = registerTarget(line)
+                continue
+            }
+
+            if (line.contains("URI=\"", ignoreCase = true)) {
+                val regex = Regex("URI=\\\"([^\\\"]+)\\\"")
+                lines[index] = regex.replace(line) { match ->
+                    "URI=\"${registerTarget(match.groupValues[1])}\""
+                }
+            }
+        }
+
+        return lines.joinToString("\n")
+    }
+
+    private fun serveTarget(
+        output: BufferedOutputStream,
+        mapping: Mapping,
+        mappingId: String,
+        target: String
+    ) {
+        val isPlaylist = target.contains(".m3u8", ignoreCase = true) ||
+            target.contains("/hls/", ignoreCase = true) ||
+            target.contains("/playlist", ignoreCase = true)
+
+        val result = runCatching {
+            runBlocking {
+                app.get(
+                    target,
+                    headers = mapping.headers,
+                    referer = mapping.headers["Referer"]
+                )
+            }
+        }.getOrNull()
+
+        if (result == null || !result.isSuccessful) {
+            val code = result?.code ?: 502
+            writeResponse(
+                output,
+                code,
+                "text/plain; charset=utf-8",
+                "Upstream resource failed".toByteArray()
+            )
+            return
+        }
+
+        if (isPlaylist) {
+            val rewritten = rewriteManifest(
+                body = result.text,
+                baseUrl = target,
+                mapping = mapping,
+                mappingId = mappingId
+            )
+            writeResponse(
+                output,
+                200,
+                "application/vnd.apple.mpegurl",
+                rewritten.toByteArray(StandardCharsets.UTF_8),
+                extraHeaders = mapOf(
+                    "Cache-Control" to "no-cache, no-store, must-revalidate",
+                    "Pragma" to "no-cache"
+                )
+            )
+            return
+        }
+
+        val bytes = runCatching {
+            result.body?.bytes()
+        }.getOrNull() ?: result.text.toByteArray(StandardCharsets.ISO_8859_1)
+
+        val contentType = when {
+            target.contains(".aac", true) -> "audio/aac"
+            target.contains(".m4s", true) -> "video/iso.segment"
+            target.contains(".ts", true) -> "video/mp2t"
+            else -> "application/octet-stream"
+        }
+
+        writeResponse(
+            output,
+            200,
+            contentType,
+            bytes,
+            extraHeaders = mapOf("Cache-Control" to "no-store")
+        )
+    }
+
+    private fun writeResponse(
+        output: BufferedOutputStream,
+        code: Int,
+        contentType: String,
+        body: ByteArray,
+        extraHeaders: Map<String, String> = emptyMap()
+    ) {
+        val reason = when (code) {
+            200 -> "OK"
+            404 -> "Not Found"
+            405 -> "Method Not Allowed"
+            502 -> "Bad Gateway"
+            else -> "Error"
+        }
+
+        val header = buildString {
+            append("HTTP/1.1 ").append(code).append(' ').append(reason).append("\r\n")
+            append("Content-Type: ").append(contentType).append("\r\n")
+            append("Content-Length: ").append(body.size).append("\r\n")
+            append("Connection: close\r\n")
+            append("Access-Control-Allow-Origin: *\r\n")
+            extraHeaders.forEach { (key, value) ->
+                append(key).append(": ").append(value).append("\r\n")
+            }
+            append("\r\n")
+        }
+
+        output.write(header.toByteArray(StandardCharsets.ISO_8859_1))
+        output.write(body)
+        output.flush()
+    }
+
+    private suspend fun makeInatPostRequestForProxy(url: String): String? {
+        return InatBox.makeProxyRequest(url)
+    }
+
+    private fun extractChUrlForProxy(rawJson: String?): String? {
+        if (rawJson.isNullOrBlank()) return null
+        return runCatching {
+            val trimmed = rawJson.trim()
+            when {
+                trimmed.startsWith("{") -> JSONObject(trimmed).optString("chUrl", null)
+                trimmed.startsWith("[") -> JSONArray(trimmed).optJSONObject(0)?.optString("chUrl", null)
+                else -> null
+            }
+        }.getOrNull()
+    }
+}
 
 class InatBox : MainAPI() {
 
@@ -95,6 +565,52 @@ class InatBox : MainAPI() {
             val mac = Mac.getInstance("HmacSHA256")
             mac.init(SecretKeySpec(key.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
             return bytesToHex(mac.doFinal(data.toByteArray(StandardCharsets.UTF_8)))
+        }
+
+        internal suspend fun makeProxyRequest(url: String): String? {
+            return makeInatPostRequestStatic(url)
+        }
+
+        private suspend fun makeInatPostRequestStatic(
+            url: String,
+            retryCount: Int = 2
+        ): String? {
+            val hostName = try {
+                URI(url).host ?: "speedrestapi.com"
+            } catch (_: Exception) {
+                "speedrestapi.com"
+            }
+
+            repeat(retryCount) { attempt ->
+                try {
+                    val dynamicKey = generateRandomKey(16)
+                    val requestBody = "1=$dynamicKey&0=$dynamicKey"
+                    val headers = mutableMapOf(
+                        "User-Agent" to "speedrestapi",
+                        "X-Requested-With" to "com.bp.box",
+                        "Referer" to "https://speedrestapi.com/",
+                        "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
+                        "Cache-Control" to "no-cache",
+                        "Host" to hostName
+                    )
+                    headers.putAll(signRequest("POST", url, requestBody))
+                    val response = app.post(
+                        url = url,
+                        headers = headers,
+                        requestBody = requestBody.toRequestBody(
+                            "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
+                        )
+                    )
+                    if (response.isSuccessful && response.text.isNotBlank()) {
+                        decryptDoubleAes(response.text, dynamicKey)?.let { return it }
+                    }
+                } catch (e: Exception) {
+                    if (attempt == retryCount - 1) {
+                        Log.w("InatBox", "Proxy refresh request failed: ${e.message}")
+                    }
+                }
+            }
+            return null
         }
 
         fun signRequest(method: String, url: String, body: String): Map<String, String> {
@@ -786,10 +1302,37 @@ class InatBox : MainAPI() {
             }
         }
 
+        var playbackUrl = sourceUrl
+        var playbackHeaders = headers
+
+        if (
+            chContent.refreshUrl.isNotBlank() &&
+            isExpiringDirectStream(sourceUrl) &&
+            sourceUrl.contains(".m3u8", ignoreCase = true)
+        ) {
+            val proxyUrl = InatHlsProxy.createLink(
+                refreshUrl = chContent.refreshUrl,
+                headers = headers,
+                name = chContent.chName,
+                type = chContent.chType,
+                image = chContent.chImg,
+                signature = chContent.refreshSignature
+            )
+
+            if (!proxyUrl.isNullOrBlank()) {
+                Log.d(
+                    "InatBox",
+                    "Using renewable local HLS proxy for ${chContent.chName}"
+                )
+                playbackUrl = proxyUrl
+                playbackHeaders = emptyMap()
+            }
+        }
+
         return emitDirectOrRawStream(
             name = chContent.chName.ifBlank { "InatBox" },
-            url = sourceUrl,
-            headers = headers,
+            url = playbackUrl,
+            headers = playbackHeaders,
             subtitleCallback = subtitleCallback,
             callback = callback
         )
@@ -861,7 +1404,11 @@ class InatBox : MainAPI() {
             }
 
             var workingHeaders: Map<String, String>? = null
-            if (linkType == ExtractorLinkType.M3U8) {
+            val isLocalProxy = cleanUrl.startsWith("http://127.0.0.1:", ignoreCase = true)
+
+            if (isLocalProxy) {
+                workingHeaders = emptyMap()
+            } else if (linkType == ExtractorLinkType.M3U8) {
                 for (candidate in candidateHeaders.distinct()) {
                     if (probeM3u8(cleanUrl, candidate)) {
                         workingHeaders = candidate
