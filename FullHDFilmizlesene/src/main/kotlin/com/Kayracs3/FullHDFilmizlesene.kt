@@ -248,16 +248,15 @@ class FullHDFilmizlesene : MainAPI() {
     }
 
     private fun isCommentLikeElement(element: Element): Boolean {
+        // Sadece elemanın kendi kimlik/sınıf işaretlerini kontrol ediyoruz.
+        // Altındaki başlıklara bakmak yanlışlıkla normal film listesini de
+        // "Son Yorumlar" olarak işaretleyebiliyordu.
         val marker = buildString {
             append(element.tagName()).append(' ')
             append(element.id()).append(' ')
             append(element.classNames().joinToString(" ")).append(' ')
             append(element.attr("data-section")).append(' ')
             append(element.attr("data-widget")).append(' ')
-            append(
-                element.select("h1, h2, h3, h4, .title, .widget-title, .section-title")
-                    .text()
-            )
         }.lowercase()
 
         return listOf(
