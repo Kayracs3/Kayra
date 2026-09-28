@@ -666,6 +666,175 @@ class HDFilmCehennemi : MainAPI() {
             .forEach { addCandidate(result, it.groupValues[1], baseUrl) }
     }
 
+    private fun evaluateJsStrings(
+        expression: String,
+        variables: Map<String, String>,
+        functions: Map<String, String>,
+        depth: Int = 0
+    ): LinkedHashSet<String> {
+        val result = LinkedHashSet<String>()
+        if (depth > 8) return result
+
+        var value = expression.trim().trimEnd(';').trim()
+        if (value.isBlank()) return result
+
+        while (value.startsWith('(') && value.endsWith(')')) {
+            val end = findBalancedEnd(value, 0, '(', ')')
+            if (end != value.lastIndex) break
+            value = value.substring(1, value.length - 1).trim()
+        }
+
+        quotedValue(value)?.let {
+            result.add(it)
+            return result
+        }
+
+        if (value.matches(Regex("[A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*"))) {
+            variables[value]?.let {
+                result.addAll(evaluateJsStrings(it, variables, functions, depth + 1))
+                if (result.isNotEmpty()) return result
+            }
+        }
+
+        val plusParts = splitTopLevel(value, '+')
+        if (plusParts.size > 1) {
+            val fragments = plusParts.map { part ->
+                evaluateJsStrings(part, variables, functions, depth + 1).ifEmpty {
+                    quotedValue(part)?.let { linkedSetOf(it) } ?: linkedSetOf(part.trim())
+                }
+            }
+
+            val combined = StringBuilder()
+            var possible = true
+            for (fragment in fragments) {
+                val piece = fragment.firstOrNull()
+                if (piece == null) {
+                    possible = false
+                    break
+                }
+                combined.append(piece)
+            }
+            if (possible && combined.isNotBlank()) result.add(combined.toString())
+            return result
+        }
+
+        val atob = Regex("(?is)^(?:window\\.)?atob\\s*\\((.*)\\)$").matchEntire(value)
+        if (atob != null) {
+            val args = evaluateJsStrings(atob.groupValues[1], variables, functions, depth + 1)
+            args.forEach {
+                val decoded = decodeBase64Text(it)
+                if (decoded.isNotBlank()) result.add(decoded)
+            }
+            return result
+        }
+
+        val decodeUri = Regex("(?is)^(?:decodeURIComponent|decodeURI)\\s*\\((.*)\\)$").matchEntire(value)
+        if (decodeUri != null) {
+            val args = evaluateJsStrings(decodeUri.groupValues[1], variables, functions, depth + 1)
+            args.forEach { result.add(decodeUrlEncoded(it)) }
+            return result
+        }
+
+        val unescape = Regex("(?is)^unescape\\s*\\((.*)\\)$").matchEntire(value)
+        if (unescape != null) {
+            val args = evaluateJsStrings(unescape.groupValues[1], variables, functions, depth + 1)
+            args.forEach { result.add(decodeUrlEncoded(it)) }
+            return result
+        }
+
+        val charCode = Regex("(?is)^String\\.fromCharCode\\s*\\((.*)\\)$").matchEntire(value)
+        if (charCode != null) {
+            val chars = splitTopLevel(charCode.groupValues[1], ',')
+                .map { token ->
+                    token.trim().toIntOrNull()
+                        ?: token.trim().removePrefix("0x").toIntOrNull(16)
+                }
+            if (chars.all { it != null }) {
+                result.add(chars.filterNotNull().map { it.toChar() }.joinToString(""))
+                return result
+            }
+        }
+
+        // Basit string dönüşümleri: x.split('').reverse().join('')
+        val reverseChain = Regex("(?is)^(.*?)\\.split\\(\\s*['\"]['\"]\\s*\\)\\.reverse\\(\\)\\.join\\(\\s*['\"]['\"]\\s*\\)$")
+            .matchEntire(value)
+        if (reverseChain != null) {
+            evaluateJsStrings(reverseChain.groupValues[1], variables, functions, depth + 1)
+                .forEach { result.add(it.reversed()) }
+            return result
+        }
+
+        // Basit replace: value.replace('a', 'b')
+        val replaceRegex = Regex("(?is)^(.*?)\\.replace\\(\\s*(['\"])(.*?)\\2\\s*,\\s*(['\"])(.*?)\\4\\s*\\)$")
+            .matchEntire(value)
+        if (replaceRegex != null) {
+            val base = evaluateJsStrings(replaceRegex.groupValues[1], variables, functions, depth + 1)
+            base.forEach {
+                result.add(
+                    it.replace(
+                        replaceRegex.groupValues[3],
+                        replaceRegex.groupValues[5]
+                    )
+                )
+            }
+            return result
+        }
+
+        // Basit slice/substring
+        val sliceRegex = Regex("(?is)^(.*?)\\.(?:slice|substring)\\(\\s*(\\d+)\\s*(?:,\\s*(\\d+)\\s*)?\\)$")
+            .matchEntire(value)
+        if (sliceRegex != null) {
+            val base = evaluateJsStrings(sliceRegex.groupValues[1], variables, functions, depth + 1)
+            val start = sliceRegex.groupValues[2].toIntOrNull() ?: 0
+            val end = sliceRegex.groupValues[3].toIntOrNull()
+            base.forEach {
+                if (start in 0..it.length) {
+                    result.add(it.substring(start, end?.coerceIn(start, it.length) ?: it.length))
+                }
+            }
+            return result
+        }
+
+        // Fonksiyon çağrısı ve return değeri
+        val call = Regex("^([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*\\((.*)\\)$", RegexOption.DOT_MATCHES_ALL)
+            .matchEntire(value)
+        if (call != null) {
+            val functionBody = functions[call.groupValues[1]]
+            if (functionBody != null) {
+                Regex("(?is)\\breturn\\s+(.+?)(?:;|$)")
+                    .findAll(functionBody)
+                    .forEach { match ->
+                        result.addAll(
+                            evaluateJsStrings(
+                                match.groupValues[1],
+                                variables,
+                                functions,
+                                depth + 1
+                            )
+                        )
+                    }
+                if (result.isNotEmpty()) return result
+            }
+        }
+
+        // Array index: arr[0]
+        val indexMatch = Regex("(?is)^([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\[\\s*(\\d+)\\s*]$").matchEntire(value)
+        if (indexMatch != null) {
+            val arrayExpression = variables[indexMatch.groupValues[1]]
+            val index = indexMatch.groupValues[2].toIntOrNull() ?: -1
+            if (arrayExpression != null && index >= 0) {
+                val inner = arrayExpression.trim().removePrefix("[").removeSuffix("]")
+                val parts = splitTopLevel(inner, ',')
+                parts.getOrNull(index)?.let {
+                    result.addAll(evaluateJsStrings(it, variables, functions, depth + 1))
+                }
+            }
+            return result
+        }
+
+        return result
+    }
+
     private fun resolveJsExpression(
         expression: String,
         variables: Map<String, String>,
@@ -793,10 +962,15 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         if (value.matches(Regex("[A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*"))) {
+            val evaluated = evaluateJsStrings(value, variables, functions, depth + 1)
+            evaluated.forEach {
+                extractMediaFromDecoded(it, result, baseUrl)
+            }
             variables[value]?.let {
                 resolveJsExpression(it, variables, functions, result, baseUrl, depth + 1)
                 return
             }
+            if (evaluated.isNotEmpty()) return
         }
 
         val callName = Regex("^([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*\\((.*)\\)$", RegexOption.DOT_MATCHES_ALL)
@@ -832,14 +1006,32 @@ class HDFilmCehennemi : MainAPI() {
 
         Log.d(TAG, "JS VARIABLES=${variables.keys}")
 
+        val sourceRefs = Regex(
+            """(?is)(?:file|src|source|url|media|stream)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)"""
+        ).findAll(text)
+            .map { it.groupValues[1] }
+            .distinct()
+            .toList()
+
+        sourceRefs.forEach { ref ->
+            variables[ref]?.let { expr ->
+                Log.d(TAG, "JS SOURCE REF=$ref EXPR=${expr.take(3000)}")
+                evaluateJsStrings(ref, variables, functions).forEach { value ->
+                    Log.d(TAG, "JS SOURCE VALUE=$ref -> ${value.take(2000)}")
+                }
+            }
+        }
+
         extractDirectStrings(text, result, baseUrl)
 
         /*
          * Değişkenleri çöz. Özellikle sources/configs önemli.
          */
         variables.forEach { (name, expression) ->
-            if (name == "sources" || name == "configs" || name == "player" || name == "q10op") {
-                Log.d(TAG, "JS SPECIAL=$name EXPR=${expression.take(2500)}")
+            if (name == "sources" || name == "configs" || name == "player" ||
+                name == "q10op" || name == "n6i" || name == "tv2" ||
+                name == "ojwcp" || name == "b75v2") {
+                Log.d(TAG, "JS SPECIAL=$name EXPR=${expression.take(3000)}")
             }
             resolveJsExpression(
                 expression,
