@@ -326,31 +326,41 @@ class HDFilmCehennemi : MainAPI() {
             lower.contains("master.txt?")
     }
 
+    private fun parsedUri(url: String): URI? {
+        if (url.isBlank()) return null
+        if (url.any { it.isWhitespace() || it == '"' || it == '\'' || it == '<' || it == '>' }) return null
+        return runCatching { URI(url) }.getOrNull()
+    }
+
     private fun isValidVideoUrl(url: String): Boolean {
         if (url.isBlank() || isRejectedMediaUrl(url)) return false
-        val lower = url.lowercase(Locale.ROOT)
-        return lower.startsWith("http://") && (
-            lower.contains(".m3u8") || lower.contains(".mp4") ||
-                lower.contains("/hls/") || lower.contains("/hls2/")
-            ) || lower.startsWith("https://") && (
-            lower.contains(".m3u8") || lower.contains(".mp4") ||
-                lower.contains("/hls/") || lower.contains("/hls2/")
-            )
+        val uri = parsedUri(url) ?: return false
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false
+        if (scheme != "http" && scheme != "https") return false
+        if (uri.host.isNullOrBlank()) return false
+        val path = uri.path?.lowercase(Locale.ROOT).orEmpty()
+        return path.contains(".m3u8") ||
+            path.contains(".mp4") ||
+            path.contains("/hls/") ||
+            path.contains("/hls2/")
     }
 
     private fun isHlsCandidate(url: String): Boolean {
         if (url.isBlank() || isRejectedMediaUrl(url)) return false
-        val lower = url.lowercase(Locale.ROOT)
-        if (lower.contains(".mp4")) return false
-        return lower.contains(".m3u8") || lower.contains("/hls/") || lower.contains("/hls2/")
+        val uri = parsedUri(url) ?: return false
+        val path = uri.path?.lowercase(Locale.ROOT).orEmpty()
+        if (path.contains(".mp4")) return false
+        return path.contains(".m3u8") ||
+            path.contains("/hls/") ||
+            path.contains("/hls2/")
     }
 
     private fun mediaTypeForUrl(url: String): ExtractorLinkType {
-        val lower = url.lowercase(Locale.ROOT)
+        val path = parsedUri(url)?.path?.lowercase(Locale.ROOT).orEmpty()
         return when {
-            lower.contains(".m3u8") -> ExtractorLinkType.M3U8
-            lower.contains(".mp4") -> ExtractorLinkType.VIDEO
-            lower.contains("/hls/") || lower.contains("/hls2/") -> ExtractorLinkType.M3U8
+            path.contains(".m3u8") -> ExtractorLinkType.M3U8
+            path.contains(".mp4") -> ExtractorLinkType.VIDEO
+            path.contains("/hls/") || path.contains("/hls2/") -> ExtractorLinkType.M3U8
             else -> ExtractorLinkType.VIDEO
         }
     }
@@ -623,17 +633,28 @@ class HDFilmCehennemi : MainAPI() {
     }
 
     private fun extractDirectStrings(text: String, result: MutableSet<String>, baseUrl: String) {
-        Regex("https?://[^\\s\"'`<>\\\\]+", RegexOption.IGNORE_CASE)
-            .findAll(decodeText(text))
+        val normalized = decodeText(text)
+
+        Regex(
+            """https?://[^\s"'`<>\\]+?(?:\.m3u8(?:\?[^\s"'`<>\\]+)?|\.mp4(?:\?[^\s"'`<>\\]+)?)(?!/master\.txt)""",
+            RegexOption.IGNORE_CASE
+        )
+            .findAll(normalized)
             .forEach { addCandidate(result, it.value, baseUrl) }
 
-        Regex("(?:https?:)?//[^\\s\"'`<>\\\\]+", RegexOption.IGNORE_CASE)
-            .findAll(decodeText(text))
+        Regex(
+            """(?:https?:)?//[^\s"'`<>\\]+/(?:hls2?/)[^\s"'`<>\\]+""",
+            RegexOption.IGNORE_CASE
+        )
+            .findAll(normalized)
             .forEach { addCandidate(result, it.value, baseUrl) }
 
-        Regex("(?:/|https?://)[^\\s\"'`<>]+/(?:hls2?/)[^\\s\"'`<>]+", RegexOption.IGNORE_CASE)
-            .findAll(decodeText(text))
-            .forEach { addCandidate(result, it.value, baseUrl) }
+        Regex(
+            """(?:^|["'`=:(,\s])(/[^\s"'`<>]+/(?:hls2?/)[^\s"'`<>]+)""",
+            RegexOption.IGNORE_CASE
+        )
+            .findAll(normalized)
+            .forEach { addCandidate(result, it.groupValues[1], baseUrl) }
     }
 
     private fun extractMediaFromDecoded(value: String, result: MutableSet<String>, baseUrl: String) {
@@ -817,7 +838,7 @@ class HDFilmCehennemi : MainAPI() {
          * Değişkenleri çöz. Özellikle sources/configs önemli.
          */
         variables.forEach { (name, expression) ->
-            if (name == "sources" || name == "configs" || name == "player") {
+            if (name == "sources" || name == "configs" || name == "player" || name == "q10op") {
                 Log.d(TAG, "JS SPECIAL=$name EXPR=${expression.take(2500)}")
             }
             resolveJsExpression(
