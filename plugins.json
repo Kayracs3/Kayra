@@ -81,10 +81,10 @@
     },
     {
         "iconUrl": "https://hdfilmcehennemi.nl/favicon.ico",
-        "fileHash": "sha256-6f9749f6e568b0e9be6fddbc5f23262250b716ba24627d31be2b98b74b53c3a9",
+        "fileHash": "sha256-c5551e13c151bb65ac976bd6e0514ea6a86544fcc8211df6f36717cb12469ce0",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 70084,
+        "fileSize": 68456,
         "status": 1,
         "language": "tr",
         "authors": [
