@@ -517,18 +517,74 @@ class HDFilmCehennemi : MainAPI() {
 
     private fun collectJsVariables(text: String): MutableMap<String, String> {
         val variables = linkedMapOf<String, String>()
-        val declarationRegex = Regex("\\b(?:var|let|const)\\s+([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*=", RegexOption.MULTILINE)
+
+        val declarationRegex = Regex(
+            "\\b(?:var|let|const)\\s+([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*=",
+            RegexOption.MULTILINE
+        )
 
         declarationRegex.findAll(text).forEach { match ->
             val name = match.groupValues[1]
             val expressionStart = match.range.last + 1
             val expression = readJsExpression(text, expressionStart)
-            if (expression.isNotBlank()) variables[name] = expression
+            if (expression.isNotBlank()) {
+                variables[name] = expression
+            }
+        }
+
+        /*
+         * Önemli: rplayer kodunda kaynak değişkenleri bazen
+         * `var sources = []` ile tanımlanıp daha sonra
+         * `sources = ...` şeklinde yeniden atanabiliyor.
+         * Bildirim olmayan atamaları da yakala.
+         */
+        val assignmentRegex = Regex(
+            "(?<![.\w$])([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*=\\s*",
+            RegexOption.MULTILINE
+        )
+
+        assignmentRegex.findAll(text).forEach { match ->
+            val name = match.groupValues[1]
+            if (name in setOf(
+                    "if", "for", "while", "switch", "return",
+                    "function", "var", "let", "const"
+                )
+            ) {
+                return@forEach
+            }
+
+            val expressionStart = match.range.last + 1
+            val expression = readJsExpression(text, expressionStart)
+            if (expression.isNotBlank()) {
+                variables[name] = expression
+            }
         }
 
         return variables
     }
 
+    private fun collectJsPushes(text: String): Map<String, List<String>> {
+        val result = linkedMapOf<String, MutableList<String>>()
+
+        val regex = Regex(
+            "\\b([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\.(?:push|unshift|concat)\\s*\\(",
+            RegexOption.MULTILINE
+        )
+
+        regex.findAll(text).forEach { match ->
+            val name = match.groupValues[1]
+            val start = match.range.last + 1
+            val end = findBalancedEnd(text, start, '(', ')')
+            if (end < 0) return@forEach
+
+            val argument = text.substring(start, end).trim()
+            if (argument.isBlank()) return@forEach
+
+            result.getOrPut(name) { mutableListOf() }.add(argument)
+        }
+
+        return result
+    }
     private fun collectJsFunctions(text: String): MutableMap<String, String> {
         val result = linkedMapOf<String, String>()
         val regex = Regex("(?is)(?:function\\s+([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*\\([^)]*\\)|([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*=\\s*function\\s*\\([^)]*\\))\\s*\\{")
@@ -678,6 +734,43 @@ class HDFilmCehennemi : MainAPI() {
             return
         }
 
+        /*
+         * Array ifadeleri: [ {file: ...}, {file: ...} ]
+         */
+        if (value.startsWith("[") && value.endsWith("]")) {
+            val inner = value.substring(1, value.length - 1)
+            splitTopLevel(inner, ',').forEach { item ->
+                resolveJsExpression(item, variables, functions, result, baseUrl, depth + 1)
+            }
+            return
+        }
+
+        /*
+         * Object ifadeleri: { sources: ..., file: ... }
+         */
+        if (value.startsWith("{") && value.endsWith("}")) {
+            extractPropertyExpressions(
+                value,
+                setOf(
+                    "file", "src", "source", "url", "media", "stream",
+                    "streamUrl", "videoUrl", "video_url", "hls",
+                    "playlist", "manifest", "sources"
+                )
+            ).forEach { property ->
+                resolveJsExpression(
+                    property,
+                    variables,
+                    functions,
+                    result,
+                    baseUrl,
+                    depth + 1
+                )
+            }
+
+            extractMediaFromDecoded(value, result, baseUrl)
+            return
+        }
+
         if (value.matches(Regex("[A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*"))) {
             variables[value]?.let {
                 resolveJsExpression(it, variables, functions, result, baseUrl, depth + 1)
@@ -707,56 +800,143 @@ class HDFilmCehennemi : MainAPI() {
         extractMediaFromDecoded(value, result, baseUrl)
     }
 
-    private fun extractJavascriptMediaSources(text: String, baseUrl: String): List<String> {
+    private fun extractJavascriptMediaSources(
+        text: String,
+        baseUrl: String
+    ): List<String> {
         val result = linkedSetOf<String>()
         val variables = collectJsVariables(text)
         val functions = collectJsFunctions(text)
+        val pushes = collectJsPushes(text)
 
         Log.d(TAG, "JS VARIABLES=${variables.keys}")
 
         extractDirectStrings(text, result, baseUrl)
 
-        variables.forEach { (_, expression) ->
-            resolveJsExpression(expression, variables, functions, result, baseUrl)
+        /*
+         * Değişkenleri çöz. Özellikle sources/configs önemli.
+         */
+        variables.forEach { (name, expression) ->
+            if (name == "sources" || name == "configs" || name == "player") {
+                Log.d(TAG, "JS SPECIAL=$name EXPR=${expression.take(2500)}")
+            }
+            resolveJsExpression(
+                expression,
+                variables,
+                functions,
+                result,
+                baseUrl
+            )
         }
 
+        /*
+         * Sonradan yapılan sources.push({...}) vb.
+         */
+        pushes.forEach { (name, expressions) ->
+            Log.d(TAG, "JS PUSHES=$name COUNT=${expressions.size}")
+            expressions.forEach { expression ->
+                resolveJsExpression(
+                    expression,
+                    variables,
+                    functions,
+                    result,
+                    baseUrl
+                )
+            }
+        }
+
+        /*
+         * file/src/source/... property'leri.
+         */
         extractPropertyExpressions(
             text,
-            setOf("file", "src", "source", "url", "media", "stream", "streamUrl", "videoUrl", "video_url", "hls", "playlist", "manifest")
-        ).forEach { resolveJsExpression(it, variables, functions, result, baseUrl) }
+            setOf(
+                "file", "src", "source", "url", "media", "stream",
+                "streamUrl", "videoUrl", "video_url", "hls",
+                "playlist", "manifest", "sources"
+            )
+        ).forEach { expression ->
+            resolveJsExpression(
+                expression,
+                variables,
+                functions,
+                result,
+                baseUrl
+            )
+        }
 
-        val setupRegex = Regex("(?is)jwplayer\\s*\\([^)]*\\)\\s*\\.\\s*setup\\s*\\(")
+        /*
+         * jwplayer(...).setup(...) yanında player.setup(...),
+         * herhangiBirDegisken.setup(...) gibi kullanımları da yakala.
+         */
+        val setupRegex = Regex(
+            "(?is)(?:[A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*(?:\\([^)]*\\))?)\\s*\\.\\s*setup\\s*\\("
+        )
+
         setupRegex.findAll(text).forEach { match ->
             val start = match.range.last + 1
             if (start !in text.indices) return@forEach
+
             val end = findBalancedEnd(text, start, '(', ')')
             if (end < 0) return@forEach
 
             val argument = text.substring(start, end).trim()
-            Log.d(TAG, "JW SETUP ARG=$argument")
+            Log.d(TAG, "JW SETUP ARG=${argument.take(2500)}")
             Log.d(TAG, "JW SOURCE BLOCK LENGTH=${argument.length}")
-            logChunks("JW SOURCE DEBUG", argument)
 
-            resolveJsExpression(argument, variables, functions, result, baseUrl)
+            if (argument.isNotBlank()) {
+                resolveJsExpression(
+                    argument,
+                    variables,
+                    functions,
+                    result,
+                    baseUrl
+                )
+            }
 
             if (argument.matches(Regex("[A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*"))) {
                 val resolved = variables[argument]
                 if (!resolved.isNullOrBlank()) {
-                    Log.d(TAG, "JW SETUP RESOLVED=$argument -> ${resolved.take(500)}")
+                    Log.d(
+                        TAG,
+                        "JW SETUP RESOLVED=$argument -> ${resolved.take(2500)}"
+                    )
                     logChunks("JW RESOLVED DEBUG", resolved)
-                    resolveJsExpression(resolved, variables, functions, result, baseUrl)
+                    resolveJsExpression(
+                        resolved,
+                        variables,
+                        functions,
+                        result,
+                        baseUrl
+                    )
                 }
             }
         }
 
-        Regex("(?is)(?:window\\.)?atob\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)")
+        /*
+         * Doğrudan atob() çağrıları.
+         */
+        Regex(
+            "(?is)(?:window\\.)?atob\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)"
+        )
             .findAll(text)
             .forEach { match ->
                 val decoded = decodeBase64Text(match.groupValues[1])
-                if (decoded.isNotBlank()) extractMediaFromDecoded(decoded, result, baseUrl)
+                if (decoded.isNotBlank()) {
+                    extractMediaFromDecoded(
+                        decoded,
+                        result,
+                        baseUrl
+                    )
+                }
             }
 
-        return result.filter { isValidVideoUrl(it) && !isRejectedMediaUrl(it) }.distinct()
+        return result
+            .filter {
+                isValidVideoUrl(it) &&
+                    !isRejectedMediaUrl(it)
+            }
+            .distinct()
     }
 
     private fun extractStructuredVideoUrls(text: String, baseUrl: String): List<String> {
