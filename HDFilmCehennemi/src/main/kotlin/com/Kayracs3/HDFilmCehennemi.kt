@@ -1707,18 +1707,98 @@ class HDFilmCehennemi : MainAPI() {
         playerUrl: String,
         subtitleCallback: (SubtitleFile) -> Unit
     ) {
-        Regex("""(?is)(?:file|src)\s*:\s*['"]([^'"]+?\.(?:vtt|srt)(?:\?[^'"]*)?)['"]""")
-            .findAll(html)
-            .forEach { match ->
-                val url = resolveAbsoluteUrl(match.groupValues[1], playerUrl) ?: return@forEach
-                subtitleCallback(newSubtitleFile("Türkçe", url))
-            }
+        val emitted = linkedSetOf<String>()
 
-        Jsoup.parse(html, playerUrl).select("track[src]").forEach { track ->
-            val url = resolveAbsoluteUrl(track.attr("src"), playerUrl) ?: return@forEach
-            val lang = track.attr("label").ifBlank { track.attr("srclang") }.ifBlank { "Türkçe" }
-            subtitleCallback(newSubtitleFile(lang, url))
+        fun emitSubtitle(label: String?, rawUrl: String?) {
+            if (rawUrl.isNullOrBlank()) return
+
+            val cleanedUrl = cleanUrl(rawUrl)
+                .replace("\\/", "/")
+                .trim()
+
+            if (cleanedUrl.isBlank()) return
+
+            val absolute = resolveAbsoluteUrl(cleanedUrl, playerUrl) ?: return
+            if (absolute.isBlank()) return
+
+            val key = absolute.lowercase(Locale.ROOT)
+            if (!emitted.add(key)) return
+
+            val normalizedLabel = label
+                ?.replace("\\u0020", " ")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: when {
+                    key.contains("turkish") || key.contains("_tr.") || key.contains("-tr.") -> "Türkçe"
+                    key.contains("english") || key.contains("_eng.") || key.contains("-eng.") -> "English"
+                    key.contains("french") || key.contains("_fr.") || key.contains("-fr.") -> "French"
+                    key.contains("german") || key.contains("_de.") || key.contains("-de.") -> "German"
+                    else -> "Türkçe"
+                }
+
+            Log.d(TAG, "SUBTITLE FOUND=$normalizedLabel URL=$absolute")
+            subtitleCallback(newSubtitleFile(normalizedLabel, absolute))
         }
+
+        // 1) HTML <track> elemanları.
+        Jsoup.parse(html, playerUrl).select("track").forEach { track ->
+            val raw = track.attr("src")
+                .ifBlank { track.attr("data-src") }
+                .ifBlank { track.attr("data-url") }
+
+            val label = track.attr("label")
+                .ifBlank { track.attr("srclang") }
+                .ifBlank { track.attr("language") }
+
+            emitSubtitle(label, raw)
+        }
+
+        // 2) JWPlayer tracks: {file:"...vtt", kind:"captions", label:"Turkish"}
+        // JSON/JS içindeki escaped slash biçimleri de desteklenir.
+        val trackObjectRegex = Regex(
+            """(?is)\{\s*[^{}]{0,250}?[\"']file[\"']?\s*:\s*[\"']([^\"']+?\.(?:vtt|srt)(?:\?[^\"']*)?)[\"'][^{}]{0,500}?[\"']label[\"']?\s*:\s*[\"']([^\"']+)[\"'][^{}]*\}"""
+        )
+
+        trackObjectRegex.findAll(html).forEach { match ->
+            emitSubtitle(match.groupValues[2], match.groupValues[1])
+        }
+
+        // 3) label/file sırası ters olan JWPlayer track objeleri.
+        val reverseTrackObjectRegex = Regex(
+            """(?is)\{\s*[^{}]{0,500}?[\"']label[\"']?\s*:\s*[\"']([^\"']+)[\"'][^{}]{0,500}?[\"']file[\"']?\s*:\s*[\"']([^\"']+?\.(?:vtt|srt)(?:\?[^\"']*)?)[\"'][^{}]*\}"""
+        )
+
+        reverseTrackObjectRegex.findAll(html).forEach { match ->
+            emitSubtitle(match.groupValues[1], match.groupValues[2])
+        }
+
+        // 4) label bilgisi olmayan file/src URL'leri.
+        val genericSubtitleRegex = Regex(
+            """(?is)(?:[\"']?(?:file|src|subtitle|subtitleUrl|subtitle_url)[\"']?)\s*:\s*[\"']([^\"']+?\.(?:vtt|srt)(?:\?[^\"']*)?)[\"']"""
+        )
+
+        genericSubtitleRegex.findAll(html).forEach { match ->
+            emitSubtitle(null, match.groupValues[1])
+        }
+
+        // 5) data-src / data-file gibi HTML attribute biçimleri.
+        Jsoup.parse(html, playerUrl).select("[data-src], [data-file], [data-url]").forEach { element ->
+            val raw = sequenceOf(
+                element.attr("data-src"),
+                element.attr("data-file"),
+                element.attr("data-url")
+            ).firstOrNull { it.contains(Regex("\\.(?:vtt|srt)(?:\\?|$)", RegexOption.IGNORE_CASE)) }
+
+            if (!raw.isNullOrBlank()) {
+                val label = element.attr("label")
+                    .ifBlank { element.attr("data-label") }
+                    .ifBlank { element.attr("srclang") }
+
+                emitSubtitle(label, raw)
+            }
+        }
+
+        Log.d(TAG, "SUBTITLE COUNT=${emitted.size}")
     }
 
     private suspend fun emitVideoLink(
