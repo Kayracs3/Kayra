@@ -138,9 +138,9 @@ class HDFilmCehennemi : MainAPI() {
             return newHomePageResponse(request.name, emptyList())
         }
 
-        val data: HDFC = runCatching {
-            mapper.readValue(response.text)
-        }.getOrElse {
+        val data: HDFC = try {
+            mapper.readValue<HDFC>(response.text)
+        } catch (_: Exception) {
             return newHomePageResponse(request.name, emptyList())
         }
 
@@ -951,7 +951,7 @@ class HDFilmCehennemi : MainAPI() {
         playerUrl: String,
         subtitleCallback: (SubtitleFile) -> Unit
     ) {
-        Regex("(?is)(?:file|src)\\s*:\s*['\"]([^'\"]+?\\.(?:vtt|srt)(?:\\?[^'\"]*)?)['\"]")
+        Regex("""(?is)(?:file|src)\s*:\s*['"]([^'"]+?\.(?:vtt|srt)(?:\?[^'"]*)?)['"]""")
             .findAll(html)
             .forEach { match ->
                 val url = resolveAbsoluteUrl(match.groupValues[1], playerUrl) ?: return@forEach
@@ -1175,7 +1175,7 @@ class HDFilmCehennemi : MainAPI() {
                         playerCandidates.add("${mainUrl}/playerr/$id")
                     }
 
-                Regex("https?://[^\s\"'<>\\\\]+", RegexOption.IGNORE_CASE)
+                Regex("""https?://[^\s"'<>\\]+""", RegexOption.IGNORE_CASE)
                     .findAll(apiHtml)
                     .map { cleanUrl(it.value) }
                     .filter {
