@@ -2,13 +2,11 @@ package com.Kayracs3
 
 import android.util.Base64
 import android.util.Log
-
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
-
 import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -35,13 +33,10 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.getAndUnpack
 import com.lagradost.cloudstream3.utils.newExtractorLink
-
 import okhttp3.Interceptor
 import okhttp3.Response
-
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-
 import java.net.URI
 import java.net.URLDecoder
 import java.util.Locale
@@ -1697,14 +1692,14 @@ class HDFilmCehennemi : MainAPI() {
         }
     }
 
-    private fun addPlayerSubtitles(
+    private suspend fun addPlayerSubtitles(
         html: String,
         playerUrl: String,
         subtitleCallback: (SubtitleFile) -> Unit
     ) {
         val emitted = linkedSetOf<String>()
 
-        fun emitSubtitle(label: String?, rawUrl: String?) {
+        suspend fun emitSubtitle(label: String?, rawUrl: String?) {
             if (rawUrl.isNullOrBlank()) return
 
             val cleanedUrl = cleanUrl(rawUrl)
@@ -1736,7 +1731,7 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         // 1) HTML <track> elemanları.
-        Jsoup.parse(html, playerUrl).select("track").forEach { track ->
+        for (track in Jsoup.parse(html, playerUrl).select("track")) {
             val raw = track.attr("src")
                 .ifBlank { track.attr("data-src") }
                 .ifBlank { track.attr("data-url") }
@@ -1754,7 +1749,7 @@ class HDFilmCehennemi : MainAPI() {
             """(?is)\{\s*[^{}]{0,250}?[\"']file[\"']?\s*:\s*[\"']([^\"']+?\.(?:vtt|srt)(?:\?[^\"']*)?)[\"'][^{}]{0,500}?[\"']label[\"']?\s*:\s*[\"']([^\"']+)[\"'][^{}]*\}"""
         )
 
-        trackObjectRegex.findAll(html).forEach { match ->
+        for (match in trackObjectRegex.findAll(html)) {
             emitSubtitle(match.groupValues[2], match.groupValues[1])
         }
 
@@ -1763,7 +1758,7 @@ class HDFilmCehennemi : MainAPI() {
             """(?is)\{\s*[^{}]{0,500}?[\"']label[\"']?\s*:\s*[\"']([^\"']+)[\"'][^{}]{0,500}?[\"']file[\"']?\s*:\s*[\"']([^\"']+?\.(?:vtt|srt)(?:\?[^\"']*)?)[\"'][^{}]*\}"""
         )
 
-        reverseTrackObjectRegex.findAll(html).forEach { match ->
+        for (match in reverseTrackObjectRegex.findAll(html)) {
             emitSubtitle(match.groupValues[1], match.groupValues[2])
         }
 
@@ -1772,12 +1767,12 @@ class HDFilmCehennemi : MainAPI() {
             """(?is)(?:[\"']?(?:file|src|subtitle|subtitleUrl|subtitle_url)[\"']?)\s*:\s*[\"']([^\"']+?\.(?:vtt|srt)(?:\?[^\"']*)?)[\"']"""
         )
 
-        genericSubtitleRegex.findAll(html).forEach { match ->
+        for (match in genericSubtitleRegex.findAll(html)) {
             emitSubtitle(null, match.groupValues[1])
         }
 
         // 5) data-src / data-file gibi HTML attribute biçimleri.
-        Jsoup.parse(html, playerUrl).select("[data-src], [data-file], [data-url]").forEach { element ->
+        for (element in Jsoup.parse(html, playerUrl).select("[data-src], [data-file], [data-url]")) {
             val raw = sequenceOf(
                 element.attr("data-src"),
                 element.attr("data-file"),
