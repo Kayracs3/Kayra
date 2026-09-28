@@ -10,7 +10,7 @@
 // - Multiple valid candidates can be emitted.
 // - Subtitle extraction supports JWPlayer tracks and <video><track>.
 
-package com.neoncs3
+package com.Kayracs3
 
 import android.util.Base64
 import android.util.Log
