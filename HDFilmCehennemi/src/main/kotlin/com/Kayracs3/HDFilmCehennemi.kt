@@ -316,6 +316,46 @@ class HDFilmCehennemi : MainAPI() {
         }
     }
 
+    /**
+     * JavaScript atob davranışına daha yakın, obfuscator adımlarında kullanılacak
+     * sıkı Base64 çözücü. Android Base64.DEFAULT geçersiz karakterleri tolere
+     * edebildiği için önce girdiyi doğruluyoruz; aksi halde bozuk bir sonuç
+     * gerçek URL gibi ilerleyebiliyor.
+     */
+    private fun decodeAtobStrict(value: String): String? {
+        val input = value
+            .replace("\n", "")
+            .replace("\r", "")
+            .replace(" ", "")
+            .replace("\t", "")
+            .trim()
+
+        if (input.isBlank()) return ""
+        if (input.any {
+                it !in 'A'..'Z' &&
+                it !in 'a'..'z' &&
+                it !in '0'..'9' &&
+                it != '+' &&
+                it != '/' &&
+                it != '='
+            }) return null
+
+        if (input.count { it == '=' } > 2) return null
+        val firstPadding = input.indexOf('=')
+        if (firstPadding >= 0 && input.substring(firstPadding).any { it != '=' }) return null
+
+        val unpadded = input.trimEnd('=')
+        if (unpadded.length % 4 == 1) return null
+
+        val padded = unpadded + "=".repeat((4 - unpadded.length % 4) % 4)
+        return runCatching {
+            String(
+                Base64.decode(padded, Base64.DEFAULT),
+                Charsets.ISO_8859_1
+            )
+        }.getOrNull()
+    }
+
     private fun cleanUrl(value: String): String {
         return decodeUrlEncoded(decodeText(value))
             .trim()
@@ -781,7 +821,7 @@ class HDFilmCehennemi : MainAPI() {
 
             for (i in operations.length - 1 downTo 0) {
                 when (val op = operations[i]) {
-                    'b' -> value = decodeBase64Text(value)
+                    'b' -> value = decodeAtobStrict(value) ?: return null
                     'v' -> value = value.reversed()
                     else -> {
                         val shift = (26 - ((op.code - 64) % 26)) % 26
@@ -821,7 +861,10 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         // Varyant 2: splice + 37/241 hash + 7/3 operations + 97/41 shuffle.
-        if (body.contains(".splice(") && body.contains("*37") && body.contains("%241")) {
+        val hasVariant2Hash =
+            Regex("\\*\\s*37\\s*\\+").containsMatchIn(body) &&
+                Regex("%\\s*241").containsMatchIn(body)
+        if (body.contains(".splice(") && hasVariant2Hash) {
             val sizeMinusTwo = encodedParts.size - 2
             if (sizeMinusTwo < 0) return null
 
@@ -851,7 +894,7 @@ class HDFilmCehennemi : MainAPI() {
 
             for (i in operationString.length - 1 downTo 0) {
                 when (val op = operationString[i]) {
-                    '7' -> value = decodeBase64Text(value)
+                    '7' -> value = decodeAtobStrict(value) ?: return null
                     '3' -> value = value.reversed()
                     else -> {
                         val shift = (26 - ((op.code - 96) % 26)) % 26
