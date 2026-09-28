@@ -539,7 +539,7 @@ class HDFilmCehennemi : MainAPI() {
          * Bildirim olmayan atamaları da yakala.
          */
         val assignmentRegex = Regex(
-            "(?<![.\w$])([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*=\\s*",
+            """(?<![.\w$])([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\s*=\s*""",
             RegexOption.MULTILINE
         )
 
