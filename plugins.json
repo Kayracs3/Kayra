@@ -81,14 +81,14 @@
     },
     {
         "iconUrl": "https://hdfilmcehennemi.nl/favicon.ico",
-        "fileHash": "sha256-7e157119ef2447b8f352ea4c123614b32d14df3de3f9d71d3341edddde42479c",
+        "fileHash": "sha256-7e830e8e54e659d7eff1890d5d3f759b1fc439529c6657bdf96ef9ef543f6b90",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 41971,
+        "fileSize": 41906,
         "status": 1,
         "language": "tr",
         "authors": [
-            "neoncs3"
+            "Kayracs3"
         ],
         "tvTypes": [
             "TvSeries"
