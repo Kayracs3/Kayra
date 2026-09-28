@@ -301,6 +301,10 @@ class HDFilmCehennemi : MainAPI() {
 
     private fun decodeBase64Text(value: String): String {
         val input = value.trim()
+            .replace("\n", "")
+            .replace("\r", "")
+            .replace("-", "+")
+            .replace("_", "/")
         if (input.length < 8) return ""
         val padded = input + "=".repeat((4 - input.length % 4) % 4)
         return runCatching {
@@ -595,17 +599,27 @@ class HDFilmCehennemi : MainAPI() {
 
         return result
     }
-    private fun collectJsFunctions(text: String): MutableMap<String, String> {
-        val result = linkedMapOf<String, String>()
-        val regex = Regex("(?is)(?:function\\s+([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*\\([^)]*\\)|([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*=\\s*function\\s*\\([^)]*\\))\\s*\\{")
+    private data class JsFunction(
+        val parameters: List<String>,
+        val body: String
+    )
 
+    private fun collectJsFunctions(text: String): MutableMap<String, JsFunction> {
+        val result = linkedMapOf<String, JsFunction>()
+        val regex = Regex(
+            "(?is)(?:function\\s+([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*\\(([^)]*)\\)|([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*=\\s*function\\s*\\(([^)]*)\\))\\s*\\{"
+        )
         regex.findAll(text).forEach { match ->
-            val name = match.groupValues[1].ifBlank { match.groupValues[2] }
+            val name = match.groupValues[1].ifBlank { match.groupValues[3] }
+            val paramsText = match.groupValues[2].ifBlank { match.groupValues[4] }
+            val params = splitTopLevel(paramsText, ',')
+                .map { it.trim() }
+                .filter { it.matches(Regex("[A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*")) }
             val brace = text.indexOf('{', match.range.last)
             if (brace < 0) return@forEach
             val end = findBalancedEnd(text, brace, '{', '}')
             if (end < 0) return@forEach
-            result[name] = text.substring(brace + 1, end)
+            result[name] = JsFunction(params, text.substring(brace + 1, end))
         }
         return result
     }
@@ -658,10 +672,21 @@ class HDFilmCehennemi : MainAPI() {
     }
 
     private fun extractMediaFromDecoded(value: String, result: MutableSet<String>, baseUrl: String) {
+        if (value.isBlank()) return
         addCandidate(result, value, baseUrl)
         extractDirectStrings(value, result, baseUrl)
 
-        Regex("(?:file|src|source|url|media|stream|streamUrl|videoUrl|video_url|hls|playlist|manifest)\\s*[:=]\\s*[\\\"']([^\\\"']+)", RegexOption.IGNORE_CASE)
+        val compact = value.trim()
+        if (compact.length >= 8 && compact.length <= 8192 &&
+            compact.matches(Regex("[A-Za-z0-9+/_=-]+"))) {
+            val decoded = decodeBase64Text(compact)
+            if (decoded.isNotBlank() && decoded != value) {
+                addCandidate(result, decoded, baseUrl)
+                extractDirectStrings(decoded, result, baseUrl)
+            }
+        }
+
+        Regex("""(?:file|src|source|url|media|stream|streamUrl|videoUrl|video_url|hls|playlist|manifest)\\s*[:=]\\s*[\"']([^\"']+)""", RegexOption.IGNORE_CASE)
             .findAll(value)
             .forEach { addCandidate(result, it.groupValues[1], baseUrl) }
     }
@@ -669,7 +694,7 @@ class HDFilmCehennemi : MainAPI() {
     private fun evaluateJsStrings(
         expression: String,
         variables: Map<String, String>,
-        functions: Map<String, String>,
+        functions: Map<String, JsFunction>,
         depth: Int = 0
     ): LinkedHashSet<String> {
         val result = LinkedHashSet<String>()
@@ -795,24 +820,74 @@ class HDFilmCehennemi : MainAPI() {
             return result
         }
 
-        // Fonksiyon çağrısı ve return değeri
+        // Fonksiyon çağrısı ve return değeri.
         val call = Regex("^([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*\\((.*)\\)$", RegexOption.DOT_MATCHES_ALL)
             .matchEntire(value)
         if (call != null) {
-            val functionBody = functions[call.groupValues[1]]
-            if (functionBody != null) {
-                Regex("(?is)\\breturn\\s+(.+?)(?:;|$)")
-                    .findAll(functionBody)
-                    .forEach { match ->
-                        result.addAll(
-                            evaluateJsStrings(
-                                match.groupValues[1],
-                                variables,
-                                functions,
-                                depth + 1
-                            )
-                        )
+            val fn = functions[call.groupValues[1]]
+            if (fn != null) {
+                val args = splitTopLevel(call.groupValues[2], ',')
+                val locals = variables.toMutableMap()
+
+                fn.parameters.forEachIndexed { index, parameter ->
+                    val rawArg = args.getOrNull(index)?.trim() ?: return@forEachIndexed
+                    val evaluatedArg = evaluateJsStrings(rawArg, variables, functions, depth + 1)
+                        .firstOrNull()
+                    locals[parameter] = evaluatedArg ?: rawArg
+                }
+
+                // `arg.split('^')` / `arg.split('!')` kullanılan obfuscator fonksiyonlarını
+                // doğrudan fonksiyon gövdesine parametre olarak bağla.
+                val primaryParam = fn.parameters.firstOrNull()
+                val primaryArg = args.firstOrNull()?.trim().orEmpty()
+                if (primaryParam != null && primaryArg.contains(".split(")) {
+                    val splitPos = primaryArg.lastIndexOf(".split(")
+                    val baseExpr = primaryArg.substring(0, splitPos)
+                    val sepExpr = primaryArg.substring(splitPos + ".split(".length).removeSuffix(")").trim()
+                    val baseValue = evaluateJsStrings(baseExpr, variables, functions, depth + 1).firstOrNull()
+                        ?: quotedValue(baseExpr)
+                    val separator = quotedValue(sepExpr)
+                        ?: evaluateJsStrings(sepExpr, variables, functions, depth + 1).firstOrNull()
+                        ?: sepExpr.trim().trim('"', '\'')
+                    val items = baseValue?.split(separator).orEmpty()
+
+                    // return param.join('')
+                    Regex("(?is)^${Regex.escape(primaryParam)}\\.join\\(\\s*(['\"])(.*?)\\1\\s*\\)$")
+                        .findAll(fn.body)
+                        .forEach { m -> result.add(items.joinToString(m.groupValues[2])) }
+
+                    // return param.reverse().join('')
+                    Regex("(?is)^${Regex.escape(primaryParam)}\\.reverse\\(\\)\\.join\\(\\s*(['\"])(.*?)\\1\\s*\\)$")
+                        .findAll(fn.body)
+                        .forEach { m -> result.add(items.asReversed().joinToString(m.groupValues[2])) }
+
+                    // return param.map(function(x){ return EXPR; }).join('')
+                    val mapJoin = Regex(
+                        "(?is)^${Regex.escape(primaryParam)}\\.map\\(\\s*function\\s*\\(([^)]*)\\)\\s*\\{\\s*return\\s+(.+?);?\\s*\\}\\s*\\)\\.join\\(\\s*(['\"])(.*?)\\3\\s*\\)$"
+                    )
+                    fn.body.lines().map { it.trim() }.forEach { line ->
+                        val m = mapJoin.matchEntire(line.removeSuffix(";"))
+                        if (m != null) {
+                            val itemParam = m.groupValues[1].trim()
+                            val bodyExpr = m.groupValues[2].trim()
+                            val transformed = items.map { item ->
+                                val itemLocals = locals.toMutableMap()
+                                itemLocals[itemParam] = item
+                                evaluateJsStrings(bodyExpr, itemLocals, functions, depth + 1).firstOrNull() ?: item
+                            }
+                            result.add(transformed.joinToString(m.groupValues[4]))
+                        }
                     }
+
+                    // return param; -> parçaları birleştir.
+                    if (Regex("(?is)\\breturn\\s+${Regex.escape(primaryParam)}\\s*;").containsMatchIn(fn.body)) {
+                        result.add(items.joinToString(""))
+                    }
+                }
+
+                Regex("(?is)\\breturn\\s+(.+?)(?:;|$)").findAll(fn.body).forEach { match ->
+                    result.addAll(evaluateJsStrings(match.groupValues[1], locals, functions, depth + 1))
+                }
                 if (result.isNotEmpty()) return result
             }
         }
@@ -838,7 +913,7 @@ class HDFilmCehennemi : MainAPI() {
     private fun resolveJsExpression(
         expression: String,
         variables: Map<String, String>,
-        functions: Map<String, String>,
+        functions: Map<String, JsFunction>,
         result: MutableSet<String>,
         baseUrl: String,
         depth: Int = 0
@@ -976,11 +1051,13 @@ class HDFilmCehennemi : MainAPI() {
         val callName = Regex("^([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*\\((.*)\\)$", RegexOption.DOT_MATCHES_ALL)
             .matchEntire(value)
         if (callName != null) {
+            val evaluated = evaluateJsStrings(value, variables, functions, depth + 1)
+            evaluated.forEach { extractMediaFromDecoded(it, result, baseUrl) }
             val fn = functions[callName.groupValues[1]]
             if (fn != null) {
-                val returns = Regex("(?is)\\breturn\\s+(.+?)(?:;|$)").findAll(fn).map { it.groupValues[1] }
-                returns.forEach { resolveJsExpression(it, variables, functions, result, baseUrl, depth + 1) }
+                Log.d(TAG, "JS FUNCTION CALL=${callName.groupValues[1]} PARAMS=${fn.parameters} BODY=${fn.body.take(5000)}")
             }
+            if (evaluated.isNotEmpty()) return
         }
 
         extractPropertyExpressions(value, setOf("file", "src", "source", "url", "media", "stream", "streamUrl", "videoUrl", "video_url", "hls", "playlist", "manifest"))
@@ -1018,6 +1095,14 @@ class HDFilmCehennemi : MainAPI() {
                 Log.d(TAG, "JS SOURCE REF=$ref EXPR=${expr.take(3000)}")
                 evaluateJsStrings(ref, variables, functions).forEach { value ->
                     Log.d(TAG, "JS SOURCE VALUE=$ref -> ${value.take(2000)}")
+                    extractMediaFromDecoded(value, result, baseUrl)
+                }
+
+                val callName = Regex("^([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\\s*\\(").matchEntire(expr.trim())?.groupValues?.getOrNull(1)
+                if (callName != null) {
+                    functions[callName]?.let { fn ->
+                        Log.d(TAG, "JS FUNCTION SOURCE=$callName PARAMS=${fn.parameters} BODY=${fn.body.take(6000)}")
+                    }
                 }
             }
         }
@@ -1030,7 +1115,7 @@ class HDFilmCehennemi : MainAPI() {
         variables.forEach { (name, expression) ->
             if (name == "sources" || name == "configs" || name == "player" ||
                 name == "q10op" || name == "n6i" || name == "tv2" ||
-                name == "ojwcp" || name == "b75v2") {
+                name == "ojwcp" || name == "b75v2" || name == "jp0" || name == "h4i3") {
                 Log.d(TAG, "JS SPECIAL=$name EXPR=${expression.take(3000)}")
             }
             resolveJsExpression(
