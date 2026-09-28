@@ -1658,7 +1658,7 @@ class HDFilmCehennemi : MainAPI() {
         val headers = mediaHeaders(playerUrl)
         val referer = resolveMediaReferer(playerUrl)
 
-        return runCatching {
+        return try {
             val body = app.get(
                 clean,
                 headers = headers,
@@ -1668,41 +1668,36 @@ class HDFilmCehennemi : MainAPI() {
 
             if (!body.contains("#EXTM3U")) {
                 Log.e(TAG, "MEDIA PREFLIGHT NOT HLS=$clean")
-                return@runCatching null
+                return null
             }
 
             if (body.contains("#EXT-X-STREAM-INF")) {
-                val variant = body.lineSequence()
-                    .map { it.trim() }
-                    .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
-                if (!variant.isNullOrBlank()) {
-                    val variantUrl = resolveAbsoluteUrl(variant, clean)
-                    if (!variantUrl.isNullOrBlank()) {
-                        val variantBody = runCatching {
-                            app.get(
-                                variantUrl,
-                                headers = headers,
-                                referer = referer,
-                                allowRedirects = true
-                            ).text
-                        }.getOrNull().orEmpty()
-                        if (variantBody.contains("#EXTM3U")) {
-                            Log.d(TAG, "MEDIA PREFLIGHT MASTER=$clean VARIANT=$variantUrl")
-                            return@runCatching variantUrl
-                        }
-                    }
+                val hasAudioRenditions = body.contains("#EXT-X-MEDIA:TYPE=AUDIO", ignoreCase = true)
+                val hasVideoRenditions = body.contains("#EXT-X-STREAM-INF", ignoreCase = true)
+
+                // Master playlist'i koru. Özellikle dizilerde ses ayrı bir
+                // #EXT-X-MEDIA:TYPE=AUDIO grubunda bulunabiliyor. İlk video
+                // varyantına geçersek ExoPlayer bu ses grubunu göremez.
+                if (hasAudioRenditions && hasVideoRenditions) {
+                    Log.d(TAG, "MEDIA PREFLIGHT MASTER WITH AUDIO=$clean")
+                    return clean
                 }
+
+                // Ayrı audio renditions yoksa bile master'ı korumak daha
+                // güvenlidir; ExoPlayer kalite/ses seçimlerini kendisi yapar.
+                Log.d(TAG, "MEDIA PREFLIGHT MASTER=$clean")
+                return clean
             }
 
             Log.d(TAG, "MEDIA PREFLIGHT OK=$clean")
             clean
-        }.getOrElse {
-            Log.e(TAG, "MEDIA PREFLIGHT FAIL=$clean ERROR=${it.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "MEDIA PREFLIGHT FAIL=$clean ERROR=${e.message}")
             null
         }
     }
 
-    private suspend fun addPlayerSubtitles(
+    private fun addPlayerSubtitles(
         html: String,
         playerUrl: String,
         subtitleCallback: (SubtitleFile) -> Unit
