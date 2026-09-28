@@ -90,6 +90,7 @@ class HDFilmCehennemi : MainAPI() {
         private const val MAX_EXTERNAL_SCRIPTS = 10
         private const val MAX_DYNAMIC_ENDPOINTS = 12
         private const val MAX_DYNAMIC_RESPONSES = 12
+        private const val MAX_JW_CONTEXT = 30000
     }
 
     class CloudflareInterceptor(
@@ -100,7 +101,8 @@ class HDFilmCehennemi : MainAPI() {
             chain: Interceptor.Chain
         ): Response {
 
-            val request = chain.request()
+            val request =
+                chain.request()
 
             val response =
                 chain.proceed(request)
@@ -663,6 +665,7 @@ class HDFilmCehennemi : MainAPI() {
             )
 
         }.getOrElse {
+
             runCatching {
 
                 var padded =
@@ -1051,9 +1054,6 @@ class HDFilmCehennemi : MainAPI() {
         ) ||
             lower.contains(
                 "/master.txt"
-            ) ||
-            lower.contains(
-                "master.txt"
             )
     }
 
@@ -1359,285 +1359,188 @@ class HDFilmCehennemi : MainAPI() {
         }
     }
 
-    private fun decodeJsExpression(
-        rawExpression: String,
-        variables: Map<String, String>,
+    private fun addVideoCandidate(
+        result: MutableSet<String>,
+        raw: String?,
+        baseUrl: String
+    ) {
+
+        if (raw.isNullOrBlank()) {
+            return
+        }
+
+        var value =
+            raw.trim()
+                .trim(
+                    '"',
+                    '\'',
+                    '`'
+                )
+
+        if (value.isBlank()) {
+            return
+        }
+
+        value =
+            decodeText(value)
+
+        val decodedUrl =
+            decodeUrlEncoded(value)
+
+        val possibilities =
+            LinkedHashSet<String>()
+
+        possibilities.add(value)
+
+        if (
+            decodedUrl != value
+        ) {
+            possibilities.add(
+                decodedUrl
+            )
+        }
+
+        for (
+            candidate in
+            possibilities
+        ) {
+
+            val absolute =
+                resolveAbsoluteUrl(
+                    candidate,
+                    baseUrl
+                )
+
+            if (
+                absolute.isNullOrBlank()
+            ) {
+                continue
+            }
+
+            val clean =
+                cleanUrl(
+                    absolute
+                )
+
+            if (
+                isRejectedMediaUrl(clean)
+            ) {
+                continue
+            }
+
+            if (
+                isValidVideoUrl(clean)
+            ) {
+                result.add(clean)
+            }
+        }
+    }
+
+    private fun extractBase64Candidates(
+        value: String,
+        result: MutableSet<String>,
+        baseUrl: String
+    ) {
+
+        if (
+            value.isBlank()
+        ) {
+            return
+        }
+
+        val trimmed =
+            value.trim()
+
+        if (
+            trimmed.length < 8
+        ) {
+            return
+        }
+
+        if (
+            !trimmed.matches(
+                Regex(
+                    """[A-Za-z0-9+/=_-]+"""
+                )
+            )
+        ) {
+            return
+        }
+
+        val decoded =
+            decodeBase64Text(
+                trimmed
+            )
+
+        if (
+            decoded.isBlank() ||
+            decoded == trimmed
+        ) {
+            return
+        }
+
+        addVideoCandidate(
+            result,
+            decoded,
+            baseUrl
+        )
+
+        /*
+         * Base64 içinden URL çıkar.
+         */
+        Regex(
+            """https?://[^\s"'`<>\\]+""",
+            RegexOption.IGNORE_CASE
+        )
+            .findAll(decoded)
+            .forEach {
+
+                addVideoCandidate(
+                    result,
+                    it.value,
+                    baseUrl
+                )
+            }
+
+        /*
+         * Base64 içinden file/source.
+         */
+        Regex(
+            """(?is)(?:file|src|source|url|media|stream)\s*[:=]\s*["']([^"']+)["']"""
+        )
+            .findAll(decoded)
+            .forEach {
+
+                addVideoCandidate(
+                    result,
+                    it.groupValues[1],
+                    baseUrl
+                )
+            }
+    }
+
+    private fun extractJavascriptMediaSources(
+        text: String,
         baseUrl: String
     ): List<String> {
 
         val result =
             LinkedHashSet<String>()
 
-        var expression =
-            rawExpression
-                .trim()
-                .trimEnd(
-                    ',',
-                    ';'
-                )
-                .trim()
-
-        if (expression.isBlank()) {
-            return emptyList()
-        }
-
-        expression =
-            expression
-                .removePrefix("(")
-                .removeSuffix(")")
-                .trim()
-
         /*
-         * Değişken doğrudan kullanılmışsa.
+         * JS değişkenleri
          */
-        if (
-            expression.matches(
-                Regex(
-                    """[A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*"""
-                )
-            )
-        ) {
-
-            val variableValue =
-                variables[expression]
-
-            if (
-                !variableValue.isNullOrBlank() &&
-                variableValue != expression
-            ) {
-
-                result.addAll(
-                    decodeJsExpression(
-                        variableValue,
-                        variables,
-                        baseUrl
-                    )
-                )
-            }
-        }
-
-        /*
-         * Direkt quoted string
-         */
-        Regex(
-            """^["'`](.*)["'`]$""",
-            RegexOption.DOT_MATCHES_ALL
-        )
-            .matchEntire(expression)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.let {
-
-                val decoded =
-                    cleanUrl(
-                        decodeText(it)
-                    )
-
-                val absolute =
-                    resolveAbsoluteUrl(
-                        decoded,
-                        baseUrl
-                    )
-
-                if (
-                    absolute != null
-                ) {
-                    result.add(absolute)
-                } else {
-                    result.add(decoded)
-                }
-            }
-
-        /*
-         * atob("...")
-         */
-        val atobRegex =
-            Regex(
-                """(?is)(?:window\.)?atob\s*\(\s*["'`]([^"'`]+)["'`]\s*\)"""
-            )
-
-        for (
-            match in
-            atobRegex.findAll(expression)
-        ) {
-
-            val decoded =
-                cleanUrl(
-                    decodeBase64Text(
-                        match.groupValues[1]
-                    )
-                )
-
-            if (
-                decoded.isNotBlank()
-            ) {
-
-                val absolute =
-                    resolveAbsoluteUrl(
-                        decoded,
-                        baseUrl
-                    )
-
-                if (
-                    absolute != null
-                ) {
-                    result.add(absolute)
-                }
-            }
-        }
-
-        /*
-         * decodeURIComponent("...")
-         */
-        val decodeUriRegex =
-            Regex(
-                """(?is)(?:decodeURIComponent|decodeURI)\s*\(\s*["'`]([^"'`]+)["'`]\s*\)"""
-            )
-
-        for (
-            match in
-            decodeUriRegex.findAll(expression)
-        ) {
-
-            val decoded =
-                cleanUrl(
-                    decodeUrlEncoded(
-                        match.groupValues[1]
-                    )
-                )
-
-            val absolute =
-                resolveAbsoluteUrl(
-                    decoded,
-                    baseUrl
-                )
-
-            if (
-                absolute != null
-            ) {
-                result.add(absolute)
-            }
-        }
-
-        /*
-         * String.fromCharCode(...)
-         */
-        val charCodeRegex =
-            Regex(
-                """(?is)String\.fromCharCode\s*\(([^)]+)\)"""
-            )
-
-        for (
-            match in
-            charCodeRegex.findAll(expression)
-        ) {
-
-            val numbers =
-                match
-                    .groupValues[1]
-                    .split(
-                        ","
-                    )
-                    .mapNotNull {
-                        it.trim().toIntOrNull()
-                    }
-
-            if (
-                numbers.isNotEmpty()
-            ) {
-
-                val decoded =
-                    numbers
-                        .map {
-                            it.toChar()
-                        }
-                        .joinToString("")
-
-                val absolute =
-                    resolveAbsoluteUrl(
-                        decoded,
-                        baseUrl
-                    )
-
-                if (
-                    absolute != null
-                ) {
-                    result.add(absolute)
-                }
-            }
-        }
-
-        /*
-         * String parçalarının birleştirilmesi:
-         * "https://" + "example.com" + "/a.m3u8"
-         */
-        val quotedParts =
-            Regex(
-                """["'`]([^"'`]*)["'`]"""
-            )
-                .findAll(expression)
-                .map {
-                    decodeText(
-                        it.groupValues[1]
-                    )
-                }
-                .toList()
-
-        if (
-            quotedParts.size >= 2
-        ) {
-
-            val joined =
-                quotedParts.joinToString("")
-
-            val absolute =
-                resolveAbsoluteUrl(
-                    joined,
-                    baseUrl
-                )
-
-            if (
-                absolute != null
-            ) {
-                result.add(absolute)
-            }
-        }
-
-        /*
-         * Expression içerisinde zaten tam URL varsa.
-         */
-        val directUrls =
-            Regex(
-                """https?://[^\s"'`<>()]+""",
-                RegexOption.IGNORE_CASE
-            )
-                .findAll(expression)
-                .map {
-                    cleanUrl(it.value)
-                }
-
-        result.addAll(
-            directUrls
-        )
-
-        return result.toList()
-    }
-
-    private fun extractJsVariableMap(
-        text: String
-    ): Map<String, String> {
-
-        val result =
+        val variables =
             LinkedHashMap<String, String>()
 
-        val regex =
+        val variableRegex =
             Regex(
                 """(?is)\b(?:var|let|const)\s+([A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*)\s*=\s*([^;\n]+)"""
             )
 
         for (
             match in
-            regex.findAll(text)
+            variableRegex.findAll(text)
         ) {
 
             val name =
@@ -1657,235 +1560,562 @@ class HDFilmCehennemi : MainAPI() {
                 name.isNotBlank() &&
                 expression.isNotBlank()
             ) {
-                result[name] = expression
+                variables[name] =
+                    expression
             }
         }
 
-        return result
-    }
-
-    private fun extractJavascriptMediaSources(
-        text: String,
-        baseUrl: String
-    ): List<String> {
-
-        val result =
-            LinkedHashSet<String>()
-
-        val variables =
-            extractJsVariableMap(
-                text
-            )
-
-        fun addExpressions(
-            expressions: Sequence<MatchResult>
+        /*
+         * Bir değeri recursive olarak çöz.
+         */
+        fun resolveExpression(
+            expression: String,
+            depth: Int = 0
         ) {
+
+            if (
+                depth > 5
+            ) {
+                return
+            }
+
+            var value =
+                expression
+                    .trim()
+
+            if (
+                value.isBlank()
+            ) {
+                return
+            }
+
+            /*
+             * Fazla parantez
+             */
+            while (
+                value.startsWith("(") &&
+                value.endsWith(")") &&
+                value.length > 2
+            ) {
+
+                value =
+                    value
+                        .substring(
+                            1,
+                            value.length - 1
+                        )
+                        .trim()
+            }
+
+            /*
+             * Doğrudan değişken
+             */
+            if (
+                value.matches(
+                    Regex(
+                        """[A-Za-z_${'$'}][A-Za-z0-9_${'$'}]*"""
+                    )
+                )
+            ) {
+
+                val variable =
+                    variables[value]
+
+                if (
+                    !variable.isNullOrBlank() &&
+                    variable != value
+                ) {
+
+                    resolveExpression(
+                        variable,
+                        depth + 1
+                    )
+                }
+
+                return
+            }
+
+            /*
+             * String.fromCharCode(...)
+             */
+            val charCodeRegex =
+                Regex(
+                    """(?is)String\.fromCharCode\s*\(([^)]*)\)"""
+                )
 
             for (
                 match in
-                expressions
+                charCodeRegex.findAll(value)
             ) {
 
-                val expression =
+                val decoded =
+                    match
+                        .groupValues
+                        .getOrNull(1)
+                        .orEmpty()
+                        .split(",")
+                        .mapNotNull {
+                            it
+                                .trim()
+                                .toIntOrNull()
+                        }
+                        .map {
+                            it.toChar()
+                        }
+                        .joinToString("")
+
+                if (
+                    decoded.isNotBlank()
+                ) {
+
+                    addVideoCandidate(
+                        result,
+                        decoded,
+                        baseUrl
+                    )
+                }
+            }
+
+            /*
+             * atob(...)
+             */
+            val atobRegex =
+                Regex(
+                    """(?is)(?:window\.)?atob\s*\(\s*([^)]*)\s*\)"""
+                )
+
+            for (
+                match in
+                atobRegex.findAll(value)
+            ) {
+
+                val argument =
+                    match
+                        .groupValues
+                        .getOrNull(1)
+                        .orEmpty()
+                        .trim()
+
+                if (
+                    argument.matches(
+                        Regex(
+                            """["'`].*["'`]"""
+                        )
+                    )
+                ) {
+
+                    val encoded =
+                        argument
+                            .trim()
+                            .trim(
+                                '"',
+                                '\'',
+                                '`'
+                            )
+
+                    val decoded =
+                        decodeBase64Text(
+                            encoded
+                        )
+
+                    if (
+                        decoded.isNotBlank()
+                    ) {
+
+                        addVideoCandidate(
+                            result,
+                            decoded,
+                            baseUrl
+                        )
+
+                        /*
+                         * Decoded içerik tekrar JS olabilir.
+                         */
+                        if (
+                            depth < 3
+                        ) {
+
+                            resolveExpression(
+                                decoded,
+                                depth + 1
+                            )
+                        }
+                    }
+                } else {
+
+                    resolveExpression(
+                        argument,
+                        depth + 1
+                    )
+                }
+            }
+
+            /*
+             * decodeURIComponent(...)
+             */
+            val decodeUriRegex =
+                Regex(
+                    """(?is)(?:decodeURIComponent|decodeURI)\s*\(\s*([^)]*)\s*\)"""
+                )
+
+            for (
+                match in
+                decodeUriRegex.findAll(value)
+            ) {
+
+                val argument =
+                    match
+                        .groupValues
+                        .getOrNull(1)
+                        .orEmpty()
+                        .trim()
+
+                if (
+                    argument.matches(
+                        Regex(
+                            """["'`].*["'`]"""
+                        )
+                    )
+                ) {
+
+                    val decoded =
+                        decodeUrlEncoded(
+                            argument
+                                .trim()
+                                .trim(
+                                    '"',
+                                    '\'',
+                                    '`'
+                                )
+                        )
+
+                    addVideoCandidate(
+                        result,
+                        decoded,
+                        baseUrl
+                    )
+                } else {
+
+                    resolveExpression(
+                        argument,
+                        depth + 1
+                    )
+                }
+            }
+
+            /*
+             * Direkt quoted string'ler
+             */
+            val quotedRegex =
+                Regex(
+                    """["'`]([^"'`]*)["'`]"""
+                )
+
+            for (
+                match in
+                quotedRegex.findAll(value)
+            ) {
+
+                val quoted =
                     match
                         .groupValues
                         .getOrNull(1)
                         .orEmpty()
 
-                result.addAll(
-                    decodeJsExpression(
-                        expression,
-                        variables,
-                        baseUrl
-                    )
+                if (
+                    quoted.isBlank()
+                ) {
+                    continue
+                }
+
+                addVideoCandidate(
+                    result,
+                    quoted,
+                    baseUrl
+                )
+
+                /*
+                 * Base64 ihtimali
+                 */
+                extractBase64Candidates(
+                    quoted,
+                    result,
+                    baseUrl
                 )
             }
+
+            /*
+             * Tam URL'ler
+             */
+            Regex(
+                """https?://[^\s"'`<>()]+""",
+                RegexOption.IGNORE_CASE
+            )
+                .findAll(value)
+                .forEach {
+
+                    addVideoCandidate(
+                        result,
+                        it.value,
+                        baseUrl
+                    )
+                }
+
+            /*
+             * Uzantısız HLS
+             */
+            Regex(
+                """(?i)(?:["'`]|^)(?:(?:https?:)?//|/)[^"'`\s<>]+/hls2?/[^"'`\s<>]+"""
+            )
+                .findAll(value)
+                .forEach {
+
+                    addVideoCandidate(
+                        result,
+                        it.value.trim(
+                            '"',
+                            '\'',
+                            '`'
+                        ),
+                        baseUrl
+                    )
+                }
         }
 
         /*
-         * file: ...
+         * Önce file/source/property alanlarını çöz.
          */
-        addExpressions(
+        val propertyRegex =
             Regex(
-                """(?is)\b(?:file|src|source|url|media|stream|streamUrl|videoUrl|hls|playlist|manifest)\s*:\s*([^,\n}]+)"""
-            ).findAll(text)
-        )
-
-        /*
-         * "file": ...
-         */
-        addExpressions(
-            Regex(
-                """(?is)["'](?:file|src|source|url|media|stream|streamUrl|videoUrl|hls|playlist|manifest)["']\s*:\s*([^,\n}]+)"""
-            ).findAll(text)
-        )
-
-        /*
-         * = ...
-         */
-        addExpressions(
-            Regex(
-                """(?is)\b(?:file|src|source|url|media|stream|streamUrl|videoUrl|hls|playlist|manifest)\s*=\s*([^;\n]+)"""
-            ).findAll(text)
-        )
-
-        /*
-         * JWPlayer setup bloğu.
-         */
-        val jwBlocks =
-            Regex(
-                """(?is)jwplayer\s*\([^)]*\)\s*\.\s*setup\s*\(\s*([\s\S]{0,25000})"""
+                """(?is)(?:file|src|source|url|media|stream|streamUrl|videoUrl|video_url|hls|playlist|manifest)\s*:\s*([^,\n}]+)"""
             )
-                .findAll(text)
 
         for (
-            block in
-            jwBlocks
+            match in
+            propertyRegex.findAll(text)
         ) {
 
-            val setupText =
-                block
-                    .groupValues
-                    .getOrNull(1)
-                    .orEmpty()
+            resolveExpression(
+                match.groupValues[1]
+            )
+        }
+
+        /*
+         * JSON biçimi:
+         * "file": ...
+         */
+        val quotedPropertyRegex =
+            Regex(
+                """(?is)["'](?:file|src|source|url|media|stream|streamUrl|videoUrl|video_url|hls|playlist|manifest)["']\s*:\s*([^,\n}]+)"""
+            )
+
+        for (
+            match in
+            quotedPropertyRegex.findAll(text)
+        ) {
+
+            resolveExpression(
+                match.groupValues[1]
+            )
+        }
+
+        /*
+         * Atama:
+         * file = ...
+         */
+        val assignmentRegex =
+            Regex(
+                """(?is)\b(?:file|src|source|url|media|stream|streamUrl|videoUrl|video_url|hls|playlist|manifest)\s*=\s*([^;\n]+)"""
+            )
+
+        for (
+            match in
+            assignmentRegex.findAll(text)
+        ) {
+
+            resolveExpression(
+                match.groupValues[1]
+            )
+        }
+
+        /*
+         * jwplayer(...).setup(...)
+         *
+         * Bloğu ayrı çıkarıyoruz.
+         */
+        val jwRegex =
+            Regex(
+                """(?is)jwplayer\s*\([^)]*\)\s*\.\s*setup\s*\(\s*"""
+            )
+
+        for (
+            match in
+            jwRegex.findAll(text)
+        ) {
+
+            val start =
+                match.range.last + 1
+
+            if (
+                start >= text.length
+            ) {
+                continue
+            }
+
+            val end =
+                minOf(
+                    text.length,
+                    start + MAX_JW_CONTEXT
+                )
+
+            val jwBlock =
+                text.substring(
+                    start,
+                    end
+                )
 
             Log.d(
                 "HDFilmCehennemi",
-                "JW SETUP BLOCK LENGTH=${setupText.length}"
+                "JW SOURCE BLOCK LENGTH=${jwBlock.length}"
             )
 
-            addExpressions(
+            val jwPropertyRegex =
                 Regex(
-                    """(?is)\b(?:file|src|source|url|media|stream|streamUrl|videoUrl|hls|playlist|manifest)\s*:\s*([^,\n}]+)"""
-                ).findAll(setupText)
-            )
+                    """(?is)(?:file|src|source|url|media|stream|streamUrl|videoUrl|video_url|hls|playlist|manifest)\s*:\s*([^,\n}]+)"""
+                )
 
-            addExpressions(
+            for (
+                property in
+                jwPropertyRegex.findAll(jwBlock)
+            ) {
+
+                resolveExpression(
+                    property
+                        .groupValues
+                        .getOrNull(1)
+                        .orEmpty()
+                )
+            }
+
+            /*
+             * JW sources array
+             */
+            val sourceArrayRegex =
                 Regex(
-                    """(?is)["'](?:file|src|source|url|media|stream|streamUrl|videoUrl|hls|playlist|manifest)["']\s*:\s*([^,\n}]+)"""
-                ).findAll(setupText)
+                    """(?is)sources?\s*:\s*\[([\s\S]{0,20000})\]"""
+                )
+
+            for (
+                sourceArray in
+                sourceArrayRegex.findAll(jwBlock)
+            ) {
+
+                val sourceBody =
+                    sourceArray
+                        .groupValues
+                        .getOrNull(1)
+                        .orEmpty()
+
+                for (
+                    property in
+                    jwPropertyRegex.findAll(sourceBody)
+                ) {
+
+                    resolveExpression(
+                        property
+                            .groupValues
+                            .getOrNull(1)
+                            .orEmpty()
+                    )
+                }
+            }
+
+            /*
+             * JW setup bloğunun içinde atob/decode çağrılarını
+             * ayrıca tara.
+             */
+            resolveExpression(
+                jwBlock
             )
         }
 
         /*
-         * sources: [{ ... }]
+         * Bütün değişkenlerin içeriklerini ayrıca çöz.
          */
-        val sourceBlocks =
-            Regex(
-                """(?is)sources?\s*:\s*\[([\s\S]{0,20000})\]"""
-            )
-                .findAll(text)
-
         for (
-            sourceBlock in
-            sourceBlocks
+            expression in
+            variables.values
         ) {
 
-            val block =
-                sourceBlock
-                    .groupValues
-                    .getOrNull(1)
-                    .orEmpty()
-
-            addExpressions(
-                Regex(
-                    """(?is)\b(?:file|src|source|url|media)\s*:\s*([^,\n}]+)"""
-                ).findAll(block)
+            resolveExpression(
+                expression
             )
         }
 
         /*
-         * Bütün atob() çağrılarını da deniyoruz.
-         * Gerçek kaynak herhangi bir değişkene atanmış
-         * olabilir.
+         * Direkt text içindeki atob çağrıları.
          */
-        val atobCalls =
+        val atobDirect =
             Regex(
                 """(?is)(?:window\.)?atob\s*\(\s*["'`]([^"'`]+)["'`]\s*\)"""
             )
 
         for (
             match in
-            atobCalls.findAll(text)
+            atobDirect.findAll(text)
         ) {
 
+            val encoded =
+                match
+                    .groupValues
+                    .getOrNull(1)
+                    .orEmpty()
+
             val decoded =
-                cleanUrl(
-                    decodeBase64Text(
-                        match.groupValues[1]
-                    )
+                decodeBase64Text(
+                    encoded
                 )
 
             if (
-                decoded.isBlank()
+                decoded.isNotBlank()
             ) {
-                continue
-            }
 
-            val absolute =
-                resolveAbsoluteUrl(
+                addVideoCandidate(
+                    result,
                     decoded,
                     baseUrl
                 )
 
-            if (
-                absolute != null
-            ) {
-                result.add(absolute)
-            } else {
-                result.add(decoded)
+                resolveExpression(
+                    decoded
+                )
             }
         }
 
         /*
-         * decodeURIComponent çağrıları.
+         * decodeURIComponent direkt.
          */
-        val decodeCalls =
+        val uriDirect =
             Regex(
                 """(?is)(?:decodeURIComponent|decodeURI)\s*\(\s*["'`]([^"'`]+)["'`]\s*\)"""
             )
 
         for (
             match in
-            decodeCalls.findAll(text)
+            uriDirect.findAll(text)
         ) {
 
-            val decoded =
-                cleanUrl(
-                    decodeUrlEncoded(
-                        match.groupValues[1]
-                    )
-                )
-
-            val absolute =
-                resolveAbsoluteUrl(
-                    decoded,
-                    baseUrl
-                )
-
-            if (
-                absolute != null
-            ) {
-                result.add(absolute)
-            }
-        }
-
-        /*
-         * Direkt tam URL taraması.
-         */
-        val directUrls =
-            Regex(
-                """https?://[^\s"'`<>\\]+""",
-                RegexOption.IGNORE_CASE
+            addVideoCandidate(
+                result,
+                decodeUrlEncoded(
+                    match
+                        .groupValues
+                        .getOrNull(1)
+                        .orEmpty()
+                ),
+                baseUrl
             )
-                .findAll(text)
-                .map {
-                    cleanUrl(it.value)
-                }
-
-        result.addAll(
-            directUrls
-        )
+        }
 
         return result
             .filter {
@@ -1907,9 +2137,7 @@ class HDFilmCehennemi : MainAPI() {
             raw: String?
         ) {
 
-            if (
-                raw.isNullOrBlank()
-            ) {
+            if (raw.isNullOrBlank()) {
                 return
             }
 
@@ -1935,7 +2163,7 @@ class HDFilmCehennemi : MainAPI() {
         val document =
             Jsoup.parse(html)
 
-        val mediaSelectors =
+        val selectors =
             listOf(
                 "video[src]",
                 "video[data-src]",
@@ -1962,7 +2190,7 @@ class HDFilmCehennemi : MainAPI() {
         for (
             element in
             document.select(
-                mediaSelectors.joinToString(",")
+                selectors.joinToString(",")
             )
         ) {
 
@@ -1996,7 +2224,9 @@ class HDFilmCehennemi : MainAPI() {
                 if (
                     value.isNotBlank()
                 ) {
-                    addCandidate(value)
+                    addCandidate(
+                        value
+                    )
                 }
             }
         }
@@ -2078,9 +2308,6 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
 
-        /*
-         * Gerçek .m3u8 / .mp4
-         */
         val mediaRegex =
             Regex(
                 """https?://[^\s"'<>\\]+(?:\.m3u8(?:\?[^\s"'<>\\]+)?|\.mp4(?:\?[^\s"'<>\\]+)?)(?!/master\.txt)""",
@@ -2097,13 +2324,12 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         /*
-         * Uzantısız HLS.
-         *
-         * .mp4/master.txt filtrelenmiştir.
+         * Burada yalnızca gerçek uzantısız HLS
+         * adreslerini kabul ediyoruz.
          */
         val hlsRegex =
             Regex(
-                """(?i)["'`](?:(?:https?:)?//|/)[^"'`\\\s<>]+/hls2?/(?![^"'`\\\s<>]*\.mp4/master\.txt)[^"'`\\\s<>]+["'`]"""
+                """(?i)(?:["'`]|^)(?:(?:https?:)?//|/)[^"'`\s<>]+/hls2?/(?![^"'`\s<>]*\.mp4/master\.txt)[^"'`\s<>]+"""
             )
 
         for (
@@ -2111,22 +2337,15 @@ class HDFilmCehennemi : MainAPI() {
             hlsRegex.findAll(normalized)
         ) {
 
-            val value =
-                match.value
-                    .trim(
-                        '"',
-                        '\'',
-                        '`'
-                    )
-
             add(
-                value
+                match.value.trim(
+                    '"',
+                    '\'',
+                    '`'
+                )
             )
         }
 
-        /*
-         * JS içinde bulunan kaynaklar.
-         */
         result.addAll(
             extractJavascriptMediaSources(
                 normalized,
@@ -2247,7 +2466,7 @@ class HDFilmCehennemi : MainAPI() {
                 ),
 
                 Regex(
-                    """(?i)\b(?:axios)\s*\(\s*\{\s*url\s*:\s*["'`]([^"'`]+)["'`]"""
+                    """(?i)\baxios\s*\(\s*\{\s*url\s*:\s*["'`]([^"'`]+)["'`]"""
                 ),
 
                 Regex(
@@ -2256,10 +2475,6 @@ class HDFilmCehennemi : MainAPI() {
 
                 Regex(
                     """(?i)\b(?:url|endpoint|apiUrl|api_url|requestUrl|request_url|sourceEndpoint|source_endpoint)\s*[:=]\s*["'`]([^"'`]+)["'`]"""
-                ),
-
-                Regex(
-                    """(?i)\burl\s*:\s*['"`]([^'"`]+)['"`]"""
                 )
             )
 
@@ -2298,7 +2513,7 @@ class HDFilmCehennemi : MainAPI() {
             Jsoup.parse(html)
 
         /*
-         * Inline scriptler
+         * Inline JS
          */
         for (
             script in
@@ -2318,29 +2533,16 @@ class HDFilmCehennemi : MainAPI() {
                 continue
             }
 
-            val sources =
+            result.addAll(
                 extractJavascriptMediaSources(
                     scriptText,
                     playerUrl
                 )
-
-            if (
-                sources.isNotEmpty()
-            ) {
-
-                Log.d(
-                    "HDFilmCehennemi",
-                    "JS MEDIA SOURCES=$sources"
-                )
-
-                result.addAll(
-                    sources
-                )
-            }
+            )
         }
 
         /*
-         * Harici JS
+         * External JS
          */
         val externalScripts =
             document
@@ -2386,25 +2588,12 @@ class HDFilmCehennemi : MainAPI() {
                 continue
             }
 
-            val jsSources =
+            result.addAll(
                 extractJavascriptMediaSources(
                     scriptText,
                     scriptUrl
                 )
-
-            if (
-                jsSources.isNotEmpty()
-            ) {
-
-                Log.d(
-                    "HDFilmCehennemi",
-                    "EXTERNAL JS SOURCES=$jsSources"
-                )
-
-                result.addAll(
-                    jsSources
-                )
-            }
+            )
         }
 
         /*
@@ -2522,6 +2711,13 @@ class HDFilmCehennemi : MainAPI() {
                 )
             )
 
+            result.addAll(
+                extractJavascriptMediaSources(
+                    endpointBody,
+                    endpoint
+                )
+            )
+
             val unpacked =
                 runCatching {
                     getAndUnpack(
@@ -2543,6 +2739,13 @@ class HDFilmCehennemi : MainAPI() {
 
                 result.addAll(
                     extractStructuredVideoUrls(
+                        unpacked,
+                        endpoint
+                    )
+                )
+
+                result.addAll(
+                    extractJavascriptMediaSources(
                         unpacked,
                         endpoint
                     )
@@ -3208,7 +3411,9 @@ class HDFilmCehennemi : MainAPI() {
                     }.getOrDefault("")
 
                 val clean =
-                    cleanUrl(decoded)
+                    cleanUrl(
+                        decoded
+                    )
 
                 if (
                     isValidVideoUrl(clean)
@@ -3257,38 +3462,13 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         /*
-         * 4. Yeni JS/JWPlayer parser
+         * 4. JW / JavaScript
          */
         val javascriptCandidates =
-            LinkedHashSet<String>()
-
-        for (
-            script in
-            Jsoup
-                .parse(html)
-                .select("script")
-        ) {
-
-            val scriptText =
-                script
-                    .data()
-                    .ifBlank {
-                        script.html()
-                    }
-
-            if (
-                scriptText.isBlank()
-            ) {
-                continue
-            }
-
-            javascriptCandidates.addAll(
-                extractJavascriptMediaSources(
-                    scriptText,
-                    playerUrl
-                )
+            extractJavascriptMediaSources(
+                html,
+                playerUrl
             )
-        }
 
         Log.d(
             "HDFilmCehennemi",
@@ -3300,7 +3480,7 @@ class HDFilmCehennemi : MainAPI() {
                 candidates = javascriptCandidates,
                 source = source,
                 playerUrl = playerUrl,
-                suffixPrefix = "JavaScript",
+                suffixPrefix = "JW",
                 callback = callback
             )
         ) {
@@ -3308,7 +3488,7 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         /*
-         * 5. Dinamik kaynak / external JS / endpoint
+         * 5. Dynamic / external JS / endpoint
          */
         val dynamicCandidates =
             extractDynamicPlayerSources(
@@ -3334,7 +3514,7 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         /*
-         * 6. Doğrudan URL taraması
+         * 6. Direct
          */
         val directCandidates =
             extractDirectVideoUrlsFromText(
@@ -3360,7 +3540,7 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         /*
-         * 7. Son fallback
+         * 7. Final fallback
          */
         val fallbackCandidates =
             extractFallbackVideoUrls(
@@ -3538,14 +3718,14 @@ class HDFilmCehennemi : MainAPI() {
                     )
                 }
 
+                /*
+                 * iframe
+                 */
                 val apiDocument =
                     Jsoup.parse(
                         apiHtml
                     )
 
-                /*
-                 * iframe
-                 */
                 val frames =
                     apiDocument.select(
                         "iframe[data-src], iframe[src]"
@@ -3576,9 +3756,9 @@ class HDFilmCehennemi : MainAPI() {
                 }
 
                 /*
-                 * generic player attributes
+                 * data-player / data-embed / data-url
                  */
-                val playerAttributes =
+                val genericAttributes =
                     listOf(
                         "data-player",
                         "data-embed",
@@ -3587,7 +3767,7 @@ class HDFilmCehennemi : MainAPI() {
 
                 for (
                     attrName in
-                    playerAttributes
+                    genericAttributes
                 ) {
 
                     val attrValue =
@@ -3676,7 +3856,7 @@ class HDFilmCehennemi : MainAPI() {
                 }
 
                 /*
-                 * API cevabındaki olası player URL'leri
+                 * API cevabındaki player URL'leri
                  */
                 val rawUrls =
                     Regex(
@@ -3690,6 +3870,7 @@ class HDFilmCehennemi : MainAPI() {
                             )
                         }
                         .filter {
+
                             val lower =
                                 it.lowercase()
 
