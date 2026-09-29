@@ -1,16 +1,17 @@
 [
     {
         "iconUrl": "https://dizipal1583.com/favicon.ico",
-        "fileHash": "sha256-ae429578491a910570269eaa721377c4ebdbd39127b1d5f4e99f7eccb91538ea",
+        "fileHash": "sha256-ec7002adb77b3a57c4f19c7fb575f1f14c13a9b4cd60de072369be7506a58de6",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 16573,
+        "fileSize": 33511,
         "status": 1,
         "language": "tr",
         "authors": [
             "Kayracs3"
         ],
         "tvTypes": [
+            "Movie",
             "TvSeries"
         ],
         "version": 2,
