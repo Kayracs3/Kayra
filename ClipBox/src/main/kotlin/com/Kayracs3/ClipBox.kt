@@ -1,7 +1,6 @@
 package com.Kayracs3
 
 import android.util.Log
-import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.ProviderType
 import com.lagradost.cloudstream3.SubtitleFile
@@ -505,78 +504,88 @@ class ClipBox : TmdbProvider() {
                 }
 
             /*
-             * Öncelik callback ile yakalanan URL.
+             * Önce callback tarafından yakalanan URL.
              */
-            if (
-                !interceptedUrl.isNullOrBlank()
-            ) {
-
-                return@try interceptedUrl
-            }
+            var resolvedUrl =
+                interceptedUrl
 
             /*
              * Resolver'ın final request'i.
              */
-            val finalRequest =
-                result.first
-
             if (
-                finalRequest != null
+                resolvedUrl.isNullOrBlank()
             ) {
 
-                val finalUrl =
-                    finalRequest.url.toString()
-
-                Log.e(
-                    TAG,
-                    "WEBVIEW FINAL REQUEST = $finalUrl"
-                )
+                val finalRequest =
+                    result.first
 
                 if (
-                    isPlaylistUrl(finalUrl)
+                    finalRequest != null
                 ) {
 
-                    return@try finalUrl
+                    val finalUrl =
+                        finalRequest.url.toString()
+
+                    Log.e(
+                        TAG,
+                        "WEBVIEW FINAL REQUEST = $finalUrl"
+                    )
+
+                    if (
+                        isPlaylistUrl(finalUrl)
+                    ) {
+
+                        resolvedUrl =
+                            finalUrl
+                    }
                 }
             }
 
             /*
              * Additional URL'lerden bul.
              */
-            val collected =
-                result.second
-
-            Log.e(
-                TAG,
-                "WEBVIEW COLLECTED REQUESTS = ${collected.size}"
-            )
-
-            for (
-                request in collected
+            if (
+                resolvedUrl.isNullOrBlank()
             ) {
 
-                val requestUrl =
-                    request.url.toString()
+                val collected =
+                    result.second
 
-                Log.d(
+                Log.e(
                     TAG,
-                    "WEBVIEW ADDITIONAL = $requestUrl"
+                    "WEBVIEW COLLECTED REQUESTS = ${collected.size}"
                 )
 
-                if (
-                    isPlaylistUrl(requestUrl)
+                for (
+                    request in collected
                 ) {
 
-                    Log.e(
+                    val requestUrl =
+                        request.url.toString()
+
+                    Log.d(
                         TAG,
-                        "WEBVIEW ADDITIONAL PLAYLIST = $requestUrl"
+                        "WEBVIEW ADDITIONAL = $requestUrl"
                     )
 
-                    return@try requestUrl
+                    if (
+                        isPlaylistUrl(requestUrl)
+                    ) {
+
+                        Log.e(
+                            TAG,
+                            "WEBVIEW ADDITIONAL PLAYLIST = $requestUrl"
+                        )
+
+                        resolvedUrl =
+                            requestUrl
+
+                        break
+                    }
                 }
             }
 
-            null
+            resolvedUrl
 
         } catch (throwable: Throwable) {
 
@@ -706,20 +715,21 @@ class ClipBox : TmdbProvider() {
                 return false
             }
 
+        /*
+         * tmdbID nullable olduğu için burada
+         * kesin olarak Int'e düşürüyoruz.
+         */
         val tmdbId =
             tmdbLink.tmdbID
+                ?: run {
 
-        if (
-            tmdbId == null
-        ) {
+                    Log.e(
+                        TAG,
+                        "TMDB ID = NULL"
+                    )
 
-            Log.e(
-                TAG,
-                "TMDB ID = NULL"
-            )
-
-            return false
-        }
+                    return false
+                }
 
         val season =
             tmdbLink.season
@@ -792,34 +802,38 @@ class ClipBox : TmdbProvider() {
          * =====================================================
          */
 
-        if (
-            finalUrl.isNullOrBlank()
-        ) {
+        val rawFinalUrl =
+            finalUrl
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: run {
 
-            Log.e(
-                TAG,
-                "========== VIXSRC STREAM NOT FOUND =========="
-            )
+                    Log.e(
+                        TAG,
+                        "========== VIXSRC STREAM NOT FOUND =========="
+                    )
 
-            return false
-        }
+                    return false
+                }
 
-        finalUrl =
+        /*
+         * Nullable String'i kesin olarak
+         * String'e çeviriyoruz.
+         */
+        val playlistUrl =
             cleanUrl(
-                finalUrl
+                rawFinalUrl
             )
+                ?: run {
 
-        if (
-            finalUrl.isNullOrBlank()
-        ) {
+                    Log.e(
+                        TAG,
+                        "FINAL URL CLEAN FAILED"
+                    )
 
-            Log.e(
-                TAG,
-                "FINAL URL CLEAN FAILED"
-            )
-
-            return false
-        }
+                    return false
+                }
 
         Log.e(
             TAG,
@@ -828,18 +842,18 @@ class ClipBox : TmdbProvider() {
 
         Log.e(
             TAG,
-            finalUrl
+            playlistUrl
         )
 
         if (
             !isPlaylistUrl(
-                finalUrl
+                playlistUrl
             )
         ) {
 
             Log.e(
                 TAG,
-                "FINAL URL IS NOT PLAYLIST = $finalUrl"
+                "FINAL URL IS NOT PLAYLIST = $playlistUrl"
             )
 
             return false
@@ -869,7 +883,7 @@ class ClipBox : TmdbProvider() {
         newExtractorLink(
             source = name,
             name = "ClipBox • VixSrc",
-            url = finalUrl,
+            url = playlistUrl,
             type = ExtractorLinkType.M3U8
         ) {
 
