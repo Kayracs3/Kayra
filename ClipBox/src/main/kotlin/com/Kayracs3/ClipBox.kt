@@ -43,6 +43,11 @@ class ClipBox : TmdbProvider() {
         )
     }
 
+    init {
+        Log.e(TAG, "========== CLIPBOX CLASS CREATED ==========")
+        Log.e(TAG, "ClipBox provider instance initialized")
+    }
+
     override var name: String = "ClipBox"
 
     override var lang: String = "tr"
@@ -58,11 +63,19 @@ class ClipBox : TmdbProvider() {
         TvType.TvSeries
     )
 
-    private fun parseTmdbLink(data: String): TmdbLink? {
+    private fun parseTmdbLink(
+        data: String
+    ): TmdbLink? {
+
         return runCatching {
-            parseJson<TmdbLink>(data.trim())
+            parseJson<TmdbLink>(
+                data.trim()
+            )
         }.onFailure {
-            Log.d(TAG, "TMDB JSON parse failed: ${it.message}")
+            Log.d(
+                TAG,
+                "TMDB JSON parse failed: ${it.message}"
+            )
         }.getOrNull()
     }
 
@@ -76,12 +89,17 @@ class ClipBox : TmdbProvider() {
         ).find(data)
 
         if (movie != null) {
+
             val id = movie.groupValues
                 .getOrNull(1)
                 ?.toIntOrNull()
 
             if (id != null) {
-                return Triple(id, null, null)
+                return Triple(
+                    id,
+                    null,
+                    null
+                )
             }
         }
 
@@ -91,12 +109,17 @@ class ClipBox : TmdbProvider() {
         ).find(data)
 
         if (tv != null) {
+
             val id = tv.groupValues
                 .getOrNull(1)
                 ?.toIntOrNull()
 
             if (id != null) {
-                return Triple(id, null, null)
+                return Triple(
+                    id,
+                    null,
+                    null
+                )
             }
         }
 
@@ -137,17 +160,29 @@ class ClipBox : TmdbProvider() {
         val url = cleanEmbeddedValue(value)
 
         return when {
-            url.startsWith("https://", true) ||
-                url.startsWith("http://", true) -> url
 
-            url.startsWith("//") ->
+            url.startsWith(
+                "https://",
+                true
+            ) ||
+                url.startsWith(
+                    "http://",
+                    true
+                ) -> {
+                url
+            }
+
+            url.startsWith("//") -> {
                 "https:$url"
+            }
 
-            url.startsWith("/") ->
+            url.startsWith("/") -> {
                 "$VIXSRC_URL$url"
+            }
 
-            else ->
+            else -> {
                 "$VIXSRC_URL/${url.trimStart('/')}"
+            }
         }
     }
 
@@ -194,7 +229,8 @@ class ClipBox : TmdbProvider() {
 
             if (!value.isNullOrBlank()) {
 
-                val cleaned = cleanEmbeddedValue(value)
+                val cleaned =
+                    cleanEmbeddedValue(value)
 
                 if (cleaned.isNotBlank()) {
                     return cleaned
@@ -225,7 +261,7 @@ class ClipBox : TmdbProvider() {
                 value.contains("master") ||
                     value.contains("playlist") ||
                     value.contains(".m3u")
-                )
+            )
         ) {
             return true
         }
@@ -237,7 +273,8 @@ class ClipBox : TmdbProvider() {
         url: String
     ): String? {
 
-        var result = cleanEmbeddedValue(url)
+        var result =
+            cleanEmbeddedValue(url)
 
         result = result
             .trim()
@@ -258,8 +295,14 @@ class ClipBox : TmdbProvider() {
         }
 
         if (
-            !result.startsWith("http://", true) &&
-            !result.startsWith("https://", true)
+            !result.startsWith(
+                "http://",
+                true
+            ) &&
+            !result.startsWith(
+                "https://",
+                true
+            )
         ) {
             return null
         }
@@ -276,8 +319,9 @@ class ClipBox : TmdbProvider() {
             return
         }
 
-        val cleaned = cleanStreamUrl(value)
-            ?: return
+        val cleaned =
+            cleanStreamUrl(value)
+                ?: return
 
         if (!isPlayableStreamUrl(cleaned)) {
             return
@@ -385,7 +429,8 @@ class ClipBox : TmdbProvider() {
 
                 addCandidate(
                     candidates,
-                    match.groupValues.getOrNull(1)
+                    match.groupValues
+                        .getOrNull(1)
                 )
             }
         }
@@ -434,10 +479,11 @@ class ClipBox : TmdbProvider() {
 
         for (field in fieldNames) {
 
-            val value = extractField(
-                html = html,
-                field = field
-            )
+            val value =
+                extractField(
+                    html = html,
+                    field = field
+                )
 
             if (!value.isNullOrBlank()) {
 
@@ -470,10 +516,10 @@ class ClipBox : TmdbProvider() {
         scriptRegex.findAll(html)
             .forEachIndexed { index, match ->
 
-                val script = match
-                    .groupValues
-                    .getOrNull(1)
-                    .orEmpty()
+                val script =
+                    match.groupValues
+                        .getOrNull(1)
+                        .orEmpty()
 
                 if (script.isBlank()) {
                     return@forEachIndexed
@@ -514,11 +560,11 @@ class ClipBox : TmdbProvider() {
         quotedUrlRegex.findAll(html)
             .forEach { match ->
 
-                val value = match
-                    .groupValues
-                    .getOrNull(1)
-                    ?.trim()
-                    ?: return@forEach
+                val value =
+                    match.groupValues
+                        .getOrNull(1)
+                        ?.trim()
+                        ?: return@forEach
 
                 val cleaned =
                     cleanEmbeddedValue(value)
@@ -554,7 +600,8 @@ class ClipBox : TmdbProvider() {
             .split('\n')
             .filter { line ->
 
-                val lower = line.lowercase()
+                val lower =
+                    line.lowercase()
 
                 lower.contains("m3u8") ||
                     lower.contains("playlist") ||
@@ -593,41 +640,26 @@ class ClipBox : TmdbProvider() {
         val candidates =
             mutableListOf<String>()
 
-        /*
-         * 1. HTML içerisindeki doğrudan HLS URL'leri.
-         */
         extractAbsoluteStreamUrls(
             html,
             candidates
         )
 
-        /*
-         * 2. Relative HLS URL'leri.
-         */
         extractRelativeStreamUrls(
             html,
             candidates
         )
 
-        /*
-         * 3. Bilinen JS değişkenleri.
-         */
         extractByFieldNames(
             html,
             candidates
         )
 
-        /*
-         * 4. Script blokları.
-         */
         extractScriptStreams(
             html,
             candidates
         )
 
-        /*
-         * 5. Son fallback.
-         */
         extractQuotedUrls(
             html,
             candidates
@@ -645,33 +677,28 @@ class ClipBox : TmdbProvider() {
             )
         }
 
-        /*
-         * Öncelik:
-         *
-         * 1 = doğrudan .m3u8
-         * 2 = /playlist/
-         */
-        val selected = candidates
-            .sortedWith(
-                compareByDescending<String> { url ->
+        val selected =
+            candidates
+                .sortedWith(
+                    compareByDescending<String> { url ->
 
-                    when {
+                        when {
 
-                        url.contains(
-                            ".m3u8",
-                            true
-                        ) -> 3
+                            url.contains(
+                                ".m3u8",
+                                true
+                            ) -> 3
 
-                        url.contains(
-                            "/playlist/",
-                            true
-                        ) -> 2
+                            url.contains(
+                                "/playlist/",
+                                true
+                            ) -> 2
 
-                        else -> 1
+                            else -> 1
+                        }
                     }
-                }
-            )
-            .firstOrNull()
+                )
+                .firstOrNull()
 
         if (selected != null) {
 
@@ -716,9 +743,21 @@ class ClipBox : TmdbProvider() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        Log.e("ClipBox", "========== LOADLINKS CALLED ==========")
-        Log.e("ClipBox", "name=$name")  
-        Log.e("ClipBox", "data=$data")
+
+        Log.e(
+            TAG,
+            "========== LOADLINKS CALLED =========="
+        )
+
+        Log.e(
+            TAG,
+            "data=$data"
+        )
+
+        Log.e(
+            TAG,
+            "isCasting=$isCasting"
+        )
 
         Log.d(
             TAG,
@@ -729,9 +768,6 @@ class ClipBox : TmdbProvider() {
         var season: Int? = null
         var episode: Int? = null
 
-        /*
-         * Normal CloudStream TmdbProvider verisi.
-         */
         val tmdbLink =
             parseTmdbLink(data)
 
@@ -752,9 +788,6 @@ class ClipBox : TmdbProvider() {
             )
         }
 
-        /*
-         * URL fallback.
-         */
         if (tmdbId == null) {
 
             val parsedUrl =
@@ -780,7 +813,13 @@ class ClipBox : TmdbProvider() {
 
         val id =
             tmdbId
-                ?: return false
+                ?: run {
+                    Log.e(
+                        TAG,
+                        "TMDB ID could not be extracted from data"
+                    )
+                    return false
+                }
 
         val playerUrl =
             buildVixsrcPlayerUrl(
@@ -794,23 +833,24 @@ class ClipBox : TmdbProvider() {
             "loading VixSrc $playerUrl"
         )
 
-        val response = runCatching {
+        val response =
+            runCatching {
 
-            app.get(
-                url = playerUrl,
-                headers = VIXSRC_HEADERS
-            )
+                app.get(
+                    url = playerUrl,
+                    headers = VIXSRC_HEADERS
+                )
 
-        }.onFailure {
+            }.onFailure {
 
-            Log.d(
-                TAG,
-                "VixSrc request failed: ${it.message}"
-            )
+                Log.e(
+                    TAG,
+                    "VixSrc request failed: ${it.message}",
+                    it
+                )
 
-        }.getOrNull()
-
-            ?: return false
+            }.getOrNull()
+                ?: return false
 
         Log.d(
             TAG,
@@ -820,6 +860,12 @@ class ClipBox : TmdbProvider() {
         if (
             response.code !in 200..399
         ) {
+
+            Log.e(
+                TAG,
+                "VixSrc returned HTTP ${response.code}"
+            )
+
             return false
         }
 
@@ -833,7 +879,7 @@ class ClipBox : TmdbProvider() {
 
         if (html.isBlank()) {
 
-            Log.d(
+            Log.e(
                 TAG,
                 "VixSrc HTML empty"
             )
@@ -868,6 +914,12 @@ class ClipBox : TmdbProvider() {
                 true
             )
         ) {
+
+            Log.e(
+                TAG,
+                "Final URL is not HTTP/HTTPS"
+            )
+
             return false
         }
 
@@ -882,6 +934,12 @@ class ClipBox : TmdbProvider() {
                 )
 
         if (!looksPlayable) {
+
+            Log.e(
+                TAG,
+                "Final URL does not look playable: $finalUrl"
+            )
+
             return false
         }
 
@@ -891,6 +949,12 @@ class ClipBox : TmdbProvider() {
                 ignoreCase = true
             )
         ) {
+
+            Log.e(
+                TAG,
+                "Rejected TMDB URL as stream"
+            )
+
             return false
         }
 
@@ -911,7 +975,7 @@ class ClipBox : TmdbProvider() {
                 Qualities.Unknown.value
         }.let(callback)
 
-        Log.d(
+        Log.e(
             TAG,
             "VixSrc link successfully sent to CloudStream"
         )
