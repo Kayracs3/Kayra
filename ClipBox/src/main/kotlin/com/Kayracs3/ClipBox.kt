@@ -1,17 +1,29 @@
 package com.Kayracs3
 
 import android.util.Log
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.ErrorLoadingException
+import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.ProviderType
+import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.addDate
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.metaproviders.TmdbLink
 import com.lagradost.cloudstream3.metaproviders.TmdbProvider
+import com.lagradost.cloudstream3.newEpisode
+import com.lagradost.cloudstream3.newMovieLoadResponse
+import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 class ClipBox : TmdbProvider() {
 
@@ -19,7 +31,18 @@ class ClipBox : TmdbProvider() {
 
         private const val TAG = "ClipBox"
 
-        private const val VIXSRC_URL = "https://vixsrc.to"
+        private const val TMDB_API_URL =
+            "https://api.themoviedb.org/3"
+
+        /*
+         * CloudStream'in kendi TmdbProvider'ında kullanılan
+         * genel TMDB anahtarı.
+         */
+        private const val TMDB_API_KEY =
+            "e6333b32409e02a4a6eba6fb7ff866bb"
+
+        private const val VIXSRC_URL =
+            "https://vixsrc.to"
 
         private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 13; Pixel 7) " +
@@ -41,124 +64,790 @@ class ClipBox : TmdbProvider() {
             "Accept" to "*/*",
             "Accept-Language" to "en-US,en;q=0.9"
         )
+
+        /*
+         * Sadece ihtiyacımız olan TMDB alanlarını parse ediyoruz.
+         * Böylece gereksiz credits / recommendations /
+         * content_ratings vb. istekleri yapılmıyor.
+         */
+
+        @Serializable
+        private data class TmdbMovieResponse(
+            @JsonProperty("id")
+            @SerialName("id")
+            val id: Int? = null,
+
+            @JsonProperty("title")
+            @SerialName("title")
+            val title: String? = null,
+
+            @JsonProperty("original_title")
+            @SerialName("original_title")
+            val originalTitle: String? = null,
+
+            @JsonProperty("overview")
+            @SerialName("overview")
+            val overview: String? = null,
+
+            @JsonProperty("poster_path")
+            @SerialName("poster_path")
+            val posterPath: String? = null,
+
+            @JsonProperty("backdrop_path")
+            @SerialName("backdrop_path")
+            val backdropPath: String? = null,
+
+            @JsonProperty("release_date")
+            @SerialName("release_date")
+            val releaseDate: String? = null,
+
+            @JsonProperty("vote_average")
+            @SerialName("vote_average")
+            val voteAverage: Double? = null,
+
+            @JsonProperty("runtime")
+            @SerialName("runtime")
+            val runtime: Int? = null,
+
+            @JsonProperty("genres")
+            @SerialName("genres")
+            val genres: List<TmdbGenre>? = null
+        )
+
+        @Serializable
+        private data class TmdbTvResponse(
+            @JsonProperty("id")
+            @SerialName("id")
+            val id: Int? = null,
+
+            @JsonProperty("name")
+            @SerialName("name")
+            val name: String? = null,
+
+            @JsonProperty("original_name")
+            @SerialName("original_name")
+            val originalName: String? = null,
+
+            @JsonProperty("overview")
+            @SerialName("overview")
+            val overview: String? = null,
+
+            @JsonProperty("poster_path")
+            @SerialName("poster_path")
+            val posterPath: String? = null,
+
+            @JsonProperty("backdrop_path")
+            @SerialName("backdrop_path")
+            val backdropPath: String? = null,
+
+            @JsonProperty("first_air_date")
+            @SerialName("first_air_date")
+            val firstAirDate: String? = null,
+
+            @JsonProperty("vote_average")
+            @SerialName("vote_average")
+            val voteAverage: Double? = null,
+
+            @JsonProperty("episode_run_time")
+            @SerialName("episode_run_time")
+            val episodeRunTime: List<Int>? = null,
+
+            @JsonProperty("genres")
+            @SerialName("genres")
+            val genres: List<TmdbGenre>? = null,
+
+            @JsonProperty("seasons")
+            @SerialName("seasons")
+            val seasons: List<TmdbSeason>? = null
+        )
+
+        @Serializable
+        private data class TmdbGenre(
+            @JsonProperty("id")
+            @SerialName("id")
+            val id: Int? = null,
+
+            @JsonProperty("name")
+            @SerialName("name")
+            val name: String? = null
+        )
+
+        @Serializable
+        private data class TmdbSeason(
+            @JsonProperty("id")
+            @SerialName("id")
+            val id: Int? = null,
+
+            @JsonProperty("season_number")
+            @SerialName("season_number")
+            val seasonNumber: Int? = null,
+
+            @JsonProperty("episode_count")
+            @SerialName("episode_count")
+            val episodeCount: Int? = null
+        )
+
+        @Serializable
+        private data class TmdbSeasonResponse(
+            @JsonProperty("season_number")
+            @SerialName("season_number")
+            val seasonNumber: Int? = null,
+
+            @JsonProperty("episodes")
+            @SerialName("episodes")
+            val episodes: List<TmdbEpisode>? = null
+        )
+
+        @Serializable
+        private data class TmdbEpisode(
+            @JsonProperty("id")
+            @SerialName("id")
+            val id: Int? = null,
+
+            @JsonProperty("name")
+            @SerialName("name")
+            val name: String? = null,
+
+            @JsonProperty("overview")
+            @SerialName("overview")
+            val overview: String? = null,
+
+            @JsonProperty("episode_number")
+            @SerialName("episode_number")
+            val episodeNumber: Int? = null,
+
+            @JsonProperty("season_number")
+            @SerialName("season_number")
+            val seasonNumber: Int? = null,
+
+            @JsonProperty("still_path")
+            @SerialName("still_path")
+            val stillPath: String? = null,
+
+            @JsonProperty("air_date")
+            @SerialName("air_date")
+            val airDate: String? = null,
+
+            @JsonProperty("vote_average")
+            @SerialName("vote_average")
+            val voteAverage: Double? = null
+        )
     }
 
     init {
-        Log.e(TAG, "========== CLIPBOX CLASS CREATED ==========")
+        Log.e(
+            TAG,
+            "========== CLIPBOX CLASS CREATED =========="
+        )
     }
 
     override var name: String = "ClipBox"
 
     override var lang: String = "tr"
 
-    override val hasMainPage: Boolean = true
+    /*
+     * TMDB URL'lerini kendimiz işlediğimiz için bunu gerçek
+     * metadata adresi olarak tanımlıyoruz.
+     */
+    override var mainUrl: String =
+        "https://www.themoviedb.org"
 
-    override val hasQuickSearch: Boolean = true
+    override val hasMainPage: Boolean =
+        true
 
-    override val providerType = ProviderType.DirectProvider
+    override val hasQuickSearch: Boolean =
+        true
+
+    override val providerType =
+        ProviderType.DirectProvider
+
+    override val supportedTypes: Set<TvType> =
+        setOf(
+            TvType.Movie,
+            TvType.TvSeries
+        )
 
     /*
-     * KRİTİK:
-     *
-     * TmdbProvider varsayılan olarak false kullanır.
-     * false olduğunda TmdbProvider.load() bizim için
-     * loadFromTmdb/loadFromImdb çağırır ve onlar null döner.
-     *
-     * true olduğunda TmdbProvider kendi TMDB metadata
-     * yükleme sistemini kullanır ve gerçek LoadResponse/Episode
-     * nesnelerini oluşturur.
+     * ---------------------------------------------------------
+     * TMDB
+     * ---------------------------------------------------------
      */
-    override val useMetaLoadResponse: Boolean = true
 
-    override val supportedTypes: Set<TvType> = setOf(
-        TvType.Movie,
-        TvType.TvSeries
-    )
+    private fun posterUrl(
+        path: String?
+    ): String? {
+
+        if (path.isNullOrBlank()) {
+            return null
+        }
+
+        return if (
+            path.startsWith(
+                "http://",
+                true
+            ) ||
+            path.startsWith(
+                "https://",
+                true
+            )
+        ) {
+            path
+        } else {
+            "https://image.tmdb.org/t/p/w500$path"
+        }
+    }
+
+    private fun backdropUrl(
+        path: String?
+    ): String? {
+
+        if (path.isNullOrBlank()) {
+            return null
+        }
+
+        return if (
+            path.startsWith(
+                "http://",
+                true
+            ) ||
+            path.startsWith(
+                "https://",
+                true
+            )
+        ) {
+            path
+        } else {
+            "https://image.tmdb.org/t/p/w1280$path"
+        }
+    }
+
+    private suspend fun tmdbGet(
+        path: String,
+        extraParams: Map<String, String> = emptyMap()
+    ): String {
+
+        val params = buildMap {
+
+            put(
+                "api_key",
+                TMDB_API_KEY
+            )
+
+            putAll(
+                extraParams
+            )
+        }
+
+        Log.d(
+            TAG,
+            "TMDB GET $path"
+        )
+
+        return app.get(
+            url = "$TMDB_API_URL$path",
+            params = params
+        ).text
+    }
+
+    private fun parseTmdbId(
+        url: String
+    ): Pair<Int, Boolean>? {
+
+        val match = Regex(
+            """themoviedb\.org/(movie|tv)/(\d+)""",
+            RegexOption.IGNORE_CASE
+        ).find(url)
+            ?: return null
+
+        val type =
+            match.groupValues
+                .getOrNull(1)
+                .orEmpty()
+
+        val id =
+            match.groupValues
+                .getOrNull(2)
+                ?.toIntOrNull()
+                ?: return null
+
+        return Pair(
+            id,
+            type.equals(
+                "tv",
+                true
+            )
+        )
+    }
 
     private fun parseTmdbLink(
         data: String
     ): TmdbLink? {
 
         return runCatching {
+
             parseJson<TmdbLink>(
                 data.trim()
             )
+
         }.onFailure {
+
             Log.d(
                 TAG,
-                "TMDB JSON parse failed: ${it.message}"
+                "TMDB data parse failed: ${it.message}"
             )
+
         }.getOrNull()
     }
 
-    private fun parseTmdbUrl(
-        data: String
-    ): Triple<Int, Int?, Int?>? {
+    /*
+     * ---------------------------------------------------------
+     * KENDİ LOAD METODUMUZ
+     * ---------------------------------------------------------
+     *
+     * TmdbProvider.load() kullanılmıyor.
+     *
+     * Böylece:
+     *
+     * APIRepository
+     *      ↓
+     * ClipBox.load()
+     *      ↓
+     * TMDB
+     *      ↓
+     * LoadResponse
+     *
+     * doğrudan gerçekleşiyor.
+     */
 
-        val movie = Regex(
-            """themoviedb\.org/movie/(\d+)""",
-            RegexOption.IGNORE_CASE
-        ).find(data)
+    override suspend fun load(
+        url: String
+    ): LoadResponse? {
 
-        if (movie != null) {
+        Log.e(
+            TAG,
+            "========== CLIPBOX LOAD CALLED =========="
+        )
 
-            val id = movie.groupValues
-                .getOrNull(1)
-                ?.toIntOrNull()
+        Log.e(
+            TAG,
+            "LOAD URL = $url"
+        )
 
-            if (id != null) {
-                return Triple(
-                    id,
-                    null,
-                    null
-                )
-            }
+        val parsed =
+            parseTmdbId(url)
+
+        if (parsed == null) {
+
+            Log.e(
+                TAG,
+                "TMDB ID could not be parsed from URL"
+            )
+
+            return null
         }
 
-        val tv = Regex(
-            """themoviedb\.org/tv/(\d+)""",
-            RegexOption.IGNORE_CASE
-        ).find(data)
+        val tmdbId =
+            parsed.first
 
-        if (tv != null) {
+        val isTv =
+            parsed.second
 
-            val id = tv.groupValues
-                .getOrNull(1)
-                ?.toIntOrNull()
+        Log.d(
+            TAG,
+            "TMDB ID=$tmdbId isTv=$isTv"
+        )
 
-            if (id != null) {
-                return Triple(
-                    id,
-                    null,
-                    null
+        return try {
+
+            if (isTv) {
+
+                loadTv(
+                    tmdbId
+                )
+
+            } else {
+
+                loadMovie(
+                    tmdbId
                 )
             }
-        }
 
-        return null
+        } catch (throwable: Throwable) {
+
+            Log.e(
+                TAG,
+                "CLIPBOX LOAD ERROR: ${throwable.message}",
+                throwable
+            )
+
+            null
+        }
     }
+
+    private suspend fun loadMovie(
+        tmdbId: Int
+    ): LoadResponse? {
+
+        Log.d(
+            TAG,
+            "Loading TMDB movie $tmdbId"
+        )
+
+        val json =
+            tmdbGet(
+                "/movie/$tmdbId",
+                mapOf(
+                    "language" to "en-US"
+                )
+            )
+
+        val movie =
+            parseJson<TmdbMovieResponse>(
+                json
+            )
+
+        val title =
+            movie.title
+                ?: movie.originalTitle
+                ?: return null
+
+        val year =
+            movie.releaseDate
+                ?.take(4)
+                ?.toIntOrNull()
+
+        val genres =
+            movie.genres
+                ?.mapNotNull {
+                    it.name
+                }
+
+        val response =
+            newMovieLoadResponse(
+                name = title,
+                url = "https://www.themoviedb.org/movie/$tmdbId",
+                type = TvType.Movie,
+                data = TmdbLink(
+                    imdbID = null,
+                    tmdbID = tmdbId,
+                    episode = null,
+                    season = null,
+                    movieName = title
+                )
+            ) {
+
+                posterUrl =
+                    posterUrl(
+                        movie.posterPath
+                    )
+
+                backgroundPosterUrl =
+                    backdropUrl(
+                        movie.backdropPath
+                    )
+
+                this.year =
+                    year
+
+                plot =
+                    movie.overview
+
+                score =
+                    Score.from10(
+                        movie.voteAverage
+                    )
+
+                tags =
+                    genres
+
+                duration =
+                    movie.runtime
+
+                Log.d(
+                    TAG,
+                    "Movie LoadResponse created for $title"
+                )
+            }
+
+        return response
+    }
+
+    private suspend fun loadTv(
+        tmdbId: Int
+    ): LoadResponse? {
+
+        Log.d(
+            TAG,
+            "Loading TMDB TV $tmdbId"
+        )
+
+        val json =
+            tmdbGet(
+                "/tv/$tmdbId",
+                mapOf(
+                    "language" to "en-US"
+                )
+            )
+
+        val tv =
+            parseJson<TmdbTvResponse>(
+                json
+            )
+
+        val title =
+            tv.name
+                ?: tv.originalName
+                ?: return null
+
+        val episodes =
+            mutableListOf<Episode>()
+
+        val seasons =
+            tv.seasons
+                ?.filter {
+                    (it.seasonNumber ?: 0) > 0
+                }
+                .orEmpty()
+
+        Log.d(
+            TAG,
+            "TV $title seasons=${seasons.size}"
+        )
+
+        for (season in seasons) {
+
+            val seasonNumber =
+                season.seasonNumber
+                    ?: continue
+
+            Log.d(
+                TAG,
+                "Loading season $seasonNumber"
+            )
+
+            try {
+
+                val seasonJson =
+                    tmdbGet(
+                        "/tv/$tmdbId/season/$seasonNumber",
+                        mapOf(
+                            "language" to "en-US"
+                        )
+                    )
+
+                val seasonData =
+                    parseJson<TmdbSeasonResponse>(
+                        seasonJson
+                    )
+
+                seasonData.episodes
+                    .orEmpty()
+                    .forEach { episodeData ->
+
+                        val episodeNumber =
+                            episodeData.episodeNumber
+                                ?: return@forEach
+
+                        val actualSeason =
+                            episodeData.seasonNumber
+                                ?: seasonNumber
+
+                        val episodeName =
+                            episodeData.name
+                                ?: "Bölüm $episodeNumber"
+
+                        val link =
+                            TmdbLink(
+                                imdbID = null,
+                                tmdbID = tmdbId,
+                                episode = episodeNumber,
+                                season = actualSeason,
+                                movieName = title
+                            )
+
+                        val episode =
+                            newEpisode(
+                                link
+                            ) {
+
+                                name =
+                                    episodeName
+
+                                season =
+                                    actualSeason
+
+                                episode =
+                                    episodeNumber
+
+                                posterUrl =
+                                    posterUrl(
+                                        episodeData.stillPath
+                                    )
+
+                                description =
+                                    episodeData.overview
+
+                                score =
+                                    Score.from10(
+                                        episodeData.voteAverage
+                                    )
+
+                                addDate(
+                                    episodeData.airDate
+                                )
+                            }
+
+                        episodes += episode
+                    }
+
+            } catch (throwable: Throwable) {
+
+                Log.e(
+                    TAG,
+                    "Season $seasonNumber failed: ${throwable.message}",
+                    throwable
+                )
+            }
+        }
+
+        val year =
+            tv.firstAirDate
+                ?.take(4)
+                ?.toIntOrNull()
+
+        val genres =
+            tv.genres
+                ?.mapNotNull {
+                    it.name
+                }
+
+        val duration =
+            tv.episodeRunTime
+                ?.filter {
+                    it > 0
+                }
+                ?.average()
+                ?.toInt()
+
+        val response =
+            newTvSeriesLoadResponse(
+                name = title,
+                url = "https://www.themoviedb.org/tv/$tmdbId",
+                type = TvType.TvSeries,
+                episodes = episodes
+            ) {
+
+                posterUrl =
+                    posterUrl(
+                        tv.posterPath
+                    )
+
+                backgroundPosterUrl =
+                    backdropUrl(
+                        tv.backdropPath
+                    )
+
+                this.year =
+                    year
+
+                plot =
+                    tv.overview
+
+                score =
+                    Score.from10(
+                        tv.voteAverage
+                    )
+
+                tags =
+                    genres
+
+                this.duration =
+                    duration
+
+                Log.e(
+                    TAG,
+                    "TV LoadResponse created: $title episodes=${episodes.size}"
+                )
+            }
+
+        return response
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * VIXSRC
+     * ---------------------------------------------------------
+     */
 
     private fun cleanEmbeddedValue(
         value: String
     ): String {
 
         return value
-            .replace("\\/", "/")
-            .replace("\\u002F", "/")
-            .replace("\\u002f", "/")
-            .replace("\\u003A", ":")
-            .replace("\\u003a", ":")
-            .replace("\\u0026", "&")
-            .replace("\\u003F", "?")
-            .replace("\\u003f", "?")
-            .replace("\\u003D", "=")
-            .replace("\\u003d", "=")
-            .replace("&amp;", "&")
-            .replace("&#x26;", "&")
-            .replace("&#38;", "&")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace("&apos;", "'")
+            .replace(
+                "\\/",
+                "/"
+            )
+            .replace(
+                "\\u002F",
+                "/"
+            )
+            .replace(
+                "\\u002f",
+                "/"
+            )
+            .replace(
+                "\\u003A",
+                ":"
+            )
+            .replace(
+                "\\u003a",
+                ":"
+            )
+            .replace(
+                "\\u0026",
+                "&"
+            )
+            .replace(
+                "\\u003F",
+                "?"
+            )
+            .replace(
+                "\\u003f",
+                "?"
+            )
+            .replace(
+                "\\u003D",
+                "="
+            )
+            .replace(
+                "\\u003d",
+                "="
+            )
+            .replace(
+                "&amp;",
+                "&"
+            )
+            .replace(
+                "&#x26;",
+                "&"
+            )
+            .replace(
+                "&#38;",
+                "&"
+            )
+            .replace(
+                "&quot;",
+                "\""
+            )
+            .replace(
+                "&#39;",
+                "'"
+            )
+            .replace(
+                "&apos;",
+                "'"
+            )
             .trim()
             .removeSurrounding("\"")
             .removeSurrounding("'")
@@ -200,18 +889,23 @@ class ClipBox : TmdbProvider() {
 
         for (pattern in patterns) {
 
-            val value = pattern
-                .find(html)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.trim()
+            val value =
+                pattern
+                    .find(html)
+                    ?.groupValues
+                    ?.getOrNull(1)
+                    ?.trim()
 
             if (!value.isNullOrBlank()) {
 
                 val cleaned =
-                    cleanEmbeddedValue(value)
+                    cleanEmbeddedValue(
+                        value
+                    )
 
-                if (cleaned.isNotBlank()) {
+                if (
+                    cleaned.isNotBlank()
+                ) {
                     return cleaned
                 }
             }
@@ -220,53 +914,33 @@ class ClipBox : TmdbProvider() {
         return null
     }
 
-    private fun isPlayableStreamUrl(
-        url: String
-    ): Boolean {
-
-        val value = url.lowercase()
-
-        if (value.contains(".m3u8")) {
-            return true
-        }
-
-        if (value.contains("/playlist/")) {
-            return true
-        }
-
-        if (
-            value.contains("/hls/") &&
-            (
-                value.contains("master") ||
-                    value.contains("playlist") ||
-                    value.contains(".m3u")
-            )
-        ) {
-            return true
-        }
-
-        return false
-    }
-
     private fun cleanStreamUrl(
         url: String
     ): String? {
 
         var result =
-            cleanEmbeddedValue(url)
-
-        result = result
-            .trim()
-            .trimEnd(
-                ')',
-                ']',
-                '}',
-                ';',
-                ','
+            cleanEmbeddedValue(
+                url
             )
 
-        if (result.startsWith("//")) {
-            result = "https:$result"
+        result =
+            result
+                .trim()
+                .trimEnd(
+                    ')',
+                    ']',
+                    '}',
+                    ';',
+                    ','
+                )
+
+        if (
+            result.startsWith(
+                "//"
+            )
+        ) {
+            result =
+                "https:$result"
         }
 
         if (
@@ -285,20 +959,59 @@ class ClipBox : TmdbProvider() {
         return result
     }
 
+    private fun isPlayableStreamUrl(
+        url: String
+    ): Boolean {
+
+        val value =
+            url.lowercase()
+
+        return value.contains(
+            ".m3u8"
+        ) ||
+            value.contains(
+                "/playlist/"
+            ) ||
+            (
+                value.contains(
+                    "/hls/"
+                ) &&
+                    (
+                        value.contains(
+                            "master"
+                        ) ||
+                            value.contains(
+                                "playlist"
+                            ) ||
+                            value.contains(
+                                ".m3u"
+                            )
+                    )
+                )
+    }
+
     private fun addCandidate(
-        list: MutableList<String>,
+        candidates: MutableList<String>,
         value: String?
     ) {
 
-        if (value.isNullOrBlank()) {
+        if (
+            value.isNullOrBlank()
+        ) {
             return
         }
 
         val cleaned =
-            cleanStreamUrl(value)
+            cleanStreamUrl(
+                value
+            )
                 ?: return
 
-        if (!isPlayableStreamUrl(cleaned)) {
+        if (
+            !isPlayableStreamUrl(
+                cleaned
+            )
+        ) {
             return
         }
 
@@ -312,21 +1025,12 @@ class ClipBox : TmdbProvider() {
         }
 
         if (
-            cleaned.contains(
-                "image",
-                true
-            ) &&
-            !cleaned.contains(
-                ".m3u8",
-                true
+            !candidates.contains(
+                cleaned
             )
         ) {
-            return
-        }
 
-        if (!list.contains(cleaned)) {
-
-            list.add(cleaned)
+            candidates += cleaned
 
             Log.d(
                 TAG,
@@ -365,13 +1069,17 @@ class ClipBox : TmdbProvider() {
 
         for (pattern in patterns) {
 
-            pattern.findAll(html).forEach { match ->
-
-                addCandidate(
-                    candidates,
-                    match.value
+            pattern
+                .findAll(
+                    html
                 )
-            }
+                .forEach { match ->
+
+                    addCandidate(
+                        candidates,
+                        match.value
+                    )
+                }
         }
     }
 
@@ -400,14 +1108,18 @@ class ClipBox : TmdbProvider() {
 
         for (pattern in patterns) {
 
-            pattern.findAll(html).forEach { match ->
-
-                addCandidate(
-                    candidates,
-                    match.groupValues
-                        .getOrNull(1)
+            pattern
+                .findAll(
+                    html
                 )
-            }
+                .forEach { match ->
+
+                    addCandidate(
+                        candidates,
+                        match.groupValues
+                            .getOrNull(1)
+                    )
+                }
         }
     }
 
@@ -416,7 +1128,7 @@ class ClipBox : TmdbProvider() {
         candidates: MutableList<String>
     ) {
 
-        val fieldNames = listOf(
+        val fields = listOf(
             "masterPlaylist",
             "master_playlist",
             "playlist",
@@ -452,15 +1164,17 @@ class ClipBox : TmdbProvider() {
             "play_url"
         )
 
-        for (field in fieldNames) {
+        for (field in fields) {
 
             val value =
                 extractField(
-                    html = html,
-                    field = field
+                    html,
+                    field
                 )
 
-            if (!value.isNullOrBlank()) {
+            if (
+                !value.isNullOrBlank()
+            ) {
 
                 Log.d(
                     TAG,
@@ -480,23 +1194,30 @@ class ClipBox : TmdbProvider() {
         candidates: MutableList<String>
     ) {
 
-        val scriptRegex = Regex(
-            """<script[^>]*>(.*?)</script>""",
-            setOf(
-                RegexOption.IGNORE_CASE,
-                RegexOption.DOT_MATCHES_ALL
+        val scriptRegex =
+            Regex(
+                """<script[^>]*>(.*?)</script>""",
+                setOf(
+                    RegexOption.IGNORE_CASE,
+                    RegexOption.DOT_MATCHES_ALL
+                )
             )
-        )
 
-        scriptRegex.findAll(html)
+        scriptRegex
+            .findAll(
+                html
+            )
             .forEachIndexed { index, match ->
 
                 val script =
-                    match.groupValues
+                    match
+                        .groupValues
                         .getOrNull(1)
                         .orEmpty()
 
-                if (script.isBlank()) {
+                if (
+                    script.isBlank()
+                ) {
                     return@forEachIndexed
                 }
 
@@ -527,22 +1248,29 @@ class ClipBox : TmdbProvider() {
         candidates: MutableList<String>
     ) {
 
-        val quotedUrlRegex = Regex(
-            """["'`]([^"'`]+)["'`]""",
-            RegexOption.IGNORE_CASE
-        )
+        val regex =
+            Regex(
+                """["'`]([^"'`]+)["'`]""",
+                RegexOption.IGNORE_CASE
+            )
 
-        quotedUrlRegex.findAll(html)
+        regex
+            .findAll(
+                html
+            )
             .forEach { match ->
 
                 val value =
-                    match.groupValues
+                    match
+                        .groupValues
                         .getOrNull(1)
                         ?.trim()
                         ?: return@forEach
 
                 val cleaned =
-                    cleanEmbeddedValue(value)
+                    cleanEmbeddedValue(
+                        value
+                    )
 
                 if (
                     cleaned.contains(
@@ -567,28 +1295,47 @@ class ClipBox : TmdbProvider() {
         html: String
     ) {
 
-        val interestingLines = html
-            .replace(
-                "><",
-                ">\n<"
+        val lines =
+            html
+                .replace(
+                    "><",
+                    ">\n<"
+                )
+                .split(
+                    '\n'
+                )
+                .filter { line ->
+
+                    val lower =
+                        line.lowercase()
+
+                    lower.contains(
+                        "m3u8"
+                    ) ||
+                        lower.contains(
+                            "playlist"
+                        ) ||
+                        lower.contains(
+                            "hls"
+                        ) ||
+                        lower.contains(
+                            "source"
+                        ) ||
+                        lower.contains(
+                            "stream"
+                        ) ||
+                        lower.contains(
+                            "master"
+                        ) ||
+                        lower.contains(
+                            "video"
+                        )
+                }
+
+        lines
+            .take(
+                100
             )
-            .split('\n')
-            .filter { line ->
-
-                val lower =
-                    line.lowercase()
-
-                lower.contains("m3u8") ||
-                    lower.contains("playlist") ||
-                    lower.contains("hls") ||
-                    lower.contains("source") ||
-                    lower.contains("stream") ||
-                    lower.contains("master") ||
-                    lower.contains("video")
-            }
-
-        interestingLines
-            .take(100)
             .forEachIndexed { index, line ->
 
                 Log.d(
@@ -640,16 +1387,20 @@ class ClipBox : TmdbProvider() {
             candidates
         )
 
-        if (candidates.isEmpty()) {
+        if (
+            candidates.isEmpty()
+        ) {
 
             Log.d(
                 TAG,
-                "No playable stream candidate found."
+                "No playable stream candidate found"
             )
 
             logInterestingHtml(
                 html
             )
+
+            return null
         }
 
         val selected =
@@ -675,9 +1426,11 @@ class ClipBox : TmdbProvider() {
                 )
                 .firstOrNull()
 
-        if (selected != null) {
+        if (
+            selected != null
+        ) {
 
-            Log.d(
+            Log.e(
                 TAG,
                 "SELECTED STREAM = $selected"
             )
@@ -685,15 +1438,10 @@ class ClipBox : TmdbProvider() {
             return selected
         }
 
-        Log.d(
-            TAG,
-            "playlist extraction failed"
-        )
-
         return null
     }
 
-    private fun buildVixsrcPlayerUrl(
+    private fun buildVixsrcUrl(
         tmdbId: Int,
         season: Int?,
         episode: Int?
@@ -711,6 +1459,12 @@ class ClipBox : TmdbProvider() {
             "$VIXSRC_URL/movie/$tmdbId"
         }
     }
+
+    /*
+     * ---------------------------------------------------------
+     * LINKS
+     * ---------------------------------------------------------
+     */
 
     override suspend fun loadLinks(
         data: String,
@@ -734,71 +1488,57 @@ class ClipBox : TmdbProvider() {
             "isCasting=$isCasting"
         )
 
-        var tmdbId: Int? = null
-        var season: Int? = null
-        var episode: Int? = null
-
         val tmdbLink =
-            parseTmdbLink(data)
-
-        if (tmdbLink != null) {
-
-            tmdbId =
-                tmdbLink.tmdbID
-
-            season =
-                tmdbLink.season
-
-            episode =
-                tmdbLink.episode
-
-            Log.d(
-                TAG,
-                "TMDB JSON -> id=$tmdbId season=$season episode=$episode"
+            parseTmdbLink(
+                data
             )
+
+        if (
+            tmdbLink == null
+        ) {
+
+            Log.e(
+                TAG,
+                "TMDB Link could not be parsed"
+            )
+
+            return false
         }
 
-        if (tmdbId == null) {
+        val tmdbId =
+            tmdbLink.tmdbID
 
-            val parsedUrl =
-                parseTmdbUrl(data)
+        if (
+            tmdbId == null
+        ) {
 
-            if (parsedUrl != null) {
+            Log.e(
+                TAG,
+                "TMDB ID is null"
+            )
 
-                tmdbId =
-                    parsedUrl.first
-
-                season =
-                    parsedUrl.second
-
-                episode =
-                    parsedUrl.third
-
-                Log.d(
-                    TAG,
-                    "TMDB URL -> id=$tmdbId season=$season episode=$episode"
-                )
-            }
+            return false
         }
 
-        val id =
-            tmdbId
-                ?: run {
-                    Log.e(
-                        TAG,
-                        "TMDB ID could not be extracted from data"
-                    )
-                    return false
-                }
+        val season =
+            tmdbLink.season
+
+        val episode =
+            tmdbLink.episode
+
+        Log.e(
+            TAG,
+            "TMDB id=$tmdbId season=$season episode=$episode"
+        )
 
         val playerUrl =
-            buildVixsrcPlayerUrl(
-                tmdbId = id,
+            buildVixsrcUrl(
+                tmdbId = tmdbId,
                 season = season,
                 episode = episode
             )
 
-        Log.d(
+        Log.e(
             TAG,
             "loading VixSrc $playerUrl"
         )
@@ -822,7 +1562,7 @@ class ClipBox : TmdbProvider() {
             }.getOrNull()
                 ?: return false
 
-        Log.d(
+        Log.e(
             TAG,
             "VixSrc response code=${response.code}"
         )
@@ -833,7 +1573,7 @@ class ClipBox : TmdbProvider() {
 
             Log.e(
                 TAG,
-                "VixSrc returned HTTP ${response.code}"
+                "VixSrc HTTP error=${response.code}"
             )
 
             return false
@@ -842,12 +1582,14 @@ class ClipBox : TmdbProvider() {
         val html =
             response.text
 
-        Log.d(
+        Log.e(
             TAG,
             "VixSrc HTML length=${html.length}"
         )
 
-        if (html.isBlank()) {
+        if (
+            html.isBlank()
+        ) {
 
             Log.e(
                 TAG,
@@ -869,41 +1611,35 @@ class ClipBox : TmdbProvider() {
             )
                 ?: return false
 
-        Log.d(
+        Log.e(
             TAG,
             "FINAL URL = $finalUrl"
         )
 
-        val looksPlayable =
+        if (
             finalUrl.contains(
-                ".m3u8",
-                ignoreCase = true
-            ) ||
-                finalUrl.contains(
-                    "/playlist/",
-                    ignoreCase = true
-                )
-
-        if (!looksPlayable) {
+                "themoviedb.org",
+                true
+            )
+        ) {
 
             Log.e(
                 TAG,
-                "Final URL does not look playable: $finalUrl"
+                "Rejected TMDB URL"
             )
 
             return false
         }
 
         if (
-            finalUrl.contains(
-                "themoviedb.org",
-                ignoreCase = true
+            !isPlayableStreamUrl(
+                finalUrl
             )
         ) {
 
             Log.e(
                 TAG,
-                "Rejected TMDB URL as stream"
+                "URL is not a playable HLS URL"
             )
 
             return false
@@ -924,11 +1660,13 @@ class ClipBox : TmdbProvider() {
 
             quality =
                 Qualities.Unknown.value
-        }.let(callback)
+        }.let(
+            callback
+        )
 
         Log.e(
             TAG,
-            "VixSrc link successfully sent to CloudStream"
+            "========== VIXSRC LINK SENT =========="
         )
 
         return true
