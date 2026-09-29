@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 import com.lagradost.cloudstream3.ProviderType
 import com.lagradost.cloudstream3.SubtitleFile
