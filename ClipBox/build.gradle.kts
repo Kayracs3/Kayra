@@ -4,7 +4,7 @@ cloudstream {
     description = "Türkiye katalog ve bölüm sağlayıcısı"
     authors = listOf("Kayracs3")
     status = 1
-    tvTypes = listOf("TvSeries")
+    tvTypes = listOf("Movie", "TvSeries")
     language = "tr"
     iconUrl = "https://dizipal1583.com/favicon.ico"
 }
