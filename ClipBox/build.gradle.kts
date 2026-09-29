@@ -2,7 +2,7 @@ version = 1
 
 cloudstream {
     description = "Türkiye katalog ve bölüm sağlayıcısı"
-    authors = listOf("ClipBox")
+    authors = listOf("Kayracs3")
     status = 1
     tvTypes = listOf("TvSeries")
     language = "tr"
