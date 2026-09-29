@@ -45,7 +45,6 @@ class ClipBox : TmdbProvider() {
 
     init {
         Log.e(TAG, "========== CLIPBOX CLASS CREATED ==========")
-        Log.e(TAG, "ClipBox provider instance initialized")
     }
 
     override var name: String = "ClipBox"
@@ -57,6 +56,19 @@ class ClipBox : TmdbProvider() {
     override val hasQuickSearch: Boolean = true
 
     override val providerType = ProviderType.DirectProvider
+
+    /*
+     * KRİTİK:
+     *
+     * TmdbProvider varsayılan olarak false kullanır.
+     * false olduğunda TmdbProvider.load() bizim için
+     * loadFromTmdb/loadFromImdb çağırır ve onlar null döner.
+     *
+     * true olduğunda TmdbProvider kendi TMDB metadata
+     * yükleme sistemini kullanır ve gerçek LoadResponse/Episode
+     * nesnelerini oluşturur.
+     */
+    override val useMetaLoadResponse: Boolean = true
 
     override val supportedTypes: Set<TvType> = setOf(
         TvType.Movie,
@@ -151,39 +163,6 @@ class ClipBox : TmdbProvider() {
             .removeSurrounding("\"")
             .removeSurrounding("'")
             .trim()
-    }
-
-    private fun toVixsrcUrl(
-        value: String
-    ): String {
-
-        val url = cleanEmbeddedValue(value)
-
-        return when {
-
-            url.startsWith(
-                "https://",
-                true
-            ) ||
-                url.startsWith(
-                    "http://",
-                    true
-                ) -> {
-                url
-            }
-
-            url.startsWith("//") -> {
-                "https:$url"
-            }
-
-            url.startsWith("/") -> {
-                "$VIXSRC_URL$url"
-            }
-
-            else -> {
-                "$VIXSRC_URL/${url.trimStart('/')}"
-            }
-        }
     }
 
     private fun extractField(
@@ -288,10 +267,6 @@ class ClipBox : TmdbProvider() {
 
         if (result.startsWith("//")) {
             result = "https:$result"
-        }
-
-        if (result.startsWith("/")) {
-            result = "$VIXSRC_URL$result"
         }
 
         if (
@@ -759,11 +734,6 @@ class ClipBox : TmdbProvider() {
             "isCasting=$isCasting"
         )
 
-        Log.d(
-            TAG,
-            "loadLinks data=$data"
-        )
-
         var tmdbId: Int? = null
         var season: Int? = null
         var episode: Int? = null
@@ -903,25 +873,6 @@ class ClipBox : TmdbProvider() {
             TAG,
             "FINAL URL = $finalUrl"
         )
-
-        if (
-            !finalUrl.startsWith(
-                "https://",
-                true
-            ) &&
-            !finalUrl.startsWith(
-                "http://",
-                true
-            )
-        ) {
-
-            Log.e(
-                TAG,
-                "Final URL is not HTTP/HTTPS"
-            )
-
-            return false
-        }
 
         val looksPlayable =
             finalUrl.contains(
