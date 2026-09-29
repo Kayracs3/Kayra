@@ -148,18 +148,24 @@ class ClipBox : TmdbProvider() {
         ).find(normalized)
 
         if (masterMatch != null) {
-            val startIndex = maxOf(0, masterMatch.range.first - 500)
-            val endIndex = minOf(normalized.length, masterMatch.range.last + 7000)
+            val startIndex = maxOf(0, masterMatch.range.first - 1000)
+            val endIndex = minOf(normalized.length, masterMatch.range.last + 12000)
             val masterBlock = normalized.substring(startIndex, endIndex)
 
             val baseUrl = extractField(masterBlock, "url")
             val token = extractField(masterBlock, "token")
             val expires = extractField(masterBlock, "expires")
 
-            if (!baseUrl.isNullOrBlank() && !token.isNullOrBlank() && !expires.isNullOrBlank()) {
+            // Some current VixSrc responses expose token as an empty string.
+            // That is still a valid playlist response, so token must NOT be
+            // required for extraction. Expires is kept as the required field
+            // because it is part of the signed playlist URL.
+            if (!baseUrl.isNullOrBlank() && !expires.isNullOrBlank()) {
                 var result = toVixsrcUrl(baseUrl)
 
-                if (!result.contains("token=", ignoreCase = true)) {
+                if (!token.isNullOrBlank() &&
+                    !result.contains("token=", ignoreCase = true)
+                ) {
                     result = appendParam(result, "token", token)
                 }
 
@@ -175,6 +181,10 @@ class ClipBox : TmdbProvider() {
                     result = appendParam(result, "lang", "en")
                 }
 
+                println(
+                    "ClipBox: masterPlaylist found " +
+                        "base=$baseUrl tokenPresent=${!token.isNullOrBlank()} expires=$expires stream=$result"
+                )
                 return result
             }
         }
@@ -286,7 +296,14 @@ class ClipBox : TmdbProvider() {
             return false
         }
 
-        val streamUrl = extractMasterPlaylist(response.text) ?: return false
+        println("ClipBox: VixSrc HTML length=${response.text.length}")
+
+        val streamUrl = extractMasterPlaylist(response.text)
+        if (streamUrl.isNullOrBlank()) {
+            println("ClipBox: playlist extraction failed")
+            return false
+        }
+
         val finalUrl = toVixsrcUrl(streamUrl)
 
         if (!finalUrl.startsWith("https://", true) &&
