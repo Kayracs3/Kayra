@@ -1,5 +1,6 @@
-package com.Kayracs3
+package com.neoncs3
 
+import android.util.Log
 import com.lagradost.cloudstream3.ProviderType
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
@@ -12,15 +13,12 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 
-/**
- * ClipBox
- *
- * TMDB is used for catalogue/metadata and episode generation.
- * VixSrc is used for the actual playable stream.
- */
 class ClipBox : TmdbProvider() {
 
     companion object {
+
+        private const val TAG = "ClipBox"
+
         private const val VIXSRC_URL = "https://vixsrc.to"
 
         private const val USER_AGENT =
@@ -33,7 +31,10 @@ class ClipBox : TmdbProvider() {
             "Referer" to "$VIXSRC_URL/",
             "Origin" to VIXSRC_URL,
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language" to "en-US,en;q=0.9"
+            "Accept-Language" to "en-US,en;q=0.9",
+            "Sec-Fetch-Dest" to "document",
+            "Sec-Fetch-Mode" to "navigate",
+            "Sec-Fetch-Site" to "same-origin"
         )
 
         private val STREAM_HEADERS = mapOf(
@@ -50,6 +51,7 @@ class ClipBox : TmdbProvider() {
 
     override val hasMainPage: Boolean = true
     override val hasQuickSearch: Boolean = true
+
     override val providerType = ProviderType.DirectProvider
 
     override val supportedTypes: Set<TvType> = setOf(
@@ -57,199 +59,629 @@ class ClipBox : TmdbProvider() {
         TvType.TvSeries
     )
 
-    /*
-     * This is the important fix.
-     *
-     * TmdbProvider's default load() only returns a LoadResponse when
-     * useMetaLoadResponse is enabled, unless a child provider implements
-     * loadFromTmdb/loadFromImdb itself. ClipBox does not need a separate
-     * metadata provider, so let TmdbProvider build the movie/series response.
-     * This also generates TmdbLink JSON for loadLinks().
-     */
-    override val useMetaLoadResponse: Boolean = true
-
     private fun parseTmdbLink(data: String): TmdbLink? {
         return runCatching {
             parseJson<TmdbLink>(data.trim())
+        }.onFailure {
+            Log.d(TAG, "TMDB JSON parse failed: ${it.message}")
         }.getOrNull()
     }
 
-    private fun cleanEmbeddedValue(value: String): String {
-        return value
-            .replace("\\/", "/")
-            .replace("\\u0026", "&")
-            .replace("&amp;", "&")
-            .replace("&#x26;", "&")
-            .replace("&quot;", "\"")
-            .trim()
-            .removeSurrounding("\"")
-            .removeSurrounding("'")
-    }
+    private fun parseTmdbUrl(data: String): Triple<Int, Int?, Int?>? {
 
-    private fun toVixsrcUrl(value: String): String {
-        val url = cleanEmbeddedValue(value)
-
-        return when {
-            url.startsWith("https://", true) || url.startsWith("http://", true) -> url
-            url.startsWith("//") -> "https:$url"
-            url.startsWith("/") -> "$VIXSRC_URL$url"
-            else -> "$VIXSRC_URL/${url.trimStart('/')}"
-        }
-    }
-
-    private fun appendParam(url: String, key: String, value: String): String {
-        val separator = if (url.contains("?")) "&" else "?"
-        return "$url$separator$key=$value"
-    }
-
-    /**
-     * Extract a field from a JS/JSON block.
-     * Handles both quoted strings and numeric expires values.
-     */
-    private fun extractField(html: String, field: String): String? {
-        val stringPattern = Regex(
-            """(?:[\"']?$field[\"']?)\s*:\s*[\"']([^\"']+)[\"']""",
+        val movie = Regex(
+            """themoviedb\.org/movie/(\d+)""",
             RegexOption.IGNORE_CASE
-        )
-        stringPattern.find(html)?.groupValues?.getOrNull(1)?.let {
-            return cleanEmbeddedValue(it)
+        ).find(data)
+
+        if (movie != null) {
+            val id = movie.groupValues
+                .getOrNull(1)
+                ?.toIntOrNull()
+
+            if (id != null) {
+                return Triple(id, null, null)
+            }
         }
 
-        val assignPattern = Regex(
-            """(?:[\"']?$field[\"']?)\s*=\s*[\"']([^\"']+)[\"']""",
+        val tv = Regex(
+            """themoviedb\.org/tv/(\d+)""",
             RegexOption.IGNORE_CASE
-        )
-        assignPattern.find(html)?.groupValues?.getOrNull(1)?.let {
-            return cleanEmbeddedValue(it)
+        ).find(data)
+
+        if (tv != null) {
+            val id = tv.groupValues
+                .getOrNull(1)
+                ?.toIntOrNull()
+
+            if (id != null) {
+                return Triple(id, null, null)
+            }
         }
 
-        val numberPattern = Regex(
-            """(?:[\"']?$field[\"']?)\s*:\s*(\d+)""",
+        /*
+         * Bazı TMDB data değerlerinde URL yerine doğrudan
+         * ID bulunabiliyor.
+         */
+        val directId = Regex(
+            """(?:tmdb(?:id)?|id)\s*[:=]\s*["']?(\d{3,10})""",
             RegexOption.IGNORE_CASE
-        )
-        numberPattern.find(html)?.groupValues?.getOrNull(1)?.let {
-            return cleanEmbeddedValue(it)
+        ).find(data)
+
+        if (directId != null) {
+            val id = directId.groupValues
+                .getOrNull(1)
+                ?.toIntOrNull()
+
+            if (id != null) {
+                return Triple(id, null, null)
+            }
         }
 
         return null
     }
 
-    /**
-     * VixSrc exposes the playable playlist through window.masterPlaylist.
-     * Current format uses url + token + expires; direct playlist URLs are
-     * supported as a fallback.
-     */
-    private fun extractMasterPlaylist(html: String): String? {
-        val normalized = cleanEmbeddedValue(html)
+    private fun cleanEmbeddedValue(value: String): String {
 
-        val masterMatch = Regex(
-            """masterPlaylist""",
-            RegexOption.IGNORE_CASE
-        ).find(normalized)
+        return value
+            .replace("\\/", "/")
+            .replace("\\u002F", "/")
+            .replace("\\u002f", "/")
+            .replace("\\u003A", ":")
+            .replace("\\u003a", ":")
+            .replace("\\u0026", "&")
+            .replace("\\u003F", "?")
+            .replace("\\u003f", "?")
+            .replace("\\u003D", "=")
+            .replace("\\u003d", "=")
+            .replace("&amp;", "&")
+            .replace("&#x26;", "&")
+            .replace("&#38;", "&")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&apos;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .trim()
+            .removeSurrounding("\"")
+            .removeSurrounding("'")
+            .trim()
+    }
 
-        if (masterMatch != null) {
-            val startIndex = maxOf(0, masterMatch.range.first - 1000)
-            val endIndex = minOf(normalized.length, masterMatch.range.last + 12000)
-            val masterBlock = normalized.substring(startIndex, endIndex)
+    private fun normalizeUrl(value: String): String? {
 
-            val baseUrl = extractField(masterBlock, "url")
-            val token = extractField(masterBlock, "token")
-            val expires = extractField(masterBlock, "expires")
+        var url = cleanEmbeddedValue(value)
 
-            // Some current VixSrc responses expose token as an empty string.
-            // That is still a valid playlist response, so token must NOT be
-            // required for extraction. Expires is kept as the required field
-            // because it is part of the signed playlist URL.
-            if (!baseUrl.isNullOrBlank() && !expires.isNullOrBlank()) {
-                var result = toVixsrcUrl(baseUrl)
+        url = url
+            .replace("\\/", "/")
+            .replace("\n", "")
+            .replace("\r", "")
+            .trim()
 
-                if (!token.isNullOrBlank() &&
-                    !result.contains("token=", ignoreCase = true)
-                ) {
-                    result = appendParam(result, "token", token)
-                }
-
-                if (!result.contains("expires=", ignoreCase = true)) {
-                    result = appendParam(result, "expires", expires)
-                }
-
-                if (!result.contains("h=", ignoreCase = true)) {
-                    result = appendParam(result, "h", "1")
-                }
-
-                if (!result.contains("lang=", ignoreCase = true)) {
-                    result = appendParam(result, "lang", "en")
-                }
-
-                println(
-                    "ClipBox: masterPlaylist found " +
-                        "base=$baseUrl tokenPresent=${!token.isNullOrBlank()} expires=$expires stream=$result"
-                )
-                return result
-            }
+        if (url.startsWith("//")) {
+            url = "https:$url"
         }
 
-        // Fallback: direct .m3u8 / playlist URL embedded in page source.
-        val directPatterns = listOf(
+        if (url.startsWith("/")) {
+            url = "$VIXSRC_URL$url"
+        }
+
+        if (!url.startsWith("http://", true) &&
+            !url.startsWith("https://", true)
+        ) {
+            return null
+        }
+
+        return url
+    }
+
+    private fun extractField(
+        html: String,
+        field: String
+    ): String? {
+
+        val patterns = listOf(
+
             Regex(
-                """https?://[^\s\"'<>]+\.m3u8(?:\?[^\s\"'<>]*)?""",
+                """["']?$field["']?\s*:\s*["']([^"']+)["']""",
                 RegexOption.IGNORE_CASE
             ),
+
             Regex(
-                """https?://[^\s\"'<>]+/playlist/[^\s\"'<>]+""",
+                """["']?$field["']?\s*=\s*["']([^"']+)["']""",
+                RegexOption.IGNORE_CASE
+            ),
+
+            Regex(
+                """["']?$field["']?\s*:\s*`([^`]+)`""",
+                RegexOption.IGNORE_CASE
+            ),
+
+            Regex(
+                """["']?$field["']?\s*=\s*`([^`]+)`""",
+                RegexOption.IGNORE_CASE
+            ),
+
+            Regex(
+                """["']?$field["']?\s*:\s*([^,\}\n]+)""",
                 RegexOption.IGNORE_CASE
             )
         )
 
-        for (pattern in directPatterns) {
-            val found = pattern.find(normalized)
-                ?.value
-                ?.trimEnd(')', ']', '}', ';', ',')
+        for (pattern in patterns) {
 
-            if (found.isNullOrBlank()) continue
+            val value = pattern
+                .find(html)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.trim()
 
-            var result = cleanEmbeddedValue(found)
+            if (!value.isNullOrBlank()) {
 
-            if (result.contains("/playlist/", true)) {
-                if (!result.contains("h=", true)) {
-                    result = appendParam(result, "h", "1")
-                }
-                if (!result.contains("lang=", true)) {
-                    result = appendParam(result, "lang", "en")
+                val cleaned = cleanEmbeddedValue(value)
+
+                if (cleaned.isNotBlank()) {
+                    return cleaned
                 }
             }
-
-            return result
         }
 
-        // Last fallback: inspect script blocks separately for escaped URLs.
-        val scriptRegex = Regex(
-            """<script[^>]*>(.*?)</script>""",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        return null
+    }
+
+    private fun isPlayableStreamUrl(url: String): Boolean {
+
+        val value = url.lowercase()
+
+        if (value.contains(".m3u8")) {
+            return true
+        }
+
+        if (value.contains("/playlist/")) {
+            return true
+        }
+
+        if (value.contains("/hls/") &&
+            (
+                value.contains("master") ||
+                    value.contains("playlist") ||
+                    value.contains(".m3u")
+                )
+        ) {
+            return true
+        }
+
+        return false
+    }
+
+    private fun cleanStreamUrl(url: String): String? {
+
+        var result = cleanEmbeddedValue(url)
+
+        result = result
+            .trim()
+            .trimEnd(
+                ')',
+                ']',
+                '}',
+                ';',
+                ',',
+                '.'
+            )
+
+        result = result.replace(
+            Regex("""["']+$"""),
+            ""
         )
 
-        val urlRegex = Regex(
-            """https?://[^\s\"'<>]+(?:\.m3u8|/playlist/)[^\s\"'<>]*""",
+        if (result.startsWith("//")) {
+            result = "https:$result"
+        }
+
+        if (result.startsWith("/")) {
+            result = "$VIXSRC_URL$result"
+        }
+
+        if (!result.startsWith("http://", true) &&
+            !result.startsWith("https://", true)
+        ) {
+            return null
+        }
+
+        return result
+    }
+
+    private fun addCandidate(
+        list: MutableList<String>,
+        value: String?
+    ) {
+
+        if (value.isNullOrBlank()) return
+
+        val cleaned = cleanStreamUrl(value) ?: return
+
+        if (!isPlayableStreamUrl(cleaned)) return
+
+        if (cleaned.contains("themoviedb.org", true)) return
+
+        if (cleaned.contains("image", true) &&
+            !cleaned.contains(".m3u8", true)
+        ) {
+            return
+        }
+
+        if (!list.contains(cleaned)) {
+            list.add(cleaned)
+            Log.d(TAG, "STREAM CANDIDATE = $cleaned")
+        }
+    }
+
+    private fun extractAbsoluteStreamUrls(
+        html: String,
+        candidates: MutableList<String>
+    ) {
+
+        /*
+         * En önemli arama:
+         *
+         * https://....m3u8
+         * https://....m3u8?token=...
+         *
+         * veya
+         *
+         * https://.../playlist/...
+         */
+        val patterns = listOf(
+
+            Regex(
+                """https?://[^"'<>\\\s]+?\.m3u8(?:\?[^"'<>\\\s]*)?""",
+                RegexOption.IGNORE_CASE
+            ),
+
+            Regex(
+                """https?://[^"'<>\\\s]+?/playlist/[^"'<>\\\s]+""",
+                RegexOption.IGNORE_CASE
+            ),
+
+            Regex(
+                """https?:\\/\\/[^"'<>\\\s]+?\\.m3u8(?:\?[^"'<>\\\s]*)?""",
+                RegexOption.IGNORE_CASE
+            ),
+
+            Regex(
+                """https?:\\/\\/[^"'<>\\\s]+?\\/playlist\\/[^"'<>\\\s]+""",
+                RegexOption.IGNORE_CASE
+            )
+        )
+
+        for (pattern in patterns) {
+
+            pattern.findAll(html).forEach { match ->
+                addCandidate(
+                    candidates,
+                    match.value
+                )
+            }
+        }
+    }
+
+    private fun extractRelativeStreamUrls(
+        html: String,
+        candidates: MutableList<String>
+    ) {
+
+        val patterns = listOf(
+
+            Regex(
+                """["'`](/[^"'`\\\s]*\.m3u8(?:\?[^"'`\\\s]*)?)["'`]""",
+                RegexOption.IGNORE_CASE
+            ),
+
+            Regex(
+                """["'`](/[^"'`\\\s]*/playlist/[^"'`\\\s]*)["'`]""",
+                RegexOption.IGNORE_CASE
+            ),
+
+            Regex(
+                """["'`]([^"'`\\\s]*?/playlist/[^"'`\\\s]*)["'`]""",
+                RegexOption.IGNORE_CASE
+            )
+        )
+
+        for (pattern in patterns) {
+
+            pattern.findAll(html).forEach { match ->
+                addCandidate(
+                    candidates,
+                    match.groupValues.getOrNull(1)
+                )
+            }
+        }
+    }
+
+    private fun extractByFieldNames(
+        html: String,
+        candidates: MutableList<String>
+    ) {
+
+        /*
+         * VixSrc player yapısı değiştiğinde
+         * masterPlaylist adı değişebilir.
+         *
+         * Bu yüzden farklı JS değişkenlerini
+         * ayrı ayrı tarıyoruz.
+         */
+        val fieldNames = listOf(
+            "masterPlaylist",
+            "master_playlist",
+            "playlist",
+            "playlistUrl",
+            "playlistURL",
+            "playlist_url",
+            "m3u8",
+            "m3u8Url",
+            "m3u8URL",
+            "m3u8_url",
+            "hls",
+            "hlsUrl",
+            "hlsURL",
+            "hls_url",
+            "stream",
+            "streamUrl",
+            "streamURL",
+            "stream_url",
+            "source",
+            "sourceUrl",
+            "sourceURL",
+            "source_url",
+            "file",
+            "fileUrl",
+            "fileURL",
+            "file_url",
+            "src",
+            "videoUrl",
+            "videoURL",
+            "video_url",
+            "playUrl",
+            "playURL",
+            "play_url"
+        )
+
+        for (field in fieldNames) {
+
+            val value = extractField(
+                html = html,
+                field = field
+            )
+
+            if (!value.isNullOrBlank()) {
+
+                Log.d(
+                    TAG,
+                    "FIELD [$field] = $value"
+                )
+
+                addCandidate(
+                    candidates,
+                    value
+                )
+            }
+        }
+    }
+
+    private fun extractScriptStreams(
+        html: String,
+        candidates: MutableList<String>
+    ) {
+
+        val scriptRegex = Regex(
+            """<script[^>]*>(.*?)</script>""",
+            setOf(
+                RegexOption.IGNORE_CASE,
+                RegexOption.DOT_MATCHES_ALL
+            )
+        )
+
+        scriptRegex.findAll(html).forEachIndexed { index, match ->
+
+            val script = match
+                .groupValues
+                .getOrNull(1)
+                .orEmpty()
+
+            if (script.isBlank()) return@forEachIndexed
+
+            Log.d(
+                TAG,
+                "SCRIPT[$index] length=${script.length}"
+            )
+
+            /*
+             * Script içerisinde direkt HLS URL'si.
+             */
+            extractAbsoluteStreamUrls(
+                script,
+                candidates
+            )
+
+            extractRelativeStreamUrls(
+                script,
+                candidates
+            )
+
+            /*
+             * Script alanlarını tekrar tara.
+             */
+            extractByFieldNames(
+                script,
+                candidates
+            )
+        }
+    }
+
+    private fun extractQuotedUrls(
+        html: String,
+        candidates: MutableList<String>
+    ) {
+
+        val quotedUrlRegex = Regex(
+            """["'`]([^"'`]+)["'`]""",
             RegexOption.IGNORE_CASE
         )
 
-        scriptRegex.findAll(html).forEach { match ->
-            val script = cleanEmbeddedValue(match.groupValues.getOrNull(1).orEmpty())
-            val found = urlRegex.find(script)?.value
-                ?.trimEnd(')', ']', '}', ';', ',')
+        quotedUrlRegex.findAll(html).forEach { match ->
+
+            val value = match
+                .groupValues
+                .getOrNull(1)
+                ?.trim()
                 ?: return@forEach
 
-            var result = found
-            if (result.contains("/playlist/", true)) {
-                if (!result.contains("h=", true)) {
-                    result = appendParam(result, "h", "1")
-                }
-                if (!result.contains("lang=", true)) {
-                    result = appendParam(result, "lang", "en")
-                }
+            val cleaned = cleanEmbeddedValue(value)
+
+            if (
+                cleaned.contains(".m3u8", true) ||
+                cleaned.contains("/playlist/", true)
+            ) {
+                addCandidate(
+                    candidates,
+                    cleaned
+                )
             }
-            return result
         }
+    }
+
+    private fun extractMasterPlaylist(
+        html: String
+    ): String? {
+
+        Log.d(
+            TAG,
+            "Starting VixSrc stream extraction..."
+        )
+
+        Log.d(
+            TAG,
+            "HTML length=${html.length}"
+        )
+
+        val candidates = mutableListOf<String>()
+
+        /*
+         * 1. Direkt HTML URL taraması.
+         */
+        extractAbsoluteStreamUrls(
+            html,
+            candidates
+        )
+
+        /*
+         * 2. Relative URL taraması.
+         */
+        extractRelativeStreamUrls(
+            html,
+            candidates
+        )
+
+        /*
+         * 3. Bilinen JS alanları.
+         */
+        extractByFieldNames(
+            html,
+            candidates
+        )
+
+        /*
+         * 4. Script blokları.
+         */
+        extractScriptStreams(
+            html,
+            candidates
+        )
+
+        /*
+         * 5. Son fallback:
+         * tüm quoted değerleri tara.
+         */
+        extractQuotedUrls(
+            html,
+            candidates
+        )
+
+        /*
+         * Eğer hiçbir şey çıkmadıysa,
+         * HTML'nin stream ile ilgili bölümlerini
+         * Logcat'e yaz.
+         *
+         * Böylece VixSrc yapısı tekrar değişirse
+         * extractor'ı kolayca güncelleyebiliriz.
+         */
+        if (candidates.isEmpty()) {
+
+            Log.d(
+                TAG,
+                "No playable stream candidate found."
+            )
+
+            val interestingLines = html
+                .replace("><", ">\n<")
+                .split('\n')
+                .filter { line ->
+
+                    val lower = line.lowercase()
+
+                    lower.contains("m3u8") ||
+                        lower.contains("playlist") ||
+                        lower.contains("hls") ||
+                        lower.contains("source") ||
+                        lower.contains("stream") ||
+                        lower.contains("master") ||
+                        lower.contains("video")
+                }
+
+            interestingLines
+                .take(80)
+                .forEachIndexed { index, line ->
+
+                    Log.d(
+                        TAG,
+                        "INTERESTING[$index]=${line.take(1000)}"
+                    )
+                }
+        }
+
+        /*
+         * En öncelikli adaylar:
+         *
+         * 1. m3u8
+         * 2. playlist
+         */
+        val selected = candidates
+            .sortedWith(
+                compareByDescending<String> {
+                    when {
+                        it.contains(".m3u8", true) -> 3
+                        it.contains("/playlist/", true) -> 2
+                        else -> 1
+                    }
+                }
+            )
+            .firstOrNull()
+
+        if (selected != null) {
+
+            Log.d(
+                TAG,
+                "SELECTED STREAM = $selected"
+            )
+
+            return selected
+        }
+
+        Log.d(
+            TAG,
+            "playlist extraction failed"
+        )
 
         return null
     }
@@ -259,9 +691,16 @@ class ClipBox : TmdbProvider() {
         season: Int?,
         episode: Int?
     ): String {
-        return if (season != null && episode != null) {
+
+        return if (
+            season != null &&
+            episode != null
+        ) {
+
             "$VIXSRC_URL/tv/$tmdbId/$season/$episode"
+
         } else {
+
             "$VIXSRC_URL/movie/$tmdbId"
         }
     }
@@ -272,68 +711,242 @@ class ClipBox : TmdbProvider() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val tmdbLink = parseTmdbLink(data) ?: return false
-        val tmdbId = tmdbLink.tmdbID ?: return false
-        val playerUrl = buildVixsrcPlayerUrl(
-            tmdbId = tmdbId,
-            season = tmdbLink.season,
-            episode = tmdbLink.episode
+
+        Log.d(
+            TAG,
+            "loadLinks data=$data"
         )
 
-        println("ClipBox: loading VixSrc $playerUrl")
+        var tmdbId: Int? = null
+        var season: Int? = null
+        var episode: Int? = null
+
+        /*
+         * Önce CloudStream'in standart
+         * TmdbLink JSON formatını deniyoruz.
+         */
+        val tmdbLink = parseTmdbLink(data)
+
+        if (tmdbLink != null) {
+
+            tmdbId = tmdbLink.tmdbID
+            season = tmdbLink.season
+            episode = tmdbLink.episode
+
+            Log.d(
+                TAG,
+                "TMDB JSON -> id=$tmdbId season=$season episode=$episode"
+            )
+        }
+
+        /*
+         * JSON değilse URL içerisinden TMDB ID bul.
+         */
+        if (tmdbId == null) {
+
+            val parsedUrl = parseTmdbUrl(data)
+
+            if (parsedUrl != null) {
+
+                tmdbId = parsedUrl.first
+                season = parsedUrl.second
+                episode = parsedUrl.third
+
+                Log.d(
+                    TAG,
+                    "TMDB URL -> id=$tmdbId season=$season episode=$episode"
+                )
+            }
+        }
+
+        val id = tmdbId
+
+        if (id == null) {
+
+            Log.d(
+                TAG,
+                "TMDB ID not found"
+            )
+
+            return false
+        }
+
+        val playerUrl = buildVixsrcPlayerUrl(
+            tmdbId = id,
+            season = season,
+            episode = episode
+        )
+
+        Log.d(
+            TAG,
+            "loading VixSrc $playerUrl"
+        )
 
         val response = runCatching {
+
             app.get(
                 url = playerUrl,
-                headers = VIXSRC_HEADERS,
-                referer = "$VIXSRC_URL/",
-                allowRedirects = true,
+                headers = VIXSRC_HEADERS
             )
-        }.getOrNull() ?: return false
+
+        }.onFailure {
+
+            Log.d(
+                TAG,
+                "VixSrc request failed: ${it.message}"
+            )
+
+        }.getOrNull()
+
+        if (response == null) {
+
+            Log.d(
+                TAG,
+                "VixSrc response is null"
+            )
+
+            return false
+        }
+
+        Log.d(
+            TAG,
+            "VixSrc response code=${response.code}"
+        )
 
         if (response.code !in 200..399) {
-            println("ClipBox: VixSrc HTTP ${response.code}")
+
+            Log.d(
+                TAG,
+                "VixSrc HTTP error ${response.code}"
+            )
+
             return false
         }
 
-        println("ClipBox: VixSrc HTML length=${response.text.length}")
+        val html = response.text
 
-        val streamUrl = extractMasterPlaylist(response.text)
+        Log.d(
+            TAG,
+            "VixSrc HTML length=${html.length}"
+        )
+
+        if (html.isBlank()) {
+
+            Log.d(
+                TAG,
+                "VixSrc HTML empty"
+            )
+
+            return false
+        }
+
+        val streamUrl = extractMasterPlaylist(
+            html
+        )
+
         if (streamUrl.isNullOrBlank()) {
-            println("ClipBox: playlist extraction failed")
+
+            Log.d(
+                TAG,
+                "No VixSrc playable stream found"
+            )
+
             return false
         }
 
-        val finalUrl = toVixsrcUrl(streamUrl)
+        val finalUrl = cleanStreamUrl(
+            streamUrl
+        )
 
-        if (!finalUrl.startsWith("https://", true) &&
-            !finalUrl.startsWith("http://", true)
+        if (finalUrl.isNullOrBlank()) {
+
+            Log.d(
+                TAG,
+                "Final stream URL invalid"
+            )
+
+            return false
+        }
+
+        Log.d(
+            TAG,
+            "FINAL URL = $finalUrl"
+        )
+
+        if (!finalUrl.startsWith(
+                "https://",
+                true
+            ) &&
+            !finalUrl.startsWith(
+                "http://",
+                true
+            )
         ) {
+
+            Log.d(
+                TAG,
+                "Final URL is not HTTP/HTTPS"
+            )
+
             return false
         }
 
-        if (!finalUrl.contains(".m3u8", ignoreCase = true) &&
-            !finalUrl.contains("/playlist/", ignoreCase = true)
+        val looksPlayable =
+            finalUrl.contains(
+                ".m3u8",
+                ignoreCase = true
+            ) ||
+                finalUrl.contains(
+                    "/playlist/",
+                    ignoreCase = true
+                )
+
+        if (!looksPlayable) {
+
+            Log.d(
+                TAG,
+                "Final URL does not look like HLS"
+            )
+
+            return false
+        }
+
+        if (
+            finalUrl.contains(
+                "themoviedb.org",
+                ignoreCase = true
+            )
         ) {
+
+            Log.d(
+                TAG,
+                "Rejected TMDB URL"
+            )
+
             return false
         }
 
-        if (finalUrl.contains("themoviedb.org", ignoreCase = true)) {
-            return false
-        }
-
-        println("ClipBox: stream=$finalUrl")
-
+        /*
+         * CloudStream'e HLS linkini gönder.
+         */
         newExtractorLink(
             source = name,
             name = "ClipBox • VixSrc",
             url = finalUrl,
             type = ExtractorLinkType.M3U8
         ) {
+
             referer = "$VIXSRC_URL/"
+
             headers = STREAM_HEADERS
+
             quality = Qualities.Unknown.value
         }.let(callback)
+
+        Log.d(
+            TAG,
+            "VixSrc link successfully sent to CloudStream"
+        )
 
         return true
     }
