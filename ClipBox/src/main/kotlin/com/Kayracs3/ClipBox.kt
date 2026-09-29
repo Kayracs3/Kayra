@@ -1,24 +1,16 @@
 package com.Kayracs3
 
 import android.util.Log
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.databind.JsonNode
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.ProviderType
-import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
-import com.lagradost.cloudstream3.addDate
-import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.mapper
+import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.metaproviders.TmdbLink
 import com.lagradost.cloudstream3.metaproviders.TmdbProvider
-import com.lagradost.cloudstream3.newEpisode
-import com.lagradost.cloudstream3.newMovieLoadResponse
-import com.lagradost.cloudstream3.newTvSeriesLoadResponse
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
-import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
@@ -30,161 +22,19 @@ class ClipBox : TmdbProvider() {
 
         private const val TAG = "ClipBox"
 
-        private const val TMDB_API_URL =
-            "https://api.themoviedb.org/3"
-
-        private const val TMDB_API_KEY =
-            "e6333b32409e02a4a6eba6fb7ff866bb"
-
         private const val VIXSRC_URL =
             "https://vixsrc.to"
 
-        private const val USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 13; Pixel 7) " +
-                "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                "Chrome/153.0.0.0 Mobile Safari/537.36"
+        private const val DEFAULT_TIMEOUT =
+            60000L
 
         private val VIXSRC_HEADERS = mapOf(
             "User-Agent" to USER_AGENT,
             "Referer" to "$VIXSRC_URL/",
             "Origin" to VIXSRC_URL,
-            "Accept" to "application/json,text/plain,text/html,*/*",
-            "Accept-Language" to "en-US,en;q=0.9"
-        )
-
-        private val STREAM_HEADERS = mapOf(
-            "User-Agent" to USER_AGENT,
-            "Referer" to "$VIXSRC_URL/",
-            "Origin" to VIXSRC_URL,
-            "Accept" to "*/*",
-            "Accept-Language" to "en-US,en;q=0.9"
-        )
-
-        private data class TmdbGenre(
-            @JsonProperty("id")
-            val id: Int? = null,
-
-            @JsonProperty("name")
-            val name: String? = null
-        )
-
-        private data class TmdbMovieResponse(
-            @JsonProperty("id")
-            val id: Int? = null,
-
-            @JsonProperty("title")
-            val title: String? = null,
-
-            @JsonProperty("original_title")
-            val originalTitle: String? = null,
-
-            @JsonProperty("overview")
-            val overview: String? = null,
-
-            @JsonProperty("poster_path")
-            val posterPath: String? = null,
-
-            @JsonProperty("backdrop_path")
-            val backdropPath: String? = null,
-
-            @JsonProperty("release_date")
-            val releaseDate: String? = null,
-
-            @JsonProperty("vote_average")
-            val voteAverage: Double? = null,
-
-            @JsonProperty("runtime")
-            val runtime: Int? = null,
-
-            @JsonProperty("genres")
-            val genres: List<TmdbGenre>? = null
-        )
-
-        private data class TmdbTvResponse(
-            @JsonProperty("id")
-            val id: Int? = null,
-
-            @JsonProperty("name")
-            val name: String? = null,
-
-            @JsonProperty("original_name")
-            val originalName: String? = null,
-
-            @JsonProperty("overview")
-            val overview: String? = null,
-
-            @JsonProperty("poster_path")
-            val posterPath: String? = null,
-
-            @JsonProperty("backdrop_path")
-            val backdropPath: String? = null,
-
-            @JsonProperty("first_air_date")
-            val firstAirDate: String? = null,
-
-            @JsonProperty("vote_average")
-            val voteAverage: Double? = null,
-
-            @JsonProperty("episode_run_time")
-            val episodeRunTime: List<Int>? = null,
-
-            @JsonProperty("genres")
-            val genres: List<TmdbGenre>? = null,
-
-            @JsonProperty("seasons")
-            val seasons: List<TmdbSeason>? = null
-        )
-
-        private data class TmdbSeason(
-            @JsonProperty("id")
-            val id: Int? = null,
-
-            @JsonProperty("season_number")
-            val seasonNumber: Int? = null,
-
-            @JsonProperty("episode_count")
-            val episodeCount: Int? = null
-        )
-
-        private data class TmdbSeasonResponse(
-            @JsonProperty("season_number")
-            val seasonNumber: Int? = null,
-
-            @JsonProperty("episodes")
-            val episodes: List<TmdbEpisode>? = null
-        )
-
-        private data class TmdbEpisode(
-            @JsonProperty("id")
-            val id: Int? = null,
-
-            @JsonProperty("name")
-            val name: String? = null,
-
-            @JsonProperty("overview")
-            val overview: String? = null,
-
-            @JsonProperty("episode_number")
-            val episodeNumber: Int? = null,
-
-            @JsonProperty("season_number")
-            val seasonNumber: Int? = null,
-
-            @JsonProperty("still_path")
-            val stillPath: String? = null,
-
-            @JsonProperty("air_date")
-            val airDate: String? = null,
-
-            @JsonProperty("vote_average")
-            val voteAverage: Double? = null
-        )
-    }
-
-    init {
-        Log.e(
-            TAG,
-            "========== CLIPBOX CLASS CREATED =========="
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language" to "en-US,en;q=0.9",
+            "Cache-Control" to "no-cache"
         )
     }
 
@@ -211,136 +61,34 @@ class ClipBox : TmdbProvider() {
         )
 
     /*
+     * TmdbProvider'ın kendi TMDB metadata sistemini kullanıyoruz.
+     *
+     * Böylece:
+     * - film bilgileri
+     * - dizi bilgileri
+     * - bölümler
+     * - posterler
+     * - puanlar
+     * - oyuncular
+     * - fragmanlar
+     *
+     * TmdbProvider tarafından alınmaya devam eder.
+     */
+    override val useMetaLoadResponse: Boolean =
+        true
+
+    init {
+        Log.e(
+            TAG,
+            "========== CLIPBOX CLASS CREATED =========="
+        )
+    }
+
+    /*
      * =========================================================
-     * TMDB
+     * LOAD
      * =========================================================
      */
-
-    private fun posterUrl(
-        path: String?
-    ): String? {
-
-        if (path.isNullOrBlank()) {
-            return null
-        }
-
-        return if (
-            path.startsWith(
-                "http://",
-                true
-            ) ||
-            path.startsWith(
-                "https://",
-                true
-            )
-        ) {
-            path
-        } else {
-            "https://image.tmdb.org/t/p/w500$path"
-        }
-    }
-
-    private fun backdropUrl(
-        path: String?
-    ): String? {
-
-        if (path.isNullOrBlank()) {
-            return null
-        }
-
-        return if (
-            path.startsWith(
-                "http://",
-                true
-            ) ||
-            path.startsWith(
-                "https://",
-                true
-            )
-        ) {
-            path
-        } else {
-            "https://image.tmdb.org/t/p/w1280$path"
-        }
-    }
-
-    private suspend fun tmdbGet(
-        path: String,
-        extraParams: Map<String, String> = emptyMap()
-    ): String {
-
-        val params = buildMap {
-
-            put(
-                "api_key",
-                TMDB_API_KEY
-            )
-
-            putAll(
-                extraParams
-            )
-        }
-
-        Log.d(
-            TAG,
-            "TMDB GET $path"
-        )
-
-        return app.get(
-            url = "$TMDB_API_URL$path",
-            params = params
-        ).text
-    }
-
-    private fun parseTmdbId(
-        url: String
-    ): Pair<Int, Boolean>? {
-
-        val match = Regex(
-            """themoviedb\.org/(movie|tv)/(\d+)""",
-            RegexOption.IGNORE_CASE
-        ).find(url)
-            ?: return null
-
-        val type =
-            match.groupValues
-                .getOrNull(1)
-                .orEmpty()
-
-        val id =
-            match.groupValues
-                .getOrNull(2)
-                ?.toIntOrNull()
-                ?: return null
-
-        return Pair(
-            id,
-            type.equals(
-                "tv",
-                true
-            )
-        )
-    }
-
-    private fun parseTmdbLink(
-        data: String
-    ): TmdbLink? {
-
-        return runCatching {
-
-            parseJson<TmdbLink>(
-                data.trim()
-            )
-
-        }.onFailure {
-
-            Log.e(
-                TAG,
-                "TMDB data parse failed: ${it.message}"
-            )
-
-        }.getOrNull()
-    }
 
     override suspend fun load(
         url: String
@@ -356,37 +104,17 @@ class ClipBox : TmdbProvider() {
             "LOAD URL = $url"
         )
 
-        val parsed =
-            parseTmdbId(url)
+        return try {
 
-        if (parsed == null) {
+            val result =
+                super.load(url)
 
             Log.e(
                 TAG,
-                "TMDB ID could not be parsed"
+                "TMDB LOAD RESULT = ${result?.name}"
             )
 
-            return null
-        }
-
-        val tmdbId =
-            parsed.first
-
-        val isTv =
-            parsed.second
-
-        Log.e(
-            TAG,
-            "TMDB ID=$tmdbId isTv=$isTv"
-        )
-
-        return try {
-
-            if (isTv) {
-                loadTv(tmdbId)
-            } else {
-                loadMovie(tmdbId)
-            }
+            result
 
         } catch (throwable: Throwable) {
 
@@ -400,489 +128,43 @@ class ClipBox : TmdbProvider() {
         }
     }
 
-    private suspend fun loadMovie(
-        tmdbId: Int
-    ): LoadResponse? {
+    /*
+     * =========================================================
+     * VIXSRC URL
+     * =========================================================
+     */
 
-        Log.e(
-            TAG,
-            "Loading TMDB movie $tmdbId"
-        )
+    private fun buildVixsrcUrl(
+        tmdbId: Int,
+        season: Int?,
+        episode: Int?
+    ): String {
 
-        val json =
-            tmdbGet(
-                "/movie/$tmdbId",
-                mapOf(
-                    "language" to "en-US"
-                )
-            )
-
-        val movie =
-            parseJson<TmdbMovieResponse>(
-                json
-            )
-
-        val title =
-            movie.title
-                ?: movie.originalTitle
-                ?: return null
-
-        val year =
-            movie.releaseDate
-                ?.take(4)
-                ?.toIntOrNull()
-
-        val genres =
-            movie.genres
-                ?.mapNotNull {
-                    it.name
-                }
-
-        return newMovieLoadResponse(
-            name = title,
-            url = "https://www.themoviedb.org/movie/$tmdbId",
-            type = TvType.Movie,
-            data = TmdbLink(
-                imdbID = null,
-                tmdbID = tmdbId,
-                episode = null,
-                season = null,
-                movieName = title
-            )
+        return if (
+            season != null &&
+            episode != null
         ) {
 
-            posterUrl =
-                posterUrl(
-                    movie.posterPath
-                )
+            "$VIXSRC_URL/tv/$tmdbId/$season/$episode"
 
-            backgroundPosterUrl =
-                backdropUrl(
-                    movie.backdropPath
-                )
+        } else {
 
-            this.year =
-                year
-
-            plot =
-                movie.overview
-
-            score =
-                Score.from10(
-                    movie.voteAverage
-                )
-
-            tags =
-                genres
-
-            duration =
-                movie.runtime
-        }
-    }
-
-    private suspend fun loadTv(
-        tmdbId: Int
-    ): LoadResponse? {
-
-        Log.e(
-            TAG,
-            "Loading TMDB TV $tmdbId"
-        )
-
-        val json =
-            tmdbGet(
-                "/tv/$tmdbId",
-                mapOf(
-                    "language" to "en-US"
-                )
-            )
-
-        val tv =
-            parseJson<TmdbTvResponse>(
-                json
-            )
-
-        val title =
-            tv.name
-                ?: tv.originalName
-                ?: return null
-
-        val episodes =
-            mutableListOf<Episode>()
-
-        val seasons =
-            tv.seasons
-                ?.filter {
-                    (it.seasonNumber ?: 0) > 0
-                }
-                .orEmpty()
-
-        Log.e(
-            TAG,
-            "TV $title seasons=${seasons.size}"
-        )
-
-        for (seasonInfo in seasons) {
-
-            val seasonNumber =
-                seasonInfo.seasonNumber
-                    ?: continue
-
-            Log.d(
-                TAG,
-                "Loading season $seasonNumber"
-            )
-
-            try {
-
-                val seasonJson =
-                    tmdbGet(
-                        "/tv/$tmdbId/season/$seasonNumber",
-                        mapOf(
-                            "language" to "en-US"
-                        )
-                    )
-
-                val seasonData =
-                    parseJson<TmdbSeasonResponse>(
-                        seasonJson
-                    )
-
-                seasonData.episodes
-                    .orEmpty()
-                    .forEach { episodeData ->
-
-                        val epNo =
-                            episodeData.episodeNumber
-                                ?: return@forEach
-
-                        val actualSeason =
-                            episodeData.seasonNumber
-                                ?: seasonNumber
-
-                        val episodeName =
-                            episodeData.name
-                                ?: "Bölüm $epNo"
-
-                        val link =
-                            TmdbLink(
-                                imdbID = null,
-                                tmdbID = tmdbId,
-                                episode = epNo,
-                                season = actualSeason,
-                                movieName = title
-                            )
-
-                        val episodeItem =
-                            newEpisode(
-                                link.toJson()
-                            ) {
-
-                                this.name =
-                                    episodeName
-
-                                this.season =
-                                    actualSeason
-
-                                this.episode =
-                                    epNo
-
-                                this.posterUrl =
-                                    posterUrl(
-                                        episodeData.stillPath
-                                    )
-
-                                this.description =
-                                    episodeData.overview
-
-                                this.score =
-                                    Score.from10(
-                                        episodeData.voteAverage
-                                    )
-
-                                addDate(
-                                    episodeData.airDate
-                                )
-                            }
-
-                        episodes +=
-                            episodeItem
-                    }
-
-            } catch (throwable: Throwable) {
-
-                Log.e(
-                    TAG,
-                    "Season $seasonNumber failed: ${throwable.message}",
-                    throwable
-                )
-            }
-        }
-
-        val year =
-            tv.firstAirDate
-                ?.take(4)
-                ?.toIntOrNull()
-
-        val genres =
-            tv.genres
-                ?.mapNotNull {
-                    it.name
-                }
-
-        val duration =
-            tv.episodeRunTime
-                ?.filter {
-                    it > 0
-                }
-                ?.average()
-                ?.toInt()
-
-        return newTvSeriesLoadResponse(
-            name = title,
-            url = "https://www.themoviedb.org/tv/$tmdbId",
-            type = TvType.TvSeries,
-            episodes = episodes
-        ) {
-
-            posterUrl =
-                posterUrl(
-                    tv.posterPath
-                )
-
-            backgroundPosterUrl =
-                backdropUrl(
-                    tv.backdropPath
-                )
-
-            this.year =
-                year
-
-            plot =
-                tv.overview
-
-            score =
-                Score.from10(
-                    tv.voteAverage
-                )
-
-            tags =
-                genres
-
-            this.duration =
-                duration
-
-            Log.e(
-                TAG,
-                "TV LoadResponse created: $title episodes=${episodes.size}"
-            )
+            "$VIXSRC_URL/movie/$tmdbId"
         }
     }
 
     /*
      * =========================================================
-     * JSON YARDIMCILARI
+     * URL TEMİZLEME
      * =========================================================
      */
 
-    private fun decodeJson(
-        text: String
-    ): JsonNode? {
-
-        return runCatching {
-
-            mapper.readTree(
-                text
-            )
-
-        }.onFailure {
-
-            Log.e(
-                TAG,
-                "JSON parse failed: ${it.message}"
-            )
-
-        }.getOrNull()
-    }
-
-    private fun findStringByKeys(
-        node: JsonNode?,
-        keys: Set<String>
+    private fun cleanUrl(
+        input: String
     ): String? {
 
-        if (node == null) {
-            return null
-        }
-
-        if (node.isObject) {
-
-            val fields =
-                node.fields()
-
-            while (
-                fields.hasNext()
-            ) {
-
-                val entry =
-                    fields.next()
-
-                if (
-                    keys.any {
-                        it.equals(
-                            entry.key,
-                            true
-                        )
-                    }
-                ) {
-
-                    val value =
-                        entry.value
-
-                    if (
-                        value.isValueNode &&
-                        !value.isNull
-                    ) {
-
-                        val text =
-                            value.asText()
-
-                        if (
-                            text.isNotBlank()
-                        ) {
-                            return text
-                        }
-                    }
-                }
-            }
-
-            val secondPass =
-                node.fields()
-
-            while (
-                secondPass.hasNext()
-            ) {
-
-                val result =
-                    findStringByKeys(
-                        secondPass.next().value,
-                        keys
-                    )
-
-                if (
-                    !result.isNullOrBlank()
-                ) {
-                    return result
-                }
-            }
-        }
-
-        if (node.isArray) {
-
-            for (
-                child in node
-            ) {
-
-                val result =
-                    findStringByKeys(
-                        child,
-                        keys
-                    )
-
-                if (
-                    !result.isNullOrBlank()
-                ) {
-                    return result
-                }
-            }
-        }
-
-        return null
-    }
-
-    private fun findPlaylistUrl(
-        node: JsonNode?
-    ): String? {
-
-        if (node == null) {
-            return null
-        }
-
-        if (node.isValueNode) {
-
-            val value =
-                node.asText()
-
-            if (
-                value.contains(
-                    "/playlist/",
-                    true
-                ) ||
-                value.contains(
-                    ".m3u8",
-                    true
-                )
-            ) {
-
-                return value
-            }
-        }
-
-        if (node.isObject) {
-
-            val fields =
-                node.fields()
-
-            while (
-                fields.hasNext()
-            ) {
-
-                val result =
-                    findPlaylistUrl(
-                        fields.next().value
-                    )
-
-                if (
-                    !result.isNullOrBlank()
-                ) {
-                    return result
-                }
-            }
-        }
-
-        if (node.isArray) {
-
-            for (
-                child in node
-            ) {
-
-                val result =
-                    findPlaylistUrl(
-                        child
-                    )
-
-                if (
-                    !result.isNullOrBlank()
-                ) {
-                    return result
-                }
-            }
-        }
-
-        return null
-    }
-
-    private fun normalizeUrl(
-        value: String?
-    ): String? {
-
-        if (
-            value.isNullOrBlank()
-        ) {
-            return null
-        }
-
-        var url =
-            value
+        var value =
+            input
                 .replace(
                     "\\/",
                     "/"
@@ -892,8 +174,32 @@ class ClipBox : TmdbProvider() {
                     "/"
                 )
                 .replace(
+                    "\\u002f",
+                    "/"
+                )
+                .replace(
                     "\\u003A",
                     ":"
+                )
+                .replace(
+                    "\\u003a",
+                    ":"
+                )
+                .replace(
+                    "\\u003F",
+                    "?"
+                )
+                .replace(
+                    "\\u003f",
+                    "?"
+                )
+                .replace(
+                    "\\u003D",
+                    "="
+                )
+                .replace(
+                    "\\u003d",
+                    "="
                 )
                 .replace(
                     "\\u0026",
@@ -903,483 +209,64 @@ class ClipBox : TmdbProvider() {
                     "&amp;",
                     "&"
                 )
+                .replace(
+                    "&quot;",
+                    "\""
+                )
                 .trim()
                 .removeSurrounding("\"")
                 .removeSurrounding("'")
                 .trim()
 
-        if (
-            url.startsWith("//")
-        ) {
-            url =
-                "https:$url"
-        }
-
-        if (
-            url.startsWith("/")
-        ) {
-            url =
-                "$VIXSRC_URL$url"
-        }
-
-        return url
-    }
-
-    private fun appendVixsrcParams(
-        baseUrl: String,
-        token: String?,
-        expires: String?
-    ): String {
-
-        val separator =
-            if (
-                baseUrl.contains("?")
-            ) {
-                "&"
-            } else {
-                "?"
-            }
-
-        val result =
-            StringBuilder(
-                baseUrl
+        value =
+            value.trimEnd(
+                ')',
+                ']',
+                '}',
+                ';',
+                ','
             )
 
         if (
-            !token.isNullOrBlank() &&
-            !baseUrl.contains(
-                "token=",
-                true
-            )
+            value.startsWith("//")
         ) {
 
-            result.append(
-                "${separator}token=${token}"
-            )
-
-            if (
-                !baseUrl.contains(
-                    "?",
-                    true
-                ) ||
-                baseUrl.contains(
-                    "&"
-                )
-            ) {
-                // intentionally empty
-            }
+            value =
+                "https:$value"
         }
-
-        val current =
-            result.toString()
-
-        val secondSeparator =
-            if (
-                current.contains("?")
-            ) {
-                "&"
-            } else {
-                "?"
-            }
 
         if (
-            !expires.isNullOrBlank() &&
-            !current.contains(
-                "expires=",
-                true
-            )
+            value.startsWith("/")
         ) {
 
-            result.append(
-                "${secondSeparator}expires=${expires}"
-            )
+            value =
+                "$VIXSRC_URL$value"
         }
-
-        val afterExpires =
-            result.toString()
-
-        val thirdSeparator =
-            if (
-                afterExpires.contains("?")
-            ) {
-                "&"
-            } else {
-                "?"
-            }
 
         if (
-            !afterExpires.contains(
-                "h=",
-                true
+            !value.startsWith(
+                "http://",
+                ignoreCase = true
+            ) &&
+            !value.startsWith(
+                "https://",
+                ignoreCase = true
             )
         ) {
 
-            result.append(
-                "${thirdSeparator}h=1"
-            )
+            return null
         }
 
-        val afterH =
-            result.toString()
-
-        val fourthSeparator =
-            if (
-                afterH.contains("?")
-            ) {
-                "&"
-            } else {
-                "?"
-            }
-
-        if (
-            !afterH.contains(
-                "lang=",
-                true
-            )
-        ) {
-
-            result.append(
-                "${fourthSeparator}lang=en"
-            )
-        }
-
-        return result.toString()
-    }
-
-    private fun createPlaylistFromApiJson(
-        jsonText: String
-    ): String? {
-
-        val root =
-            decodeJson(
-                jsonText
-            )
-                ?: return null
-
-        /*
-         * Önce doğrudan playlist / m3u8 ara.
-         */
-        val direct =
-            normalizeUrl(
-                findPlaylistUrl(
-                    root
-                )
-            )
-
-        if (
-            !direct.isNullOrBlank()
-        ) {
-
-            Log.e(
-                TAG,
-                "API DIRECT PLAYLIST = $direct"
-            )
-
-            return appendVixsrcParams(
-                direct,
-                token = null,
-                expires = null
-            )
-        }
-
-        /*
-         * Sonra bilinen alanları ara.
-         */
-        val urlValue =
-            normalizeUrl(
-                findStringByKeys(
-                    root,
-                    setOf(
-                        "playlist",
-                        "playlistUrl",
-                        "playlistURL",
-                        "m3u8",
-                        "m3u8Url",
-                        "stream",
-                        "streamUrl",
-                        "source",
-                        "sourceUrl",
-                        "file",
-                        "fileUrl",
-                        "url"
-                    )
-                )
-            )
-
-        val token =
-            findStringByKeys(
-                root,
-                setOf(
-                    "token",
-                    "Token"
-                )
-            )
-
-        val expires =
-            findStringByKeys(
-                root,
-                setOf(
-                    "expires",
-                    "expire",
-                    "expiration"
-                )
-            )
-
-        val videoId =
-            findStringByKeys(
-                root,
-                setOf(
-                    "video_id",
-                    "videoId",
-                    "videoID",
-                    "stream_id",
-                    "streamId",
-                    "playlist_id",
-                    "playlistId"
-                )
-            )
-
-        if (
-            !urlValue.isNullOrBlank()
-        ) {
-
-            Log.d(
-                TAG,
-                "API URL VALUE = $urlValue"
-            )
-
-            /*
-             * URL zaten playlist ise doğrudan kullan.
-             */
-            if (
-                urlValue.contains(
-                    "/playlist/",
-                    true
-                ) ||
-                urlValue.contains(
-                    ".m3u8",
-                    true
-                )
-            ) {
-
-                return appendVixsrcParams(
-                    urlValue,
-                    token,
-                    expires
-                )
-            }
-
-            /*
-             * API "url" olarak bir embed/page döndürüyorsa
-             * loadLinks içerisinde ayrıca açacağız.
-             */
-            Log.d(
-                TAG,
-                "API returned non-playlist URL=$urlValue"
-            )
-        }
-
-        /*
-         * Eğer API video_id + token + expires döndürürse
-         * playlist URL'sini doğrudan oluştur.
-         */
-        if (
-            !videoId.isNullOrBlank()
-        ) {
-
-            val playlist =
-                "$VIXSRC_URL/playlist/$videoId"
-
-            Log.e(
-                TAG,
-                "API VIDEO ID = $videoId"
-            )
-
-            return appendVixsrcParams(
-                playlist,
-                token,
-                expires
-            )
-        }
-
-        /*
-         * API cevabında embed URL ara.
-         */
-        val embed =
-            normalizeUrl(
-                findStringByKeys(
-                    root,
-                    setOf(
-                        "embed",
-                        "embedUrl",
-                        "embedURL",
-                        "player",
-                        "playerUrl",
-                        "playerURL"
-                    )
-                )
-            )
-
-        if (
-            !embed.isNullOrBlank()
-        ) {
-
-            Log.e(
-                TAG,
-                "API EMBED = $embed"
-            )
-
-            /*
-             * Embed URL'si VixSrc playlist ise doğrudan kullan.
-             */
-            if (
-                embed.contains(
-                    "/playlist/",
-                    true
-                ) ||
-                    embed.contains(
-                        ".m3u8",
-                        true
-                    )
-            ) {
-
-                return appendVixsrcParams(
-                    embed,
-                    token,
-                    expires
-                )
-            }
-        }
-
-        Log.e(
-            TAG,
-            "API JSON did not contain an obvious stream"
-        )
-
-        Log.d(
-            TAG,
-            "API JSON = ${jsonText.take(6000)}"
-        )
-
-        return embed
+        return value
     }
 
     /*
      * =========================================================
-     * ESKİ HTML / EMBED FALLBACK
+     * PLAYLIST KONTROLÜ
      * =========================================================
      */
 
-    private fun cleanEmbeddedValue(
-        value: String
-    ): String {
-
-        return value
-            .replace(
-                "\\/",
-                "/"
-            )
-            .replace(
-                "\\u002F",
-                "/"
-            )
-            .replace(
-                "\\u002f",
-                "/"
-            )
-            .replace(
-                "\\u003A",
-                ":"
-            )
-            .replace(
-                "\\u003a",
-                ":"
-            )
-            .replace(
-                "\\u0026",
-                "&"
-            )
-            .replace(
-                "\\u003F",
-                "?"
-            )
-            .replace(
-                "\\u003f",
-                "?"
-            )
-            .replace(
-                "\\u003D",
-                "="
-            )
-            .replace(
-                "\\u003d",
-                "="
-            )
-            .replace(
-                "&amp;",
-                "&"
-            )
-            .replace(
-                "&quot;",
-                "\""
-            )
-            .trim()
-            .removeSurrounding("\"")
-            .removeSurrounding("'")
-            .trim()
-    }
-
-    private fun cleanStreamUrl(
-        url: String
-    ): String? {
-
-        var result =
-            cleanEmbeddedValue(
-                url
-            )
-
-        result =
-            result
-                .trim()
-                .trimEnd(
-                    ')',
-                    ']',
-                    '}',
-                    ';',
-                    ','
-                )
-
-        if (
-            result.startsWith("//")
-        ) {
-            result =
-                "https:$result"
-        }
-
-        if (
-            result.startsWith("/")
-        ) {
-            result =
-                "$VIXSRC_URL$result"
-        }
-
-        if (
-            !result.startsWith(
-                "http://",
-                true
-            ) &&
-            !result.startsWith(
-                "https://",
-                true
-            )
-        ) {
-            return null
-        }
-
-        return result
-    }
-
-    private fun isPlayableStreamUrl(
+    private fun isPlaylistUrl(
         url: String
     ): Boolean {
 
@@ -1387,70 +274,30 @@ class ClipBox : TmdbProvider() {
             url.lowercase()
 
         return lower.contains(
-            ".m3u8"
+            "/playlist/"
         ) ||
             lower.contains(
-                "/playlist/"
+                ".m3u8"
             )
     }
 
-    private fun extractOldHtmlStream(
+    /*
+     * =========================================================
+     * HTML FALLBACK
+     * =========================================================
+     *
+     * WebView çalışmazsa eski tip HTML içerisinde
+     * playlist / m3u8 aramayı da deniyoruz.
+     */
+
+    private fun extractPlaylistFromHtml(
         html: String
     ): String? {
 
         /*
-         * 1. masterPlaylist / url alanları
+         * 1. Doğrudan VixSrc playlist URL'si
          */
-        val urlMatch =
-            Regex(
-                """(?:url|file|src|m3u8|playlist)\s*[:=]\s*["']([^"']+)["']""",
-                RegexOption.IGNORE_CASE
-            ).find(
-                html
-            )
-
-        val token =
-            Regex(
-                """["']?token["']?\s*[:=]\s*["']([^"']*)["']""",
-                RegexOption.IGNORE_CASE
-            )
-                .find(html)
-                ?.groupValues
-                ?.getOrNull(1)
-
-        val expires =
-            Regex(
-                """["']?(?:expires|expire)["']?\s*[:=]\s*["']([^"']+)["']""",
-                RegexOption.IGNORE_CASE
-            )
-                .find(html)
-                ?.groupValues
-                ?.getOrNull(1)
-
-        val url =
-            cleanStreamUrl(
-                urlMatch
-                    ?.groupValues
-                    ?.getOrNull(1)
-                    ?: ""
-            )
-
-        if (
-            !url.isNullOrBlank() &&
-            isPlayableStreamUrl(url)
-        ) {
-
-            return appendVixsrcParams(
-                url,
-                token,
-                expires
-            )
-        }
-
-        /*
-         * 2. Doğrudan playlist URL'si
-         */
-        val direct =
+        val playlist =
             Regex(
                 """https?://[^"'<>\s]+/playlist/[^"'<>\s]+""",
                 RegexOption.IGNORE_CASE
@@ -1459,18 +306,27 @@ class ClipBox : TmdbProvider() {
                 ?.value
 
         if (
-            !direct.isNullOrBlank()
+            !playlist.isNullOrBlank()
         ) {
 
-            return appendVixsrcParams(
-                direct,
-                token = null,
-                expires = null
-            )
+            val cleaned =
+                cleanUrl(playlist)
+
+            if (
+                !cleaned.isNullOrBlank()
+            ) {
+
+                Log.e(
+                    TAG,
+                    "HTML PLAYLIST = $cleaned"
+                )
+
+                return cleaned
+            }
         }
 
         /*
-         * 3. Doğrudan .m3u8
+         * 2. Doğrudan m3u8
          */
         val m3u8 =
             Regex(
@@ -1483,7 +339,54 @@ class ClipBox : TmdbProvider() {
         if (
             !m3u8.isNullOrBlank()
         ) {
-            return m3u8
+
+            val cleaned =
+                cleanUrl(m3u8)
+
+            if (
+                !cleaned.isNullOrBlank()
+            ) {
+
+                Log.e(
+                    TAG,
+                    "HTML M3U8 = $cleaned"
+                )
+
+                return cleaned
+            }
+        }
+
+        /*
+         * 3. JSON benzeri url:"..."
+         */
+        val generic =
+            Regex(
+                """["'](?:url|file|src|playlist|m3u8)["']\s*[:=]\s*["']([^"']+)["']""",
+                RegexOption.IGNORE_CASE
+            )
+                .find(html)
+                ?.groupValues
+                ?.getOrNull(1)
+
+        if (
+            !generic.isNullOrBlank()
+        ) {
+
+            val cleaned =
+                cleanUrl(generic)
+
+            if (
+                !cleaned.isNullOrBlank() &&
+                isPlaylistUrl(cleaned)
+            ) {
+
+                Log.e(
+                    TAG,
+                    "HTML GENERIC PLAYLIST = $cleaned"
+                )
+
+                return cleaned
+            }
         }
 
         return null
@@ -1491,210 +394,270 @@ class ClipBox : TmdbProvider() {
 
     /*
      * =========================================================
-     * VIXSRC API
+     * WEBVIEW VIXSRC RESOLVER
      * =========================================================
+     *
+     * Güncel VixSrc sayfası JavaScript ile çalıştığı için
+     * normal app.get() ile HTML almak çoğu zaman sadece
+     * Next.js başlangıç sayfasını döndürüyor.
+     *
+     * WebViewResolver JavaScript'i çalıştırıyor ve
+     * oluşan /playlist/ isteğini yakalıyor.
      */
 
-    private fun buildVixsrcApiUrl(
-        tmdbId: Int,
-        season: Int?,
-        episode: Int?
-    ): String {
-
-        return if (
-            season != null &&
-            episode != null
-        ) {
-
-            "$VIXSRC_URL/api/tv?id=$tmdbId&season=$season&episode=$episode"
-
-        } else {
-
-            "$VIXSRC_URL/api/movie?id=$tmdbId"
-        }
-    }
-
-    private suspend fun resolveVixsrcApi(
-        tmdbId: Int,
-        season: Int?,
-        episode: Int?
+    private suspend fun resolveVixsrcWithWebView(
+        pageUrl: String
     ): String? {
-
-        val apiUrl =
-            buildVixsrcApiUrl(
-                tmdbId,
-                season,
-                episode
-            )
 
         Log.e(
             TAG,
-            "VIXSRC API = $apiUrl"
+            "========== VIXSRC WEBVIEW START =========="
         )
 
-        val response =
-            runCatching {
+        Log.e(
+            TAG,
+            "WEBVIEW URL = $pageUrl"
+        )
 
-                app.get(
-                    url = apiUrl,
-                    headers = VIXSRC_HEADERS
-                )
+        var interceptedUrl: String? = null
 
-            }.onFailure {
+        val resolver =
+            WebViewResolver(
+                interceptUrl =
+                    Regex(
+                        """/playlist/"""
+                    ),
+
+                additionalUrls =
+                    listOf(
+                        Regex(
+                            """/playlist/"""
+                        ),
+                        Regex(
+                            """\.m3u8(?:\?.*)?$""",
+                            RegexOption.IGNORE_CASE
+                        )
+                    ),
+
+                /*
+                 * null -> WebView'in kendi gerçek User-Agent'ını kullan.
+                 */
+                userAgent = null,
+
+                /*
+                 * VixSrc JavaScript sayfası için
+                 * WebView ağ yapısını doğrudan kullan.
+                 */
+                useOkhttp = false,
+
+                timeout =
+                    DEFAULT_TIMEOUT
+            )
+
+        return try {
+
+            val result =
+                resolver.resolveUsingWebView(
+                    url = pageUrl,
+                    referer = "$VIXSRC_URL/",
+                    headers = VIXSRC_HEADERS,
+                    method = "GET"
+                ) { request ->
+
+                    val requestUrl =
+                        request.url.toString()
+
+                    Log.e(
+                        TAG,
+                        "WEBVIEW REQUEST = $requestUrl"
+                    )
+
+                    if (
+                        requestUrl.contains(
+                            "/playlist/",
+                            ignoreCase = true
+                        ) ||
+                        requestUrl.contains(
+                            ".m3u8",
+                            ignoreCase = true
+                        )
+                    ) {
+
+                        interceptedUrl =
+                            requestUrl
+
+                        Log.e(
+                            TAG,
+                            "========== VIXSRC PLAYLIST INTERCEPTED =========="
+                        )
+
+                        Log.e(
+                            TAG,
+                            requestUrl
+                        )
+
+                        true
+
+                    } else {
+
+                        false
+                    }
+                }
+
+            /*
+             * Öncelik callback ile yakalanan URL.
+             */
+            if (
+                !interceptedUrl.isNullOrBlank()
+            ) {
+
+                return@try interceptedUrl
+            }
+
+            /*
+             * Resolver'ın final request'i.
+             */
+            val finalRequest =
+                result.first
+
+            if (
+                finalRequest != null
+            ) {
+
+                val finalUrl =
+                    finalRequest.url.toString()
 
                 Log.e(
                     TAG,
-                    "VixSrc API request failed: ${it.message}",
-                    it
+                    "WEBVIEW FINAL REQUEST = $finalUrl"
                 )
-            }.getOrNull()
-                ?: return null
 
-        Log.e(
-            TAG,
-            "VixSrc API response code=${response.code}"
-        )
+                if (
+                    isPlaylistUrl(finalUrl)
+                ) {
 
-        val body =
-            response.text
+                    return@try finalUrl
+                }
+            }
 
-        Log.d(
-            TAG,
-            "VixSrc API body length=${body.length}"
-        )
-
-        if (
-            response.code !in 200..399 ||
-            body.isBlank()
-        ) {
-            return null
-        }
-
-        val possible =
-            createPlaylistFromApiJson(
-                body
-            )
-
-        if (
-            possible.isNullOrBlank()
-        ) {
-            return null
-        }
-
-        /*
-         * Eğer API doğrudan playlist vermişse bitti.
-         */
-        if (
-            isPlayableStreamUrl(
-                possible
-            )
-        ) {
+            /*
+             * Additional URL'lerden bul.
+             */
+            val collected =
+                result.second
 
             Log.e(
                 TAG,
-                "API RESOLVED STREAM = $possible"
+                "WEBVIEW COLLECTED REQUESTS = ${collected.size}"
             )
 
-            return possible
-        }
-
-        /*
-         * API embed/page URL döndürdüyse aç.
-         */
-        val embedResponse =
-            runCatching {
-
-                app.get(
-                    url = possible,
-                    headers = VIXSRC_HEADERS
-                )
-
-            }.onFailure {
-
-                Log.e(
-                    TAG,
-                    "Embed request failed: ${it.message}",
-                    it
-                )
-            }.getOrNull()
-                ?: return null
-
-        Log.e(
-            TAG,
-            "Embed response code=${embedResponse.code}"
-        )
-
-        val embedHtml =
-            embedResponse.text
-
-        Log.d(
-            TAG,
-            "Embed HTML length=${embedHtml.length}"
-        )
-
-        return extractOldHtmlStream(
-            embedHtml
-        )
-    }
-
-    private suspend fun resolveVixsrcPageFallback(
-        tmdbId: Int,
-        season: Int?,
-        episode: Int?
-    ): String? {
-
-        val pageUrl =
-            if (
-                season != null &&
-                episode != null
+            for (
+                request in collected
             ) {
 
-                "$VIXSRC_URL/tv/$tmdbId/$season/$episode"
+                val requestUrl =
+                    request.url.toString()
 
-            } else {
+                Log.d(
+                    TAG,
+                    "WEBVIEW ADDITIONAL = $requestUrl"
+                )
 
-                "$VIXSRC_URL/movie/$tmdbId"
+                if (
+                    isPlaylistUrl(requestUrl)
+                ) {
+
+                    Log.e(
+                        TAG,
+                        "WEBVIEW ADDITIONAL PLAYLIST = $requestUrl"
+                    )
+
+                    return@try requestUrl
+                }
             }
+
+            null
+
+        } catch (throwable: Throwable) {
+
+            Log.e(
+                TAG,
+                "WEBVIEW RESOLVER ERROR: ${throwable.message}",
+                throwable
+            )
+
+            null
+        }
+    }
+
+    /*
+     * =========================================================
+     * NORMAL HTML FALLBACK
+     * =========================================================
+     */
+
+    private suspend fun resolveVixsrcHtml(
+        pageUrl: String
+    ): String? {
 
         Log.e(
             TAG,
-            "VIXSRC PAGE FALLBACK = $pageUrl"
+            "========== VIXSRC HTML FALLBACK =========="
         )
 
-        val response =
-            runCatching {
+        Log.e(
+            TAG,
+            "HTML URL = $pageUrl"
+        )
 
-                app.get(
+        return try {
+
+            val response =
+                com.lagradost.cloudstream3.app.get(
                     url = pageUrl,
                     headers = VIXSRC_HEADERS
                 )
 
-            }.onFailure {
+            Log.e(
+                TAG,
+                "VIXSRC HTML RESPONSE = ${response.code}"
+            )
 
-                Log.e(
-                    TAG,
-                    "VixSrc page request failed: ${it.message}",
-                    it
+            val html =
+                response.text
+
+            Log.e(
+                TAG,
+                "VIXSRC HTML LENGTH = ${html.length}"
+            )
+
+            val result =
+                extractPlaylistFromHtml(
+                    html
                 )
-            }.getOrNull()
-                ?: return null
 
-        Log.e(
-            TAG,
-            "VixSrc page response code=${response.code}"
-        )
+            if (
+                result.isNullOrBlank()
+            ) {
 
-        val html =
-            response.text
+                Log.d(
+                    TAG,
+                    "No playlist found in static HTML"
+                )
+            }
 
-        Log.e(
-            TAG,
-            "VixSrc page HTML length=${html.length}"
-        )
+            result
 
-        return extractOldHtmlStream(
-            html
-        )
+        } catch (throwable: Throwable) {
+
+            Log.e(
+                TAG,
+                "VIXSRC HTML ERROR: ${throwable.message}",
+                throwable
+            )
+
+            null
+        }
     }
 
     /*
@@ -1717,30 +680,31 @@ class ClipBox : TmdbProvider() {
 
         Log.e(
             TAG,
-            "data=$data"
+            "DATA = $data"
         )
 
         Log.e(
             TAG,
-            "isCasting=$isCasting"
+            "IS CASTING = $isCasting"
         )
 
         val tmdbLink =
-            parseTmdbLink(
-                data
-            )
+            try {
 
-        if (
-            tmdbLink == null
-        ) {
+                parseJson<TmdbLink>(
+                    data
+                )
 
-            Log.e(
-                TAG,
-                "TMDB Link could not be parsed"
-            )
+            } catch (throwable: Throwable) {
 
-            return false
-        }
+                Log.e(
+                    TAG,
+                    "TMDB LINK PARSE ERROR: ${throwable.message}",
+                    throwable
+                )
+
+                return false
+            }
 
         val tmdbId =
             tmdbLink.tmdbID
@@ -1751,7 +715,7 @@ class ClipBox : TmdbProvider() {
 
             Log.e(
                 TAG,
-                "TMDB ID is null"
+                "TMDB ID = NULL"
             )
 
             return false
@@ -1765,38 +729,68 @@ class ClipBox : TmdbProvider() {
 
         Log.e(
             TAG,
-            "TMDB id=$tmdbId season=$season episode=$episode"
+            "TMDB ID = $tmdbId"
         )
 
-        /*
-         * Önce yeni API.
-         */
-        var finalUrl =
-            resolveVixsrcApi(
+        Log.e(
+            TAG,
+            "SEASON = $season"
+        )
+
+        Log.e(
+            TAG,
+            "EPISODE = $episode"
+        )
+
+        val pageUrl =
+            buildVixsrcUrl(
                 tmdbId = tmdbId,
                 season = season,
                 episode = episode
             )
 
+        Log.e(
+            TAG,
+            "VIXSRC PAGE = $pageUrl"
+        )
+
         /*
-         * API başarısızsa eski page fallback.
+         * =====================================================
+         * 1. WEBVIEW
+         * =====================================================
          */
+
+        var finalUrl =
+            resolveVixsrcWithWebView(
+                pageUrl
+            )
+
+        /*
+         * =====================================================
+         * 2. STATIK HTML FALLBACK
+         * =====================================================
+         */
+
         if (
             finalUrl.isNullOrBlank()
         ) {
 
-            Log.d(
+            Log.e(
                 TAG,
-                "VixSrc API did not resolve a stream, trying page fallback"
+                "WEBVIEW STREAM NOT FOUND"
             )
 
             finalUrl =
-                resolveVixsrcPageFallback(
-                    tmdbId = tmdbId,
-                    season = season,
-                    episode = episode
+                resolveVixsrcHtml(
+                    pageUrl
                 )
         }
+
+        /*
+         * =====================================================
+         * 3. SON KONTROL
+         * =====================================================
+         */
 
         if (
             finalUrl.isNullOrBlank()
@@ -1811,29 +805,66 @@ class ClipBox : TmdbProvider() {
         }
 
         finalUrl =
-            cleanStreamUrl(
+            cleanUrl(
                 finalUrl
             )
-                ?: return false
+
+        if (
+            finalUrl.isNullOrBlank()
+        ) {
+
+            Log.e(
+                TAG,
+                "FINAL URL CLEAN FAILED"
+            )
+
+            return false
+        }
 
         Log.e(
             TAG,
-            "FINAL URL = $finalUrl"
+            "========== FINAL VIXSRC URL =========="
+        )
+
+        Log.e(
+            TAG,
+            finalUrl
         )
 
         if (
-            !isPlayableStreamUrl(
+            !isPlaylistUrl(
                 finalUrl
             )
         ) {
 
             Log.e(
                 TAG,
-                "FINAL URL NOT PLAYABLE = $finalUrl"
+                "FINAL URL IS NOT PLAYLIST = $finalUrl"
             )
 
             return false
         }
+
+        /*
+         * =====================================================
+         * STREAM HEADERS
+         * =====================================================
+         */
+
+        val streamHeaders =
+            mapOf(
+                "User-Agent" to USER_AGENT,
+                "Referer" to pageUrl,
+                "Origin" to VIXSRC_URL,
+                "Accept" to "*/*",
+                "Accept-Language" to "en-US,en;q=0.9"
+            )
+
+        /*
+         * =====================================================
+         * EXTRACTOR LINK
+         * =====================================================
+         */
 
         newExtractorLink(
             source = name,
@@ -1843,10 +874,10 @@ class ClipBox : TmdbProvider() {
         ) {
 
             referer =
-                "$VIXSRC_URL/"
+                pageUrl
 
             headers =
-                STREAM_HEADERS
+                streamHeaders
 
             quality =
                 Qualities.Unknown.value
