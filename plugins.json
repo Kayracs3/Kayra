@@ -1,7 +1,7 @@
 [
     {
         "iconUrl": "https://dizipal1583.com/favicon.ico",
-        "fileHash": "sha256-0cfedfd54cf2652e94fa318e464ef6cef50c742375e830fbcc7a6690422b69d1",
+        "fileHash": "sha256-2a5694f2c8a2aeace3a92c1b4b83bf5ce7acd6a2a2ff9bb8b87326f89cd8ab89",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 34799,
@@ -14,7 +14,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 2,
+        "version": 3,
         "internalName": "ClipBox",
         "description": "T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/ClipBox.cs3",
