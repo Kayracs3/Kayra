@@ -716,6 +716,11 @@ class ClipBox : TmdbProvider() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        Log.e("ClipBox", "========== LOADLINKS CALLED ==========")
+        Log.e("ClipBox", "name=$name")
+        Log.e("ClipBox", "url=$url")
+        Log.e("ClipBox", "referer=$referer")
+        Log.e("ClipBox", "data=$data")
 
         Log.d(
             TAG,
