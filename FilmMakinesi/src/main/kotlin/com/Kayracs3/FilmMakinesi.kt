@@ -2601,9 +2601,155 @@ private class CloseLoadExtractor : ExtractorApi() {
         }
     }
 
+    private fun logCloseLoadStructure(html: String) {
+        val tag = "FILMMAKINESI"
+
+        val sourcePatterns = listOf(
+            Regex("""(?is).{0,220}\b(?:file|src|source|media|stream|url)\s*:\s*.{0,500}"""),
+            Regex("""(?is).{0,220}\b(?:sources|tracks)\s*:\s*.{0,800}"""),
+            Regex("""(?is).{0,220}\.setup\s*\(.{0,1400}"""),
+        )
+
+        var shown = 0
+
+        sourcePatterns.forEach { regex ->
+            regex.findAll(html).take(8).forEach { match ->
+                Log.d(
+                    tag,
+                    "CloseLoad STRUCTURE[$shown]=" +
+                        match.value
+                            .replace('\n', ' ')
+                            .replace('\r', ' ')
+                            .take(1800),
+                )
+                shown++
+            }
+        }
+
+        val declarations = Regex(
+            """(?is)\b(?:var|let|const)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*"""
+        ).findAll(html)
+
+        declarations.take(30).forEach { match ->
+            val name = match.groupValues[1]
+            val start = match.range.last + 1
+            if (start !in html.indices) return@forEach
+
+            var depthParen = 0
+            var depthBrace = 0
+            var depthBracket = 0
+            var quote: Char? = null
+            var escaped = false
+            var end = start
+
+            while (end < html.length) {
+                val c = html[end]
+
+                if (quote != null) {
+                    if (escaped) {
+                        escaped = false
+                    } else if (c == '\\') {
+                        escaped = true
+                    } else if (c == quote) {
+                        quote = null
+                    }
+                } else {
+                    if (c == '\'' || c == '"') {
+                        quote = c
+                    } else {
+                        when (c) {
+                            '(' -> depthParen++
+                            ')' -> {
+                                if (depthParen > 0) depthParen--
+                                else break
+                            }
+
+                            '{' -> depthBrace++
+                            '}' -> {
+                                if (depthBrace > 0) depthBrace--
+                                else break
+                            }
+
+                            '[' -> depthBracket++
+                            ']' -> {
+                                if (depthBracket > 0) depthBracket--
+                                else break
+                            }
+
+                            ';', ',' -> {
+                                if (
+                                    depthParen == 0 &&
+                                    depthBrace == 0 &&
+                                    depthBracket == 0
+                                ) {
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+
+                end++
+            }
+
+            val expression =
+                html.substring(
+                    start,
+                    end.coerceAtMost(html.length)
+                ).trim()
+
+            if (
+                name.equals("sources", true) ||
+                name.equals("file", true) ||
+                name.equals("src", true) ||
+                name.equals("source", true) ||
+                name.equals("url", true) ||
+                expression.contains("m3u8", true) ||
+                expression.contains("master.txt", true) ||
+                expression.contains("hls", true)
+            ) {
+                Log.d(
+                    tag,
+                    "CloseLoad VAR $name=" +
+                        expression.take(2500),
+                )
+            }
+        }
+
+        val functionRegex = Regex(
+            """(?is)\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\([^)]*\)\s*\{"""
+        )
+
+        functionRegex.findAll(html).take(20).forEach { match ->
+            val name = match.groupValues[1]
+            val start = match.range.last + 1
+            val end = html.indexOf('}', start)
+            val body =
+                if (end > start) {
+                    html.substring(
+                        start,
+                        end.coerceAtMost(start + 2500)
+                    )
+                } else {
+                    ""
+                }
+
+            Log.d(
+                tag,
+                "CloseLoad FN $name=" +
+                    body
+                        .replace('\n', ' ')
+                        .replace('\r', ' ')
+                        .take(2500),
+            )
+        }
+    }
+
     private fun decodeNative(
         html: String,
     ): String? {
+        logCloseLoadStructure(html)
+
         /*
          * CloseLoad obfuscasyonu sayfadan sayfaya küçük JS biçim
          * farklılıkları gösterebiliyor. Eski yaklaşım doğrudan
