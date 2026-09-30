@@ -2743,7 +2743,7 @@ private class CloseLoadExtractor : ExtractorApi() {
                             }
                             .firstOrNull {
                                 val lower =
-                                    it.value.lowercase()
+                                    it.lowercase()
 
                                 lower.contains(".m3u8") ||
                                     lower.contains(".mp4") ||
@@ -2756,7 +2756,7 @@ private class CloseLoadExtractor : ExtractorApi() {
                         Log.d(
                             "FILMMAKINESI",
                             "CloseLoad decoder medya adayı bulundu=" +
-                                media.value,
+                                media,
                         )
                         return decoded
                     }
