@@ -2466,26 +2466,48 @@ private class CloseLoadExtractor : ExtractorApi() {
         if (
             directUrls.isNotEmpty()
         ) {
-            directUrls.forEach {
+            var emittedDirect = false
+
+            for (candidate in directUrls) {
+                val mediaUrl =
+                    if (isHlsMediaUrl(candidate)) {
+                        prepareHlsUrl(
+                            candidate,
+                            "$mainUrl/",
+                            mainUrl,
+                            userAgent,
+                        )
+                    } else {
+                        candidate
+                    } ?: continue
+
                 callback(
                     newExtractorLink(
                         source = name,
                         name = name,
-                        url = it,
-                        type = INFER_TYPE,
+                        url = mediaUrl,
+                        type = mediaTypeForUrl(mediaUrl),
                     ) {
                         quality =
                             detectQuality(
-                                it
+                                mediaUrl
                             )
 
-                        this.headers = mapOf(
-                            "User-Agent" to userAgent,
-                            "Referer" to "$mainUrl/",
-                            "Origin" to mainUrl,
-                        )
+                        this.referer =
+                            "$mainUrl/"
+
+                        this.headers =
+                            mapOf(
+                                "User-Agent" to userAgent,
+                                "Accept" to "*/*",
+                                "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+                                "Referer" to "$mainUrl/",
+                                "Origin" to mainUrl,
+                            )
                     }
                 )
+
+                emittedDirect = true
             }
 
             processSubtitles(
@@ -2493,7 +2515,9 @@ private class CloseLoadExtractor : ExtractorApi() {
                 subtitleCallback,
             )
 
-            return
+            if (emittedDirect) {
+                return
+            }
         }
 
         throw ErrorLoadingException(
@@ -3037,7 +3061,7 @@ private class CloseLoadExtractor : ExtractorApi() {
             LinkedHashSet<String>()
 
         Regex(
-            """https?://[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""",
+            """https?://[^"'<>\s]+(?:\.m3u8|/master\.txt)(?:\?[^"'<>\s]*)?""",
             RegexOption.IGNORE_CASE,
         )
             .findAll(html)
