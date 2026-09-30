@@ -2604,6 +2604,88 @@ private class CloseLoadExtractor : ExtractorApi() {
     private fun decodeNative(
         html: String,
     ): String? {
+        /*
+         * CloseLoad sayfasında birden fazla JS dizisi/değişken grubu
+         * bulunabiliyor. Eski decoder tüm HTML içindeki ilk eşleşmeyi
+         * seçtiği için farklı filmlerde aynı medya URL'sini üretebiliyordu.
+         *
+         * Önce player'ın sources/file/hls tanımlarını içeren scriptleri
+         * ayrı ayrı çözmeyi deniyoruz. Böylece alakasız global JS
+         * değişkenleri decoder'a girmiyor.
+         */
+        val scripts =
+            Regex(
+                """<script\\b[^>]*>(.*?)</script>""",
+                setOf(
+                    RegexOption.DOT_MATCHES_ALL,
+                    RegexOption.IGNORE_CASE,
+                ),
+            )
+                .findAll(html)
+                .map {
+                    it.groupValues
+                        .getOrNull(1)
+                        .orEmpty()
+                }
+                .filter {
+                    val lower =
+                        it.lowercase()
+
+                    lower.contains("sources") ||
+                        lower.contains("file") ||
+                        lower.contains("hls") ||
+                        lower.contains("jwplayer")
+                }
+                .sortedByDescending {
+                    val lower =
+                        it.lowercase()
+
+                    (if (lower.contains("sources")) 8 else 0) +
+                        (if (lower.contains("jwplayer")) 4 else 0) +
+                        (if (lower.contains("hls")) 2 else 0) +
+                        (if (lower.contains("file")) 1 else 0)
+                }
+                .toList()
+
+        for (script in scripts) {
+            val decoded =
+                decodeNativeRaw(script)
+
+            if (
+                !decoded.isNullOrBlank() &&
+                Regex(
+                    """https?://[^\\s"'<>|]+""",
+                    RegexOption.IGNORE_CASE,
+                )
+                    .findAll(decoded)
+                    .any {
+                        val url =
+                            it.value.lowercase()
+
+                        url.contains(".m3u8") ||
+                            url.contains(".mp4") ||
+                            url.contains("master.txt") ||
+                            url.contains("/hls/") ||
+                            url.contains("/hls2/")
+                    }
+            ) {
+                Log.d(
+                    "FILMMAKINESI",
+                    "CloseLoad scoped decoder başarılı",
+                )
+                return decoded
+            }
+        }
+
+        /*
+         * Scoped denemeler başarısız olursa eski tüm sayfa fallback'i.
+         */
+        return decodeNativeRaw(html)
+    }
+
+    private fun decodeNativeRaw(
+        html: String,
+    ): String? {
 
         return runCatching {
 
