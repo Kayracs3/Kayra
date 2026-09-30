@@ -1,7 +1,7 @@
 package com.Kayracs3
 
-import android.util.Log
 import android.util.Base64
+import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
@@ -9,8 +9,8 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.getAndUnpack
+import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -22,8 +22,10 @@ class FilmMakinesi : MainAPI() {
     override var mainUrl = "https://filmmakinesi.to"
     override var name = "FilmMakinesi"
     override var lang = "tr"
+
     override val hasMainPage = true
     override val hasQuickSearch = true
+
     override var sequentialMainPage = true
     override var sequentialMainPageDelay = 250L
     override var sequentialMainPageScrollDelay = 250L
@@ -79,6 +81,7 @@ class FilmMakinesi : MainAPI() {
         "$mainUrl/yil/2026-fmfbkb/dizi/" to "2026 Dizileri",
         "$mainUrl/yil/2025-fm4/film/" to "2025 Filmleri",
         "$mainUrl/yil/2025-fm4/dizi/" to "2025 Dizileri",
+
         "$mainUrl/ulke/turkiye-fm4/" to "Yerli İçerikler",
         "$mainUrl/film-izle/olmeden-izlenmesi-gerekenler-fm1/" to "Ölmeden İzle",
         "$mainUrl/seri-filmler-izle-1/" to "Seri Filmler",
@@ -94,11 +97,11 @@ class FilmMakinesi : MainAPI() {
 
         val url = pageUrl(baseUrl, page)
 
-        val response = runCatching {
+        val document = runCatching {
             app.get(
                 url,
                 headers = requestHeaders,
-            )
+            ).document
         }.getOrElse {
             Log.e(
                 "FILMMAKINESI",
@@ -113,35 +116,32 @@ class FilmMakinesi : MainAPI() {
             )
         }
 
-        val document = response.document
-        val results = parseListPage(document)
+        var results = parseListPage(document)
 
-        val finalResults =
-            if (results.isEmpty() && page > 1) {
-                val alternate = alternatePageUrl(
-                    baseUrl,
-                    page,
-                )
+        if (
+            results.isEmpty() &&
+            page > 1
+        ) {
+            val alternate = alternatePageUrl(
+                baseUrl,
+                page,
+            )
 
-                if (
-                    alternate != null &&
-                    alternate != url
-                ) {
-                    runCatching {
-                        app.get(
-                            alternate,
-                            headers = requestHeaders,
-                        ).document
-                    }
-                        .getOrNull()
-                        ?.let(::parseListPage)
-                        .orEmpty()
-                } else {
-                    emptyList()
+            if (
+                alternate != null &&
+                alternate != url
+            ) {
+                results = runCatching {
+                    app.get(
+                        alternate,
+                        headers = requestHeaders,
+                    ).document
                 }
-            } else {
-                results
+                    .getOrNull()
+                    ?.let(::parseListPage)
+                    .orEmpty()
             }
+        }
 
         val hasNext =
             hasNextPage(
@@ -149,18 +149,18 @@ class FilmMakinesi : MainAPI() {
                 page,
             ) ||
                 (
-                    finalResults.isNotEmpty() &&
-                        finalResults.size >= 15
+                    results.isNotEmpty() &&
+                        results.size >= 15
                     )
 
         Log.d(
             "FILMMAKINESI",
-            "${request.name} / sayfa $page -> ${finalResults.size} sonuç",
+            "${request.name} / sayfa $page -> ${results.size} sonuç",
         )
 
         return newHomePageResponse(
             request.name,
-            finalResults,
+            results,
             hasNext = hasNext,
         )
     }
@@ -169,7 +169,9 @@ class FilmMakinesi : MainAPI() {
         baseUrl: String,
         page: Int,
     ): String {
-        if (page <= 1) return baseUrl
+        if (page <= 1) {
+            return baseUrl
+        }
 
         return "${baseUrl.trimEnd('/')}/sayfa/$page/"
     }
@@ -199,7 +201,8 @@ class FilmMakinesi : MainAPI() {
     private fun parseListPage(
         document: Document,
     ): List<SearchResponse> {
-        return document.select("a[href]")
+        return document
+            .select("a[href]")
             .mapNotNull { anchor ->
 
                 val href = fixUrlNull(
@@ -238,9 +241,7 @@ class FilmMakinesi : MainAPI() {
                     card?.selectFirst(
                         "h2,h3,h4,.title,.film-title,.dizi-title"
                     )?.text(),
-                    cleanCardTitle(
-                        anchor.text()
-                    ),
+                    cleanCardTitle(anchor.text()),
                     slugToTitle(href),
                 ) ?: return@mapNotNull null
 
@@ -270,7 +271,7 @@ class FilmMakinesi : MainAPI() {
                     )
                 ) {
                     newTvSeriesSearchResponse(
-                        title.trim(),
+                        title,
                         href,
                         TvType.TvSeries,
                     ) {
@@ -286,7 +287,7 @@ class FilmMakinesi : MainAPI() {
                     }
                 } else {
                     newMovieSearchResponse(
-                        title.trim(),
+                        title,
                         href,
                         TvType.Movie,
                     ) {
@@ -408,16 +409,15 @@ class FilmMakinesi : MainAPI() {
         )
 
         for (url in urls) {
-            val results =
-                runCatching {
-                    app.get(
-                        url,
-                        headers = requestHeaders,
-                    ).document
-                }
-                    .getOrNull()
-                    ?.let(::parseListPage)
-                    .orEmpty()
+            val results = runCatching {
+                app.get(
+                    url,
+                    headers = requestHeaders,
+                ).document
+            }
+                .getOrNull()
+                ?.let(::parseListPage)
+                .orEmpty()
 
             if (results.isNotEmpty()) {
                 return results
@@ -438,16 +438,12 @@ class FilmMakinesi : MainAPI() {
     ): LoadResponse? {
         val normalized = fixUrl(url)
 
-        val document =
-            runCatching {
-                app.get(
-                    normalized,
-                    headers = requestHeaders,
-                )
-            }
-                .getOrNull()
-                ?.document
-                ?: return null
+        val document = runCatching {
+            app.get(
+                normalized,
+                headers = requestHeaders,
+            ).document
+        }.getOrNull() ?: return null
 
         val pageText = document.text()
             .replace(
@@ -481,11 +477,10 @@ class FilmMakinesi : MainAPI() {
             )?.attr("content"),
             document.select("img[alt]")
                 .firstOrNull {
-                    it.attr("alt")
-                        .contains(
-                            title,
-                            ignoreCase = true,
-                        )
+                    it.attr("alt").contains(
+                        title,
+                        ignoreCase = true,
+                    )
                 }
                 ?.let {
                     posterUrlOf(it)
@@ -552,10 +547,12 @@ class FilmMakinesi : MainAPI() {
                 episodes,
             ) {
                 posterUrl = poster
+
                 plot = buildPlot(
                     originalTitle,
                     description,
                 )
+
                 this.year = year
                 this.tags = genres
 
@@ -579,10 +576,12 @@ class FilmMakinesi : MainAPI() {
             normalized,
         ) {
             posterUrl = poster
+
             plot = buildPlot(
                 originalTitle,
                 description,
             )
+
             this.year = year
             this.tags = genres
 
@@ -669,7 +668,9 @@ class FilmMakinesi : MainAPI() {
                     Actor(it)
                 }
 
-        if (linked.isNotEmpty()) {
+        if (
+            linked.isNotEmpty()
+        ) {
             return linked
         }
 
@@ -691,43 +692,42 @@ class FilmMakinesi : MainAPI() {
                 ?.text()
                 .orEmpty()
 
-        if (parentText.isBlank()) {
+        if (
+            parentText.isBlank()
+        ) {
             return null
         }
 
-        val names =
-            parentText
-                .substringAfter(
-                    "Oyuncular",
-                    "",
+        return parentText
+            .substringAfter(
+                "Oyuncular",
+                "",
+            )
+            .split(
+                ",",
+                "•",
+                "|",
+            )
+            .map {
+                it.trim()
+            }
+            .filter {
+                it.length in 2..60
+            }
+            .filterNot {
+                it.contains(
+                    "Tüm Kadroyu",
+                    true,
                 )
-                .split(
-                    ",",
-                    "•",
-                    "|",
-                )
-                .map {
-                    it.trim()
-                }
-                .filter {
-                    it.length in 2..60
-                }
-                .filterNot {
-                    it.contains(
-                        "Tüm Kadroyu",
-                        true,
-                    )
-                }
-                .distinctBy {
-                    it.lowercase()
-                }
-
-        return names
+            }
+            .distinctBy {
+                it.lowercase()
+            }
+            .map {
+                Actor(it)
+            }
             .takeIf {
                 it.isNotEmpty()
-            }
-            ?.map {
-                Actor(it)
             }
     }
 
@@ -738,106 +738,113 @@ class FilmMakinesi : MainAPI() {
         val result =
             LinkedHashMap<String, Episode>()
 
-        document.select(
-            "a[href], a[data-href], a[data-url]"
-        ).forEach { anchor ->
-
-            val href = fixUrlNull(
-                firstNonBlank(
-                    anchor.attr("href"),
-                    anchor.attr("data-href"),
-                    anchor.attr("data-url"),
-                )
-            ) ?: return@forEach
-
-            val anchorText =
-                anchor.text()
-                    .replace(
-                        Regex("\\s+"),
-                        " ",
-                    )
-                    .trim()
-
-            val dataText =
-                listOf(
-                    anchorText,
-                    anchor.attr("title"),
-                    anchor.attr("aria-label"),
-                    anchor.parent()
-                        ?.text()
-                        .orEmpty(),
-                ).joinToString(" ")
-
-            val season =
-                extractSeason(
-                    dataText,
-                    href,
-                ) ?: return@forEach
-
-            val episode =
-                extractEpisodeNumber(
-                    dataText,
-                    href,
-                ) ?: return@forEach
-
-            if (
-                !dataText.contains(
-                    "Bölüm",
-                    true,
-                ) &&
-                !dataText.contains(
-                    "Episode",
-                    true,
-                ) &&
-                !href.contains(
-                    "bolum",
-                    true,
-                ) &&
-                !href.contains(
-                    "episode",
-                    true,
-                )
-            ) {
-                return@forEach
-            }
-
-            if (!href.startsWith("$mainUrl/")) {
-                return@forEach
-            }
-
-            if (
-                isContentDetailUrl(href) &&
-                !href.contains("bolum", true) &&
-                !href.contains("episode", true)
-            ) {
-                return@forEach
-            }
-
-            val name =
-                cleanEpisodeName(
-                    dataText,
-                    season,
-                    episode,
-                )
-
-            result[
-                href.trimEnd('/')
-            ] = newEpisode(href) {
-                this.name = name
-                this.season = season
-                this.episode = episode
-                posterUrl = poster
-            }
-        }
-
-        return result.values
-            .sortedWith(
-                compareBy<Episode> {
-                    it.season ?: Int.MAX_VALUE
-                }.thenBy {
-                    it.episode ?: Int.MAX_VALUE
-                }
+        document
+            .select(
+                "a[href], a[data-href], a[data-url]"
             )
+            .forEach { anchor ->
+
+                val href =
+                    fixUrlNull(
+                        firstNonBlank(
+                            anchor.attr("href"),
+                            anchor.attr("data-href"),
+                            anchor.attr("data-url"),
+                        )
+                    ) ?: return@forEach
+
+                val text =
+                    listOf(
+                        anchor.text(),
+                        anchor.attr("title"),
+                        anchor.attr("aria-label"),
+                        anchor.parent()
+                            ?.text()
+                            .orEmpty(),
+                    ).joinToString(" ")
+                        .replace(
+                            Regex("\\s+"),
+                            " ",
+                        )
+                        .trim()
+
+                val season =
+                    extractSeason(
+                        text,
+                        href,
+                    ) ?: return@forEach
+
+                val episode =
+                    extractEpisodeNumber(
+                        text,
+                        href,
+                    ) ?: return@forEach
+
+                if (
+                    !text.contains(
+                        "Bölüm",
+                        true,
+                    ) &&
+                    !text.contains(
+                        "Episode",
+                        true,
+                    ) &&
+                    !href.contains(
+                        "bolum",
+                        true,
+                    ) &&
+                    !href.contains(
+                        "episode",
+                        true,
+                    )
+                ) {
+                    return@forEach
+                }
+
+                if (
+                    !href.startsWith("$mainUrl/")
+                ) {
+                    return@forEach
+                }
+
+                if (
+                    isContentDetailUrl(href) &&
+                    !href.contains(
+                        "bolum",
+                        true,
+                    ) &&
+                    !href.contains(
+                        "episode",
+                        true,
+                    )
+                ) {
+                    return@forEach
+                }
+
+                val episodeName =
+                    cleanEpisodeName(
+                        text,
+                        season,
+                        episode,
+                    )
+
+                result[
+                    href.trimEnd('/')
+                ] = newEpisode(href) {
+                    name = episodeName
+                    this.season = season
+                    this.episode = episode
+                    posterUrl = poster
+                }
+            }
+
+        return result.values.sortedWith(
+            compareBy<Episode> {
+                it.season ?: Int.MAX_VALUE
+            }.thenBy {
+                it.episode ?: Int.MAX_VALUE
+            }
+        )
     }
 
     private fun extractSeason(
@@ -965,28 +972,19 @@ class FilmMakinesi : MainAPI() {
         }
     }
 
-    /*
-     * ASIL DÜZELTME BURADA.
-     *
-     * Eski kod yalnızca:
-     * div.player-div iframe
-     *
-     * arıyordu. Güncel FilmMakinesi sayfasında player farklı bir container
-     * altında bulunabiliyor. Bu nedenle artık tüm iframe/data-* yapılarını
-     * tarıyoruz.
-     */
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
+
         Log.d(
             "FILMMAKINESI",
             "loadLinks -> $data",
         )
 
-        val pageResponse =
+        val response =
             runCatching {
                 app.get(
                     data,
@@ -995,11 +993,11 @@ class FilmMakinesi : MainAPI() {
             }.getOrNull()
                 ?: return false
 
-        val document = pageResponse.document
-        val rawHtml =
-            normalizeEmbeddedText(
-                pageResponse.text
-            )
+        val document =
+            response.document
+
+        val html =
+            normalizeText(response.text)
 
         val candidates =
             LinkedHashMap<String, String>()
@@ -1023,18 +1021,21 @@ class FilmMakinesi : MainAPI() {
                 }.getOrNull()
                     ?: return
 
-            if (fixed.isBlank()) {
-                return
-            }
-
-            if (sameUrl(fixed, data)) {
+            if (
+                fixed.isBlank() ||
+                sameUrl(fixed, data)
+            ) {
                 return
             }
 
             if (
-                isTrailerCandidateUrl(
-                    fixed
-                )
+                isTrailerCandidateUrl(fixed)
+            ) {
+                return
+            }
+
+            if (
+                !isUsefulPlayerUrl(fixed)
             ) {
                 return
             }
@@ -1045,70 +1046,46 @@ class FilmMakinesi : MainAPI() {
         }
 
         /*
-         * 1) EN ÖNEMLİ KISIM:
-         * Sayfadaki TÜM iframe'leri tara.
-         *
-         * div.player-div iframe
-         * iframe[src]
-         * iframe[data-src]
-         * iframe[data-url]
-         *
-         * hepsi burada yakalanır.
+         * Tüm iframe'ler.
          */
-        document.select(
-            "iframe, embed"
-        ).forEach { element ->
+        document
+            .select(
+                "iframe, embed"
+            )
+            .forEach { element ->
 
-            val marker =
-                (
-                    element.text() + " " +
-                        element.attr("title") + " " +
-                        element.attr("aria-label") + " " +
-                        element.id() + " " +
-                        element.attr("name") + " " +
-                        element.classNames()
-                            .joinToString(" ") + " " +
-                        element.parent()
-                            ?.text()
-                            .orEmpty()
-                    )
-                    .replace(
-                        Regex("\\s+"),
-                        " ",
-                    )
-                    .trim()
-
-            if (
-                isTrailerElement(element)
-            ) {
-                return@forEach
-            }
-
-            val label =
-                when {
-                    marker.contains(
-                        "rapid",
-                        true,
-                    ) ->
-                        "FilmMakinesi • Rapid"
-
-                    marker.contains(
-                        "dublaj",
-                        true,
-                    ) ->
-                        "FilmMakinesi • Dublaj"
-
-                    marker.contains(
-                        "altyaz",
-                        true,
-                    ) ->
-                        "FilmMakinesi • Altyazı"
-
-                    else ->
-                        "FilmMakinesi • Player"
+                if (
+                    isTrailerElement(element)
+                ) {
+                    return@forEach
                 }
 
-            val attributes =
+                val marker =
+                    (
+                        element.attr("title") + " " +
+                            element.attr("aria-label") + " " +
+                            element.attr("id") + " " +
+                            element.attr("name") + " " +
+                            element.classNames()
+                                .joinToString(" ")
+                        )
+                        .lowercase()
+
+                val label =
+                    when {
+                        "rapid" in marker ->
+                            "FilmMakinesi • Rapid"
+
+                        "dublaj" in marker ->
+                            "FilmMakinesi • Dublaj"
+
+                        "altyaz" in marker ->
+                            "FilmMakinesi • Altyazı"
+
+                        else ->
+                            "FilmMakinesi • Player"
+                    }
+
                 listOf(
                     "src",
                     "data-src",
@@ -1119,22 +1096,70 @@ class FilmMakinesi : MainAPI() {
                     "data-video",
                     "data-video-url",
                     "data-embed-url",
-                )
+                ).forEach { attr ->
 
-            for (attributeName in attributes) {
-                val raw =
-                    element
-                        .attr(attributeName)
-                        .trim()
+                    val raw =
+                        element.attr(attr)
 
-                if (raw.isBlank()) {
-                    continue
+                    if (
+                        raw.isBlank()
+                    ) {
+                        return@forEach
+                    }
+
+                    val decoded =
+                        normalizeText(raw)
+
+                    Regex(
+                        "https?://[^\\s\\\"'<>]+",
+                        RegexOption.IGNORE_CASE,
+                    )
+                        .findAll(decoded)
+                        .forEach { match ->
+                            addCandidate(
+                                match.value.trimEnd(
+                                    ')',
+                                    ']',
+                                    '}',
+                                    ';',
+                                    ',',
+                                ),
+                                label,
+                            )
+                        }
+
+                    if (
+                        decoded.startsWith("/")
+                    ) {
+                        addCandidate(
+                            decoded,
+                            label,
+                        )
+                    }
+                }
+            }
+
+        /*
+         * Scriptlerde player/embed URL'leri.
+         */
+        document
+            .select("script")
+            .forEach { element ->
+
+                val script =
+                    element.data()
+                        .ifBlank {
+                            element.html()
+                        }
+
+                if (
+                    script.isBlank()
+                ) {
+                    return@forEach
                 }
 
                 val decoded =
-                    normalizeEmbeddedText(
-                        raw
-                    )
+                    normalizeText(script)
 
                 Regex(
                     "https?://[^\\s\\\"'<>]+",
@@ -1150,163 +1175,95 @@ class FilmMakinesi : MainAPI() {
                                 ';',
                                 ',',
                             ),
-                            label,
+                            "FilmMakinesi • Script Player",
                         )
                     }
 
+                val unpacked =
+                    runCatching {
+                        getAndUnpack(decoded)
+                    }.getOrNull()
+
                 if (
-                    decoded.startsWith("/")
+                    !unpacked.isNullOrBlank() &&
+                    unpacked != decoded
                 ) {
-                    addCandidate(
-                        decoded,
-                        label,
+                    Regex(
+                        "https?://[^\\s\\\"'<>]+",
+                        RegexOption.IGNORE_CASE,
                     )
+                        .findAll(unpacked)
+                        .forEach { match ->
+                            addCandidate(
+                                match.value.trimEnd(
+                                    ')',
+                                    ']',
+                                    '}',
+                                    ';',
+                                    ',',
+                                ),
+                                "FilmMakinesi • Unpacked Player",
+                            )
+                        }
                 }
             }
-        }
 
         /*
-         * 2) Eski FilmMakinesi yapısı:
-         * div.player-div iframe
-         *
-         * Bu doğrudan fallback olarak da tutuluyor.
+         * Data-* / onclick player bağlantıları.
          */
-        document.select(
-            "div.player-div iframe, " +
-                "div.player-div embed, " +
-                "div.player-div video, " +
-                "div.player-div source, " +
-                "div.player-div [data-src], " +
-                "div.player-div [data-url], " +
-                "div.player-div [data-player], " +
-                "div.player-div [data-embed]"
-        ).forEach { element ->
-
-            if (
-                isTrailerElement(element)
-            ) {
-                return@forEach
-            }
-
-            val marker =
-                (
-                    element.text() + " " +
-                        element.attr("title") + " " +
-                        element.attr("aria-label") + " " +
-                        element.classNames()
-                            .joinToString(" ")
-                    )
-                    .lowercase()
-
-            val label =
-                when {
-                    marker.contains("rapid") ->
-                        "FilmMakinesi • Rapid"
-
-                    marker.contains("dublaj") ->
-                        "FilmMakinesi • Dublaj"
-
-                    else ->
-                        "FilmMakinesi • Player"
-                }
-
-            addCandidate(
-                firstNonBlank(
-                    element.attr("src"),
-                    element.attr("data-src"),
-                    element.attr("data-url"),
-                    element.attr("data-iframe"),
-                    element.attr("data-player"),
-                    element.attr("data-embed"),
-                ),
-                label,
+        document
+            .select(
+                "a[href], button, [onclick], " +
+                    "[data-src], [data-url], [data-link], " +
+                    "[data-href], [data-iframe], [data-embed], " +
+                    "[data-player], [data-video], [data-file], [data-play]"
             )
-        }
+            .forEach { element ->
 
-        /*
-         * 3) Player butonları ve data-* bağlantıları.
-         */
-        document.select(
-            "a[href], " +
-                "button, " +
-                "[role='button'], " +
-                "[onclick], " +
-                "[data-src], " +
-                "[data-url], " +
-                "[data-link], " +
-                "[data-href], " +
-                "[data-video], " +
-                "[data-iframe], " +
-                "[data-embed], " +
-                "[data-player], " +
-                "[data-player-src], " +
-                "[data-embed-url], " +
-                "[data-video-url], " +
-                "[data-file], " +
-                "[data-play]"
-        ).forEach { element ->
+                val marker =
+                    (
+                        element.text() + " " +
+                            element.attr("title") + " " +
+                            element.attr("aria-label") + " " +
+                            element.id() + " " +
+                            element.classNames()
+                                .joinToString(" ") +
+                            " " +
+                            element.attr("data-provider")
+                        )
+                        .lowercase()
 
-            val marker =
-                (
-                    element.text() + " " +
-                        element.attr("title") + " " +
-                        element.attr("aria-label") + " " +
-                        element.attr("id") + " " +
-                        element.classNames()
-                            .joinToString(" ") + " " +
-                        element.attr("data-type") + " " +
-                        element.attr("data-provider")
-                    )
-                    .replace(
-                        Regex("\\s+"),
-                        " ",
-                    )
-                    .trim()
+                val playerLike =
+                    "player" in marker ||
+                        "rapid" in marker ||
+                        "dublaj" in marker ||
+                        "altyaz" in marker ||
+                        "stream" in marker ||
+                        "flm" in marker ||
+                        "izle" in marker
 
-            val likelyPlayer =
-                marker.contains("flm", true) ||
-                    marker.contains("rapid", true) ||
-                    marker.contains("dublaj", true) ||
-                    marker.contains("altyaz", true) ||
-                    marker.contains("player", true) ||
-                    marker.contains("izle", true) ||
-                    marker.contains("stream", true) ||
-                    marker.contains("1080", true) ||
-                    marker.contains("720", true) ||
-                    marker.contains("film", true)
-
-            if (
-                !likelyPlayer &&
-                element.attr("onclick").isBlank()
-            ) {
-                return@forEach
-            }
-
-            val label =
-                when {
-                    marker.contains(
-                        "rapid",
-                        true,
-                    ) ->
-                        "FilmMakinesi • Rapid"
-
-                    marker.contains(
-                        "dublaj",
-                        true,
-                    ) ->
-                        "FilmMakinesi • Dublaj"
-
-                    marker.contains(
-                        "altyaz",
-                        true,
-                    ) ->
-                        "FilmMakinesi • Altyazı"
-
-                    else ->
-                        "FilmMakinesi • Player"
+                if (
+                    !playerLike &&
+                    element.attr("onclick").isBlank()
+                ) {
+                    return@forEach
                 }
 
-            val attributes =
+                val label =
+                    when {
+                        "rapid" in marker ->
+                            "FilmMakinesi • Rapid"
+
+                        "dublaj" in marker ->
+                            "FilmMakinesi • Dublaj"
+
+                        "altyaz" in marker ->
+                            "FilmMakinesi • Altyazı"
+
+                        else ->
+                            "FilmMakinesi • Player"
+                    }
+
                 listOf(
                     "href",
                     "src",
@@ -1324,211 +1281,27 @@ class FilmMakinesi : MainAPI() {
                     "data-file",
                     "data-play",
                     "onclick",
-                )
+                ).forEach { attr ->
 
-            for (
-                attributeName in attributes
-            ) {
-                val rawValue =
-                    element
-                        .attr(attributeName)
-                        .trim()
-
-                if (
-                    rawValue.isBlank()
-                ) {
-                    continue
-                }
-
-                val decoded =
-                    normalizeEmbeddedText(
-                        rawValue
-                    )
-
-                Regex(
-                    "https?://[^\\s\\\"'<>]+",
-                    RegexOption.IGNORE_CASE,
-                )
-                    .findAll(decoded)
-                    .forEach { match ->
-
-                        val candidateUrl =
-                            match.value.trimEnd(
-                                ')',
-                                ']',
-                                '}',
-                                ';',
-                                ',',
-                            )
-
-                        val lower =
-                            candidateUrl.lowercase()
-
-                        if (
-                            lower.contains("/player") ||
-                            lower.contains("/embed") ||
-                            lower.contains("/watch") ||
-                            lower.contains("/stream") ||
-                            lower.contains("/video") ||
-                            lower.contains("filmmakinesi.to/ajax") ||
-                            lower.contains("filmmakinesi.to/source") ||
-                            lower.contains("filmmakinesi.to/play") ||
-                            lower.contains("filmmakinesi.to/load") ||
-                            isKnownProviderHost(
-                                candidateUrl
-                            )
-                        ) {
-                            addCandidate(
-                                candidateUrl,
-                                label,
-                            )
-                        }
-                    }
-
-                Regex(
-                    """(?:^|[=:"'`()\s])((?:/)+(?:player|embed|watch|stream|video|ajax/player|ajax/embed|ajax/video|source|play|load)[^\s"'<>]*)""",
-                    RegexOption.IGNORE_CASE,
-                )
-                    .findAll(decoded)
-                    .map {
-                        it.groupValues[1]
-                    }
-                    .forEach { relative ->
-                        addCandidate(
-                            relative,
-                            label,
-                        )
-                    }
-            }
-        }
-
-        /*
-         * 4) Scriptlerde iframe/player URL'si ara.
-         *
-         * Önce keyword'e yakın pencere,
-         * sonra tüm script içinde doğrudan iframe/player/embed URL'si.
-         */
-        val scriptBlocks =
-            document.select("script")
-                .map {
-                    it.data()
-                        .ifBlank {
-                            it.html()
-                        }
-                }
-                .filter {
-                    it.isNotBlank()
-                }
-
-        for (script in scriptBlocks) {
-            val decodedScript =
-                normalizeEmbeddedText(
-                    script
-                )
-
-            /*
-             * Tüm script içindeki mutlak player URL'leri.
-             */
-            Regex(
-                "https?://[^\\s\\\"'<>]+",
-                RegexOption.IGNORE_CASE,
-            )
-                .findAll(decodedScript)
-                .forEach { match ->
-
-                    val candidateUrl =
-                        match.value.trimEnd(
-                            ')',
-                            ']',
-                            '}',
-                            ';',
-                            ',',
-                        )
-
-                    val lower =
-                        candidateUrl.lowercase()
+                    val raw =
+                        element.attr(attr)
 
                     if (
-                        lower.contains(
-                            "/embed"
-                        ) ||
-                        lower.contains(
-                            "/player"
-                        ) ||
-                        lower.contains(
-                            "/video"
-                        ) ||
-                        lower.contains(
-                            "/stream"
-                        ) ||
-                        lower.contains(
-                            "closeload"
-                        ) ||
-                        isKnownProviderHost(
-                            candidateUrl
-                        )
+                        raw.isBlank()
                     ) {
-                        addCandidate(
-                            candidateUrl,
-                            "FilmMakinesi • Script Player",
-                        )
-                    }
-                }
-
-            /*
-             * Keyword yakınındaki URL'ler.
-             */
-            val keywords =
-                listOf(
-                    "iframe",
-                    "player",
-                    "rapid",
-                    "dublaj",
-                    "altyaz",
-                    "embed",
-                    "stream",
-                    "source",
-                )
-
-            for (keyword in keywords) {
-                var cursor = 0
-
-                while (true) {
-                    val index =
-                        decodedScript.indexOf(
-                            keyword,
-                            cursor,
-                            ignoreCase = true,
-                        )
-
-                    if (index < 0) {
-                        break
+                        return@forEach
                     }
 
-                    val start =
-                        maxOf(
-                            0,
-                            index - 2200,
-                        )
-
-                    val end =
-                        minOf(
-                            decodedScript.length,
-                            index + 3200,
-                        )
-
-                    val window =
-                        decodedScript.substring(
-                            start,
-                            end,
-                        )
+                    val decoded =
+                        normalizeText(raw)
 
                     Regex(
                         "https?://[^\\s\\\"'<>]+",
                         RegexOption.IGNORE_CASE,
                     )
-                        .findAll(window)
+                        .findAll(decoded)
                         .forEach { match ->
+
                             addCandidate(
                                 match.value.trimEnd(
                                     ')',
@@ -1537,126 +1310,34 @@ class FilmMakinesi : MainAPI() {
                                     ';',
                                     ',',
                                 ),
-                                "FilmMakinesi • Script Player",
+                                label,
                             )
                         }
 
                     Regex(
-                        """["'](?:src|href|url|file|source|embed|player|iframe)["']?\s*[:=]\s*["']([^"']+)["']""",
+                        """(?:^|[=:"'`()\s])((?:/)+(?:player|embed|watch|stream|video|source|play|load)[^\s"'<>]*)""",
                         RegexOption.IGNORE_CASE,
                     )
-                        .findAll(window)
+                        .findAll(decoded)
                         .forEach { match ->
                             addCandidate(
                                 match.groupValues[1],
-                                "FilmMakinesi • Script Player",
+                                label,
                             )
                         }
-
-                    cursor =
-                        index + keyword.length
                 }
             }
-
-            /*
-             * Packed JavaScript.
-             */
-            val unpacked =
-                runCatching {
-                    getAndUnpack(
-                        decodedScript
-                    )
-                }.getOrNull()
-
-            if (
-                !unpacked.isNullOrBlank() &&
-                unpacked != decodedScript
-            ) {
-                Regex(
-                    "https?://[^\\s\\\"'<>]+",
-                    RegexOption.IGNORE_CASE,
-                )
-                    .findAll(unpacked)
-                    .forEach { match ->
-                        addCandidate(
-                            match.value.trimEnd(
-                                ')',
-                                ']',
-                                '}',
-                                ';',
-                                ',',
-                            ),
-                            "FilmMakinesi • Unpacked Player",
-                        )
-                    }
-
-                extractDirectMediaWithContext(
-                    normalizeEmbeddedText(
-                        unpacked
-                    )
-                ).forEach { mediaUrl ->
-                    addCandidate(
-                        mediaUrl,
-                        "FilmMakinesi • Direct Media",
-                    )
-                }
-            }
-        }
 
         /*
-         * 5) Doğrudan m3u8 / mp4.
+         * Doğrudan m3u8/mp4.
          */
-        extractDirectMediaWithContext(
-            rawHtml
-        ).forEach { mediaUrl ->
+        extractDirectMedia(
+            html
+        ).forEach {
             addCandidate(
-                mediaUrl,
+                it,
                 "FilmMakinesi • Direct Media",
             )
-        }
-
-        /*
-         * 6) Hiç aday bulunamadıysa son bir global HTML regex taraması.
-         */
-        if (candidates.isEmpty()) {
-            val allUrls =
-                Regex(
-                    """https?://[^"'<>\s]+""",
-                    RegexOption.IGNORE_CASE,
-                )
-                    .findAll(rawHtml)
-                    .map {
-                        it.value.trimEnd(
-                            ')',
-                            ']',
-                            '}',
-                            ';',
-                            ',',
-                        )
-                    }
-                    .distinct()
-
-            for (candidateUrl in allUrls) {
-                val lower =
-                    candidateUrl.lowercase()
-
-                if (
-                    lower.contains("/embed") ||
-                    lower.contains("/player") ||
-                    lower.contains("/video") ||
-                    lower.contains("/stream") ||
-                    lower.contains(".m3u8") ||
-                    lower.contains(".mp4") ||
-                    isKnownProviderHost(
-                        candidateUrl
-                    )
-                ) {
-                    addCandidate(
-                        candidateUrl,
-                        "FilmMakinesi • Global Fallback",
-                    )
-                }
-            }
         }
 
         Log.d(
@@ -1674,31 +1355,33 @@ class FilmMakinesi : MainAPI() {
             "player aday sayısı = ${candidates.size}",
         )
 
-        if (candidates.isEmpty()) {
+        if (
+            candidates.isEmpty()
+        ) {
             Log.w(
                 "FILMMAKINESI",
-                "Hiç player bulunamadı: $data",
+                "Player adayı bulunamadı: $data",
             )
             return false
         }
 
         Log.d(
             "FILMMAKINESI",
-            "Bulunan adaylar = " +
+            "Player adayları = " +
                 candidates.entries.joinToString(
                     " | "
                 ) {
                     "${it.value}: ${it.key}"
-                }
+                },
         )
 
         /*
-         * 7) CloseLoad önce.
+         * CloseLoad.
          */
         val closeLoadCandidates =
             candidates.entries.filter {
                 it.key.contains(
-                    "closeload",
+                    "closeload.filmmakinesi",
                     true,
                 )
             }
@@ -1706,40 +1389,47 @@ class FilmMakinesi : MainAPI() {
         for (
             (playerUrl, _) in closeLoadCandidates
         ) {
-            val closeLoaded =
-                runCatching {
-                    CloseLoadExtractor().getUrl(
+            var emitted =
+                false
+
+            Log.d(
+                "FILMMAKINESI",
+                "CloseLoad deneniyor: $playerUrl",
+            )
+
+            runCatching {
+                CloseLoadExtractor()
+                    .getUrl(
                         url = playerUrl,
                         referer = data,
                         subtitleCallback = subtitleCallback,
-                        callback = callback,
+                        callback = {
+                            emitted = true
+                            callback(it)
+                        },
                     )
+            }.onFailure {
+                Log.e(
+                    "FILMMAKINESI",
+                    "CloseLoad hatası: $playerUrl",
+                    it,
+                )
+            }
 
-                    true
-                }.getOrElse { error ->
-                    Log.e(
-                        "FILMMAKINESI",
-                        "CloseLoad başarısız: $playerUrl",
-                        error,
-                    )
-
-                    false
-                }
-
-            if (closeLoaded) {
+            if (emitted) {
                 return true
             }
         }
 
         /*
-         * 8) CloudStream extractor'ları.
+         * Diğer extractor'lar.
          */
         for (
             (playerUrl, playerLabel) in candidates
         ) {
             if (
                 playerUrl.contains(
-                    "closeload",
+                    "closeload.filmmakinesi",
                     true,
                 )
             ) {
@@ -1751,7 +1441,7 @@ class FilmMakinesi : MainAPI() {
                 "Extractor deneniyor: $playerUrl",
             )
 
-            val externalLoaded =
+            val loaded =
                 runCatching {
                     loadExtractor(
                         playerUrl,
@@ -1761,17 +1451,12 @@ class FilmMakinesi : MainAPI() {
                     )
                 }.getOrDefault(false)
 
-            if (externalLoaded) {
-                Log.d(
-                    "FILMMAKINESI",
-                    "Extractor başarılı: $playerUrl",
-                )
-
+            if (loaded) {
                 return true
             }
 
             /*
-             * Extractor çözemedi ise player sayfasını aç.
+             * Player sayfasını aç.
              */
             val playerResponse =
                 runCatching {
@@ -1781,7 +1466,8 @@ class FilmMakinesi : MainAPI() {
                             "User-Agent" to USER_AGENT,
                             "Accept" to "*/*",
                             "Referer" to data,
-                            "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                            "Accept-Language" to
+                                "tr-TR,tr;q=0.9,en;q=0.8",
                         ),
                     )
                 }.getOrNull()
@@ -1791,127 +1477,106 @@ class FilmMakinesi : MainAPI() {
                 playerResponse.document
 
             val playerHtml =
-                normalizeEmbeddedText(
+                normalizeText(
                     playerResponse.text
                 )
 
             /*
-             * İç içe iframe.
+             * İç iframe.
              */
-            val nestedCandidates =
-                LinkedHashSet<String>()
+            playerDocument
+                .select(
+                    "iframe, embed, [data-iframe], " +
+                        "[data-embed], [data-player], [data-video]"
+                )
+                .forEach { nestedElement ->
 
-            playerDocument.select(
-                "iframe, embed, " +
-                    "[data-iframe], " +
-                    "[data-embed], " +
-                    "[data-player], " +
-                    "[data-video]"
-            ).forEach { element ->
+                    if (
+                        isTrailerElement(
+                            nestedElement
+                        )
+                    ) {
+                        return@forEach
+                    }
 
-                if (
-                    isTrailerElement(
-                        element
-                    )
-                ) {
-                    return@forEach
-                }
-
-                firstNonBlank(
-                    element.attr("src"),
-                    element.attr("data-src"),
-                    element.attr("data-url"),
-                    element.attr("data-iframe"),
-                    element.attr("data-embed"),
-                    element.attr("data-player"),
-                    element.attr("data-video"),
-                )?.let { raw ->
-                    fixUrlNull(raw)
-                        ?.let { nested ->
-                            if (
-                                !isTrailerCandidateUrl(
-                                    nested
-                                )
-                            ) {
-                                nestedCandidates.add(
-                                    nested
+                    firstNonBlank(
+                        nestedElement.attr("src"),
+                        nestedElement.attr("data-src"),
+                        nestedElement.attr("data-url"),
+                        nestedElement.attr("data-iframe"),
+                        nestedElement.attr("data-embed"),
+                        nestedElement.attr("data-player"),
+                        nestedElement.attr("data-video"),
+                    )?.let { nested ->
+                        fixUrlNull(nested)
+                            ?.takeIf {
+                                !isTrailerCandidateUrl(it)
+                            }
+                            ?.let {
+                                candidates.putIfAbsent(
+                                    it,
+                                    playerLabel,
                                 )
                             }
-                        }
+                    }
                 }
-            }
 
-            for (
-                nested in nestedCandidates
-            ) {
-                val nestedLoaded =
-                    runCatching {
-                        loadExtractor(
-                            nested,
-                            playerUrl,
-                            subtitleCallback,
-                            callback,
-                        )
-                    }.getOrDefault(false)
-
-                if (nestedLoaded) {
-                    return true
-                }
-            }
-
-            /*
-             * Player sayfasında doğrudan medya.
-             */
             val mediaUrls =
                 LinkedHashSet<String>()
 
             mediaUrls.addAll(
-                extractDirectMediaWithContext(
+                extractDirectMedia(
                     playerHtml
                 )
             )
 
-            playerDocument.select(
-                "script"
-            ).forEach { scriptElement ->
+            playerDocument
+                .select("script")
+                .forEach { scriptElement ->
 
-                val script =
-                    scriptElement.data()
-                        .ifBlank {
-                            scriptElement.html()
-                        }
+                    val script =
+                        scriptElement.data()
+                            .ifBlank {
+                                scriptElement.html()
+                            }
 
-                if (script.isBlank()) {
-                    return@forEach
-                }
+                    if (
+                        script.isBlank()
+                    ) {
+                        return@forEach
+                    }
 
-                val unpacked =
-                    runCatching {
-                        getAndUnpack(
+                    val unpacked =
+                        runCatching {
+                            getAndUnpack(
+                                script
+                            )
+                        }.getOrDefault(
                             script
                         )
-                    }.getOrDefault(
-                        script
-                    )
 
-                mediaUrls.addAll(
-                    extractDirectMediaWithContext(
-                        normalizeEmbeddedText(
-                            unpacked
+                    mediaUrls.addAll(
+                        extractDirectMedia(
+                            normalizeText(
+                                unpacked
+                            )
                         )
                     )
-                )
-            }
+                }
 
             var found = false
 
             for (
-                mediaUrl in mediaUrls
-                    .distinct()
-                    .filterNot {
-                        isTrailerCandidateUrl(it)
-                    }
+                mediaUrl in mediaUrls.distinct()
             ) {
+                if (
+                    isTrailerCandidateUrl(
+                        mediaUrl
+                    )
+                ) {
+                    continue
+                }
+
                 callback(
                     newExtractorLink(
                         source = name,
@@ -1950,30 +1615,65 @@ class FilmMakinesi : MainAPI() {
         return false
     }
 
-    private fun originFromUrl(
-        url: String,
-    ): String {
-        return runCatching {
-            val uri = URI(url)
-
-            val scheme =
-                uri.scheme ?: "https"
-
-            val host =
-                uri.host
-                    ?: return@runCatching "$mainUrl/"
-
-            "$scheme://$host"
-        }.getOrDefault("$mainUrl/")
-    }
-
-    private fun isKnownProviderHost(
+    private fun isUsefulPlayerUrl(
         url: String,
     ): Boolean {
         val lower =
             url.lowercase()
 
-        return lower.contains("vidmoly") ||
+        if (
+            lower.contains(
+                ".m3u8"
+            ) ||
+            lower.contains(
+                ".mp4"
+            ) ||
+            lower.contains(
+                "closeload.filmmakinesi"
+            )
+        ) {
+            return true
+        }
+
+        if (
+            lower.contains(
+                "/uploads/"
+            ) ||
+            lower.contains(
+                "/oyuncular/"
+            ) ||
+            lower.contains(
+                "/yil/"
+            ) ||
+            lower.contains(
+                "schema.org"
+            )
+        ) {
+            return false
+        }
+
+        if (
+            lower.contains(
+                "youtube.com"
+            ) ||
+            lower.contains(
+                "youtu.be"
+            ) ||
+            lower.contains(
+                "vimeo.com"
+            )
+        ) {
+            return false
+        }
+
+        return lower.contains("/embed") ||
+            lower.contains("/player") ||
+            lower.contains("/video") ||
+            lower.contains("/stream") ||
+            lower.contains("/play") ||
+            lower.contains("/load") ||
+            lower.contains("/source") ||
+            lower.contains("vidmoly") ||
             lower.contains("filemoon") ||
             lower.contains("streamwish") ||
             lower.contains("dood") ||
@@ -1983,9 +1683,13 @@ class FilmMakinesi : MainAPI() {
             lower.contains("streamtape") ||
             lower.contains("vidhide") ||
             lower.contains("lulustream") ||
-            lower.contains("ok.ru") ||
-            lower.contains("closeload") ||
-            lower.contains("filmmakinesi")
+            lower.contains("ok.ru")
+    }
+
+    private fun isKnownProviderHost(
+        url: String,
+    ): Boolean {
+        return isUsefulPlayerUrl(url)
     }
 
     private fun isTrailerCandidateUrl(
@@ -2004,169 +1708,116 @@ class FilmMakinesi : MainAPI() {
             value.contains(
                 "youtube.com/embed"
             ) ||
-            value.contains("youtu.be/") ||
             value.contains(
-                "youtube-nocookie.com"
+                "youtu.be/"
             ) ||
-            value.contains("vimeo.com/")
+            value.contains(
+                "youtube-nocookie"
+            ) ||
+            value.contains(
+                "vimeo.com/"
+            )
     }
 
     private fun isTrailerElement(
         element: Element,
     ): Boolean {
-        val parts =
-            ArrayList<String>()
-
-        var current:
-            Element? = element
-
-        repeat(5) {
-            val item =
-                current
-                    ?: return@repeat
-
-            parts.add(
-                item.id()
-            )
-
-            parts.add(
-                item.classNames()
-                    .joinToString(" ")
-            )
-
-            parts.add(
-                item.attr("title")
-            )
-
-            parts.add(
-                item.attr("aria-label")
-            )
-
-            parts.add(
-                item.attr("data-name")
-            )
-
-            parts.add(
-                item.attr("data-type")
-            )
-
-            parts.add(
-                item.attr("data-player")
-            )
-
-            current =
-                item.parent()
-        }
-
         val marker =
-            parts.joinToString(" ")
-                .lowercase()
+            buildString {
+
+                var current:
+                    Element? = element
+
+                repeat(5) {
+                    val item =
+                        current
+                            ?: return@repeat
+
+                    append(' ')
+                    append(
+                        item.id()
+                    )
+
+                    append(' ')
+                    append(
+                        item.classNames()
+                            .joinToString(" ")
+                    )
+
+                    append(' ')
+                    append(
+                        item.attr("title")
+                    )
+
+                    append(' ')
+                    append(
+                        item.attr("aria-label")
+                    )
+
+                    append(' ')
+                    append(
+                        item.attr("data-type")
+                    )
+
+                    append(' ')
+                    append(
+                        item.attr("data-player")
+                    )
+
+                    current =
+                        item.parent()
+                }
+            }
 
         return Regex(
             "\\b(fragman|trailer|teaser|preview|tanıtım|tanitim)\\b",
             RegexOption.IGNORE_CASE,
+        ).containsMatchIn(
+            marker
         )
-            .containsMatchIn(marker)
     }
 
-    private fun sameUrl(
-        a: String,
-        b: String,
-    ): Boolean {
-        return a.trimEnd('/') ==
-            b.trimEnd('/')
-    }
-
-    private fun extractDirectMediaWithContext(
+    private fun extractDirectMedia(
         html: String,
     ): List<String> {
         val patterns =
             listOf(
                 Regex(
-                    "https?://[^\\\"'<>\\s]+\\.m3u8(?:\\?[^\\\"'<>\\s]*)?",
+                    """https?://[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""",
                     RegexOption.IGNORE_CASE,
                 ),
                 Regex(
-                    "https?://[^\\\"'<>\\s]+\\.mp4(?:\\?[^\\\"'<>\\s]*)?",
+                    """https?://[^"'<>\s]+\.mp4(?:\?[^"'<>\s]*)?""",
                     RegexOption.IGNORE_CASE,
                 ),
             )
 
-        val foundUrls =
+        val result =
             LinkedHashSet<String>()
 
         for (pattern in patterns) {
-            for (
-                match in pattern.findAll(html)
-            ) {
-                val url =
-                    match.value.replace(
-                        "\\/",
-                        "/",
-                    )
+            pattern.findAll(html)
+                .forEach {
+                    val url =
+                        it.value.replace(
+                            "\\/",
+                            "/",
+                        )
 
-                if (
-                    isTrailerCandidateUrl(
-                        url
-                    )
-                ) {
-                    continue
+                    if (
+                        !isTrailerCandidateUrl(
+                            url
+                        )
+                    ) {
+                        result.add(url)
+                    }
                 }
-
-                val start =
-                    maxOf(
-                        0,
-                        match.range.first - 700,
-                    )
-
-                val end =
-                    minOf(
-                        html.length,
-                        match.range.last + 700,
-                    )
-
-                val context =
-                    html.substring(
-                        start,
-                        end,
-                    ).lowercase()
-
-                if (
-                    Regex(
-                        "\\b(fragman|trailer|teaser|preview|tanıtım|tanitim)\\b",
-                        RegexOption.IGNORE_CASE,
-                    ).containsMatchIn(
-                        context
-                    )
-                ) {
-                    continue
-                }
-
-                val shortDuration =
-                    Regex(
-                        "(?:duration|length|seconds)\\D{0,15}(\\d+(?:\\.\\d+)?)",
-                        RegexOption.IGNORE_CASE,
-                    )
-                        .find(context)
-                        ?.groupValues
-                        ?.getOrNull(1)
-                        ?.toDoubleOrNull()
-                        ?.let {
-                            it in 1.0..900.0
-                        } == true
-
-                if (shortDuration) {
-                    continue
-                }
-
-                foundUrls.add(url)
-            }
         }
 
-        return foundUrls.toList()
+        return result.toList()
     }
 
-    private fun normalizeEmbeddedText(
+    private fun normalizeText(
         text: String,
     ): String {
         return text
@@ -2180,13 +1831,13 @@ class FilmMakinesi : MainAPI() {
                 ignoreCase = true,
             )
             .replace(
-                "\\u003D",
-                "=",
+                "\\u002F",
+                "/",
                 ignoreCase = true,
             )
             .replace(
-                "\\u002F",
-                "/",
+                "\\u003D",
+                "=",
                 ignoreCase = true,
             )
             .replace(
@@ -2196,45 +1847,32 @@ class FilmMakinesi : MainAPI() {
             )
     }
 
-    private fun extractMediaUrls(
-        html: String,
-    ): List<String> {
-        val patterns =
-            listOf(
-                Regex(
-                    """https?://[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""",
-                    RegexOption.IGNORE_CASE,
-                ),
-                Regex(
-                    """https?://[^"'<>\s]+\.mp4(?:\?[^"'<>\s]*)?""",
-                    RegexOption.IGNORE_CASE,
-                ),
-                Regex(
-                    """["'](?:file|source|src|contentUrl)["']?\s*[:=]\s*["'](https?://[^"']+)["']""",
-                    RegexOption.IGNORE_CASE,
-                ),
-            )
+    private fun originFromUrl(
+        url: String,
+    ): String {
+        return runCatching {
+            val uri =
+                URI(url)
 
-        return patterns
-            .flatMap {
-                it.findAll(html)
-                    .map {
-                        match ->
-                        match.groupValues.last()
-                    }
-                    .toList()
-            }
-            .map {
-                it.replace(
-                    "\\/",
-                    "/",
-                )
-            }
-            .distinct()
-            .filter {
-                it.contains(".m3u8", true) ||
-                    it.contains(".mp4", true)
-            }
+            val scheme =
+                uri.scheme ?: "https"
+
+            val host =
+                uri.host
+                    ?: return@runCatching "$mainUrl/"
+
+            "$scheme://$host"
+        }.getOrDefault(
+            "$mainUrl/"
+        )
+    }
+
+    private fun sameUrl(
+        a: String,
+        b: String,
+    ): Boolean {
+        return a.trimEnd('/') ==
+            b.trimEnd('/')
     }
 
     private fun detectQuality(
@@ -2328,6 +1966,7 @@ class FilmMakinesi : MainAPI() {
     private fun extractDurationMinutes(
         text: String,
     ): Int? {
+
         Regex(
             "(\\d+)\\s*Saat(?:\\s*(\\d+)\\s*Dakika)?",
             RegexOption.IGNORE_CASE,
@@ -2390,7 +2029,7 @@ class FilmMakinesi : MainAPI() {
         if (
             url.contains(
                 "/dizi/",
-                ignoreCase = true,
+                true,
             )
         ) {
             return false
@@ -2403,18 +2042,18 @@ class FilmMakinesi : MainAPI() {
     private fun extractYear(
         text: String,
     ): Int? {
-        val match =
-            Regex(
-                "(?:19|20)\\d{2}"
-            ).find(text)
-                ?: return null
-
-        return match.value.toIntOrNull()
+        return Regex(
+            "(?:19|20)\\d{2}"
+        )
+            .find(text)
+            ?.value
+            ?.toIntOrNull()
     }
 
     private fun extractRating(
         text: String,
     ): Float? {
+
         val explicit =
             Regex(
                 "(?:IMDb|IMDB|Puan|Rating)\\s*[:：]?\\s*([0-9]+(?:[.,][0-9]+)?)",
@@ -2425,7 +2064,7 @@ class FilmMakinesi : MainAPI() {
                 ?.getOrNull(1)
                 ?.replace(
                     ',',
-                    '.'
+                    '.',
                 )
                 ?.toFloatOrNull()
 
@@ -2434,27 +2073,6 @@ class FilmMakinesi : MainAPI() {
             explicit in 0f..10f
         ) {
             return explicit
-        }
-
-        val cardRating =
-            Regex(
-                "(?:HD|CAM|Dual|Dublaj|Altyazılı|Altyazili|Yabancı Dizi|Yerli Dizi|Yerli Film)\\s+([0-9](?:[.,][0-9])?)(?:\\s|$)",
-                RegexOption.IGNORE_CASE,
-            )
-                .find(text)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.replace(
-                    ',',
-                    '.'
-                )
-                ?.toFloatOrNull()
-
-        if (
-            cardRating != null &&
-            cardRating in 0f..10f
-        ) {
-            return cardRating
         }
 
         return Regex(
@@ -2466,7 +2084,7 @@ class FilmMakinesi : MainAPI() {
                     .getOrNull(1)
                     ?.replace(
                         ',',
-                        '.'
+                        '.',
                     )
                     ?.toFloatOrNull()
             }
@@ -2479,55 +2097,55 @@ class FilmMakinesi : MainAPI() {
         document: Document,
         page: Int,
     ): Boolean {
-        val nextPage = page + 1
+        val next =
+            page + 1
 
-        val nextPattern =
+        val regex =
             Regex(
-                "(?:/sayfa/$nextPage/|-$nextPage(?:/|$)|[?&]page=$nextPage)"
+                "(?:/sayfa/$next/|-$next(?:/|$)|[?&]page=$next)"
             )
 
-        return document.select(
-            "a[href]"
-        ).any { anchor ->
+        return document
+            .select("a[href]")
+            .any { anchor ->
 
-            val href =
-                fixUrlNull(
-                    anchor.attr("href")
-                ).orEmpty()
+                val href =
+                    fixUrlNull(
+                        anchor.attr("href")
+                    ).orEmpty()
 
-            nextPattern.containsMatchIn(
-                href
-            ) ||
-                anchor.text()
-                    .trim()
-                    .equals(
-                        "$nextPage",
-                        true,
-                    )
-        }
+                regex.containsMatchIn(
+                    href
+                ) ||
+                    anchor.text()
+                        .trim()
+                        .equals(
+                            next.toString(),
+                            true,
+                        )
+            }
     }
 
     private fun isContentDetailUrl(
         url: String,
     ): Boolean {
-        val clean =
+        val uri =
             runCatching {
                 URI(url)
             }.getOrNull()
                 ?: return false
 
         if (
-            !clean.host.orEmpty()
-                .contains(
-                    "filmmakinesi.to",
-                    true,
-                )
+            !uri.host.orEmpty().contains(
+                "filmmakinesi.to",
+                true,
+            )
         ) {
             return false
         }
 
         val path =
-            clean.path.trimEnd('/')
+            uri.path.trimEnd('/')
 
         return path.matches(
             Regex("/film/[^/]+")
@@ -2541,61 +2159,64 @@ class FilmMakinesi : MainAPI() {
         text: String,
     ): String? {
         var value =
-            text.replace(
-                Regex("\\s+"),
-                " ",
-            ).trim()
+            text
+                .replace(
+                    Regex("\\s+"),
+                    " ",
+                )
+                .trim()
 
-        if (value.isBlank()) {
+        if (
+            value.isBlank()
+        ) {
             return null
         }
 
-        value = value
-            .replace(
-                Regex(
-                    "^(?:HD|CAM|HD Dual|HD Altyazılı|HD Altyazili|HD Dublaj|Yabancı Dizi|Yerli Dizi|Yerli Film|Dual|Altyazılı|Altyazili|Dublaj)\\s*",
-                    RegexOption.IGNORE_CASE,
-                ),
-                "",
-            )
-            .replace(
-                Regex(
-                    "^\\d+(?:[.,]\\d+)?\\s*"
-                ),
-                "",
-            )
-            .replace(
-                Regex(
-                    "^\\d+\\s+"
-                ),
-                "",
-            )
-            .replace(
-                Regex(
-                    "\\b(?:19|20)\\d{2}\\b"
-                ),
-                "",
-            )
-            .replace(
-                Regex(
-                    "\\b\\d+\\s+Dakika\\b",
-                    RegexOption.IGNORE_CASE,
-                ),
-                "",
-            )
-            .replace(
-                Regex(
-                    "\\bİzle\\b|\\bIzle\\b",
-                    RegexOption.IGNORE_CASE,
-                ),
-                "",
-            )
-            .trim(
-                ' ',
-                '-',
-                '|',
-                ':',
-            )
+        value =
+            value
+                .replace(
+                    Regex(
+                        "^(?:HD|CAM|HD Dual|HD Altyazılı|HD Altyazili|HD Dublaj|Yabancı Dizi|Yerli Dizi|Yerli Film|Dual|Altyazılı|Altyazili|Dublaj)\\s*",
+                        RegexOption.IGNORE_CASE,
+                    ),
+                    "",
+                )
+                .replace(
+                    Regex(
+                        "^\\d+(?:[.,]\\d+)?\\s*"
+                    ),
+                    "",
+                )
+                .replace(
+                    Regex(
+                        "\\b(?:19|20)\\d{2}\\b"
+                    ),
+                    "",
+                )
+                .replace(
+                    Regex(
+                        "\\b\\d+\\s+Dakika\\b",
+                        RegexOption.IGNORE_CASE,
+                    ),
+                    "",
+                )
+                .replace(
+                    Regex(
+                        "\\bİzle\\b|\\bIzle\\b",
+                        RegexOption.IGNORE_CASE,
+                    ),
+                    "",
+                )
+                .replace(
+                    Regex("\\s+"),
+                    " ",
+                )
+                .trim(
+                    ' ',
+                    '-',
+                    '|',
+                    ':',
+                )
 
         return value.takeIf {
             it.isNotBlank()
@@ -2658,7 +2279,6 @@ class FilmMakinesi : MainAPI() {
                 ),
                 "",
             )
-            .trim()
             .removeSuffix(" izle")
             .removeSuffix(" İzle")
             .trim()
@@ -2676,13 +2296,24 @@ class FilmMakinesi : MainAPI() {
 
     companion object {
         private const val USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 " +
-                "Chrome/154.0 Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/150.0.0.0 Safari/537.36"
     }
 }
 
 /*
- * CloseLoad extractor.
+ * CloseLoad
+ *
+ * Buradaki çözüm, CloseLoad'un güncel dinamik JS şemasına göre:
+ * 1. İki anahtar değişkenini alır.
+ * 2. Array içindeki string parçalarını birleştirir.
+ * 3. key2 işlemlerini tersten uygular:
+ *    - Base64
+ *    - reverse
+ *    - Caesar benzeri harf kaydırması
+ * 4. Sonraki karakter shuffle işlemini uygular.
+ * 5. XOR tabanlı son çözme aşamasını uygular.
  */
 private class CloseLoadExtractor : ExtractorApi() {
 
@@ -2690,7 +2321,7 @@ private class CloseLoadExtractor : ExtractorApi() {
         "CloseLoad"
 
     override val mainUrl =
-        "https://closeload.filmmakinesi.de"
+        "https://closeload.filmmakinesi.to"
 
     override val requiresReferer =
         true
@@ -2701,292 +2332,58 @@ private class CloseLoadExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ) {
-        val extRef =
-            referer
-                ?: "https://filmmakinesi.to/"
+
+        val userAgent =
+            USER_AGENT
+
+        val headers =
+            mapOf(
+                "User-Agent" to userAgent,
+                "Accept" to "*/*",
+                "Referer" to (
+                    referer
+                        ?: "https://filmmakinesi.to/"
+                    ),
+                "Origin" to mainUrl,
+            )
+
+        val html =
+            runCatching {
+                app.get(
+                    url,
+                    headers = headers,
+                ).text
+            }.getOrNull()
+
+                ?: throw ErrorLoadingException(
+                    "CloseLoad sayfası alınamadı"
+                )
 
         Log.d(
             "FILMMAKINESI",
-            "CloseLoad URL -> $url",
+            "CloseLoad HTML length = ${html.length}",
         )
 
-        val response =
-            app.get(
-                url,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to extRef,
-                    "Accept-Language" to
-                        "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-                ),
-            )
+        /*
+         * Önce güncel native decryption.
+         */
+        val decoded =
+            decodeNative(html)
 
-        response.document
-            .select("track[src]")
-            .forEach { track ->
-
-                val src =
-                    track.attr("src")
-                        .trim()
-                        .takeIf {
-                            it.isNotBlank()
-                        }
-                        ?.let { raw ->
-                            runCatching {
-                                URI(url)
-                                    .resolve(raw)
-                                    .toString()
-                            }.getOrNull()
-                        }
-
-                if (
-                    !src.isNullOrBlank()
-                ) {
-                    subtitleCallback(
-                        SubtitleFile(
-                            lang = track.attr("label")
-                                .ifBlank {
-                                    track.attr(
-                                        "srclang"
-                                    ).ifBlank {
-                                        "Turkish"
-                                    }
-                                },
-                            url = src,
-                        )
-                    )
-                }
-            }
-
-        val scripts =
-            response.document
-                .select("script")
-                .map {
-                    it.data()
-                        .ifBlank {
-                            it.html()
-                        }
-                        .trim()
-                }
-                .filter {
-                    it.isNotBlank()
-                }
-
-        val unpackedScripts =
-            buildList {
-
-                for (script in scripts) {
-                    add(script)
-
-                    runCatching {
-                        getAndUnpack(script)
-                    }
-                        .getOrNull()
-                        ?.takeIf {
-                            it.isNotBlank() &&
-                                it != script
-                        }
-                        ?.let(::add)
-                }
-            }
-
-        val encodedCandidates =
-            LinkedHashSet<String>()
-
-        for (
-            script in unpackedScripts
+        if (
+            !decoded.isNullOrBlank()
         ) {
-            Regex(
-                "return\\s+result\\s*}var\\s+.*?=\\s*\\(\\\"([^\\\"]+)\\\"\\)",
-                RegexOption.IGNORE_CASE,
+            Log.d(
+                "FILMMAKINESI",
+                "CloseLoad decoded = $decoded",
             )
-                .find(script)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.let(
-                    encodedCandidates::add
-                )
 
-            Regex(
-                "(?:=|\\()\\s*\\\"([A-Za-z0-9+/=_-]{80,})\\\"\\s*\\)?",
-                RegexOption.IGNORE_CASE,
-            )
-                .findAll(script)
-                .forEach { match ->
-                    match.groupValues
-                        .getOrNull(1)
-                        ?.let(
-                            encodedCandidates::add
-                        )
-                }
-        }
-
-        fun normalizeBase64(
-            value: String,
-        ): String {
-            var v =
-                value
-                    .trim()
-                    .replace(
-                        "\\/",
-                        "/"
-                    )
-                    .replace(
-                        "\\u003d",
-                        "=",
-                        ignoreCase = true,
-                    )
-                    .replace(
-                        "\\u002b",
-                        "+",
-                        ignoreCase = true,
-                    )
-                    .replace(
-                        "\\u002f",
-                        "/",
-                        ignoreCase = true,
-                    )
-
-            v = v.filter {
-                !it.isWhitespace()
-            }
-
-            val pad =
-                (
-                    4 -
-                        (
-                            v.length % 4
-                            )
-                    ) % 4
-
-            return v +
-                "=".repeat(pad)
-        }
-
-        fun decodeCloseLoad(
-            value: String,
-        ): List<String> {
-            val results =
-                LinkedHashSet<String>()
-
-            val original =
-                value
-                    .trim()
-                    .removeSurrounding("\"")
-
-            val normalized =
-                normalizeBase64(
-                    original
-                )
-
-            runCatching {
-                val first =
-                    Base64.decode(
-                        normalized,
-                        Base64.DEFAULT,
-                    ).reversedArray()
-
-                val second =
-                    Base64.decode(
-                        first,
-                        Base64.DEFAULT,
-                    )
-
-                val text =
-                    second.toString(
-                        Charsets.UTF_8
-                    )
-
-                text.split("|")
-                    .map {
-                        it.trim()
-                    }
-                    .filter {
-                        it.startsWith(
-                            "http",
-                            true,
-                        ) &&
-                            (
-                                it.contains(
-                                    ".m3u8",
-                                    true,
-                                ) ||
-                                    it.contains(
-                                        ".mp4",
-                                        true,
-                                    )
-                                )
-                    }
-                    .forEach(
-                        results::add
-                    )
-
-                if (
-                    text.contains(
-                        "http",
-                        true,
-                    )
-                ) {
-                    Regex(
-                        "https?://[^\\s|\\\"'<>]+",
-                        RegexOption.IGNORE_CASE,
-                    )
-                        .findAll(text)
-                        .map {
-                            it.value.trimEnd(
-                                ')',
-                                ']',
-                                '}',
-                                ';',
-                                ',',
-                            )
-                        }
-                        .filter {
-                            it.contains(
-                                ".m3u8",
-                                true,
-                            ) ||
-                                it.contains(
-                                    ".mp4",
-                                    true,
-                                )
-                        }
-                        .forEach(
-                            results::add
-                        )
-                }
-            }
-
-            runCatching {
-                val firstDecoded =
-                    Base64.decode(
-                        normalized,
-                        Base64.DEFAULT,
-                    )
-                        .reversedArray()
-                        .toString(
-                            Charsets.UTF_8
-                        )
-
-                val secondNormalized =
-                    normalizeBase64(
-                        firstDecoded
-                    )
-
-                val secondDecoded =
-                    Base64.decode(
-                        secondNormalized,
-                        Base64.DEFAULT,
-                    )
-                        .toString(
-                            Charsets.UTF_8
-                        )
-
+            val urls =
                 Regex(
-                    "https?://[^\\s|\\\"'<>]+",
+                    "https?://[^\\s\\\"'<>|]+",
                     RegexOption.IGNORE_CASE,
                 )
-                    .findAll(secondDecoded)
+                    .findAll(decoded)
                     .map {
                         it.value.trimEnd(
                             ')',
@@ -3004,107 +2401,620 @@ private class CloseLoadExtractor : ExtractorApi() {
                             it.contains(
                                 ".mp4",
                                 true,
+                            ) ||
+                            it.contains(
+                                "master.txt",
+                                true,
                             )
                     }
-                    .forEach(
-                        results::add
-                    )
-            }
+                    .distinct()
+                    .toList()
 
-            return results.toList()
-        }
+            if (
+                urls.isNotEmpty()
+            ) {
+                urls.forEach {
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = name,
+                            url = it,
+                            type = INFER_TYPE,
+                        ) {
+                            quality =
+                                detectQuality(
+                                    it
+                                )
 
-        val mediaUrls =
-            LinkedHashSet<String>()
-
-        for (
-            encoded in encodedCandidates
-        ) {
-            decodeCloseLoad(
-                encoded
-            ).forEach(
-                mediaUrls::add
-            )
-        }
-
-        for (
-            script in unpackedScripts
-        ) {
-            Regex(
-                "https?://[^\\s\\\"'<>]+\\.(?:m3u8|mp4)(?:\\?[^\\s\\\"'<>]*)?",
-                RegexOption.IGNORE_CASE,
-            )
-                .findAll(script)
-                .map {
-                    it.value.trimEnd(
-                        ')',
-                        ']',
-                        '}',
-                        ';',
-                        ',',
+                            headers = mapOf(
+                                "User-Agent" to userAgent,
+                                "Referer" to "$mainUrl/",
+                                "Origin" to mainUrl,
+                            )
+                        }
                     )
                 }
-                .forEach(
-                    mediaUrls::add
+
+                processSubtitles(
+                    html,
+                    subtitleCallback,
                 )
+
+                return
+            }
         }
 
-        val cleanMedia =
-            mediaUrls
-                .map {
-                    it.replace(
+        /*
+         * Native decoder bazı yeni sayfalarda değişirse,
+         * açık m3u8/mp4 fallback'i.
+         */
+        val directUrls =
+            extractDirectMedia(html)
+
+        if (
+            directUrls.isNotEmpty()
+        ) {
+            directUrls.forEach {
+                callback(
+                    newExtractorLink(
+                        source = name,
+                        name = name,
+                        url = it,
+                        type = INFER_TYPE,
+                    ) {
+                        quality =
+                            detectQuality(
+                                it
+                            )
+
+                        headers = mapOf(
+                            "User-Agent" to userAgent,
+                            "Referer" to "$mainUrl/",
+                            "Origin" to mainUrl,
+                        )
+                    }
+                )
+            }
+
+            processSubtitles(
+                html,
+                subtitleCallback,
+            )
+
+            return
+        }
+
+        throw ErrorLoadingException(
+            "CloseLoad video adresi çözülemedi"
+        )
+    }
+
+    private fun decodeNative(
+        html: String,
+    ): String? {
+
+        return runCatching {
+
+            /*
+             * Array içindeki string parçalarını birleştir.
+             *
+             * Örnek:
+             * (["abc","def","ghi"])
+             */
+            val arrayMatch =
+                Regex(
+                    """\(\[((?:["'][^"']+["'],?\s*)+)\]\)""",
+                    setOf(
+                        RegexOption.DOT_MATCHES_ALL,
+                    ),
+                ).find(html)
+                    ?: return@runCatching null
+
+            val arrayText =
+                arrayMatch.groupValues
+                    .getOrNull(1)
+                    ?: return@runCatching null
+
+            var data =
+                Regex(
+                    """["']([^"']+)["']"""
+                )
+                    .findAll(arrayText)
+                    .joinToString("") {
+                        it.groupValues[1]
+                    }
+
+            if (
+                data.isBlank()
+            ) {
+                return@runCatching null
+            }
+
+            /*
+             * İki anahtar değişkeni.
+             */
+            val keysMatch =
+                Regex(
+                    """var\s+[A-Za-z0-9_]+\s*=\s*["']([^"']+)["'];\s*var\s+[A-Za-z0-9_]+\s*=\s*["']([^"']+)["'];""",
+                    RegexOption.DOT_MATCHES_ALL,
+                ).find(html)
+
+            var key1 =
+                keysMatch
+                    ?.groupValues
+                    ?.getOrNull(1)
+
+            var key2 =
+                keysMatch
+                    ?.groupValues
+                    ?.getOrNull(2)
+
+            /*
+             * Daha esnek fallback:
+             * İlk uzun alfanümerik var + hemen sonraki kısa var.
+             */
+            if (
+                key1.isNullOrBlank() ||
+                key2.isNullOrBlank()
+            ) {
+                val vars =
+                    Regex(
+                        """var\s+[A-Za-z0-9_]+\s*=\s*["']([^"']+)["'];?"""
+                    )
+                        .findAll(html)
+                        .map {
+                            it.groupValues[1]
+                        }
+                        .toList()
+
+                val firstKey =
+                    vars.firstOrNull {
+                        it.length in 15..35 &&
+                            it.all { c ->
+                                c.isLetterOrDigit()
+                            }
+                    }
+
+                val secondKey =
+                    vars.firstOrNull {
+                        it.length in 2..8 &&
+                            it.all { c ->
+                                c.isLetter()
+                            }
+                    }
+
+                key1 = firstKey
+                key2 = secondKey
+            }
+
+            val k1 =
+                key1
+                    ?: return@runCatching null
+
+            val k2 =
+                key2
+                    ?: return@runCatching null
+
+            /*
+             * Key1 hash.
+             */
+            var hashA =
+                0
+
+            var hashB =
+                0
+
+            for (
+                i in k1.indices
+            ) {
+                val code =
+                    k1[i].code
+
+                hashA =
+                    (
+                        hashA * 31 +
+                            code
+                        ) % 251
+
+                hashB =
+                    (
+                        hashB xor (
+                            code + i
+                            )
+                        ) and 255
+            }
+
+            val xorStart =
+                (
+                    hashA +
+                        hashB
+                    ) % 256
+
+            val step =
+                (
+                    hashA % 13
+                    ) + 3
+
+            var seed =
+                (
+                    (
+                        hashA * 256 +
+                            hashB
+                        ) % 65521
+                    ) + 1
+
+            /*
+             * key2 işlemlerini tersten uygula.
+             */
+            for (
+                i in k2.length - 1 downTo 0
+            ) {
+
+                when (
+                    val op =
+                        k2[i]
+                ) {
+
+                    'b' -> {
+                        var padded =
+                            data
+
+                        val missing =
+                            padded.length % 4
+
+                        if (
+                            missing != 0
+                        ) {
+                            padded +=
+                                "=".repeat(
+                                    4 - missing
+                                )
+                        }
+
+                        val bytes =
+                            try {
+                                Base64.decode(
+                                    padded,
+                                    Base64.DEFAULT,
+                                )
+                            } catch (
+                                _: Throwable
+                            ) {
+                                java.util.Base64
+                                    .getDecoder()
+                                    .decode(
+                                        padded
+                                    )
+                            }
+
+                        data =
+                            String(
+                                bytes,
+                                Charsets.ISO_8859_1,
+                            )
+                    }
+
+                    'v' -> {
+                        data =
+                            data.reversed()
+                    }
+
+                    else -> {
+                        val shift =
+                            (
+                                26 -
+                                    (
+                                        (
+                                            op.code -
+                                                64
+                                            ) % 26
+                                        )
+                                ) % 26
+
+                        val builder =
+                            StringBuilder(
+                                data.length
+                            )
+
+                        for (
+                            char in data
+                        ) {
+
+                            val code =
+                                char.code
+
+                            if (
+                                code in 65..90
+                            ) {
+                                builder.append(
+                                    (
+                                        (
+                                            code -
+                                                65 +
+                                                shift
+                                            ) % 26 +
+                                            65
+                                        ).toChar()
+                                )
+                            } else if (
+                                code in 97..122
+                            ) {
+                                builder.append(
+                                    (
+                                        (
+                                            code -
+                                                97 +
+                                                shift
+                                            ) % 26 +
+                                            97
+                                        ).toChar()
+                                )
+                            } else {
+                                builder.append(
+                                    char
+                                )
+                            }
+                        }
+
+                        data =
+                            builder.toString()
+                    }
+                }
+            }
+
+            /*
+             * Shuffle indexleri.
+             */
+            val length =
+                data.length
+
+            val indexes =
+                IntArray(length)
+
+            for (
+                i in length - 1 downTo 1
+            ) {
+                seed =
+                    (
+                        seed * 75 +
+                            74
+                        ) % 65537
+
+                indexes[i] =
+                    seed %
+                        (i + 1)
+            }
+
+            val chars =
+                data.toCharArray()
+
+            for (
+                i in 1 until length
+            ) {
+                val target =
+                    indexes[i]
+
+                val temp =
+                    chars[i]
+
+                chars[i] =
+                    chars[target]
+
+                chars[target] =
+                    temp
+            }
+
+            data =
+                String(chars)
+
+            /*
+             * Final XOR.
+             */
+            var state =
+                xorStart
+
+            val output =
+                StringBuilder(
+                    data.length
+                )
+
+            for (
+                i in data.indices
+            ) {
+
+                val code =
+                    data[i].code
+
+                state =
+                    (
+                        state +
+                            step
+                        ) % 256
+
+                output.append(
+                    (
+                        code xor state
+                        ).toChar()
+                )
+
+                state =
+                    (
+                        state +
+                            code
+                        ) % 256
+            }
+
+            output.toString()
+
+        }.getOrNull()
+    }
+
+    private fun processSubtitles(
+        html: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+    ) {
+
+        val direct =
+            Regex(
+                """["']file["']\s*:\s*["'](https?:[^"']+\.vtt[^"']*)["'][^}]*["']label["']\s*:\s*["']([^"']+)["']""",
+                RegexOption.IGNORE_CASE,
+            )
+
+        direct.findAll(
+            html
+        ).forEach {
+
+            val url =
+                it.groupValues[1]
+                    .replace(
                         "\\/",
                         "/",
                     )
-                }
-                .filter {
-                    !it.contains(
-                        "fragman",
-                        true,
-                    ) &&
-                        !it.contains(
-                            "trailer",
-                            true,
-                        )
-                }
-                .distinct()
 
-        if (
-            cleanMedia.isEmpty()
-        ) {
-            throw ErrorLoadingException(
-                "CloseLoad m3u8 bulunamadı"
-            )
+            val label =
+                it.groupValues[2]
+                    .ifBlank {
+                        "Altyazı"
+                    }
+
+            if (
+                url.startsWith(
+                    "http",
+                    true,
+                )
+            ) {
+                subtitleCallback(
+                    SubtitleFile(
+                        lang = label,
+                        url = url,
+                    )
+                )
+            }
         }
 
-        cleanMedia.forEach { mediaUrl ->
+        /*
+         * Daha basit VTT fallback.
+         */
+        Regex(
+            """https?://[^"'<>\\s]+\.vtt(?:\?[^"'<>\\s]*)?""",
+            RegexOption.IGNORE_CASE,
+        )
+            .findAll(html)
+            .map {
+                it.value.replace(
+                    "\\/",
+                    "/",
+                )
+            }
+            .distinct()
+            .forEach { url ->
 
-            callback(
-                newExtractorLink(
-                    source = name,
-                    name = name,
-                    url = mediaUrl,
-                    type = INFER_TYPE,
-                ) {
-                    quality =
-                        if (
-                            mediaUrl.contains(
-                                "1080",
+                subtitleCallback(
+                    SubtitleFile(
+                        lang = when {
+                            url.contains(
+                                "/tr",
                                 true,
-                            )
-                        ) {
-                            Qualities.P1080.value
-                        } else {
-                            Qualities.Unknown.value
-                        }
+                            ) ||
+                                url.contains(
+                                    "tur",
+                                    true,
+                                ) ->
+                                "Turkish"
 
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to url,
-                        "Origin" to mainUrl,
+                            url.contains(
+                                "/en",
+                                true,
+                            ) ||
+                                url.contains(
+                                    "eng",
+                                    true,
+                                ) ->
+                                "English"
+
+                            else ->
+                                "Subtitle"
+                        },
+                        url = url,
                     )
-                }
-            )
+                )
+            }
+    }
+
+    private fun extractDirectMedia(
+        html: String,
+    ): List<String> {
+
+        val result =
+            LinkedHashSet<String>()
+
+        Regex(
+            """https?://[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""",
+            RegexOption.IGNORE_CASE,
+        )
+            .findAll(html)
+            .forEach {
+                result.add(
+                    it.value.replace(
+                        "\\/",
+                        "/",
+                    )
+                )
+            }
+
+        Regex(
+            """https?://[^"'<>\s]+\.mp4(?:\?[^"'<>\s]*)?""",
+            RegexOption.IGNORE_CASE,
+        )
+            .findAll(html)
+            .forEach {
+                result.add(
+                    it.value.replace(
+                        "\\/",
+                        "/",
+                    )
+                )
+            }
+
+        return result
+            .filterNot {
+                it.contains(
+                    "fragman",
+                    true,
+                ) ||
+                    it.contains(
+                        "trailer",
+                        true,
+                    )
+            }
+            .toList()
+    }
+
+    private fun detectQuality(
+        url: String,
+    ): Int {
+        val lower =
+            url.lowercase()
+
+        return when {
+            "2160" in lower ||
+                "4k" in lower ->
+                Qualities.P2160.value
+
+            "1440" in lower ->
+                Qualities.P1440.value
+
+            "1080" in lower ->
+                Qualities.P1080.value
+
+            "720" in lower ->
+                Qualities.P720.value
+
+            "480" in lower ->
+                Qualities.P480.value
+
+            else ->
+                Qualities.Unknown.value
         }
     }
 }
