@@ -2426,7 +2426,7 @@ private class CloseLoadExtractor : ExtractorApi() {
                                     it
                                 )
 
-                            headers = mapOf(
+                            this.headers = mapOf(
                                 "User-Agent" to userAgent,
                                 "Referer" to "$mainUrl/",
                                 "Origin" to mainUrl,
@@ -2467,7 +2467,7 @@ private class CloseLoadExtractor : ExtractorApi() {
                                 it
                             )
 
-                        headers = mapOf(
+                        this.headers = mapOf(
                             "User-Agent" to userAgent,
                             "Referer" to "$mainUrl/",
                             "Origin" to mainUrl,
