@@ -2605,169 +2605,168 @@ private class CloseLoadExtractor : ExtractorApi() {
         html: String,
     ): String? {
         /*
-         * CloseLoad sayfasında şifreli veri ile anahtarlar farklı
-         * <script> bloklarında bulunabiliyor. Bu nedenle artık tek bir
-         * script bloğuna bağlı kalmıyoruz.
+         * CloseLoad obfuscasyonu sayfadan sayfaya küçük JS biçim
+         * farklılıkları gösterebiliyor. Eski yaklaşım doğrudan
+         * "([..]) + iki ardışık var" düzenine bağımlıydı.
          *
-         * Her olası ([...]) array'i, HTML içindeki en yakın var-key
-         * çiftleri ile birleştirip gerçek medya URL'si üreten adayı
-         * seçiyoruz.
+         * Şimdi:
+         * - doğrudan [...] array literal'larını buluyoruz,
+         * - var/let/const ile tanımlanan string değerleri topluyoruz,
+         * - makul anahtar çiftlerini native decoder'a veriyoruz,
+         * - yalnızca gerçek medya URL'si üreten sonucu kabul ediyoruz.
          */
         val arrayRegex =
             Regex(
-                """\\(\\[((?:["'][^"']+["'],?\\s*)+)\\]\\)""",
-                RegexOption.DOT_MATCHES_ALL,
+                """(?s)\[((?:\s*(?:["'][^"'\\]*(?:\\.[^"'\\]*)*["'])\s*,?)+)\s*\]"""
             )
 
-        val keyRegex =
+        val stringVarRegex =
             Regex(
-                """var\\s+[A-Za-z0-9_]+\\s*=\\s*["']([^"']+)["'];?\\s*var\\s+[A-Za-z0-9_]+\\s*=\\s*["']([^"']+)["'];?""",
-                RegexOption.DOT_MATCHES_ALL,
+                """(?s)\b(?:var|let|const)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*(["'])(.*?)\1\s*;?"""
             )
 
         val arrays =
             arrayRegex
                 .findAll(html)
+                .map { it.value }
+                .distinct()
                 .toList()
 
-        val keyPairs =
-            keyRegex
+        val stringVars =
+            stringVarRegex
                 .findAll(html)
                 .map {
-                    Triple(
-                        it.range.first,
-                        it.groupValues[1],
-                        it.groupValues[2],
-                    )
+                    it.groupValues[2]
                 }
+                .filter {
+                    it.isNotBlank()
+                }
+                .distinct()
                 .toList()
 
         Log.d(
             "FILMMAKINESI",
-            "CloseLoad decoder adayları: arrays=${arrays.size}, keyPairs=${keyPairs.size}",
+            "CloseLoad decoder adayları: arrays=" +
+                arrays.size +
+                ", stringVars=" +
+                stringVars.size,
         )
+
+        if (arrays.isEmpty() || stringVars.size < 2) {
+            return null
+        }
 
         val mediaRegex =
             Regex(
-                """https?://[^\\s"'<>|]+""",
+                """https?://[^\s"'<>|]+""",
                 RegexOption.IGNORE_CASE,
             )
 
-        /*
-         * Her array için en yakın anahtar çiftlerinden başlayarak dene.
-         * Aynı çifti tekrar denememek için sentetik input'u cache'le.
-         */
+        val orderedKeys =
+            stringVars.sortedWith(
+                compareByDescending<String> {
+                    it.length in 15..40 &&
+                        it.all(Char::isLetterOrDigit)
+                }.thenByDescending {
+                    it.length
+                }
+            )
+
         val attempted =
             HashSet<String>()
 
         for (array in arrays) {
-            val arrayText =
-                array.value
+            for (i in orderedKeys.indices) {
+                val key1 =
+                    orderedKeys[i]
 
-            val nearbyPairs =
-                keyPairs
-                    .sortedBy {
-                        kotlin.math.abs(
-                            it.first - array.range.first
-                        )
-                    }
-                    .take(40)
-
-            for (pair in nearbyPairs) {
-                val synthetic =
-                    buildString {
-                        append(arrayText)
-                        append(";var a='")
-                        append(pair.second)
-                        append("';var b='")
-                        append(pair.third)
-                        append("';")
-                    }
-
-                if (!attempted.add(synthetic)) {
+                if (
+                    key1.length !in 8..64 ||
+                    key1.contains("\n") ||
+                    key1.contains("\r")
+                ) {
                     continue
                 }
 
-                val decoded =
-                    decodeNativeRaw(synthetic)
-                        ?: continue
+                for (j in orderedKeys.indices) {
+                    if (i == j) continue
 
-                val media =
-                    mediaRegex
-                        .findAll(decoded)
-                        .map {
-                            it.value.trimEnd(
-                                ')',
-                                ']',
-                                '}',
-                                ';',
-                                ',',
+                    val key2 =
+                        orderedKeys[j]
+
+                    if (
+                        key2.length !in 2..20 ||
+                        key2.contains("\n") ||
+                        key2.contains("\r")
+                    ) {
+                        continue
+                    }
+
+                    val synthetic =
+                        buildString {
+                            append("(")
+                            append(array)
+                            append(");var a='")
+                            append(
+                                key1
+                                    .replace("\\", "\\\\")
+                                    .replace("'", "\\'")
                             )
-                        }
-                        .firstOrNull {
-                            val lower =
-                                it.lowercase()
-
-                            lower.contains(".m3u8") ||
-                                lower.contains(".mp4") ||
-                                lower.contains("master.txt") ||
-                                lower.contains("/hls/") ||
-                                lower.contains("/hls2/")
+                            append("';var b='")
+                            append(
+                                key2
+                                    .replace("\\", "\\\\")
+                                    .replace("'", "\\'")
+                            )
+                            append("';")
                         }
 
-                if (!media.isNullOrBlank()) {
-                    Log.d(
-                        "FILMMAKINESI",
-                        "CloseLoad doğru decoder adayı bulundu: ${media}",
-                    )
-                    return decoded
-                }
-            }
-        }
+                    if (!attempted.add(synthetic)) {
+                        continue
+                    }
 
-        /*
-         * Son çare: eski decoder. Ancak sonucu doğruluyoruz; geçerli bir
-         * medya URL'si üretmiyorsa artık sahte/stale adres yayınlamıyoruz.
-         */
-        val legacy =
-            decodeNativeRaw(html)
+                    val decoded =
+                        decodeNativeRaw(synthetic)
+                            ?: continue
 
-        if (!legacy.isNullOrBlank()) {
-            val media =
-                mediaRegex
-                    .findAll(legacy)
-                    .map {
-                        it.value.trimEnd(
-                            ')',
-                            ']',
-                            '}',
-                            ';',
-                            ',',
+                    val media =
+                        mediaRegex
+                            .findAll(decoded)
+                            .map {
+                                it.value.trimEnd(
+                                    ')',
+                                    ']',
+                                    '}',
+                                    ';',
+                                    ',',
+                                )
+                            }
+                            .firstOrNull {
+                                val lower =
+                                    it.value.lowercase()
+
+                                lower.contains(".m3u8") ||
+                                    lower.contains(".mp4") ||
+                                    lower.contains("master.txt") ||
+                                    lower.contains("/hls/") ||
+                                    lower.contains("/hls2/")
+                            }
+
+                    if (!media.isNullOrBlank()) {
+                        Log.d(
+                            "FILMMAKINESI",
+                            "CloseLoad decoder medya adayı bulundu=" +
+                                media.value,
                         )
+                        return decoded
                     }
-                    .firstOrNull {
-                        val lower =
-                            it.lowercase()
-
-                        lower.contains(".m3u8") ||
-                            lower.contains(".mp4") ||
-                            lower.contains("master.txt") ||
-                            lower.contains("/hls/") ||
-                            lower.contains("/hls2/")
-                    }
-
-            if (!media.isNullOrBlank()) {
-                Log.d(
-                    "FILMMAKINESI",
-                    "CloseLoad legacy decoder medya adayı: ${media}",
-                )
-                return legacy
+                }
             }
         }
 
         Log.e(
             "FILMMAKINESI",
-            "CloseLoad decoder hiçbir geçerli medya adayı üretemedi",
+            "CloseLoad decoder hiçbir medya adayı üretemedi",
         )
 
         return null
