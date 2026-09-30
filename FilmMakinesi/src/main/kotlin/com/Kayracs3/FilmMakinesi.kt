@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.getAndUnpack
@@ -2370,12 +2371,10 @@ private class CloseLoadExtractor : ExtractorApi() {
         val decoded =
             decodeNative(html)
 
-        if (
-            !decoded.isNullOrBlank()
-        ) {
+        if (!decoded.isNullOrBlank()) {
             Log.d(
                 "FILMMAKINESI",
-                "CloseLoad decoded = $decoded",
+                "CloseLoad decoded = " + decoded,
             )
 
             val urls =
@@ -2394,52 +2393,65 @@ private class CloseLoadExtractor : ExtractorApi() {
                         )
                     }
                     .filter {
-                        it.contains(
-                            ".m3u8",
-                            true,
-                        ) ||
-                            it.contains(
-                                ".mp4",
-                                true,
-                            ) ||
-                            it.contains(
-                                "master.txt",
-                                true,
-                            )
+                        it.contains(".m3u8", true) ||
+                            it.contains(".mp4", true) ||
+                            it.contains("master.txt", true) ||
+                            it.contains("/hls/", true) ||
+                            it.contains("/hls2/", true)
                     }
                     .distinct()
                     .toList()
 
-            if (
-                urls.isNotEmpty()
-            ) {
-                urls.forEach {
-                    callback(
-                        newExtractorLink(
-                            source = name,
-                            name = name,
-                            url = it,
-                            type = INFER_TYPE,
-                        ) {
-                            quality =
-                                detectQuality(
-                                    it
-                                )
+            var emitted = false
 
-                            this.headers = mapOf(
+            for (candidate in urls) {
+                val mediaUrl =
+                    if (isHlsMediaUrl(candidate)) {
+                        prepareHlsUrl(
+                            candidate,
+                            "$mainUrl/",
+                            mainUrl,
+                            userAgent,
+                        )
+                    } else {
+                        candidate
+                    } ?: continue
+
+                callback(
+                    newExtractorLink(
+                        source = name,
+                        name = name,
+                        url = mediaUrl,
+                        type = mediaTypeForUrl(mediaUrl),
+                    ) {
+                        quality =
+                            detectQuality(
+                                mediaUrl
+                            )
+
+                        this.referer =
+                            "$mainUrl/"
+
+                        this.headers =
+                            mapOf(
                                 "User-Agent" to userAgent,
+                                "Accept" to "*/*",
+                                "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
                                 "Referer" to "$mainUrl/",
                                 "Origin" to mainUrl,
                             )
-                        }
-                    )
-                }
-
-                processSubtitles(
-                    html,
-                    subtitleCallback,
+                    }
                 )
 
+                emitted = true
+            }
+
+            processSubtitles(
+                html,
+                subtitleCallback,
+            )
+
+            if (emitted) {
                 return
             }
         }
@@ -2487,6 +2499,82 @@ private class CloseLoadExtractor : ExtractorApi() {
         throw ErrorLoadingException(
             "CloseLoad video adresi çözülemedi"
         )
+    }
+
+    private fun isHlsMediaUrl(url: String): Boolean {
+        val lower = url.lowercase()
+        return lower.contains(".m3u8") ||
+            lower.contains("/hls/") ||
+            lower.contains("/hls2/") ||
+            lower.endsWith("/master.txt")
+    }
+
+    private fun mediaTypeForUrl(url: String): ExtractorLinkType {
+        val lower = url.lowercase()
+        return when {
+            lower.contains(".m3u8") ||
+                lower.contains("/hls/") ||
+                lower.contains("/hls2/") ||
+                lower.endsWith("/master.txt") ->
+                ExtractorLinkType.M3U8
+
+            lower.contains(".mp4") ->
+                ExtractorLinkType.VIDEO
+
+            else ->
+                ExtractorLinkType.VIDEO
+        }
+    }
+
+    private suspend fun prepareHlsUrl(
+        url: String,
+        referer: String,
+        origin: String,
+        userAgent: String,
+    ): String? {
+        val clean = url
+            .replace("\\/", "/")
+            .trim()
+
+        if (!isHlsMediaUrl(clean)) {
+            return clean
+        }
+
+        return runCatching {
+            val body = app.get(
+                clean,
+                headers = mapOf(
+                    "User-Agent" to userAgent,
+                    "Accept" to "*/*",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Referer" to referer,
+                    "Origin" to origin,
+                ),
+                referer = referer,
+                allowRedirects = true,
+            ).text
+
+            if (!body.contains("#EXTM3U")) {
+                Log.e(
+                    "FILMMAKINESI",
+                    "MEDIA PREFLIGHT NOT HLS=" + clean,
+                )
+                return@runCatching null
+            }
+
+            Log.d(
+                "FILMMAKINESI",
+                "MEDIA PREFLIGHT OK=" + clean,
+            )
+
+            clean
+        }.getOrElse {
+            Log.e(
+                "FILMMAKINESI",
+                "MEDIA PREFLIGHT FAIL=" + clean + " ERROR=" + it.message,
+            )
+            null
+        }
     }
 
     private fun decodeNative(
