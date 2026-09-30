@@ -2615,7 +2615,7 @@ private class CloseLoadExtractor : ExtractorApi() {
          */
         val scripts =
             Regex(
-                """<script\\b[^>]*>(.*?)</script>""",
+                """<script\b[^>]*>(.*?)</script>""",
                 setOf(
                     RegexOption.DOT_MATCHES_ALL,
                     RegexOption.IGNORE_CASE,
@@ -2654,7 +2654,7 @@ private class CloseLoadExtractor : ExtractorApi() {
             if (
                 !decoded.isNullOrBlank() &&
                 Regex(
-                    """https?://[^\\s"'<>|]+""",
+                    """https?://[^\s"'<>|]+""",
                     RegexOption.IGNORE_CASE,
                 )
                     .findAll(decoded)
