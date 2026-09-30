@@ -2605,82 +2605,172 @@ private class CloseLoadExtractor : ExtractorApi() {
         html: String,
     ): String? {
         /*
-         * CloseLoad sayfasında birden fazla JS dizisi/değişken grubu
-         * bulunabiliyor. Eski decoder tüm HTML içindeki ilk eşleşmeyi
-         * seçtiği için farklı filmlerde aynı medya URL'sini üretebiliyordu.
+         * CloseLoad sayfasında şifreli veri ile anahtarlar farklı
+         * <script> bloklarında bulunabiliyor. Bu nedenle artık tek bir
+         * script bloğuna bağlı kalmıyoruz.
          *
-         * Önce player'ın sources/file/hls tanımlarını içeren scriptleri
-         * ayrı ayrı çözmeyi deniyoruz. Böylece alakasız global JS
-         * değişkenleri decoder'a girmiyor.
+         * Her olası ([...]) array'i, HTML içindeki en yakın var-key
+         * çiftleri ile birleştirip gerçek medya URL'si üreten adayı
+         * seçiyoruz.
          */
-        val scripts =
+        val arrayRegex =
             Regex(
-                """<script\b[^>]*>(.*?)</script>""",
-                setOf(
-                    RegexOption.DOT_MATCHES_ALL,
-                    RegexOption.IGNORE_CASE,
-                ),
+                """\\(\\[((?:["'][^"']+["'],?\\s*)+)\\]\\)""",
+                RegexOption.DOT_MATCHES_ALL,
             )
+
+        val keyRegex =
+            Regex(
+                """var\\s+[A-Za-z0-9_]+\\s*=\\s*["']([^"']+)["'];?\\s*var\\s+[A-Za-z0-9_]+\\s*=\\s*["']([^"']+)["'];?""",
+                RegexOption.DOT_MATCHES_ALL,
+            )
+
+        val arrays =
+            arrayRegex
+                .findAll(html)
+                .toList()
+
+        val keyPairs =
+            keyRegex
                 .findAll(html)
                 .map {
-                    it.groupValues
-                        .getOrNull(1)
-                        .orEmpty()
-                }
-                .filter {
-                    val lower =
-                        it.lowercase()
-
-                    lower.contains("sources") ||
-                        lower.contains("file") ||
-                        lower.contains("hls") ||
-                        lower.contains("jwplayer")
-                }
-                .sortedByDescending {
-                    val lower =
-                        it.lowercase()
-
-                    (if (lower.contains("sources")) 8 else 0) +
-                        (if (lower.contains("jwplayer")) 4 else 0) +
-                        (if (lower.contains("hls")) 2 else 0) +
-                        (if (lower.contains("file")) 1 else 0)
+                    Triple(
+                        it.range.first,
+                        it.groupValues[1],
+                        it.groupValues[2],
+                    )
                 }
                 .toList()
 
-        for (script in scripts) {
-            val decoded =
-                decodeNativeRaw(script)
+        Log.d(
+            "FILMMAKINESI",
+            "CloseLoad decoder adayları: arrays=${arrays.size}, keyPairs=${keyPairs.size}",
+        )
 
-            if (
-                !decoded.isNullOrBlank() &&
-                Regex(
-                    """https?://[^\s"'<>|]+""",
-                    RegexOption.IGNORE_CASE,
-                )
-                    .findAll(decoded)
-                    .any {
-                        val url =
-                            it.value.lowercase()
+        val mediaRegex =
+            Regex(
+                """https?://[^\\s"'<>|]+""",
+                RegexOption.IGNORE_CASE,
+            )
 
-                        url.contains(".m3u8") ||
-                            url.contains(".mp4") ||
-                            url.contains("master.txt") ||
-                            url.contains("/hls/") ||
-                            url.contains("/hls2/")
+        /*
+         * Her array için en yakın anahtar çiftlerinden başlayarak dene.
+         * Aynı çifti tekrar denememek için sentetik input'u cache'le.
+         */
+        val attempted =
+            HashSet<String>()
+
+        for (array in arrays) {
+            val arrayText =
+                array.value
+
+            val nearbyPairs =
+                keyPairs
+                    .sortedBy {
+                        kotlin.math.abs(
+                            it.first - array.range.first
+                        )
                     }
-            ) {
-                Log.d(
-                    "FILMMAKINESI",
-                    "CloseLoad scoped decoder başarılı",
-                )
-                return decoded
+                    .take(40)
+
+            for (pair in nearbyPairs) {
+                val synthetic =
+                    buildString {
+                        append(arrayText)
+                        append(";var a='")
+                        append(pair.second)
+                        append("';var b='")
+                        append(pair.third)
+                        append("';")
+                    }
+
+                if (!attempted.add(synthetic)) {
+                    continue
+                }
+
+                val decoded =
+                    decodeNativeRaw(synthetic)
+                        ?: continue
+
+                val media =
+                    mediaRegex
+                        .findAll(decoded)
+                        .map {
+                            it.value.trimEnd(
+                                ')',
+                                ']',
+                                '}',
+                                ';',
+                                ',',
+                            )
+                        }
+                        .firstOrNull {
+                            val lower =
+                                it.lowercase()
+
+                            lower.contains(".m3u8") ||
+                                lower.contains(".mp4") ||
+                                lower.contains("master.txt") ||
+                                lower.contains("/hls/") ||
+                                lower.contains("/hls2/")
+                        }
+
+                if (!media.isNullOrBlank()) {
+                    Log.d(
+                        "FILMMAKINESI",
+                        "CloseLoad doğru decoder adayı bulundu: ${media}",
+                    )
+                    return decoded
+                }
             }
         }
 
         /*
-         * Scoped denemeler başarısız olursa eski tüm sayfa fallback'i.
+         * Son çare: eski decoder. Ancak sonucu doğruluyoruz; geçerli bir
+         * medya URL'si üretmiyorsa artık sahte/stale adres yayınlamıyoruz.
          */
-        return decodeNativeRaw(html)
+        val legacy =
+            decodeNativeRaw(html)
+
+        if (!legacy.isNullOrBlank()) {
+            val media =
+                mediaRegex
+                    .findAll(legacy)
+                    .map {
+                        it.value.trimEnd(
+                            ')',
+                            ']',
+                            '}',
+                            ';',
+                            ',',
+                        )
+                    }
+                    .firstOrNull {
+                        val lower =
+                            it.lowercase()
+
+                        lower.contains(".m3u8") ||
+                            lower.contains(".mp4") ||
+                            lower.contains("master.txt") ||
+                            lower.contains("/hls/") ||
+                            lower.contains("/hls2/")
+                    }
+
+            if (!media.isNullOrBlank()) {
+                Log.d(
+                    "FILMMAKINESI",
+                    "CloseLoad legacy decoder medya adayı: ${media}",
+                )
+                return legacy
+            }
+        }
+
+        Log.e(
+            "FILMMAKINESI",
+            "CloseLoad decoder hiçbir geçerli medya adayı üretemedi",
+        )
+
+        return null
     }
 
     private fun decodeNativeRaw(
