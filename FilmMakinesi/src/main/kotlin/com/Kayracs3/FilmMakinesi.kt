@@ -2628,8 +2628,7 @@ private class CloseLoadExtractor : ExtractorApi() {
         val arrays =
             arrayRegex
                 .findAll(html)
-                .map { it.value }
-                .distinct()
+                .distinctBy { it.value }
                 .toList()
 
         val stringVars =
@@ -2675,7 +2674,13 @@ private class CloseLoadExtractor : ExtractorApi() {
         val attempted =
             HashSet<String>()
 
-        for (array in arrays) {
+        val decodedCandidates =
+            linkedMapOf<String, Int>()
+
+        for (arrayMatch in arrays) {
+            val array =
+                arrayMatch.value
+
             for (i in orderedKeys.indices) {
                 val key1 =
                     orderedKeys[i]
@@ -2753,15 +2758,48 @@ private class CloseLoadExtractor : ExtractorApi() {
                             }
 
                     if (!media.isNullOrBlank()) {
+                        decodedCandidates[media] =
+                            (decodedCandidates[media] ?: 0) + 1
+
                         Log.d(
                             "FILMMAKINESI",
-                            "CloseLoad decoder medya adayı bulundu=" +
-                                media,
+                            "CloseLoad decoder kombinasyon adayı=" +
+                                media +
+                                " arrayPos=" +
+                                arrayMatch.range.first,
                         )
-                        return decoded
                     }
                 }
             }
+        }
+
+        if (decodedCandidates.isNotEmpty()) {
+            val ordered =
+                decodedCandidates.entries
+                    .sortedWith(
+                        compareBy<Map.Entry<String, Int>> {
+                            it.value
+                        }.thenByDescending {
+                            val lower =
+                                it.key.lowercase()
+
+                            (
+                                lower.contains("m3u8") ||
+                                    lower.contains("/hls/") ||
+                                    lower.contains("/hls2/")
+                                )
+                        }
+                    )
+
+            Log.d(
+                "FILMMAKINESI",
+                "CloseLoad decoder tüm adaylar=" +
+                    ordered.joinToString(" | ") {
+                        it.key + " x" + it.value
+                    },
+            )
+
+            return ordered.firstOrNull()?.key
         }
 
         Log.e(
