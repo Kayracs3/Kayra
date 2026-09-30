@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 import com.lagradost.cloudstream3.plugins.BasePlugin
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
