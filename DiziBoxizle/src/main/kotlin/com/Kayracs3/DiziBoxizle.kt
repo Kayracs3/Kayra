@@ -253,6 +253,7 @@ class DiziBoxizle : MainAPI() {
 
         for (candidate in candidates) {
             val clean = candidate.decodeEmbeddedText()
+            println("[DiziBoxizle] candidate=$clean")
 
             when {
                 isMediaUrl(clean) -> {
@@ -265,16 +266,10 @@ class DiziBoxizle : MainAPI() {
                 }
 
                 isExternalPlayer(clean) -> {
-                    // First inspect the provider page itself. VidMoly/Moly may hide the
-                    // real VMEAS master.m3u8 URL inside JavaScript instead of exposing it
-                    // as a normal HTML video element.
-                    val providerFound = extractProviderMedia(
-                        clean,
-                        episodeUrl,
-                        subtitleCallback,
-                        callback,
-                    )
-
+                    // Prefer CloudStream's native extractor first.
+                    // This is important for VidMoly and Ok.ru because their extractors
+                    // already handle the current player/API structure and required
+                    // request headers.
                     val extracted = runCatching {
                         loadExtractor(
                             clean,
@@ -284,7 +279,22 @@ class DiziBoxizle : MainAPI() {
                         )
                     }.getOrDefault(false)
 
-                    found = providerFound || extracted || found
+                    println("[DiziBoxizle] loadExtractor=$extracted url=$clean")
+
+                    if (extracted) {
+                        found = true
+                    } else {
+                        // Keep our HTML/JS parser only as a fallback for providers
+                        // that are not handled by the installed CloudStream extractors.
+                        val providerFound = extractProviderMedia(
+                            clean,
+                            episodeUrl,
+                            subtitleCallback,
+                            callback,
+                        )
+                        println("[DiziBoxizle] fallbackProvider=$providerFound url=$clean")
+                        found = providerFound || found
+                    }
                 }
             }
         }
@@ -798,6 +808,7 @@ class DiziBoxizle : MainAPI() {
             "data-player-url",
             "data-video-url",
             "data-stream",
+            "onclick",
         )
 
         for (attribute in attrs) {
@@ -817,7 +828,19 @@ class DiziBoxizle : MainAPI() {
 
             if (!direct.isNullOrBlank()) return direct
 
-            if (decoded.startsWith("//") || decoded.startsWith("/")) {
+            val protocolRelative = Regex(
+                "//[^\\s\\\"'<>]+",
+                RegexOption.IGNORE_CASE,
+            )
+                .find(decoded)
+                ?.value
+                ?.trimEnd(')', ']', '}', ';', ',')
+
+            if (!protocolRelative.isNullOrBlank()) {
+                return "https:$protocolRelative"
+            }
+
+            if (decoded.startsWith("/")) {
                 return fixUrl(decoded)
             }
         }
@@ -834,14 +857,12 @@ class DiziBoxizle : MainAPI() {
         val value = url.lowercase()
 
         return value.contains("vidmoly") ||
-            value.contains("moly") ||
             value.contains("ok.ru") ||
             value.contains("odnoklassniki") ||
             value.contains("doodstream") ||
             value.contains("streamtape") ||
             value.contains("filemoon") ||
-            value.contains("oynatloload.top") ||
-            value.contains("vidmoly.biz")
+            value.contains("oynatloload.top")
     }
 
     private fun isMediaUrl(url: String): Boolean {
