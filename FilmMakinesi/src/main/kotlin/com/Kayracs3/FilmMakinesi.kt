@@ -2748,27 +2748,73 @@ private class CloseLoadExtractor : ExtractorApi() {
     private fun decodeCloseLoadSourceChain(
         html: String
     ): String? {
+        val tag = "FILMMAKINESI"
+
         val sourceRef =
             Regex(
-                """(?is)(?:file|src|source|media|stream|url)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)"""
-            ).find(html)
+                """(?is)\bsources\s*:\s*\[\s*\{\s*(?:file|src|source|media|stream|url)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)"""
+            )
+                .find(html)
                 ?.groupValues
                 ?.getOrNull(1)
-                ?: return null
+                ?: Regex(
+                    """(?is)\b(?:file|src|source|media|stream|url)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)"""
+                )
+                    .find(html)
+                    ?.groupValues
+                    ?.getOrNull(1)
+
+        if (sourceRef.isNullOrBlank()) {
+            Log.d(tag, "CloseLoad source-chain: sourceRef bulunamadı")
+            return null
+        }
+
+        Log.d(tag, "CloseLoad source-chain sourceRef=" + sourceRef)
+
+        val escapedSourceRef = Regex.escape(sourceRef)
 
         val assignmentRegex =
             Regex(
-                """(?is)\b(?:var|let|const)\s+${Regex.escape(sourceRef)}\s*=\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\("""
+                """(?is)(?:\b(?:var|let|const)\s+)?""" +
+                    escapedSourceRef +
+                    """\s*=\s*(?:window\.)?([A-Za-z_$][A-Za-z0-9_$]*)\s*\("""
             )
 
-        val assignment =
-            assignmentRegex.find(html)
-                ?: return null
+        val assignment = assignmentRegex.find(html)
+
+        if (assignment == null) {
+            val nearby =
+                Regex(
+                    """(?is)\b""" + escapedSourceRef + """\s*=\s*[^;]{0,500}"""
+                )
+                    .find(html)
+                    ?.value
+                    ?.replace('\n', ' ')
+                    ?.replace('\r', ' ')
+
+            Log.d(
+                tag,
+                "CloseLoad source-chain assignment bulunamadı source=" +
+                    sourceRef +
+                    " nearby=" +
+                    (nearby ?: "yok")
+            )
+            return null
+        }
 
         val functionName =
-            assignment.groupValues[1]
+            assignment.groupValues
+                .getOrNull(1)
+                ?.takeIf { it.isNotBlank() }
+                ?: return null
+
+        Log.d(
+            tag,
+            "CloseLoad source-chain function=" + functionName
+        )
 
         val callStart = assignment.range.last + 1
+
         var depth = 1
         var quote: Char? = null
         var escaped = false
@@ -2805,7 +2851,14 @@ private class CloseLoadExtractor : ExtractorApi() {
             }
         }
 
-        if (callEnd < 0) return null
+        if (callEnd < 0) {
+            Log.d(
+                tag,
+                "CloseLoad source-chain: çağrı parantezi kapanmadı function=" +
+                    functionName
+            )
+            return null
+        }
 
         val arguments =
             html.substring(
@@ -2813,25 +2866,46 @@ private class CloseLoadExtractor : ExtractorApi() {
                 callEnd
             ).trim()
 
-        if (!arguments.startsWith("[")) return null
+        val arrayStart = arguments.indexOf('[')
+        val arrayEnd = arguments.lastIndexOf(']')
 
-        val arrayEnd = arguments.lastIndexOf("]")
-        if (arrayEnd <= 0) return null
+        if (arrayStart < 0 || arrayEnd <= arrayStart) {
+            Log.d(
+                tag,
+                "CloseLoad source-chain: array argümanı bulunamadı args=" +
+                    arguments.take(600)
+            )
+            return null
+        }
 
         val array =
             arguments.substring(
-                0,
+                arrayStart,
                 arrayEnd + 1
             )
 
-        val functionRegex =
-            Regex(
-                """(?is)function\s+${Regex.escape(functionName)}\s*\(([^)]*)\)\s*\{"""
-            )
+        Log.d(
+            tag,
+            "CloseLoad source-chain array length=" +
+                array.length
+        )
 
         val functionMatch =
-            functionRegex.find(html)
-                ?: return null
+            Regex(
+                """(?is)\bfunction\s+""" +
+                    Regex.escape(functionName) +
+                    """\s*\([^)]*\)\s*\{"""
+            )
+                .find(html)
+
+        if (functionMatch == null) {
+            Log.d(
+                tag,
+                "CloseLoad source-chain: function gövdesi bulunamadı function=" +
+                    functionName
+            )
+            return null
+        }
 
         val braceStart =
             html.indexOf(
@@ -2877,7 +2951,14 @@ private class CloseLoadExtractor : ExtractorApi() {
             }
         }
 
-        if (bodyEnd < 0) return null
+        if (bodyEnd < 0) {
+            Log.d(
+                tag,
+                "CloseLoad source-chain: function gövdesi kapanmadı function=" +
+                    functionName
+            )
+            return null
+        }
 
         val body =
             html.substring(
@@ -2885,14 +2966,31 @@ private class CloseLoadExtractor : ExtractorApi() {
                 bodyEnd
             )
 
+        Log.d(
+            tag,
+            "CloseLoad source-chain function body=" +
+                body
+                    .replace('\n', ' ')
+                    .replace('\r', ' ')
+                    .take(2200)
+        )
+
         val constants =
             Regex(
                 """\b(?:var|let|const)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*["']([^"']*)["']"""
-            ).findAll(body)
+            )
+                .findAll(body)
                 .map { it.groupValues[1] }
                 .toList()
 
-        if (constants.size < 2) return null
+        if (constants.size < 2) {
+            Log.d(
+                tag,
+                "CloseLoad source-chain: yeterli string sabiti yok count=" +
+                    constants.size
+            )
+            return null
+        }
 
         val k1 =
             constants[0]
@@ -2904,6 +3002,14 @@ private class CloseLoadExtractor : ExtractorApi() {
                 .replace("\\", "\\\\")
                 .replace("'", "\\'")
 
+        Log.d(
+            tag,
+            "CloseLoad source-chain constants k1Len=" +
+                k1.length +
+                " k2=" +
+                k2
+        )
+
         val synthetic =
             "(" +
                 array +
@@ -2914,44 +3020,60 @@ private class CloseLoadExtractor : ExtractorApi() {
                 "';"
 
         val decoded =
-            decodeNativeRaw(
-                synthetic
-            ) ?: return null
+            decodeNativeRaw(synthetic)
+
+        if (decoded.isNullOrBlank()) {
+            Log.d(
+                tag,
+                "CloseLoad source-chain decodeNativeRaw sonuç üretmedi function=" +
+                    functionName
+            )
+            return null
+        }
 
         Log.d(
-            "FILMMAKINESI",
-            "CloseLoad gerçek function=" +
-                functionName +
-                " source=" +
-                sourceRef
-        )
-
-        Log.d(
-            "FILMMAKINESI",
+            tag,
             "CloseLoad gerçek function decoded=" +
                 decoded.take(2000)
         )
 
-        return Regex(
-            """https?://[^\s"'<>|]+"""
-        ).findAll(decoded)
-            .map {
-                it.value.trimEnd(
-                    ')',
-                    ']',
-                    '}',
-                    ';',
-                    ','
-                )
-            }
-            .firstOrNull {
-                val lower = it.lowercase()
-                lower.contains(".m3u8") ||
-                    lower.contains(".mp4") ||
-                    lower.contains("master.txt") ||
-                    lower.contains("/hls/") ||
-                    lower.contains("/hls2/")
-            }
+        val media =
+            Regex(
+                """https?://[^\s"'<>|]+"""
+            )
+                .findAll(decoded)
+                .map {
+                    it.value.trimEnd(
+                        ')',
+                        ']',
+                        '}',
+                        ';',
+                        ','
+                    )
+                }
+                .firstOrNull {
+                    val lower = it.lowercase()
+
+                    lower.contains(".m3u8") ||
+                        lower.contains(".mp4") ||
+                        lower.contains("master.txt") ||
+                        lower.contains("/hls/") ||
+                        lower.contains("/hls2/")
+                }
+
+        if (!media.isNullOrBlank()) {
+            Log.d(
+                tag,
+                "CloseLoad source-chain MEDIA=" + media
+            )
+        } else {
+            Log.d(
+                tag,
+                "CloseLoad source-chain decoded içinde medya URL bulunamadı"
+            )
+        }
+
+        return media
     }
 
     private fun decodeNative(
