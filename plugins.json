@@ -1,10 +1,10 @@
 [
     {
         "iconUrl": "https://asyafilmizle.com//favicon.ico",
-        "fileHash": "sha256-53a66bb56b18d3a2927af4bf7a378d3b18b13a3c902b871b76bfe76aa50ce871",
+        "fileHash": "sha256-642cc615c81a6d24a59779b0e859f5de9be3ce8f9b5cb87551e095b21954c2e4",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 55448,
+        "fileSize": 55384,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -122,10 +122,10 @@
     },
     {
         "iconUrl": "https://www.dramadizilerim.com/favicon.ico",
-        "fileHash": "sha256-a2c913536ebec34d74f43b9015eb45a1aee84b7441fd7b6643b00281b282e00f",
+        "fileHash": "sha256-786aac28e17a3830208b5bfb4cdf55f95ccb30646b247c799ff78dd830812040",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 30711,
+        "fileSize": 30679,
         "status": 1,
         "language": "tr",
         "authors": [
