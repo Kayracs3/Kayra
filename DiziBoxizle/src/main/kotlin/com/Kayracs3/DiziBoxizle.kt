@@ -527,6 +527,16 @@ class DiziBoxizle : MainAPI() {
             if (!found && needsWebViewFallback) {
                 val beforeWebViewLinks = providerEmittedLinks
 
+                val webViewStartUrl =
+                    if (pageUrl.contains("vidmoly", ignoreCase = true)) episodeUrl else pageUrl
+
+                val webViewReferer =
+                    if (webViewStartUrl == episodeUrl) "$mainUrl/" else episodeUrl
+
+                val frameUrl = pageUrl
+                    .replace("\\", "\\\\")
+                    .replace(""", "\\"")
+
                 val webViewResult = runCatching {
                     val resolver = WebViewResolver(
                         interceptUrl = Regex("""(?:m3u8|master\.txt)"""),
@@ -534,52 +544,58 @@ class DiziBoxizle : MainAPI() {
                         useOkhttp = false,
                         script = """
                             (function() {
-                                function startPlayer() {
+                                var providerUrl = "$frameUrl";
+
+                                function injectProviderFrame() {
                                     try {
-                                        if (typeof jwplayer === "function") {
-                                            var player = jwplayer();
-                                            if (player && typeof player.play === "function") {
-                                                player.play();
-                                            }
+                                        var oldFrame = document.getElementById("cs3-vidmoly-frame");
+                                        if (oldFrame && oldFrame.parentNode) {
+                                            oldFrame.parentNode.removeChild(oldFrame);
                                         }
-                                    } catch (e) {}
 
-                                    try {
-                                        document.querySelectorAll("video").forEach(function(video) {
-                                            video.muted = true;
-                                            var p = video.play();
-                                            if (p && p.catch) p.catch(function() {});
-                                        });
-                                    } catch (e) {}
+                                        var frame = document.createElement("iframe");
+                                        frame.id = "cs3-vidmoly-frame";
+                                        frame.src = providerUrl;
+                                        frame.setAttribute(
+                                            "allow",
+                                            "autoplay; fullscreen; encrypted-media"
+                                        );
+                                        frame.setAttribute("allowfullscreen", "true");
 
-                                    try {
-                                        var playButton =
-                                            document.querySelector(".jw-display-icon-container") ||
-                                            document.querySelector(".jw-icon-play") ||
-                                            document.querySelector(".jwplayer .jw-display-icon-container");
-                                        if (playButton) playButton.click();
+                                        frame.style.position = "fixed";
+                                        frame.style.left = "-20px";
+                                        frame.style.top = "-20px";
+                                        frame.style.width = "2px";
+                                        frame.style.height = "2px";
+                                        frame.style.opacity = "0.01";
+                                        frame.style.border = "0";
+                                        frame.style.pointerEvents = "none";
+
+                                        (document.body || document.documentElement)
+                                            .appendChild(frame);
                                     } catch (e) {}
                                 }
 
-                                setTimeout(startPlayer, 1500);
-                                setTimeout(startPlayer, 4500);
+                                injectProviderFrame();
+                                setTimeout(injectProviderFrame, 1500);
+                                setTimeout(injectProviderFrame, 5000);
                             })();
                         """.trimIndent(),
                         timeout = 25_000L,
                     )
 
                     app.get(
-                        pageUrl,
+                        webViewStartUrl,
                         headers = mapOf(
                             "User-Agent" to USER_AGENT,
-                            "Referer" to episodeUrl,
-                            "Accept" to "*/*",
+                            "Referer" to webViewReferer,
+                            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                             "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
-                            "Sec-Fetch-Dest" to "iframe",
+                            "Sec-Fetch-Dest" to "document",
                             "Sec-Fetch-Mode" to "navigate",
-                            "Sec-Fetch-Site" to "cross-site",
+                            "Sec-Fetch-Site" to "same-origin",
                         ),
-                        referer = episodeUrl,
+                        referer = webViewReferer,
                         interceptor = resolver,
                     )
                 }.getOrNull()
