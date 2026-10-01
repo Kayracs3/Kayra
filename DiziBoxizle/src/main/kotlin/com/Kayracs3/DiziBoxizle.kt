@@ -1,3 +1,4 @@
+import android.util.Base64
 package com.Kayracs3
 
 import com.lagradost.cloudstream3.*
@@ -432,10 +433,16 @@ class DiziBoxizle : MainAPI() {
             val unpackedHtml = runCatching { getAndUnpack(providerHtml) }
                 .getOrDefault(providerHtml)
 
-            val searchableHtml = if (unpackedHtml == providerHtml) {
-                providerHtml
-            } else {
-                providerHtml + "\n" + unpackedHtml
+            val decodedBase64 = decodeBase64Javascript(providerHtml)
+
+            val searchableHtml = buildString {
+                append(providerHtml)
+                append("\n")
+                append(unpackedHtml)
+                if (decodedBase64.isNotBlank()) {
+                    append("\n")
+                    append(decodedBase64)
+                }
             }
 
             val sourceUrls = LinkedHashSet<String>()
@@ -458,14 +465,25 @@ class DiziBoxizle : MainAPI() {
                 .map { it.value.trimEnd(')', ']', '}', ';', ',') }
                 .forEach(sourceUrls::add)
 
+            GENERIC_MEDIA_PATTERN.findAll(searchableHtml)
+                .map { it.value.trimEnd(')', ']', '}', ';', ',') }
+                .forEach(sourceUrls::add)
+
+            RELATIVE_MEDIA_PATTERN.findAll(searchableHtml)
+                .map { it.groupValues[1] }
+                .forEach(sourceUrls::add)
+
             // Some current VidMoly pages use:
             //   sources: [{ file: yd4, type: "hls" }]
             // where yd4 is assigned elsewhere in the script. Resolve those
             // string variables before giving up on the provider.
             extractJavascriptMediaUrls(searchableHtml).forEach(sourceUrls::add)
 
+            println("[DiziBoxizle] provider=" + pageUrl + " sourceCandidates=" + sourceUrls.size)
+
             for (rawSource in sourceUrls) {
                 val mediaUrl = normalizeProviderMediaUrl(rawSource, pageUrl)
+                println("[DiziBoxizle] providerSource=" + mediaUrl)
                 if (!isMediaUrl(mediaUrl)) continue
 
                 emitMediaLink(mediaUrl, pageUrl, callback)
@@ -488,6 +506,40 @@ class DiziBoxizle : MainAPI() {
         }
 
         return found
+    }
+
+    private fun decodeBase64Javascript(html: String): String {
+        val decoded = StringBuilder()
+
+        val patterns = listOf(
+            Regex("""(?is)atob\(\s*["']([A-Za-z0-9+/=_-]{40,})["']\s*\)"""),
+            Regex("""(?is)data:text/[^;]+;base64,([A-Za-z0-9+/=_-]{80,})"""),
+        )
+
+        for (pattern in patterns) {
+            for (match in pattern.findAll(html)) {
+                val encoded = match.groupValues.getOrNull(1).orEmpty()
+                if (encoded.isBlank()) continue
+
+                val normalized = encoded
+                    .replace("-", "+")
+                    .replace("_", "/")
+                    .let { value ->
+                        value + "=".repeat((4 - value.length % 4) % 4)
+                    }
+
+                val bytes = runCatching {
+                    Base64.decode(normalized, Base64.DEFAULT)
+                }.getOrNull() ?: continue
+
+                val text = bytes.toString(Charsets.UTF_8)
+                if (text.length >= 20) {
+                    decoded.append("\n").append(text)
+                }
+            }
+        }
+
+        return decoded.toString()
     }
 
     private fun extractJavascriptMediaUrls(html: String): Set<String> {
@@ -1263,6 +1315,15 @@ class DiziBoxizle : MainAPI() {
         private val GENERIC_M3U8_PATTERN = Regex(
             "https?://[^\\s\"'<>]+(?:master|index|playlist)[^\\s\"'<>]*\\.(?:m3u8|txt)(?:\\?[^\\s\"'<>]+)?",
             RegexOption.IGNORE_CASE,
+        )
+
+        private val GENERIC_MEDIA_PATTERN = Regex(
+            "https?://[^\s\"'<>]+\.(?:m3u8|mpd|mp4|webm|txt)(?:\?[^\s\"'<>]+)?",
+            RegexOption.IGNORE_CASE,
+        )
+
+        private val RELATIVE_MEDIA_PATTERN = Regex(
+            """(?i)["'](/[^"']+\.(?:m3u8|mpd|mp4|webm|txt)(?:\?[^"']*)?)["']"""
         )
 
         // /the-lowdown-1-sezon-1-bolum/
