@@ -2745,6 +2745,380 @@ private class CloseLoadExtractor : ExtractorApi() {
         }
     }
 
+
+    private fun decodeCloseLoadFunctionBody(
+        body: String,
+        encodedParts: List<String>
+    ): String? {
+        if (encodedParts.isEmpty()) return null
+
+        /*
+         * CloseLoad Varyant 2:
+         * splice + 37/241 hash + 7/3 operations + 97/41 shuffle.
+         */
+        val hasVariant2Hash =
+            Regex("""\*\s*37\s*\+""").containsMatchIn(body) &&
+                Regex("""%\s*241""").containsMatchIn(body)
+
+        if (body.contains(".splice(") && hasVariant2Hash) {
+            val sizeMinusTwo = encodedParts.size - 2
+            if (sizeMinusTwo < 0) return null
+
+            val operationIndex =
+                8 + (sizeMinusTwo % 5)
+
+            if (operationIndex !in encodedParts.indices) {
+                Log.d(
+                    "FILMMAKINESI",
+                    "CloseLoad V2 operationIndex geçersiz=" +
+                        operationIndex +
+                        " parts=" +
+                        encodedParts.size
+                )
+                return null
+            }
+
+            val workParts =
+                encodedParts.toMutableList()
+
+            val operationString =
+                workParts.removeAt(
+                    operationIndex
+                )
+
+            val secondaryIndex =
+                sizeMinusTwo % 7
+
+            if (secondaryIndex !in workParts.indices) {
+                Log.d(
+                    "FILMMAKINESI",
+                    "CloseLoad V2 secondaryIndex geçersiz=" +
+                        secondaryIndex +
+                        " parts=" +
+                        workParts.size
+                )
+                return null
+            }
+
+            val hashString =
+                workParts.removeAt(
+                    secondaryIndex
+                )
+
+            var value =
+                workParts.joinToString("")
+
+            if (hashString.length > 4096) {
+                value =
+                    runCatching {
+                        val padded =
+                            value +
+                                "=".repeat(
+                                    (4 - value.length % 4) % 4
+                                )
+
+                        String(
+                            Base64.decode(
+                                padded,
+                                Base64.DEFAULT
+                            ),
+                            Charsets.ISO_8859_1
+                        )
+                    }.getOrElse {
+                        return null
+                    }
+            }
+
+            var hash = 0
+            var xor = 0
+
+            for (i in hashString.indices) {
+                val code =
+                    hashString[i].code
+
+                hash =
+                    (
+                        hash * 37 +
+                            code
+                    ) % 241
+
+                xor =
+                    (
+                        xor +
+                            ((code shl 1) xor i)
+                    ) and 255
+            }
+
+            var state =
+                (
+                    hash * 3 +
+                        xor
+                ) % 256
+
+            val step =
+                (
+                    xor % 11
+                ) + 5
+
+            var shuffleSeed =
+                (
+                    (
+                        xor * 251 +
+                            hash
+                    ) % 65519
+                ) + 1
+
+            for (
+                i in operationString.length - 1 downTo 0
+            ) {
+                when (
+                    val op =
+                        operationString[i]
+                ) {
+                    '7' -> {
+                        val padded =
+                            value +
+                                "=".repeat(
+                                    (4 - value.length % 4) % 4
+                                )
+
+                        value =
+                            try {
+                                String(
+                                    Base64.decode(
+                                        padded,
+                                        Base64.DEFAULT
+                                    ),
+                                    Charsets.ISO_8859_1
+                                )
+                            } catch (
+                                _: Throwable
+                            ) {
+                                try {
+                                    String(
+                                        java.util.Base64
+                                            .getDecoder()
+                                            .decode(
+                                                padded
+                                            ),
+                                        Charsets.ISO_8859_1
+                                    )
+                                } catch (
+                                    _: Throwable
+                                ) {
+                                    return null
+                                }
+                            }
+                    }
+
+                    '3' -> {
+                        value =
+                            value.reversed()
+                    }
+
+                    else -> {
+                        val shift =
+                            (
+                                26 -
+                                    (
+                                        (
+                                            op.code -
+                                                96
+                                        ) % 26
+                                    )
+                            ) % 26
+
+                        val builder =
+                            StringBuilder(
+                                value.length
+                            )
+
+                        for (char in value) {
+                            val code = char.code
+
+                            if (
+                                code in 65..90
+                            ) {
+                                builder.append(
+                                    (
+                                        (
+                                            code -
+                                                65 +
+                                                shift
+                                        ) % 26 +
+                                            65
+                                    ).toChar()
+                                )
+                            } else if (
+                                code in 97..122
+                            ) {
+                                builder.append(
+                                    (
+                                        (
+                                            code -
+                                                97 +
+                                                shift
+                                        ) % 26 +
+                                            97
+                                    ).toChar()
+                                )
+                            } else {
+                                builder.append(char)
+                            }
+                        }
+
+                        value =
+                            builder.toString()
+                    }
+                }
+            }
+
+            if (operationString.length > 2048) {
+                value =
+                    value.reversed()
+            }
+
+            val length =
+                value.length
+
+            val swaps =
+                IntArray(length)
+
+            for (
+                i in length - 1 downTo 1
+            ) {
+                shuffleSeed =
+                    (
+                        shuffleSeed * 97 +
+                            41
+                    ) % 65519
+
+                swaps[i] =
+                    (
+                        shuffleSeed %
+                            (i + 1)
+                    )
+                        .toInt()
+            }
+
+            val chars =
+                value.toCharArray()
+
+            for (
+                i in 1 until length
+            ) {
+                val target =
+                    swaps[i]
+
+                val temp =
+                    chars[i]
+
+                chars[i] =
+                    chars[target]
+
+                chars[target] =
+                    temp
+            }
+
+            value =
+                String(chars)
+
+            var outputState =
+                state
+
+            val output =
+                StringBuilder(
+                    value.length
+                )
+
+            for (char in value) {
+                val code =
+                    char.code
+
+                outputState =
+                    (
+                        outputState * 5 +
+                            step
+                    ) % 256
+
+                output.append(
+                    (
+                        code xor outputState
+                    ).toChar()
+                )
+
+                outputState =
+                    (
+                        outputState +
+                            code
+                    ) % 256
+            }
+
+            Log.d(
+                "FILMMAKINESI",
+                "CloseLoad Varyant2 decode başarılı len=" +
+                    value.length
+            )
+
+            return output.toString()
+        }
+
+        /*
+         * CloseLoad Varyant 1:
+         * join + 31/251 hash + b/v işlemleri + 75/74 shuffle.
+         */
+        if (
+            body.contains("* 31") &&
+            body.contains("% 251")
+        ) {
+            val constants =
+                Regex(
+                    """\b(?:var|let|const)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*["']([^"']*)["']"""
+                )
+                    .findAll(body)
+                    .map { it.groupValues[1] }
+                    .toList()
+
+            if (constants.size < 2) {
+                return null
+            }
+
+            val synthetic =
+                buildString {
+                    append("(")
+                    append(
+                        encodedParts.joinToString(
+                            prefix = "[",
+                            postfix = "]"
+                        ) { part ->
+                            "'" +
+                                part
+                                    .replace("\\", "\\\\")
+                                    .replace("'", "\\'") +
+                                "'"
+                        }
+                    )
+                    append(");var a='")
+                    append(
+                        constants[0]
+                            .replace("\\", "\\\\")
+                            .replace("'", "\\'")
+                    )
+                    append("';var b='")
+                    append(
+                        constants[1]
+                            .replace("\\", "\\\\")
+                            .replace("'", "\\'")
+                    )
+                    append("';")
+                }
+
+            return decodeNativeRaw(synthetic)
+        }
+
+        return null
+    }
+
     private fun decodeCloseLoadSourceChain(
         html: String
     ): String? {
@@ -2866,19 +3240,12 @@ private class CloseLoadExtractor : ExtractorApi() {
                 callEnd
             ).trim()
 
-        val array: String? =
+        val encodedParts: List<String> =
             if (arguments.trimStart().startsWith("[")) {
-                val arrayStart = arguments.indexOf('[')
-                val arrayEnd = arguments.lastIndexOf(']')
-
-                if (arrayStart >= 0 && arrayEnd > arrayStart) {
-                    arguments.substring(
-                        arrayStart,
-                        arrayEnd + 1
-                    )
-                } else {
-                    null
-                }
+                Regex("""(?s)["']((?:\\.|[^"'\\])*)["']""")
+                    .findAll(arguments)
+                    .map { it.groupValues[1] }
+                    .toList()
             } else {
                 val splitMatch =
                     Regex(
@@ -2886,42 +3253,29 @@ private class CloseLoadExtractor : ExtractorApi() {
                     ).matchEntire(arguments)
 
                 if (splitMatch != null) {
-                    val encodedBase = splitMatch.groupValues[2]
-                    val separator = splitMatch.groupValues[4]
-                    val parts = encodedBase.split(separator)
-
-                    buildString {
-                        append("[")
-                        parts.forEachIndexed { index, part ->
-                            if (index > 0) append(",")
-                            append('"')
-                            append(
-                                part
-                                    .replace("\\", "\\\\")
-                                    .replace("\"", "\\\"")
-                            )
-                            append('"')
-                        }
-                        append("]")
-                    }
+                    splitMatch.groupValues[2]
+                        .split(splitMatch.groupValues[4])
+                        .toList()
                 } else {
-                    null
+                    emptyList()
                 }
             }
 
-        if (array.isNullOrBlank()) {
+        if (encodedParts.isEmpty()) {
             Log.d(
                 tag,
-                "CloseLoad source-chain: array/split argümanı çözülemedi args=" +
-                    arguments.take(1000)
+                "CloseLoad source-chain: encoded parçalar çözülemedi args=" +
+                    arguments.take(1200)
             )
             return null
         }
 
         Log.d(
             tag,
-            "CloseLoad source-chain array length=" +
-                array.length
+            "CloseLoad source-chain encodedParts=" +
+                encodedParts.size +
+                " firstLen=" +
+                (encodedParts.firstOrNull()?.length ?: 0)
         )
 
         val functionMatch =
@@ -3011,57 +3365,16 @@ private class CloseLoadExtractor : ExtractorApi() {
                     .take(2200)
         )
 
-        val constants =
-            Regex(
-                """\b(?:var|let|const)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*["']([^"']*)["']"""
-            )
-                .findAll(body)
-                .map { it.groupValues[1] }
-                .toList()
-
-        if (constants.size < 2) {
-            Log.d(
-                tag,
-                "CloseLoad source-chain: yeterli string sabiti yok count=" +
-                    constants.size
-            )
-            return null
-        }
-
-        val k1 =
-            constants[0]
-                .replace("\\", "\\\\")
-                .replace("'", "\\'")
-
-        val k2 =
-            constants[1]
-                .replace("\\", "\\\\")
-                .replace("'", "\\'")
-
-        Log.d(
-            tag,
-            "CloseLoad source-chain constants k1Len=" +
-                k1.length +
-                " k2=" +
-                k2
-        )
-
-        val synthetic =
-            "(" +
-                array +
-                ");var a='" +
-                k1 +
-                "';var b='" +
-                k2 +
-                "';"
-
         val decoded =
-            decodeNativeRaw(synthetic)
+            decodeCloseLoadFunctionBody(
+                body,
+                encodedParts
+            )
 
         if (decoded.isNullOrBlank()) {
             Log.d(
                 tag,
-                "CloseLoad source-chain decodeNativeRaw sonuç üretmedi function=" +
+                "CloseLoad source-chain decoder sonuç üretmedi function=" +
                     functionName
             )
             return null
