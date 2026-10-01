@@ -2756,10 +2756,13 @@ private class CloseLoadExtractor : ExtractorApi() {
                 ?.getOrNull(1)
                 ?: return null
 
-        val assignment =
+        val assignmentRegex =
             Regex(
-                """(?is)\b(?:var|let|const)\s+\${sourceRef}\s*=\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\("""
-            ).find(html)
+                """(?is)\b(?:var|let|const)\s+${Regex.escape(sourceRef)}\s*=\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\("""
+            )
+
+        val assignment =
+            assignmentRegex.find(html)
                 ?: return null
 
         val functionName =
@@ -2823,7 +2826,7 @@ private class CloseLoadExtractor : ExtractorApi() {
 
         val functionRegex =
             Regex(
-                """(?is)function\s+\${functionName}\s*\(([^)]*)\)\s*\{"""
+                """(?is)function\s+${Regex.escape(functionName)}\s*\(([^)]*)\)\s*\{"""
             )
 
         val functionMatch =
