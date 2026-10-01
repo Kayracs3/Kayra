@@ -496,7 +496,7 @@ class DiziBoxizle : MainAPI() {
         val variables = LinkedHashMap<String, String>()
 
         val declarationPattern = Regex(
-            """(?is)\\b(?:var|let|const)\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*(?:"([^"]*)"|'([^']*)')\\s*;?"""
+            """(?is)\b(?:var|let|const)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:"([^"]*)"|'([^']*)')\s*;?"""
         )
 
         for (match in declarationPattern.findAll(html)) {
@@ -512,7 +512,7 @@ class DiziBoxizle : MainAPI() {
 
         // Also catch assignments without var/let/const, which are common in player scripts.
         val assignmentPattern = Regex(
-            """(?is)\\b([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*(?:"([^"]*)"|'([^']*)')\\s*;?"""
+            """(?is)\b([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:"([^"]*)"|'([^']*)')\s*;?"""
         )
 
         for (match in assignmentPattern.findAll(html)) {
@@ -599,7 +599,7 @@ class DiziBoxizle : MainAPI() {
         }
 
         val sourceExpressionPattern = Regex(
-            """(?is)\\b(?:file|src|url|source|hls)\\s*:\\s*([^,}\\n]+)"""
+            """(?is)\b(?:file|src|url|source|hls)\s*:\s*([^,}\n]+)"""
         )
 
         for (match in sourceExpressionPattern.findAll(html)) {
