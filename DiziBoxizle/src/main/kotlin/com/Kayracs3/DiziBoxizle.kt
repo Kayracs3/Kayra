@@ -1318,7 +1318,7 @@ class DiziBoxizle : MainAPI() {
         )
 
         private val GENERIC_MEDIA_PATTERN = Regex(
-            "https?://[^\\s\\\"'<>]+\\.(?:m3u8|mpd|mp4|webm|txt)(?:\\?[^\\s\\\"'<>]+)?",
+            """https?://[^\s"'<>]+\.(?:m3u8|mpd|mp4|webm|txt)(?:\?[^\s"'<>]+)?""",
             RegexOption.IGNORE_CASE,
         )
 
