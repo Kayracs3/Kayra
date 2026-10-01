@@ -345,7 +345,7 @@ class DiziBoxizle : MainAPI() {
         callback: (ExtractorLink) -> Unit,
     ) {
         val type = when {
-            Regex("(?i)\\.(?:m3u8)(?:$|\\?)").containsMatchIn(mediaUrl) -> ExtractorLinkType.M3U8
+            Regex("(?i)\\.(?:m3u8|txt)(?:$|\\?)").containsMatchIn(mediaUrl) -> ExtractorLinkType.M3U8
             Regex("(?i)\\.(?:mpd)(?:$|\\?)").containsMatchIn(mediaUrl) -> ExtractorLinkType.DASH
             else -> ExtractorLinkType.VIDEO
         }
@@ -458,6 +458,12 @@ class DiziBoxizle : MainAPI() {
                 .map { it.value.trimEnd(')', ']', '}', ';', ',') }
                 .forEach(sourceUrls::add)
 
+            // Some current VidMoly pages use:
+            //   sources: [{ file: yd4, type: "hls" }]
+            // where yd4 is assigned elsewhere in the script. Resolve those
+            // string variables before giving up on the provider.
+            extractJavascriptMediaUrls(searchableHtml).forEach(sourceUrls::add)
+
             for (rawSource in sourceUrls) {
                 val mediaUrl = normalizeProviderMediaUrl(rawSource, pageUrl)
                 if (!isMediaUrl(mediaUrl)) continue
@@ -482,6 +488,139 @@ class DiziBoxizle : MainAPI() {
         }
 
         return found
+    }
+
+    private fun extractJavascriptMediaUrls(html: String): Set<String> {
+        val result = LinkedHashSet<String>()
+
+        val variables = LinkedHashMap<String, String>()
+
+        val declarationPattern = Regex(
+            """(?is)\\b(?:var|let|const)\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*(?:"([^"]*)"|'([^']*)')\\s*;?"""
+        )
+
+        for (match in declarationPattern.findAll(html)) {
+            val name = match.groupValues[1]
+            val value = match.groupValues[2]
+                .ifBlank { match.groupValues[3] }
+                .decodeEmbeddedText()
+
+            if (value.isNotBlank()) {
+                variables[name] = value
+            }
+        }
+
+        // Also catch assignments without var/let/const, which are common in player scripts.
+        val assignmentPattern = Regex(
+            """(?is)\\b([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*(?:"([^"]*)"|'([^']*)')\\s*;?"""
+        )
+
+        for (match in assignmentPattern.findAll(html)) {
+            val name = match.groupValues[1]
+            val value = match.groupValues[2]
+                .ifBlank { match.groupValues[3] }
+                .decodeEmbeddedText()
+
+            if (value.isNotBlank() && name !in variables) {
+                variables[name] = value
+            }
+        }
+
+        fun resolve(value: String, depth: Int = 0): String? {
+            if (depth > 6) return null
+
+            val cleaned = value
+                .trim()
+                .trim(',', ';')
+                .trim()
+
+            if (cleaned.startsWith("http://", ignoreCase = true) ||
+                cleaned.startsWith("https://", ignoreCase = true)
+            ) {
+                return cleaned
+            }
+
+            if (cleaned.startsWith("//")) {
+                return "https:$cleaned"
+            }
+
+            val quoted = when {
+                cleaned.length >= 2 &&
+                    ((cleaned.first() == '"' && cleaned.last() == '"') ||
+                        (cleaned.first() == '\'' && cleaned.last() == '\'')) -> {
+                    cleaned.substring(1, cleaned.length - 1)
+                }
+
+                else -> null
+            }
+
+            if (quoted != null) {
+                return resolve(quoted.decodeEmbeddedText(), depth + 1)
+                    ?: quoted.decodeEmbeddedText()
+            }
+
+            val simpleName = Regex("^[A-Za-z_$][A-Za-z0-9_$]*$")
+                .find(cleaned)
+                ?.value
+
+            if (simpleName != null) {
+                variables[simpleName]?.let { mapped ->
+                    return resolve(mapped, depth + 1)
+                }
+            }
+
+            // Resolve simple string concatenations such as:
+            // base + "/hls/" + fileName
+            if ('+' in cleaned) {
+                val parts = cleaned.split('+')
+                val joined = buildString {
+                    for (part in parts) {
+                        val piece = part.trim()
+                        val resolved = resolve(piece, depth + 1)
+                            ?: if (
+                                piece.length >= 2 &&
+                                ((piece.first() == '"' && piece.last() == '"') ||
+                                    (piece.first() == '\'' && piece.last() == '\''))
+                            ) {
+                                piece.substring(1, piece.length - 1)
+                            } else {
+                                variables[piece]
+                            }
+
+                        if (resolved.isNullOrBlank()) return null
+                        append(resolved)
+                    }
+                }
+
+                if (joined.isNotBlank()) return joined
+            }
+
+            return null
+        }
+
+        val sourceExpressionPattern = Regex(
+            """(?is)\\b(?:file|src|url|source|hls)\\s*:\\s*([^,}\\n]+)"""
+        )
+
+        for (match in sourceExpressionPattern.findAll(html)) {
+            val expression = match.groupValues[1]
+                .trim()
+                .trimEnd(';')
+
+            val resolved = resolve(expression) ?: continue
+
+            if (isMediaUrl(resolved)) {
+                result.add(resolved)
+            }
+        }
+
+        // Catch direct URL variables even when the player setup references them indirectly.
+        variables.values
+            .map { it.trim() }
+            .filter { isMediaUrl(it) || it.contains("master.txt", ignoreCase = true) }
+            .forEach { result.add(it) }
+
+        return result
     }
 
     private fun normalizeProviderMediaUrl(raw: String, pageUrl: String): String {
@@ -893,10 +1032,17 @@ class DiziBoxizle : MainAPI() {
         val value = url.lowercase()
 
         return Regex(
-            "(?i)\\.(m3u8|mpd|mp4|webm)(?:$|[?#])"
-        ).containsMatchIn(value) ||
+            "(?i)\\.(m3u8|mpd|mp4|webm|txt)(?:$|[?#])"
+        ).containsMatchIn(value) &&
+            (
+                value.endsWith(".m3u8") ||
+                    value.contains("master.txt") ||
+                    value.contains("playlist.txt") ||
+                    value.contains("index.txt") ||
+                    value.contains("/hls")
+            ) ||
             (value.contains("/hls2/") && value.contains(".m3u8")) ||
-            (value.contains(".vmeas.cloud/") && value.contains(".m3u8"))
+            (value.contains(".vmeas.cloud/") && (value.contains(".m3u8") || value.contains(".txt")))
     }
 
     private fun String.decodeEmbeddedText(): String {
@@ -1110,12 +1256,12 @@ class DiziBoxizle : MainAPI() {
         )
 
         private val VMEAS_M3U8_PATTERN = Regex(
-            "https?://[a-z0-9.-]+\\.vmeas\\.cloud/[^\\s\"'<>]+?\\.m3u8(?:\\?[^\\s\"'<>]+)?",
+            "https?://[a-z0-9.-]+\\.vmeas\\.cloud/[^\\s\"'<>]+?\\.(?:m3u8|txt)(?:\\?[^\\s\"'<>]+)?",
             RegexOption.IGNORE_CASE,
         )
 
         private val GENERIC_M3U8_PATTERN = Regex(
-            "https?://[^\\s\"'<>]+(?:master|index|playlist)[^\\s\"'<>]*\\.m3u8(?:\\?[^\\s\"'<>]+)?",
+            "https?://[^\\s\"'<>]+(?:master|index|playlist)[^\\s\"'<>]*\\.(?:m3u8|txt)(?:\\?[^\\s\"'<>]+)?",
             RegexOption.IGNORE_CASE,
         )
 
