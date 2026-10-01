@@ -250,6 +250,12 @@ class DiziBoxizle : MainAPI() {
             .forEach(candidates::add)
 
         var found = false
+        var emittedLinks = 0
+
+        val reportLink: (ExtractorLink) -> Unit = { link ->
+            emittedLinks++
+            callback(link)
+        }
 
         for (candidate in candidates) {
             val clean = candidate.decodeEmbeddedText()
@@ -260,40 +266,58 @@ class DiziBoxizle : MainAPI() {
                     emitMediaLink(
                         clean,
                         episodeUrl,
-                        callback,
+                        reportLink,
                     )
                     found = true
                 }
 
                 isExternalPlayer(clean) -> {
-                    // Prefer CloudStream's native extractor first.
-                    // This is important for VidMoly and Ok.ru because their extractors
-                    // already handle the current player/API structure and required
-                    // request headers.
-                    val extracted = runCatching {
+                    // loadExtractor() returns true when an extractor is recognized,
+                    // not necessarily when it produced an ExtractorLink. The log showed
+                    // exactly that case for Ok.ru, so success is determined by callback count.
+                    val beforeLinks = emittedLinks
+
+                    val recognized = runCatching {
                         loadExtractor(
                             clean,
                             episodeUrl,
                             subtitleCallback,
-                            callback,
+                            reportLink,
                         )
                     }.getOrDefault(false)
 
-                    println("[DiziBoxizle] loadExtractor=$extracted url=$clean")
+                    val nativeFound = emittedLinks > beforeLinks
+                    println(
+                        "[DiziBoxizle] loadExtractor recognized=$recognized " +
+                            "links=$nativeFound url=$clean"
+                    )
 
-                    if (extracted) {
+                    if (nativeFound) {
                         found = true
                     } else {
-                        // Keep our HTML/JS parser only as a fallback for providers
-                        // that are not handled by the installed CloudStream extractors.
-                        val providerFound = extractProviderMedia(
-                            clean,
-                            episodeUrl,
-                            subtitleCallback,
-                            callback,
+                        // Fall back to the custom HTML/JS parser only when the native
+                        // extractor did not emit an actual media link.
+                        val beforeFallbackLinks = emittedLinks
+
+                        val fallbackFound = runCatching {
+                            extractProviderMedia(
+                                clean,
+                                episodeUrl,
+                                subtitleCallback,
+                                reportLink,
+                            )
+                        }.getOrDefault(false)
+
+                        val fallbackLinks = emittedLinks > beforeFallbackLinks
+
+                        println(
+                            "[DiziBoxizle] fallbackProvider=$fallbackFound " +
+                                "links=$fallbackLinks url=$clean"
                         )
-                        println("[DiziBoxizle] fallbackProvider=$providerFound url=$clean")
-                        found = providerFound || found
+
+                        if (fallbackLinks) {
+                            found = true
+                        }
                     }
                 }
             }
