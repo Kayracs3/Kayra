@@ -2745,10 +2745,224 @@ private class CloseLoadExtractor : ExtractorApi() {
         }
     }
 
+    private fun decodeCloseLoadSourceChain(
+        html: String
+    ): String? {
+        val sourceRef =
+            Regex(
+                """(?is)(?:file|src|source|media|stream|url)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)"""
+            ).find(html)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?: return null
+
+        val assignment =
+            Regex(
+                """(?is)\b(?:var|let|const)\s+\${sourceRef}\s*=\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\("""
+            ).find(html)
+                ?: return null
+
+        val functionName =
+            assignment.groupValues[1]
+
+        val callStart = assignment.range.last + 1
+        var depth = 1
+        var quote: Char? = null
+        var escaped = false
+        var callEnd = -1
+
+        for (i in callStart until html.length) {
+            val c = html[i]
+
+            if (quote != null) {
+                if (escaped) {
+                    escaped = false
+                } else if (c == '\\') {
+                    escaped = true
+                } else if (c == quote) {
+                    quote = null
+                }
+                continue
+            }
+
+            if (c == '\'' || c == '"') {
+                quote = c
+                continue
+            }
+
+            when (c) {
+                '(' -> depth++
+                ')' -> {
+                    depth--
+                    if (depth == 0) {
+                        callEnd = i
+                        break
+                    }
+                }
+            }
+        }
+
+        if (callEnd < 0) return null
+
+        val arguments =
+            html.substring(
+                callStart,
+                callEnd
+            ).trim()
+
+        if (!arguments.startsWith("[")) return null
+
+        val arrayEnd = arguments.lastIndexOf("]")
+        if (arrayEnd <= 0) return null
+
+        val array =
+            arguments.substring(
+                0,
+                arrayEnd + 1
+            )
+
+        val functionRegex =
+            Regex(
+                """(?is)function\s+\${functionName}\s*\(([^)]*)\)\s*\{"""
+            )
+
+        val functionMatch =
+            functionRegex.find(html)
+                ?: return null
+
+        val braceStart =
+            html.indexOf(
+                '{',
+                functionMatch.range.last
+            )
+
+        if (braceStart < 0) return null
+
+        depth = 0
+        quote = null
+        escaped = false
+        var bodyEnd = -1
+
+        for (i in braceStart until html.length) {
+            val c = html[i]
+
+            if (quote != null) {
+                if (escaped) {
+                    escaped = false
+                } else if (c == '\\') {
+                    escaped = true
+                } else if (c == quote) {
+                    quote = null
+                }
+                continue
+            }
+
+            if (c == '\'' || c == '"') {
+                quote = c
+                continue
+            }
+
+            when (c) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        bodyEnd = i
+                        break
+                    }
+                }
+            }
+        }
+
+        if (bodyEnd < 0) return null
+
+        val body =
+            html.substring(
+                braceStart + 1,
+                bodyEnd
+            )
+
+        val constants =
+            Regex(
+                """\b(?:var|let|const)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*["']([^"']*)["']"""
+            ).findAll(body)
+                .map { it.groupValues[1] }
+                .toList()
+
+        if (constants.size < 2) return null
+
+        val k1 =
+            constants[0]
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+
+        val k2 =
+            constants[1]
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+
+        val synthetic =
+            "(" +
+                array +
+                ");var a='" +
+                k1 +
+                "';var b='" +
+                k2 +
+                "';"
+
+        val decoded =
+            decodeNativeRaw(
+                synthetic
+            ) ?: return null
+
+        Log.d(
+            "FILMMAKINESI",
+            "CloseLoad gerçek function=" +
+                functionName +
+                " source=" +
+                sourceRef
+        )
+
+        Log.d(
+            "FILMMAKINESI",
+            "CloseLoad gerçek function decoded=" +
+                decoded.take(2000)
+        )
+
+        return Regex(
+            """https?://[^\s"'<>|]+"""
+        ).findAll(decoded)
+            .map {
+                it.value.trimEnd(
+                    ')',
+                    ']',
+                    '}',
+                    ';',
+                    ','
+                )
+            }
+            .firstOrNull {
+                val lower = it.lowercase()
+                lower.contains(".m3u8") ||
+                    lower.contains(".mp4") ||
+                    lower.contains("master.txt") ||
+                    lower.contains("/hls/") ||
+                    lower.contains("/hls2/")
+            }
+    }
+
     private fun decodeNative(
         html: String,
     ): String? {
         logCloseLoadStructure(html)
+
+        decodeCloseLoadSourceChain(html)?.let {
+            Log.d(
+                "FILMMAKINESI",
+                "CloseLoad source-chain decoded=" + it
+            )
+            return it
+        }
 
         /*
          * CloseLoad obfuscasyonu sayfadan sayfaya küçük JS biçim
