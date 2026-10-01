@@ -239,7 +239,16 @@ class DiziBoxizle : MainAPI() {
         Regex("https?://[^\\s\\\"'<>]+", RegexOption.IGNORE_CASE)
             .findAll(rawHtml)
             .map { it.value.trimEnd(')', ']', '}', ';', ',') }
-            .filter { isMediaUrl(it) || isExternalPlayer(it) }
+            .filter {
+                (isMediaUrl(it) || isExternalPlayer(it)) &&
+                    !it.contains("youtube.com", ignoreCase = true) &&
+                    !it.contains("youtube-nocookie.com", ignoreCase = true)
+            }
+            .forEach(candidates::add)
+
+        // 4b) The current player network URL uses the vmpx.online /hls2/... format.
+        VMPX_M3U8_PATTERN.findAll(rawHtml)
+            .map { it.value.trimEnd(')', ']', '}', ';', ',') }
             .forEach(candidates::add)
 
         // 5) VMEAS HLS URLs.
@@ -418,6 +427,12 @@ class DiziBoxizle : MainAPI() {
                 )
             }.getOrNull() ?: continue
 
+            println(
+                "[DiziBoxizle] providerResponse url=" + pageUrl +
+                    " code=" + providerResponse.code +
+                    " length=" + providerResponse.text.length
+            )
+
             val providerDocument = providerResponse.document
             val providerHtml = buildString {
                 append(providerDocument.html())
@@ -462,6 +477,10 @@ class DiziBoxizle : MainAPI() {
                 .forEach(sourceUrls::add)
 
             GENERIC_M3U8_PATTERN.findAll(searchableHtml)
+                .map { it.value.trimEnd(')', ']', '}', ';', ',') }
+                .forEach(sourceUrls::add)
+
+            VMPX_M3U8_PATTERN.findAll(searchableHtml)
                 .map { it.value.trimEnd(')', ']', '}', ';', ',') }
                 .forEach(sourceUrls::add)
 
@@ -1305,6 +1324,11 @@ class DiziBoxizle : MainAPI() {
         // Fallback for variants using src/url/source/hls directly.
         private val PROVIDER_ANY_SOURCE_PATTERN = Regex(
             "(?is)\\b(?:file|src|url|source|hls)\\s*[:=]\\s*[\"'](https?://[^\"']+(?:m3u8|mpd)(?:\\?[^\"']+)?)['\"]"
+        )
+
+        private val VMPX_M3U8_PATTERN = Regex(
+            """https?://[a-z0-9.-]+\\.vmpx\\.online/hls2/[^\\s"'<>]+?\\.m3u8(?:\\?[^\\s"'<>]+)?""",
+            RegexOption.IGNORE_CASE,
         )
 
         private val VMEAS_M3U8_PATTERN = Regex(
