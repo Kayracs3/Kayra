@@ -411,6 +411,12 @@ class DiziBoxizle : MainAPI() {
         vidMolyClassicUrl(providerUrl)?.let(providerCandidates::add)
 
         var found = false
+        var providerEmittedLinks = 0
+
+        val providerReportLink: (ExtractorLink) -> Unit = { link ->
+            providerEmittedLinks++
+            callback(link)
+        }
 
         for (pageUrl in providerCandidates) {
             val providerResponse = runCatching {
@@ -507,7 +513,7 @@ class DiziBoxizle : MainAPI() {
                 println("[DiziBoxizle] providerSource=" + mediaUrl)
                 if (!isMediaUrl(mediaUrl)) continue
 
-                emitMediaLink(mediaUrl, pageUrl, callback)
+                emitMediaLink(mediaUrl, pageUrl, providerReportLink)
                 found = true
             }
 
@@ -519,7 +525,7 @@ class DiziBoxizle : MainAPI() {
                     pageUrl.contains("vidmoly", ignoreCase = true)
 
             if (!found && needsWebViewFallback) {
-                val beforeWebViewLinks = emittedLinks
+                val beforeWebViewLinks = providerEmittedLinks
 
                 val webViewResult = runCatching {
                     val resolver = WebViewResolver(
