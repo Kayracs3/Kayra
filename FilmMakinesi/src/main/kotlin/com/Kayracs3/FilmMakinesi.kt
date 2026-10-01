@@ -2866,23 +2866,57 @@ private class CloseLoadExtractor : ExtractorApi() {
                 callEnd
             ).trim()
 
-        val arrayStart = arguments.indexOf('[')
-        val arrayEnd = arguments.lastIndexOf(']')
+        val array: String? =
+            if (arguments.trimStart().startsWith("[")) {
+                val arrayStart = arguments.indexOf('[')
+                val arrayEnd = arguments.lastIndexOf(']')
 
-        if (arrayStart < 0 || arrayEnd <= arrayStart) {
+                if (arrayStart >= 0 && arrayEnd > arrayStart) {
+                    arguments.substring(
+                        arrayStart,
+                        arrayEnd + 1
+                    )
+                } else {
+                    null
+                }
+            } else {
+                val splitMatch =
+                    Regex(
+                        """(?is)^\s*(["'])(.*?)\1\s*\.\s*split\(\s*(["'])(.*?)\3\s*\)\s*$"""
+                    ).matchEntire(arguments)
+
+                if (splitMatch != null) {
+                    val encodedBase = splitMatch.groupValues[2]
+                    val separator = splitMatch.groupValues[4]
+                    val parts = encodedBase.split(separator)
+
+                    buildString {
+                        append("[")
+                        parts.forEachIndexed { index, part ->
+                            if (index > 0) append(",")
+                            append('"')
+                            append(
+                                part
+                                    .replace("\\", "\\\\")
+                                    .replace("\"", "\\\"")
+                            )
+                            append('"')
+                        }
+                        append("]")
+                    }
+                } else {
+                    null
+                }
+            }
+
+        if (array.isNullOrBlank()) {
             Log.d(
                 tag,
-                "CloseLoad source-chain: array argümanı bulunamadı args=" +
-                    arguments.take(600)
+                "CloseLoad source-chain: array/split argümanı çözülemedi args=" +
+                    arguments.take(1000)
             )
             return null
         }
-
-        val array =
-            arguments.substring(
-                arrayStart,
-                arrayEnd + 1
-            )
 
         Log.d(
             tag,
@@ -2892,9 +2926,11 @@ private class CloseLoadExtractor : ExtractorApi() {
 
         val functionMatch =
             Regex(
-                """(?is)\bfunction\s+""" +
+                """(?is)(?:\bfunction\s+""" +
                     Regex.escape(functionName) +
-                    """\s*\([^)]*\)\s*\{"""
+                    """\s*\([^)]*\)\s*\{|\b(?:var|let|const)\s+""" +
+                    Regex.escape(functionName) +
+                    """\s*=\s*function\s*\([^)]*\)\s*\{)"""
             )
                 .find(html)
 
