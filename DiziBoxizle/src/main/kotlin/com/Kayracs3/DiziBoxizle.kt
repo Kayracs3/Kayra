@@ -580,17 +580,17 @@ class DiziBoxizle : MainAPI() {
                             referer = pageUrl,
                             headers = webViewHeaders,
                         )
-                    }.getOrDefault(emptyList()).forEach(reportLink)
+                    }.getOrDefault(emptyList()).forEach(providerReportLink)
 
-                    if (emittedLinks == beforeWebViewLinks) {
+                    if (providerEmittedLinks == beforeWebViewLinks) {
                         emitMediaLink(
                             interceptedUrl,
                             pageUrl,
-                            reportLink,
+                            providerReportLink,
                         )
                     }
 
-                    found = emittedLinks > beforeWebViewLinks
+                    found = providerEmittedLinks > beforeWebViewLinks
                 }
             }
 
