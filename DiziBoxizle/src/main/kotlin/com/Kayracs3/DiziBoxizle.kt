@@ -551,7 +551,7 @@ class DiziBoxizle : MainAPI() {
                     )
 
                     M3u8Helper.generateM3u8(
-                        name = name,
+                        source = name,
                         streamUrl = interceptedUrl,
                         referer = pageUrl,
                         headers = webViewHeaders,
