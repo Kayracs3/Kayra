@@ -1,5 +1,25 @@
 [
     {
+        "iconUrl": "https://asyafilmizle.com//favicon.ico",
+        "fileHash": "sha256-53a66bb56b18d3a2927af4bf7a378d3b18b13a3c902b871b76bfe76aa50ce871",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 55448,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "AsyaFilmIzle"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "AsyaFilmIzle",
+        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaFilmIzle.cs3",
+        "name": "AsyaFilmIzle"
+    },
+    {
         "iconUrl": "https://dizipal1583.com/favicon.ico",
         "fileHash": "sha256-9761791cc7aba1b0fb9ee2884c3029d74fb7881fbcd33a808c31e8c3dd1e5bae",
         "apiVersion": 1,
@@ -99,6 +119,26 @@
         "description": "katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziYou.cs3",
         "name": "DiziYou"
+    },
+    {
+        "iconUrl": "https://www.dramadizilerim.com/favicon.ico",
+        "fileHash": "sha256-a2c913536ebec34d74f43b9015eb45a1aee84b7441fd7b6643b00281b282e00f",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 30711,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Dramadizilerim"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "Dramadizilerim",
+        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dramadizilerim.cs3",
+        "name": "Dramadizilerim"
     },
     {
         "iconUrl": "https://dizipal1583.com/favicon.ico",
