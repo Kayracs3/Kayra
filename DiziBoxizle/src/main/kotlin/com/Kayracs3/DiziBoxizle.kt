@@ -2,12 +2,14 @@ package com.Kayracs3
 
 import android.util.Base64
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.getAndUnpack
+import com.lagradost.cloudstream3.utils.M3u8Helper
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
@@ -507,6 +509,58 @@ class DiziBoxizle : MainAPI() {
 
                 emitMediaLink(mediaUrl, pageUrl, callback)
                 found = true
+            }
+
+            // Oynatloload builds the HLS URL after JavaScript executes, so the
+            // normal HTTP/HTML parser can see the page but not the final master.m3u8.
+            // Use CloudStream's WebView interceptor as a last-resort fallback.
+            if (!found && pageUrl.contains("oynatloload.top", ignoreCase = true)) {
+                val webViewResult = runCatching {
+                    val resolver = WebViewResolver(
+                        interceptUrl = Regex("""(?:m3u8|master\.txt)"""),
+                        additionalUrls = listOf(Regex("""(?:m3u8|master\.txt)""")),
+                        useOkhttp = false,
+                        timeout = 15_000L,
+                    )
+
+                    app.get(
+                        pageUrl,
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to episodeUrl,
+                            "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                        ),
+                        interceptor = resolver,
+                    )
+                }.getOrNull()
+
+                val interceptedUrl = webViewResult?.url.orEmpty()
+
+                println(
+                    "[DiziBoxizle] WebView Oynatloload intercepted=" +
+                        interceptedUrl
+                )
+
+                if (interceptedUrl.contains("m3u8", ignoreCase = true) ||
+                    interceptedUrl.contains("master.txt", ignoreCase = true)
+                ) {
+                    val webViewHeaders = linkedMapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to pageUrl,
+                        "Accept" to "*/*",
+                    )
+
+                    M3u8Helper.generateM3u8(
+                        name = name,
+                        streamUrl = interceptedUrl,
+                        referer = pageUrl,
+                        headers = webViewHeaders,
+                    ).forEach { link ->
+                        callback(link)
+                    }
+
+                    found = true
+                }
             }
 
             providerDocument.select("track[src], track[data-src]").forEach { track ->
