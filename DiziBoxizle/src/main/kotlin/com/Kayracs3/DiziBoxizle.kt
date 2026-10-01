@@ -532,7 +532,40 @@ class DiziBoxizle : MainAPI() {
                         interceptUrl = Regex("""(?:m3u8|master\.txt)"""),
                         additionalUrls = listOf(Regex("""(?:m3u8|master\.txt)""")),
                         useOkhttp = false,
-                        timeout = 15_000L,
+                        script = """
+                            (function() {
+                                function startPlayer() {
+                                    try {
+                                        if (typeof jwplayer === "function") {
+                                            var player = jwplayer();
+                                            if (player && typeof player.play === "function") {
+                                                player.play();
+                                            }
+                                        }
+                                    } catch (e) {}
+
+                                    try {
+                                        document.querySelectorAll("video").forEach(function(video) {
+                                            video.muted = true;
+                                            var p = video.play();
+                                            if (p && p.catch) p.catch(function() {});
+                                        });
+                                    } catch (e) {}
+
+                                    try {
+                                        var playButton =
+                                            document.querySelector(".jw-display-icon-container") ||
+                                            document.querySelector(".jw-icon-play") ||
+                                            document.querySelector(".jwplayer .jw-display-icon-container");
+                                        if (playButton) playButton.click();
+                                    } catch (e) {}
+                                }
+
+                                setTimeout(startPlayer, 1500);
+                                setTimeout(startPlayer, 4500);
+                            })();
+                        """.trimIndent(),
+                        timeout = 25_000L,
                     )
 
                     app.get(
