@@ -511,10 +511,16 @@ class DiziBoxizle : MainAPI() {
                 found = true
             }
 
-            // Oynatloload builds the HLS URL after JavaScript executes, so the
-            // normal HTTP/HTML parser can see the page but not the final master.m3u8.
+            // Some providers generate the final HLS URL only after JavaScript runs.
+            // The normal HTTP parser can then see a valid player page but no media URL.
             // Use CloudStream's WebView interceptor as a last-resort fallback.
-            if (!found && pageUrl.contains("oynatloload.top", ignoreCase = true)) {
+            val needsWebViewFallback =
+                pageUrl.contains("oynatloload.top", ignoreCase = true) ||
+                    pageUrl.contains("vidmoly", ignoreCase = true)
+
+            if (!found && needsWebViewFallback) {
+                val beforeWebViewLinks = emittedLinks
+
                 val webViewResult = runCatching {
                     val resolver = WebViewResolver(
                         interceptUrl = Regex("""(?:m3u8|master\.txt)"""),
@@ -528,8 +534,13 @@ class DiziBoxizle : MainAPI() {
                         headers = mapOf(
                             "User-Agent" to USER_AGENT,
                             "Referer" to episodeUrl,
+                            "Accept" to "*/*",
                             "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                            "Sec-Fetch-Dest" to "iframe",
+                            "Sec-Fetch-Mode" to "navigate",
+                            "Sec-Fetch-Site" to "cross-site",
                         ),
+                        referer = episodeUrl,
                         interceptor = resolver,
                     )
                 }.getOrNull()
@@ -537,7 +548,9 @@ class DiziBoxizle : MainAPI() {
                 val interceptedUrl = webViewResult?.url.orEmpty()
 
                 println(
-                    "[DiziBoxizle] WebView Oynatloload intercepted=" +
+                    "[DiziBoxizle] WebView fallback provider=" +
+                        pageUrl +
+                        " intercepted=" +
                         interceptedUrl
                 )
 
@@ -548,18 +561,30 @@ class DiziBoxizle : MainAPI() {
                         "User-Agent" to USER_AGENT,
                         "Referer" to pageUrl,
                         "Accept" to "*/*",
+                        "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
                     )
 
-                    M3u8Helper.generateM3u8(
-                        source = name,
-                        streamUrl = interceptedUrl,
-                        referer = pageUrl,
-                        headers = webViewHeaders,
-                    ).forEach { link ->
-                        callback(link)
+                    // First try CloudStream's HLS parser. If the provider returns a
+                    // playlist format the helper does not expand, emit the intercepted
+                    // URL directly as a final fallback.
+                    runCatching {
+                        M3u8Helper.generateM3u8(
+                            source = name,
+                            streamUrl = interceptedUrl,
+                            referer = pageUrl,
+                            headers = webViewHeaders,
+                        )
+                    }.getOrDefault(emptyList()).forEach(reportLink)
+
+                    if (emittedLinks == beforeWebViewLinks) {
+                        emitMediaLink(
+                            interceptedUrl,
+                            pageUrl,
+                            reportLink,
+                        )
                     }
 
-                    found = true
+                    found = emittedLinks > beforeWebViewLinks
                 }
             }
 
