@@ -533,9 +533,7 @@ class DiziBoxizle : MainAPI() {
                 val webViewReferer =
                     if (webViewStartUrl == episodeUrl) "$mainUrl/" else episodeUrl
 
-                val frameUrl = pageUrl
-                    .replace("\\", "\\\\")
-                    .replace(""", "\\"")
+                val frameUrl = pageUrl.replace(""", "\\"")
 
                 val webViewResult = runCatching {
                     val resolver = WebViewResolver(
