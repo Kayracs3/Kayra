@@ -2,7 +2,7 @@ version = 1
 
 cloudstream {
     description = "SetFilmIzle film ve dizi sağlayıcısı"
-    authors = listOf("neoncs3")
+    authors = listOf("Kayracs3")
     status = 1
     tvTypes = listOf("TvSeries", "Movie")
     language = "tr"
