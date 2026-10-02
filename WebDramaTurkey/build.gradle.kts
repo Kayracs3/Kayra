@@ -2,7 +2,7 @@ version = 1
 
 cloudstream {
     description = "Web Drama Turkey Kore, Çin ve Asya dizileri sağlayıcısı"
-    authors = listOf("neoncs3")
+    authors = listOf("Kayracs3")
     status = 1
     tvTypes = listOf("AsianDrama", "Movie", "Anime", "Others")
     language = "tr"
