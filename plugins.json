@@ -42,10 +42,10 @@
     },
     {
         "iconUrl": "https://diziboxizle.com/favicon.ico",
-        "fileHash": "sha256-192389b9713c3149112ccb7cffa52285a08644ea589309aea9e8096b290ded1a",
+        "fileHash": "sha256-36eb585ed2604e3a93250d9bbb82da1d63fe93831453bed3f1779785565bef0f",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 49017,
+        "fileSize": 49390,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -99,6 +99,27 @@
         "description": "Dizilla t\u00fcm yabanc\u0131 dizileri \u00fccretsiz olarak T\u00fcrk\u00e7e Dublaj ve altyaz\u0131l\u0131 se\u00e7enekleri ile 1080P kalite izleyebilece\u011finiz yeni nesil yabanc\u0131 dizi izleme siteniz.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizilla.cs3",
         "name": "Dizilla"
+    },
+    {
+        "iconUrl": "https://dizipal1586.com/favicon.ico",
+        "fileHash": "sha256-ed3c2fc7a898920d758188feea0919aa0c6f9fc4b1a411338b6ac8106ba78a37",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 44045,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "DiziPal",
+        "description": "Dizipal dizi ve film sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPal.cs3",
+        "name": "DiziPal"
     },
     {
         "iconUrl": "https://www.diziyou.one/favicon.ico",
@@ -159,6 +180,26 @@
         "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmMakinesi.cs3",
         "name": "FilmMakinesi"
+    },
+    {
+        "iconUrl": "https://www.filmmodu.one/favicon.ico",
+        "fileHash": "sha256-5497f7bf2ddb77c44c74c8cabcabc19ec413a4c2b9d94215eb5b5a8e3f574462",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 35750,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "neoncs3"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "FilmModu",
+        "description": "FilmModu film sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmModu.cs3",
+        "name": "FilmModu"
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=www.fullhdfilmizlesene.de&sz=%size%",
@@ -247,5 +288,49 @@
         "description": "RecTv APK, T\u00fcrkiye\u2019deki en pop\u00fcler \u00c7evrimi\u00e7i Medya Ak\u0131\u015f platformlar\u0131ndan biridir. Filmlerin, Canl\u0131 Sporlar\u0131n, Web Dizilerinin ve \u00e7ok daha fazlas\u0131n\u0131n keyfini \u00fccretsiz \u00e7\u0131kar\u0131n.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/RecTV.cs3",
         "name": "RecTV"
+    },
+    {
+        "iconUrl": "https://www.setfilmizle.ltd/favicon.ico",
+        "fileHash": "sha256-f4f37dd0f1b8e6faab3b64448c956d681fa652867025c63036d341c86b8ce683",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 47473,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "SetFilmIzle",
+        "description": "SetFilmIzle film ve dizi sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SetFilmIzle.cs3",
+        "name": "SetFilmIzle"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=https://webdramaturkey2.com&sz=%size%",
+        "fileHash": "sha256-e6d5cde83e50b5a8698b78a3f91b011695c8fbefe358c4a8b46dd1da6161ad55",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 57174,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "AsianDrama",
+            "Movie",
+            "Anime",
+            "Others"
+        ],
+        "version": 1,
+        "internalName": "WebDramaTurkey",
+        "description": "Web Drama Turkey Kore, \u00c7in ve Asya dizileri sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/WebDramaTurkey.cs3",
+        "name": "WebDramaTurkey"
     }
 ]
