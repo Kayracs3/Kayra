@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
