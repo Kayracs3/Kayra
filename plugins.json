@@ -291,10 +291,10 @@
     },
     {
         "iconUrl": "https://www.setfilmizle.ltd/favicon.ico",
-        "fileHash": "sha256-672645d34c8a40e924afe7e8abdad02fda07aecef177d442d5dfe1e236204299",
+        "fileHash": "sha256-56ccd87b8cbd427f1d52f3461033dc258ee63c584a9ddb0b7333d820ebd0dede",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 53320,
+        "fileSize": 57248,
         "status": 1,
         "language": "tr",
         "authors": [
