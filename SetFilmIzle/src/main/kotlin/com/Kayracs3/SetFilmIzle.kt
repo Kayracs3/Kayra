@@ -1050,10 +1050,10 @@ class SetFilmIzle : MainAPI() {
 
                 // Modal bir id ile işaretlenmişse (#trailerModal gibi) hedef
                 // elemana geçip içindeki iframe/link'i de tara.
-                val targetSelectors = listOf(
-                    container.attr("data-target"),
-                    container.attr("data-bs-target"),
-                    container.attr("data-trailer-target"),
+                val targetSelectors = listOfNotNull(
+                    container.attr("data-target").takeIf { it.isNotBlank() },
+                    container.attr("data-bs-target").takeIf { it.isNotBlank() },
+                    container.attr("data-trailer-target").takeIf { it.isNotBlank() },
                     container.attr("href").takeIf { it.startsWith("#") },
                 )
 
