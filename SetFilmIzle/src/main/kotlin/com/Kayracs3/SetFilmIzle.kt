@@ -60,6 +60,7 @@ class SetFilmIzle : MainAPI() {
         mainUrl + "/tur/komedi/" to "Komedi",
         mainUrl + "/tur/bilim-kurgu/" to "Bilim-Kurgu",
         mainUrl + "/tur/korku/" to "Korku",
+        mainUrl + "/boxset/" to "Seriler",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
