@@ -1,4 +1,4 @@
-package com.Kayracs3
+package com.Kayracs3cs3
 
 import android.content.Context
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
