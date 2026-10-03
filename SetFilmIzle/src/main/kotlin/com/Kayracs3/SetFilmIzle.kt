@@ -46,7 +46,7 @@ class SetFilmIzle : MainAPI() {
         )
 
     override val mainPage = mainPageOf(
-        mainUrl + "/yil/2026" to "Son Filmler",
+        mainUrl + "/yil/2026/" to "Son Filmler",
         mainUrl + "/dizi/" to "Son Diziler",
         mainUrl + "/film/" to "Filmler",        
         mainUrl + "/ag/netflix/" to "Netflix",
