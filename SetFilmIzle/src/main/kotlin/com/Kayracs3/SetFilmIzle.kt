@@ -46,7 +46,7 @@ class SetFilmIzle : MainAPI() {
         )
 
     override val mainPage = mainPageOf(
-        mainUrl + "/" to "Son Filmler",
+        mainUrl + "/yil/2026" to "Son Filmler",
         mainUrl + "/dizi/" to "Son Diziler",
         mainUrl + "/film/" to "Filmler",        
         mainUrl + "/ag/netflix/" to "Netflix",
@@ -59,8 +59,7 @@ class SetFilmIzle : MainAPI() {
         mainUrl + "/tur/aksiyon/" to "Aksiyon",
         mainUrl + "/tur/komedi/" to "Komedi",
         mainUrl + "/tur/bilim-kurgu/" to "Bilim-Kurgu",
-        mainUrl + "/tur/korku/" to "Korku",
-        mainUrl + "/boxset/" to "Seriler",
+        mainUrl + "/tur/korku/" to "Korku",        
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
