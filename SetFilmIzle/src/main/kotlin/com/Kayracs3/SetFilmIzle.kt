@@ -958,54 +958,170 @@ class SetFilmIzle : MainAPI() {
 
 
     private fun pageTrailer(document: Document): String? {
-        val selectors = listOf(
-            "[data-trailer]",
-            "[data-trailer-url]",
-            "[data-youtube]",
-            "[data-youtube-url]",
-            "[data-video-url]",
-            "[data-video]",
-            "a[href*='youtube.com/watch']",
-            "a[href*='youtu.be/']",
-            "a[href*='youtube.com/embed/']",
-            "a[href*='vimeo.com/']",
-            "iframe[src*='youtube.com/embed/']",
-            "iframe[src*='youtube-nocookie.com/embed/']",
-            "iframe[src*='youtu.be/']",
-            "iframe[src*='vimeo.com/']",
-        )
-
-        for (selector in selectors) {
-            for (element in document.select(selector)) {
-                val candidate = listOf(
-                    element.attr("data-trailer"),
-                    element.attr("data-trailer-url"),
-                    element.attr("data-youtube"),
-                    element.attr("data-youtube-url"),
-                    element.attr("data-video-url"),
-                    element.attr("data-video"),
-                    element.attr("href"),
-                    element.attr("src"),
-                ).firstOrNull { it.isNotBlank() }
+        fun tryExtract(value: String?): String? =
+            extractTrailerUrl(
+                value
                     ?.trim()
                     ?.replace("\\/", "/")
+                    ?.replace("\\u0026", "&")
                     ?.replace("&amp;", "&")
                     ?.trim('"', '\'')
+            )
 
-                val normalized = extractTrailerUrl(candidate)
-                if (!normalized.isNullOrBlank()) return normalized
+        // SetFilmIzle'de fragman düğmesi doğrudan <a href="..."> olmayabilir.
+        // Bazı sayfalarda veri button/data-* özniteliklerinde veya modal içinde tutuluyor.
+        val triggerSelectors = listOf(
+            "[data-trailer]",
+            "[data-trailer-url]",
+            "[data-trailer-id]",
+            "[data-youtube]",
+            "[data-youtube-url]",
+            "[data-youtube-id]",
+            "[data-video-id]",
+            "[data-video-url]",
+            "[data-video]",
+            "[data-embed]",
+            "[data-iframe]",
+            "[onclick*='youtube']",
+            "[onclick*='trailer']",
+            "[onclick*='fragman']",
+            "button",
+            "a",
+            "[role='button']",
+            "[class*='trailer']",
+            "[class*='fragman']",
+            "[id*='trailer']",
+            "[id*='fragman']",
+        )
+
+        val candidates = LinkedHashSet<Element>()
+
+        for (selector in triggerSelectors) {
+            for (element in document.select(selector)) {
+                val text = element.text().trim()
+                val classes = element.className()
+                val id = element.id()
+
+                if (
+                    selector.startsWith("[data-") ||
+                    selector.contains("onclick") ||
+                    selector.contains("[class*='") ||
+                    selector.contains("[id*='") ||
+                    text.equals("Fragman", true) ||
+                    text.startsWith("Fragman ", true) ||
+                    text.equals("Trailer", true) ||
+                    classes.contains("fragman", true) ||
+                    classes.contains("trailer", true) ||
+                    id.contains("fragman", true) ||
+                    id.contains("trailer", true)
+                ) {
+                    candidates.add(element)
+                }
             }
+        }
+
+        fun inspectElement(root: Element): String? {
+            val roots = ArrayList<Element>(5)
+            var current: Element? = root
+
+            repeat(5) {
+                if (current == null) return@repeat
+                roots.add(current!!)
+                current = current!!.parent()
+            }
+
+            for (container in roots) {
+                // Önce container'ın tüm özniteliklerini tara. Bu, onclick,
+                // data-target, data-youtube-id vb. gizli alanları yakalar.
+                for (attribute in container.attributes()) {
+                    tryExtract(attribute.value)?.let { return it }
+                }
+
+                // href/src/data-* içindeki gömülü bağlantılar.
+                val descendants = container.select(
+                    "a[href], iframe[src], video[src], source[src], " +
+                        "[data-src], [data-url], [data-embed], [data-iframe], [onclick]"
+                )
+
+                for (child in descendants) {
+                    for (attribute in child.attributes()) {
+                        tryExtract(attribute.value)?.let { return it }
+                    }
+                }
+
+                // Modal bir id ile işaretlenmişse (#trailerModal gibi) hedef
+                // elemana geçip içindeki iframe/link'i de tara.
+                val targetSelectors = listOf(
+                    container.attr("data-target"),
+                    container.attr("data-bs-target"),
+                    container.attr("data-trailer-target"),
+                    container.attr("href").takeIf { it.startsWith("#") },
+                )
+
+                for (target in targetSelectors) {
+                    if (target.isBlank() || !target.startsWith("#")) continue
+
+                    runCatching {
+                        document.select(target).forEach { targetElement ->
+                            tryExtract(targetElement.html())?.let { return it }
+
+                            for (attribute in targetElement.attributes()) {
+                                tryExtract(attribute.value)?.let { return it }
+                            }
+
+                            for (child in targetElement.select(
+                                "a[href], iframe[src], video[src], source[src], " +
+                                    "[data-src], [data-url], [data-embed], [data-iframe], [onclick]"
+                            )) {
+                                for (attribute in child.attributes()) {
+                                    tryExtract(attribute.value)?.let { return it }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return null
+        }
+
+        for (candidate in candidates) {
+            inspectElement(candidate)?.let { return it }
         }
 
         val html = document.html()
             .replace("\\/", "/")
+            .replace("\\u0026", "&")
             .replace("&amp;", "&")
 
-        val trailerSection = Regex(
-            """(?is)(?:fragman|trailer).{0,2500}"""
-        ).find(html)?.value
+        // Fragman düğmesinin çevresindeki JS kodunu özellikle tara.
+        val trailerMatches = Regex(
+            """(?is)(?:fragman|trailer).{0,5000}"""
+        ).findAll(html)
 
-        return extractTrailerUrl(trailerSection ?: html)
+        for (match in trailerMatches) {
+            extractTrailerUrl(match.value)?.let { return it }
+        }
+
+        // JS değişkenlerinde sadece YouTube ID tutuluyorsa doğrudan URL üret.
+        val idPatterns = listOf(
+            Regex(
+                """(?i)(?:data-)?(?:youtube[-_ ]?(?:video[-_ ]?)?id|youtubeId|youtube_id|videoId|video_id)\s*[:=]\s*["']([A-Za-z0-9_-]{6,})["']"""
+            ),
+            Regex(
+                """(?i)["'](?:youtubeId|youtube_id|videoId|video_id)["']\s*[:=]\s*["']([A-Za-z0-9_-]{6,})["']"""
+            ),
+        )
+
+        for (pattern in idPatterns) {
+            pattern.find(html)?.groupValues?.getOrNull(1)?.let { id ->
+                if (id.length in 6..20) {
+                    return "https://www.youtube.com/watch?v=$id"
+                }
+            }
+        }
+
+        return extractTrailerUrl(html)
     }
 
     private fun extractTrailerUrl(value: String?): String? {
@@ -1018,7 +1134,7 @@ class SetFilmIzle : MainAPI() {
 
         val patterns = listOf(
             Regex(
-                """https?://(?:www\.)?youtube\.com/(?:watch\?[^"'<>\\s]*v=|embed/)[A-Za-z0-9_-]+(?:\?[^"'<>\\s]*)?""",
+                """https?://(?:www\.)?youtube\.com/(?:watch\?[^"'<>\\s]*v=|embed/|shorts/)[A-Za-z0-9_-]+(?:\?[^"'<>\\s]*)?""",
                 RegexOption.IGNORE_CASE,
             ),
             Regex(
@@ -1034,7 +1150,7 @@ class SetFilmIzle : MainAPI() {
                 RegexOption.IGNORE_CASE,
             ),
             Regex(
-                """(?:https?:)?//(?:www\.)?youtube\.com/(?:embed/|watch\?[^"'<>\\s]*v=)[A-Za-z0-9_-]+(?:\?[^"'<>\\s]*)?""",
+                """(?:https?:)?//(?:www\.)?youtube\.com/(?:embed/|watch\?[^"'<>\\s]*v=|shorts/)[A-Za-z0-9_-]+(?:\?[^"'<>\\s]*)?""",
                 RegexOption.IGNORE_CASE,
             ),
         )
