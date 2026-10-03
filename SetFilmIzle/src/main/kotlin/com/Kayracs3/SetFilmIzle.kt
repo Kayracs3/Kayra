@@ -3,6 +3,7 @@ package com.Kayracs3
 import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
@@ -194,9 +195,17 @@ class SetFilmIzle : MainAPI() {
         val plot = pagePlot(document)
         val year = pageYear(document)
         val rating = pageRating(document)
+        val genres = pageGenres(document)
+        val actors = pageActors(document)
 
         if (isEpisodeUrl(pageUrl)) {
-            return loadEpisodePage(pageUrl, document, poster)
+            return loadEpisodePage(
+                pageUrl,
+                document,
+                poster,
+                genres,
+                actors,
+            )
         }
 
         val isSeries = pageUrl.contains("/dizi/", true) ||
@@ -213,6 +222,8 @@ class SetFilmIzle : MainAPI() {
                 posterUrl = poster
                 this.plot = plot
                 this.year = year
+                this.tags = genres
+                addActors(actors)
                 rating?.let { score = Score.from10(it) }
             }
         }
@@ -226,6 +237,8 @@ class SetFilmIzle : MainAPI() {
             posterUrl = poster
             this.plot = plot
             this.year = year
+            this.tags = genres
+            addActors(actors)
             rating?.let { score = Score.from10(it) }
         }
     }
@@ -711,6 +724,8 @@ class SetFilmIzle : MainAPI() {
         url: String,
         document: Document,
         poster: String?,
+        genres: List<String>,
+        actors: List<Actor>,
     ): LoadResponse {
         val title = pageTitle(document, url) ?: "SetFilmIzle Bölüm"
         val numbers = episodeNumbersFrom(title + " " + url + " " + document.text())
@@ -736,6 +751,8 @@ class SetFilmIzle : MainAPI() {
             posterUrl = poster
             plot = pagePlot(document)
             year = pageYear(document)
+            tags = genres
+            addActors(actors)
             pageRating(document)?.let { score = Score.from10(it) }
         }
     }
@@ -857,6 +874,80 @@ class SetFilmIzle : MainAPI() {
         }
 
         return results.distinctBy { it.url }
+    }
+
+
+    private fun detailContainer(document: Document): Element? {
+        var current: Element? = document.selectFirst("h1")
+
+        repeat(8) {
+            val node = current ?: return null
+
+            val hasActorLinks = node.select("a[href*='/oyuncu/']").isNotEmpty()
+            val hasGenreLinks = node.select("a[href*='/tur/']").isNotEmpty()
+
+            if (hasActorLinks || hasGenreLinks) {
+                return node
+            }
+
+            current = node.parent()
+        }
+
+        return null
+    }
+
+    private fun pageGenres(document: Document): List<String> {
+        val container = detailContainer(document) ?: document
+
+        return container
+            .select("a[href*='/tur/']")
+            .map { it.text().trim() }
+            .map { it.replace(Regex("""\s+"""), " ").trim() }
+            .filter { text ->
+                text.isNotBlank() &&
+                    !text.equals("Filmler", true) &&
+                    !text.equals("Diziler", true) &&
+                    !text.equals("Türler", true)
+            }
+            .distinct()
+    }
+
+    private fun pageActors(document: Document): List<Actor> {
+        val container = detailContainer(document) ?: document
+
+        return container
+            .select("a[href*='/oyuncu/']")
+            .mapNotNull { link ->
+                val href = normalizeUrl(link.attr("href"), mainUrl)
+                if (href.isBlank()) return@mapNotNull null
+
+                val slug = runCatching {
+                    URI(href)
+                        .path
+                        ?.trimEnd('/')
+                        ?.substringAfterLast('/')
+                        .orEmpty()
+                }.getOrDefault("")
+
+                val rawName = link.attr("title")
+                    .ifBlank { link.attr("aria-label") }
+                    .ifBlank { slug }
+
+                val actorName = rawName
+                    .replace('-', ' ')
+                    .replace('_', ' ')
+                    .replace(Regex("""\s+"""), " ")
+                    .trim()
+                    .cleanTitle()
+
+                if (actorName.isBlank()) return@mapNotNull null
+
+                Actor(
+                    name = actorName,
+                    image = posterFromElement(link.selectFirst("img")),
+                )
+            }
+            .distinctBy { it.name.lowercase() }
     }
 
     private fun pageTitle(document: Document, url: String): String? =
