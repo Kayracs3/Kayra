@@ -197,6 +197,7 @@ class SetFilmIzle : MainAPI() {
         val rating = pageRating(document)
         val genres = pageGenres(document)
         val actors = pageActors(document)
+        val trailer = pageTrailer(document)
 
         if (isEpisodeUrl(pageUrl)) {
             return loadEpisodePage(
@@ -205,6 +206,7 @@ class SetFilmIzle : MainAPI() {
                 poster,
                 genres,
                 actors,
+                trailer,
             )
         }
 
@@ -224,6 +226,7 @@ class SetFilmIzle : MainAPI() {
                 this.year = year
                 this.tags = genres
                 addActors(actors)
+                trailer?.let { this.trailers.add(TrailerData(it, null, false)) }
                 rating?.let { score = Score.from10(it) }
             }
         }
@@ -239,6 +242,7 @@ class SetFilmIzle : MainAPI() {
             this.year = year
             this.tags = genres
             addActors(actors)
+            trailer?.let { this.trailers.add(TrailerData(it, null, false)) }
             rating?.let { score = Score.from10(it) }
         }
     }
@@ -726,6 +730,7 @@ class SetFilmIzle : MainAPI() {
         poster: String?,
         genres: List<String>,
         actors: List<Actor>,
+        trailer: String?,
     ): LoadResponse {
         val title = pageTitle(document, url) ?: "SetFilmIzle Bölüm"
         val numbers = episodeNumbersFrom(title + " " + url + " " + document.text())
@@ -753,6 +758,7 @@ class SetFilmIzle : MainAPI() {
             year = pageYear(document)
             tags = genres
             addActors(actors)
+            trailer?.let { this.trailers.add(TrailerData(it, null, false)) }
             pageRating(document)?.let { score = Score.from10(it) }
         }
     }
@@ -948,6 +954,97 @@ class SetFilmIzle : MainAPI() {
                 )
             }
             .distinctBy { it.name.lowercase() }
+    }
+
+
+    private fun pageTrailer(document: Document): String? {
+        val selectors = listOf(
+            "[data-trailer]",
+            "[data-trailer-url]",
+            "[data-youtube]",
+            "[data-youtube-url]",
+            "[data-video-url]",
+            "[data-video]",
+            "a[href*='youtube.com/watch']",
+            "a[href*='youtu.be/']",
+            "a[href*='youtube.com/embed/']",
+            "a[href*='vimeo.com/']",
+            "iframe[src*='youtube.com/embed/']",
+            "iframe[src*='youtube-nocookie.com/embed/']",
+            "iframe[src*='youtu.be/']",
+            "iframe[src*='vimeo.com/']",
+        )
+
+        for (selector in selectors) {
+            for (element in document.select(selector)) {
+                val candidate = listOf(
+                    element.attr("data-trailer"),
+                    element.attr("data-trailer-url"),
+                    element.attr("data-youtube"),
+                    element.attr("data-youtube-url"),
+                    element.attr("data-video-url"),
+                    element.attr("data-video"),
+                    element.attr("href"),
+                    element.attr("src"),
+                ).firstOrNull { it.isNotBlank() }
+                    ?.trim()
+                    ?.replace("\\/", "/")
+                    ?.replace("&amp;", "&")
+                    ?.trim('"', '\'')
+
+                val normalized = extractTrailerUrl(candidate)
+                if (!normalized.isNullOrBlank()) return normalized
+            }
+        }
+
+        val html = document.html()
+            .replace("\\/", "/")
+            .replace("&amp;", "&")
+
+        val trailerSection = Regex(
+            """(?is)(?:fragman|trailer).{0,2500}"""
+        ).find(html)?.value
+
+        return extractTrailerUrl(trailerSection ?: html)
+    }
+
+    private fun extractTrailerUrl(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+
+        val source = value
+            .replace("\\/", "/")
+            .replace("\\u0026", "&")
+            .replace("&amp;", "&")
+
+        val patterns = listOf(
+            Regex(
+                """https?://(?:www\.)?youtube\.com/(?:watch\?[^"'<>\\s]*v=|embed/)[A-Za-z0-9_-]+(?:\?[^"'<>\\s]*)?""",
+                RegexOption.IGNORE_CASE,
+            ),
+            Regex(
+                """https?://(?:www\.)?youtu\.be/[A-Za-z0-9_-]+(?:\?[^"'<>\\s]*)?""",
+                RegexOption.IGNORE_CASE,
+            ),
+            Regex(
+                """https?://(?:www\.)?youtube-nocookie\.com/embed/[A-Za-z0-9_-]+(?:\?[^"'<>\\s]*)?""",
+                RegexOption.IGNORE_CASE,
+            ),
+            Regex(
+                """https?://(?:www\.)?vimeo\.com/[0-9]+(?:\?[^"'<>\\s]*)?""",
+                RegexOption.IGNORE_CASE,
+            ),
+            Regex(
+                """(?:https?:)?//(?:www\.)?youtube\.com/(?:embed/|watch\?[^"'<>\\s]*v=)[A-Za-z0-9_-]+(?:\?[^"'<>\\s]*)?""",
+                RegexOption.IGNORE_CASE,
+            ),
+        )
+
+        for (pattern in patterns) {
+            val match = pattern.find(source)?.value ?: continue
+            return if (match.startsWith("//")) "https:$match" else match
+        }
+
+        return null
     }
 
     private fun pageTitle(document: Document, url: String): String? =
