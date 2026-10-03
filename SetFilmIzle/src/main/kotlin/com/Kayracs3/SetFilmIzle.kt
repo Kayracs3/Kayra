@@ -197,6 +197,7 @@ class SetFilmIzle : MainAPI() {
         val genres = pageGenres(document)
         val actors = pageActors(document)
         val trailer = pageTrailer(document)
+            ?: pageTrailerFromYouTube(title, year)
 
         if (isEpisodeUrl(pageUrl)) {
             return loadEpisodePage(
@@ -955,6 +956,121 @@ class SetFilmIzle : MainAPI() {
             .distinctBy { it.name.lowercase() }
     }
 
+
+    private suspend fun pageTrailerFromYouTube(
+        title: String,
+        year: Int?,
+    ): String? {
+        if (title.isBlank()) return null
+
+        val query = buildString {
+            append(title)
+            if (year != null) append(" ").append(year)
+            append(" fragman trailer")
+        }
+
+        val encoded = runCatching {
+            URLEncoder.encode(query, "UTF-8")
+        }.getOrNull() ?: return null
+
+        val response = runCatching {
+            app.get(
+                "https://www.youtube.com/results?search_query=$encoded&hl=tr&gl=TR",
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+                ),
+                referer = "https://www.youtube.com/",
+                allowRedirects = true,
+            )
+        }.getOrNull() ?: return null
+
+        if (!response.isSuccessful) return null
+
+        val html = response.text
+            .replace("\\u0026", "&")
+            .replace("\\/", "/")
+
+        val target = title
+            .lowercase()
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+        data class Candidate(
+            val id: String,
+            val videoTitle: String,
+            val score: Int,
+        )
+
+        val candidates = LinkedHashMap<String, Candidate>()
+
+        Regex("""(?i)"videoRenderer"\s*:\s*\{""").findAll(html).forEach { renderer ->
+            val start = renderer.range.first
+            val end = (start + 5000).coerceAtMost(html.length)
+            val block = html.substring(start, end)
+
+            val id = Regex(
+                """(?i)"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"""
+            ).find(block)?.groupValues?.getOrNull(1) ?: return@forEach
+
+            val videoTitle = Regex(
+                """(?is)"title"\s*:\s*\{\s*"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"((?:\\.|[^"])*)"""
+            ).find(block)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.replace("\\\"", "\"")
+                ?.replace("\\u0026", "&")
+                .orEmpty()
+
+            if (videoTitle.isBlank()) return@forEach
+
+            val normalized = videoTitle
+                .lowercase()
+                .replace(Regex("""[^a-z0-9çğıöşüİÇĞIÖŞÜ]+"""), " ")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+
+            var score = 0
+
+            if (normalized.contains("fragman") || normalized.contains("trailer")) {
+                score += 100
+            }
+
+            if (
+                normalized.contains("resmi") ||
+                    normalized.contains("official") ||
+                    normalized.contains("prime video")
+            ) {
+                score += 35
+            }
+
+            val targetWords = target
+                .split(" ")
+                .filter { it.length >= 3 }
+
+            val matchedWords = targetWords.count { word ->
+                normalized.contains(word)
+            }
+
+            score += matchedWords * 15
+
+            if (year != null && videoTitle.contains(year.toString())) {
+                score += 20
+            }
+
+            candidates[id] = Candidate(id, videoTitle, score)
+        }
+
+        return candidates.values
+            .sortedWith(
+                compareByDescending<Candidate> { it.score }
+                    .thenBy { it.videoTitle.length }
+            )
+            .firstOrNull { it.score >= 100 }
+            ?.id
+            ?.let { "https://www.youtube.com/watch?v=$it" }
+    }
 
     private fun pageTrailer(document: Document): String? {
         fun tryExtract(value: String?): String? =
