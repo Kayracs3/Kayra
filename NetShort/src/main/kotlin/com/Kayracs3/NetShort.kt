@@ -131,7 +131,7 @@ class NetShort : MainAPI() {
         var found = false
         val seen = hashSetOf<String>()
 
-        fun emit(raw: String, label: String = "NetShort") {
+        suspend fun emit(raw: String, label: String = "NetShort") {
             val url = normalize(raw)
             if (!url.startsWith("http", true) || !seen.add(url)) return
 
