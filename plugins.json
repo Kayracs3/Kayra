@@ -307,6 +307,26 @@
         "name": "JetFilmizle"
     },
     {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=netshort.com&sz=%size%",
+        "fileHash": "sha256-5e825bb2c8f8797ac507e7a5432e3dbb82025a0b9c87aa529c149c0d236bbc65",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 22709,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "NetShort",
+        "description": "NetShort T\u00fcrk\u00e7e k\u0131sa dizi sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/NetShort.cs3",
+        "name": "NetShort"
+    },
+    {
         "iconUrl": "https://rectvapk.cc/wp-content/uploads/2023/02/Rec-TV.webp",
         "fileHash": "sha256-81c7bd5bb9fd14dbc728720227a9aa592b500c5937551fa7ea6cddfb2d93f630",
         "apiVersion": 1,
