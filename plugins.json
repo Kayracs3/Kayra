@@ -61,6 +61,27 @@
         "name": "DiziBoxizle"
     },
     {
+        "iconUrl": "https://dizigecesi.com/favicon.ico",
+        "fileHash": "sha256-990502a97c029eea61bf1db5dc582cb842baf69bfd06ded5836fc37cf9208505",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 50954,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "version": 2,
+        "internalName": "Dizigecesi",
+        "description": "Dizigecesi film ve dizi sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizigecesi.cs3",
+        "name": "Dizigecesi"
+    },
+    {
         "iconUrl": "https://dizikorea3.com//favicon.ico",
         "fileHash": "sha256-49e62cffb7bf83f84a663b84de3489b783caa4e8bb1c000ea71d136c4be57087",
         "apiVersion": 1,
@@ -263,6 +284,27 @@
         "description": "\u0130natBox cloudstream eklentisidir. Sevdi\u011finiz yay\u0131n platformlar\u0131n\u0131 ve canl\u0131 ma\u00e7lar\u0131 burada bulabilirsiniz.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBox.cs3",
         "name": "InatBox"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=jetfilmizle.now&sz=%size%",
+        "fileHash": "sha256-90008f318de6283e587a87c9a46e726964760406ab864e661c7c68da5023bcf9",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 32559,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 23,
+        "internalName": "JetFilmizle",
+        "description": "Jet Film - T\u00fcrk\u00e7e dublajl\u0131 ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/JetFilmizle.cs3",
+        "name": "JetFilmizle"
     },
     {
         "iconUrl": "https://rectvapk.cc/wp-content/uploads/2023/02/Rec-TV.webp",
