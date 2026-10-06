@@ -32,25 +32,8 @@ adb devices -l
 echo "CloudStream APK kuruluyor..."
 adb install -r "$APK"
 
-echo "Plugin klasörü hazırlanıyor..."
-adb shell mkdir -p /sdcard/Cloudstream3/plugins
-adb push doctor-results/cs3/. /sdcard/Cloudstream3/plugins/
-
-# APK adına göre activity tahmin etmek yerine, gerçekten kurulmuş olan
-# CloudStream paketini ve launcher activity'yi cihazdan keşfet.
-CS_PACKAGE="$(adb shell pm list packages | tr -d '\\r' | grep -E '^package:com\\.lagradost\\.cloudstream3(\\.prerelease)?   grep -E "PluginManager|Loading plugin|Failed to load plugin|ClassNotFoundException|VerifyError|NoClassDefFoundError|Kayracs3"   > doctor-results/android/plugin-load.log || true
-
-cat doctor-results/android/plugin-load.log
-
-if grep -Eq "Failed to load plugin|No manifest found|ClassNotFoundException|VerifyError|NoClassDefFoundError"   doctor-results/android/plugin-load.log; then
-  echo "Plugin yükleme hatası bulundu."
-  exit 1
-fi
-
-adb logcat -d -v threadtime > doctor-results/android/full-logcat.txt
-
-python3 doctor/playback_smoke.py   --package "$CS_PACKAGE"   --plugins-dir doctor-results/cs3   --config doctor/providers.json   --output doctor-results/android/playback-smoke.json   --timeout 45
- | sed 's/^package://' | head -n 1 || true)"
+echo "CloudStream paketi keşfediliyor..."
+CS_PACKAGE="$(adb shell pm list packages | tr -d '\\r' | grep -E '^package:com\\.lagradost\\.cloudstream3(\\.prerelease)?$' | sed 's/^package://' | head -n 1 || true)"
 if [ -z "$CS_PACKAGE" ]; then
   echo "CloudStream paketi bulunamadı."
   adb shell pm list packages | grep -i cloudstream || true
@@ -58,7 +41,13 @@ if [ -z "$CS_PACKAGE" ]; then
 fi
 echo "CloudStream package: $CS_PACKAGE"
 
-LAUNCHER="$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$CS_PACKAGE" 2>/dev/null | tr -d '\\r' | tail -n 1 || true)"
+echo "Plugin klasörü hazırlanıyor..."
+adb shell mkdir -p /sdcard/Cloudstream3/plugins
+adb push doctor-results/cs3/. /sdcard/Cloudstream3/plugins/
+
+echo "CloudStream launcher activity keşfediliyor..."
+LAUNCHER="$(adb shell cmd package resolve-activity --brief   -a android.intent.action.MAIN   -c android.intent.category.LAUNCHER   "$CS_PACKAGE" 2>/dev/null | tr -d '\\r' | tail -n 1 || true)"
+
 if [ -z "$LAUNCHER" ] || [ "$LAUNCHER" = "No activity found" ]; then
   echo "resolve-activity launcher bulamadı; monkey ile launcher açılacak."
   adb shell monkey -p "$CS_PACKAGE" -c android.intent.category.LAUNCHER 1
@@ -69,6 +58,7 @@ fi
 
 sleep 10
 
+echo "Plugin yükleme logları:"
 adb logcat -d -v time |   grep -E "PluginManager|Loading plugin|Failed to load plugin|ClassNotFoundException|VerifyError|NoClassDefFoundError|Kayracs3"   > doctor-results/android/plugin-load.log || true
 
 cat doctor-results/android/plugin-load.log
@@ -80,13 +70,5 @@ fi
 
 adb logcat -d -v threadtime > doctor-results/android/full-logcat.txt
 
-CS_PACKAGE="$(adb shell pm list packages | tr -d '\\r' | sed 's/^package://' | grep -E '^com\\.lagradost\\.cloudstream3(\\.prerelease)?$' | head -n 1 || true)"
-if [ -z "$CS_PACKAGE" ]; then
-  echo "CloudStream package bulunamadı."
-  adb shell pm list packages | grep -i cloudstream || true
-  exit 1
-fi
-
-echo "CloudStream package: $CS_PACKAGE"
-
+echo "Playback smoke başlatılıyor..."
 python3 doctor/playback_smoke.py   --package "$CS_PACKAGE"   --plugins-dir doctor-results/cs3   --config doctor/providers.json   --output doctor-results/android/playback-smoke.json   --timeout 45
