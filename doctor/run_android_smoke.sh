@@ -45,8 +45,8 @@ fi
 echo "CloudStream package: $CS_PACKAGE"
 
 echo "Plugin klasörü hazırlanıyor..."
-adb shell mkdir -p /sdcard/Cloudstream3/plugins
-adb push doctor-results/cs3/. /sdcard/Cloudstream3/plugins/
+adb shell mkdir -p /storage/emulated/0/Cloudstream3/plugins
+adb push doctor-results/cs3/. /storage/emulated/0/Cloudstream3/plugins/
 
 echo "CloudStream launcher activity keşfediliyor..."
 LAUNCHER="$(adb shell cmd package resolve-activity --brief \
