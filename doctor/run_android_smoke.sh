@@ -47,7 +47,7 @@ echo "CloudStream package: $CS_PACKAGE"
 adb shell am force-stop "$CS_PACKAGE" || true
 
 echo "Playback smoke başlatılıyor..."
-python3 doctor/playback_smoke.py \
+python3 -u doctor/playback_smoke.py \
   --package "$CS_PACKAGE" \
   --plugins-dir doctor-results/cs3 \
   --config doctor/providers.json \
