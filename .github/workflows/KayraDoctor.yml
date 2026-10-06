@@ -1,0 +1,213 @@
+name: Kayra Doctor
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: kayra-doctor-${ github.ref }
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  doctor:
+    name: Kayra Doctor
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+          token: ${ secrets.GITHUB_TOKEN }
+
+      - name: Python hazırla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: JDK 17 Ayarla
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK Ayarla
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
+
+      - name: CloudStream Gradle plugin hazırla
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/cloudstream-gradle
+          git clone https://github.com/recloudstream/gradle.git /tmp/cloudstream-gradle
+          cd /tmp/cloudstream-gradle
+          git checkout 81b1d424d236a447d9f2e95a229faef79002f761
+          chmod +x gradlew
+          ./gradlew publishToMavenLocal --no-daemon --stacktrace
+          test -f "$HOME/.m2/repository/com/lagradost/cloudstream3/gradle/local-SNAPSHOT/gradle-local-SNAPSHOT.pom"
+
+      - name: Git kullanıcı ayarla
+        run: |
+          git config user.name "Kayra Doctor"
+          git config user.email "actions@github.com"
+
+      - name: Sonuç klasörü
+        run: |
+          mkdir -p doctor-results
+          printf 'commit=%s\nrun=%s\ndate=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(date -u +%FT%TZ)" > doctor-results/run-info.txt
+
+      - name: Build ve otomatik düzeltme
+        id: doctor
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${ secrets.OPENAI_API_KEY }
+          OPENAI_MODEL: ${ vars.OPENAI_MODEL }
+          OPENAI_BASE_URL: ${ vars.OPENAI_BASE_URL }
+        run: |
+          set -u -o pipefail
+
+          MAX_ATTEMPTS=3
+          FIX_BRANCH="doctor/auto-fix-${GITHUB_RUN_ID}"
+          BRANCH_CREATED=0
+          SUCCESS=0
+
+          build_once() {
+            rm -f doctor-results/gradle.log doctor-results/build-error.txt
+            chmod +x gradlew
+            if ./gradlew clean make makePluginsJson --no-daemon --stacktrace >doctor-results/gradle.log 2>&1; then
+              return 0
+            fi
+            tail -n 1400 doctor-results/gradle.log > doctor-results/build-error.txt
+            return 1
+          }
+
+          collect_cs3() {
+            rm -rf doctor-results/cs3
+            mkdir -p doctor-results/cs3
+            find . -type f -name "*.cs3" -path "*/build/*" -exec cp -f {} doctor-results/cs3/ \; || true
+            count=$(find doctor-results/cs3 -type f -name "*.cs3" | wc -l)
+            [ "$count" -gt 0 ] || return 1
+            python3 doctor/cs3_health.py --directory doctor-results/cs3 --output doctor-results/cs3-health.json
+          }
+
+          run_http_health() {
+            python3 doctor/http_health.py --root . --output doctor-results/http-health.json
+          }
+
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            build_ok=0
+            cs3_ok=0
+            http_ok=0
+
+            build_once && build_ok=1
+            [ "$build_ok" -eq 1 ] && collect_cs3 && cs3_ok=1
+            [ "$build_ok" -eq 1 ] && [ "$cs3_ok" -eq 1 ] && run_http_health && http_ok=1
+
+            if [ "$build_ok" -eq 1 ] && [ "$cs3_ok" -eq 1 ] && [ "$http_ok" -eq 1 ]; then
+              SUCCESS=1
+              break
+            fi
+
+            if [ -z "${OPENAI_API_KEY:-}" ]; then
+              echo "OPENAI_API_KEY yok. Otomatik düzeltme atlandı."
+              break
+            fi
+
+            if [ "$BRANCH_CREATED" -eq 0 ]; then
+              git checkout -b "$FIX_BRANCH"
+              BRANCH_CREATED=1
+            fi
+
+            python3 doctor/auto_fix.py               --repo-root .               --build-log doctor-results/gradle.log               --build-error doctor-results/build-error.txt               --health-log doctor-results/http-health.json               --attempt "$attempt"
+
+            git diff --check
+            git diff --quiet && { echo "AI source değişikliği üretmedi."; break; } || true
+          done
+
+          [ "$SUCCESS" -eq 1 ] && echo "success=true" >> "$GITHUB_OUTPUT" || echo "success=false" >> "$GITHUB_OUTPUT"
+          echo "fix_branch=$FIX_BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Android CloudStream smoke
+        if: steps.doctor.outputs.success == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GH_TOKEN: ${ secrets.GITHUB_TOKEN }
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: Pixel_6
+          force-avd-creation: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            mkdir -p doctor-results/android
+            APK_DIR="$RUNNER_TEMP/cloudstream"
+            mkdir -p "$APK_DIR"
+
+            TAG="$(gh release list --repo recloudstream/cloudstream --limit 20 --json tagName,isPrerelease,publishedAt --jq '[.[] | select(.isPrerelease == true)] | sort_by(.publishedAt) | reverse | .[0].tagName')"
+            test -n "$TAG"
+
+            gh release download "$TAG" --repo recloudstream/cloudstream --pattern "*.apk" --dir "$APK_DIR"
+            APK="$(find "$APK_DIR" -type f -name "*.apk" | head -n 1)"
+            test -n "$APK"
+
+            adb install -r "$APK"
+            adb shell mkdir -p /sdcard/Cloudstream3/plugins
+            adb push doctor-results/cs3/. /sdcard/Cloudstream3/plugins/
+
+            adb shell am start -n com.lagradost.cloudstream3.prerelease/.ui.account.AccountSelectActivity ||               adb shell am start -n com.lagradost.cloudstream3/.ui.account.AccountSelectActivity
+
+            sleep 10
+
+            adb logcat -d -v time | grep -E "PluginManager|Loading plugin|Failed to load plugin|ClassNotFoundException|VerifyError|NoClassDefFoundError|Kayracs3" > doctor-results/android/plugin-load.log || true
+            cat doctor-results/android/plugin-load.log
+
+            if grep -Eq "Failed to load plugin|No manifest found|ClassNotFoundException|VerifyError|NoClassDefFoundError" doctor-results/android/plugin-load.log; then
+              exit 1
+            fi
+
+            adb logcat -d -v threadtime > doctor-results/android/full-logcat.txt
+
+      - name: Sonuçları yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kayra-doctor-${github.run_id}
+          path: doctor-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Otomatik düzeltme branch gönder
+        if: always() && steps.doctor.outputs.success == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="${steps.doctor.outputs.fix_branch}"
+          if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then exit 0; fi
+          git checkout "$BRANCH"
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then exit 0; fi
+          git add -A
+          git commit -m "Kayra Doctor otomatik düzeltme"
+          git push --set-upstream origin "$BRANCH"
+
+      - name: Başarılı düzeltme PR
+        if: steps.doctor.outputs.success == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${ secrets.GITHUB_TOKEN }
+        run: |
+          set -euo pipefail
+          BRANCH="${steps.doctor.outputs.fix_branch}"
+          if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then exit 0; fi
+          if git diff --quiet master...HEAD; then exit 0; fi
+          git push --set-upstream origin "$BRANCH" || true
+          gh pr create --repo "$GITHUB_REPOSITORY" --base master --head "$BRANCH" --title "Kayra Doctor: otomatik düzeltme" --body "Kayra Doctor build/site kontrollerinde hata buldu, kaynak kodu otomatik düzeltti ve tekrar test etti."
