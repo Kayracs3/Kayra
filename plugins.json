@@ -353,6 +353,27 @@
         "name": "SetFilmIzle"
     },
     {
+        "iconUrl": "https://sinezy.to/favicon.ico",
+        "fileHash": "sha256-e3a7224beba1bf5b15d9a0d5f1d1754fa0f1672f3f7948ca9ae35e1873e03e8a",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 13268,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "SinezyTo",
+        "description": "Sinezy.to film ve dizi sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinezyTo.cs3",
+        "name": "SinezyTo"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=https://webdramaturkey2.com&sz=%size%",
         "fileHash": "sha256-e6d5cde83e50b5a8698b78a3f91b011695c8fbefe358c4a8b46dd1da6161ad55",
         "apiVersion": 1,
