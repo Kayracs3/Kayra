@@ -162,6 +162,16 @@ jobs:
           [ "$HTTP_VALID" -eq 1 ] && echo "http_ok=true" >> "$GITHUB_OUTPUT" || echo "http_ok=false" >> "$GITHUB_OUTPUT"
           echo "fix_branch=$FIX_BRANCH" >> "$GITHUB_OUTPUT"
 
+      - name: KVM hızlandırmasını etkinleştir
+        if: steps.doctor.outputs.build_ok == 'true' && steps.doctor.outputs.cs3_ok == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
       - name: Android CloudStream smoke
         if: steps.doctor.outputs.build_ok == 'true' && steps.doctor.outputs.cs3_ok == 'true'
         uses: reactivecircus/android-emulator-runner@v2
@@ -172,9 +182,14 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_5
+          cores: 2
+          ram-size: 2048M
+          disk-size: 4G
           force-avd-creation: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          emulator-boot-timeout: 900
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
+          disable-linux-hw-accel: false
           script: |
             set -euo pipefail
             mkdir -p doctor-results/android
