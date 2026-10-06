@@ -50,3 +50,56 @@ def main():
         "Health report:\n" + health[-8000:] + "\n\n"
         "Source:\n" + source[-90000:]
     )
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY is missing")
+    model = os.environ.get("OPENAI_MODEL") or "gpt-6-luna"
+    base = os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+
+    body = json.dumps({"model": model, "input": prompt}).encode()
+    request = urllib.request.Request(
+        base.rstrip("/") + "/responses",
+        data=body,
+        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urllib.request.urlopen(request, timeout=180) as response:
+        data = json.loads(response.read().decode())
+
+    text = data.get("output_text")
+    if not text:
+        for item in data.get("output", []):
+            for part in item.get("content", []):
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    text = part["text"]
+                    break
+            if text:
+                break
+
+    if not text:
+        raise RuntimeError("Model returned no text")
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+
+    result = json.loads(text.strip())
+    if result.get("path") != relative:
+        raise RuntimeError("Model returned a different path")
+
+    replacement = result.get("content")
+    if not isinstance(replacement, str) or not replacement.strip():
+        raise RuntimeError("Model returned empty source")
+
+    target.write_text(replacement.rstrip() + "\n", encoding="utf-8")
+    print("AI reason:", result.get("reason", "not supplied"))
+    print("Updated:", relative)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:
+        print("AUTO_FIX_ERROR:", exc, file=sys.stderr)
+        sys.exit(1)
