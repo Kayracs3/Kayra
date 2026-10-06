@@ -23,10 +23,23 @@ def main():
         log = Path(args.build_log).read_text(encoding="utf-8", errors="ignore")
 
     match = FILE_RE.search(log)
-    if not match:
+    relative = match.group(1).replace("\\", "/") if match else None
+
+    if not relative:
+        health_path = Path(args.health_log)
+        if health_path.exists():
+            try:
+                health_data = json.loads(health_path.read_text(encoding="utf-8", errors="ignore"))
+            except Exception:
+                health_data = {}
+            for item in health_data.get("results", []):
+                if item.get("status") == "fail" and item.get("source"):
+                    relative = str(item["source"]).replace("\\", "/")
+                    break
+
+    if not relative:
         raise RuntimeError("Could not identify Kotlin source file")
 
-    relative = match.group(1).replace("\\", "/")
     target = root / relative
     parts = Path(relative).parts
     if not target.exists():
