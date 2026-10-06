@@ -185,8 +185,18 @@ jobs:
             test -n "$TAG"
 
             gh release download "$TAG" --repo recloudstream/cloudstream --pattern "*.apk" --dir "$APK_DIR"
-            APK="$(find "$APK_DIR" -type f -name "*.apk" | head -n 1)"
+            echo "CloudStream APK varlıkları:"
+            find "$APK_DIR" -maxdepth 1 -type f -name "*.apk" -print | sort
+
+            APK="$(find "$APK_DIR" -maxdepth 1 -type f -iname "*x86_64*.apk" | head -n 1 || true)"
+            if [ -z "$APK" ]; then
+              APK="$(find "$APK_DIR" -maxdepth 1 -type f -iname "*universal*.apk" | head -n 1 || true)"
+            fi
+            if [ -z "$APK" ]; then
+              APK="$(find "$APK_DIR" -maxdepth 1 -type f -name "*.apk" | head -n 1 || true)"
+            fi
             test -n "$APK"
+            echo "Seçilen APK: $APK"
 
             adb install -r "$APK"
             adb shell mkdir -p /sdcard/Cloudstream3/plugins
