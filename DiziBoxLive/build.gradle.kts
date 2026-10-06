@@ -1,12 +1,12 @@
 version = 1
 
 cloudstream {
-    description = "DiziPal Türkiye katalog ve bölüm sağlayıcısı"
+    description = "DiziBOX Live yabancı dizi katalog ve bölüm sağlayıcısı"
     authors = listOf("Kayracs3")
     status = 1
     tvTypes = listOf("TvSeries")
     language = "tr"
-    iconUrl = "https://diziboxizle.com/favicon.ico"
+    iconUrl = "https://www.dizibox.live/favicon.ico"
 }
 
 android {
