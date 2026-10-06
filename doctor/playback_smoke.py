@@ -128,13 +128,23 @@ def remote_plugin_listing():
     )
 
 
-def push_only_plugin(package, plugin_path):
+def clear_remote_plugins():
     adb("shell", "mkdir", "-p", REMOTE_PLUGIN_DIR, check=False, timeout=15)
     adb(
         "shell", "sh", "-c",
-        f"rm -f {REMOTE_PLUGIN_DIR}/*.cs3 {REMOTE_PLUGIN_DIR}/*.zip",
-        check=False, timeout=15,
+        (
+            "find "
+            + REMOTE_PLUGIN_DIR
+            + " -maxdepth 1 -type f "
+            + "\\( -name '*.cs3' -o -name '*.zip' \\) -delete"
+        ),
+        check=False,
+        timeout=15,
     )
+
+
+def push_only_plugin(package, plugin_path):
+    clear_remote_plugins()
     adb("push", str(plugin_path), REMOTE_PLUGIN_DIR + "/", check=True, timeout=60)
 
     listing = remote_plugin_listing()
