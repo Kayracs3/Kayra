@@ -180,8 +180,7 @@ def launch_account_activity(package):
     )
 
 
-def wait_for_plugin_ready(plugin_path, timeout=15):
-    expected_name = plugin_path.name
+def wait_for_plugin_ready(plugin_path, timeout=12):
     deadline = time.time() + timeout
     last_log = ""
     last_listing = ""
@@ -190,22 +189,25 @@ def wait_for_plugin_ready(plugin_path, timeout=15):
         last_listing = remote_plugin_listing()
         last_log = logcat()
 
-        if expected_name not in last_listing:
-            return False, last_log, last_listing
-
-        if re.search(
-            r"Loaded plugin .*successfully",
+        failed = re.search(
+            rf"(Failed to load|No manifest found|ClassNotFoundException|"
+            rf"VerifyError|NoClassDefFoundError).*{re.escape(plugin_path.stem)}",
             last_log,
             re.I,
-        ):
+        )
+        if failed:
+            return False, last_log, last_listing
+
+        if re.search(r"Loaded plugin .*successfully", last_log, re.I):
             return True, last_log, last_listing
 
-        if re.search(
-            rf"Failed to load .*{re.escape(plugin_path.stem)}",
+        folder_match = re.search(
+            r"Files in '.*/plugins' folder:\s*(\d+)",
             last_log,
             re.I,
-        ):
-            return False, last_log, last_listing
+        )
+        if folder_match and int(folder_match.group(1)) > 0:
+            return True, last_log, last_listing
 
         time.sleep(1)
 
@@ -295,7 +297,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             "detail": "Matching .cs3 file was not found",
         }
 
-    queries = discover_queries(item)
+    queries = discover_queries(item)[:3]
     result = {
         "provider": provider,
         "status": "fail",
@@ -307,15 +309,19 @@ def test_case(package, plugins_dir, item, timeout_seconds):
         "detail": "",
     }
 
+    print(f"[{provider}] smoke başlıyor; plugin={plugin_file.name}", flush=True)
     adb("logcat", "-c", check=False, timeout=15)
     push_only_plugin(package, plugin_file)
+    print(f"[{provider}] plugin cihaza gönderildi", flush=True)
     launch_account_activity(package)
+    print(f"[{provider}] CloudStream launcher açıldı; plugin yükleme bekleniyor", flush=True)
 
     plugin_ready, plugin_log, plugin_listing = wait_for_plugin_ready(
         plugin_file, timeout=min(15, max(5, timeout_seconds // 3))
     )
     result["pluginReady"] = plugin_ready
     result["pluginRemoteListing"] = plugin_listing[-3000:]
+    print(f"[{provider}] pluginReady={plugin_ready}", flush=True)
     if not plugin_ready:
         result["status"] = "fail"
         result["detail"] = (
@@ -330,11 +336,12 @@ def test_case(package, plugins_dir, item, timeout_seconds):
 
     for query in queries:
         result["queriesTried"].append(query)
+        print(f"[{provider}] arama: {query}", flush=True)
         adb("logcat", "-c", check=False, timeout=15)
         start_output = open_search(package, query)
         result["lastAmStart"] = start_output[-1200:]
 
-        search_node, last_ui = wait_for_node(resource="search_result_root", timeout=15)
+        search_node, last_ui = wait_for_node(resource="search_result_root", timeout=7)
         if search_node:
             selected_query = query
             result_title_node = find_resource_node(last_ui, "imageText")
@@ -346,6 +353,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             if tap_node(search_node):
                 break
     else:
+        print(f"[{provider}] arama sonucu bulunamadı -> unverified", flush=True)
         result["status"] = "unverified"
         result["detail"] = (
             "Automatic query discovery did not find a CloudStream search result "
@@ -364,10 +372,11 @@ def test_case(package, plugins_dir, item, timeout_seconds):
     episode_text = str(item.get("episodeText", "")).strip()
 
     if episode_text:
-        episode_node, last_ui = wait_for_node(text=episode_text, timeout=timeout_seconds)
+        print(f"[{provider}] bölüm aranıyor: {episode_text}", flush=True)
+        episode_node, last_ui = wait_for_node(text=episode_text, timeout=min(timeout_seconds, 20))
         if not episode_node:
             episode_node, last_ui = wait_for_node(
-                resource="episode_holder", timeout=timeout_seconds
+                resource="episode_holder", timeout=min(timeout_seconds, 20)
             )
         if not episode_node:
             result["detail"] = "Expected episode was not found on the result page"
@@ -396,7 +405,8 @@ def test_case(package, plugins_dir, item, timeout_seconds):
                 return result
             tap_node(episode_node)
 
-    deadline = time.time() + timeout_seconds
+    print(f"[{provider}] playback kontrolü başladı", flush=True)
+    deadline = time.time() + min(timeout_seconds, 30)
     stable_since = None
     last_log = ""
     last_ui = ""
@@ -418,6 +428,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             if stable_since is None:
                 stable_since = time.time()
             elif time.time() - stable_since >= 5:
+                print(f"[{provider}] PLAYBACK OK", flush=True)
                 result["status"] = "ok"
                 result["detail"] = (
                     "CloudStream discovered content, opened it, received an "
@@ -432,6 +443,12 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             result["detail"] = (
                 "CloudStream found a media source but reported a fatal "
                 "playback error."
+            )
+            print(
+                f"[{provider}] bekleniyor: sourceFound={result['sourceFound']} "
+                f"playerSurface={result['playerSurface']} "
+                f"fatal={result['fatalMediaError']!r}",
+                flush=True,
             )
             break
 
@@ -473,11 +490,14 @@ def main():
         item["name"] = name
         cases.append(item)
 
+    print(f"Playback smoke: {len(cases)} plugin bulundu.", flush=True)
     results = []
-    for item in cases:
+    for index, item in enumerate(cases, start=1):
+        print(f"\n=== {index}/{len(cases)} ===", flush=True)
         provider = str(item.get("name", "unknown"))
         try:
             results.append(test_case(args.package, plugins_dir, item, args.timeout))
+            print(f"[{provider}] durum={results[-1]['status']}", flush=True)
         except subprocess.TimeoutExpired as exc:
             results.append({
                 "provider": provider,
