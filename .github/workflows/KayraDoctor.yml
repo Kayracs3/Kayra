@@ -115,6 +115,13 @@ jobs:
               break
             fi
 
+            # AI source repair is only valid when the Kotlin/Gradle build itself failed.
+            # A protected/blocked site must not cause arbitrary Kotlin edits.
+            if [ "$build_ok" -eq 1 ]; then
+              echo "Build başarılı; site/health katmanı başarısız. Kaynak kodu otomatik değiştirmiyorum."
+              break
+            fi
+
             if [ -z "${OPENAI_API_KEY:-}" ]; then
               echo "OPENAI_API_KEY yok. Otomatik düzeltme atlandı."
               break
