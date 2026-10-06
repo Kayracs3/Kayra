@@ -1,4 +1,4 @@
-name: Domain Değişiklik Kontrolü
+name: Domain Sağlık Kontrolü
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
@@ -7,59 +7,82 @@ concurrency:
 on:
   workflow_dispatch:
   schedule:
-    - cron: '11 */9 * * *'
+    - cron: "11 */9 * * *"
 
 jobs:
   DomainKontrol:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
 
     steps:
-      - name: Depo Kontrolü
+      - name: Depoyu al
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          token: ${{ github.token }}
+          fetch-depth: 1
 
-      - name: Python 3.11.8 Yükle
+      - name: Python hazırla
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11.8'
+          python-version: "3.12"
 
-      - name: Python Sürümünü Göster
-        run: python -c "import sys; print(sys.version)"
-
-      - name: Gereksinimleri Yükle
+      - name: Domain sağlık kontrolünü çalıştır
+        id: health
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install -U setuptools wheel Kekik cloudscraper pycryptodome
+          set +e
+          mkdir -p domain-health
+          python doctor/http_health.py             --root .             --output domain-health/http-health.json
+          CODE=$?
+          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
 
-      - name: Betiği Çalıştır
-        run: python KONTROL.py
-
-      - name: Değişiklik Kontrolü
-        id: degisiklik_kontrol
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "degisiklik=true" >> $GITHUB_OUTPUT
+          if [ ! -f domain-health/http-health.json ]; then
+            echo "Sağlık kontrolü çıktı dosyası üretmedi."
+            exit 1
           fi
 
-      - name: Pull Request Oluştur
-        if: steps.degisiklik_kontrol.outputs.degisiklik == 'true'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "♻️ Domain Değişikliği"
-          author: "Kayracs3 <Kayracs3@users.noreply.github.com>"
-          committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
-          branch: "domain-degisikligi"
-          base: "master"
-          title: "♻️ Domain Değişikliği"
-          body: |
-            🔄 Otomatik tespit edilen domain değişiklikleri uygulandı.
+          python - <<'PY'
+          import json
+          from pathlib import Path
 
-            📂 İlgili dosyalar güncellendi. Lütfen değişiklikleri gözden geçirin ve onaylayın.
-          delete-branch: true
+          path = Path("domain-health/http-health.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+
+          print("Domain sağlık özeti:")
+          print(f"  Sağlayıcı: {data.get('providers', 0)}")
+          print(f"  OK: {data.get('ok', 0)}")
+          print(f"  Protected: {data.get('protected', 0)}")
+          print(f"  Hard failure: {data.get('failed', 0)}")
+
+          for item in data.get("results", []):
+              status = item.get("status", "unknown")
+              name = item.get("name", "unknown")
+              url = item.get("url", "")
+              print(f"  [{status}] {name} -> {url}")
+          PY
+
+          {
+            echo "## Domain Sağlık Kontrolü"
+            echo
+            echo "- Sağlayıcı: ${{ '' }}$(python -c 'import json; print(json.load(open("domain-health/http-health.json", encoding="utf-8")).get("providers", 0))')"
+            echo "- OK: $(python -c 'import json; print(json.load(open("domain-health/http-health.json", encoding="utf-8")).get("ok", 0))')"
+            echo "- Protected: $(python -c 'import json; print(json.load(open("domain-health/http-health.json", encoding="utf-8")).get("protected", 0))')"
+            echo "- Hard failure: $(python -c 'import json; print(json.load(open("domain-health/http-health.json", encoding="utf-8")).get("failed", 0))')"
+            echo
+            echo "> Bu workflow artık silinmiş `KONTROL.py` dosyasını kullanmaz. Domain değişikliği yapmaz; yalnızca sağlık raporu üretir."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Site erişim problemleri raporlanır fakat bu yardımcı workflow
+          # ana plugin build/doctor pipeline'ını bozmaz.
+          exit 0
+
+      - name: Sonucu yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: domain-health-${{ github.run_id }}
+          path: domain-health/http-health.json
+          if-no-files-found: error
+          retention-days: 14
