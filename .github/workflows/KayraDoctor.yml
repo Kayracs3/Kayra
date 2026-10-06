@@ -177,42 +177,7 @@ jobs:
 
             adb logcat -d -v threadtime > doctor-results/android/full-logcat.txt
 
-            CS_PACKAGE="$(adb shell pm list packages | tr -d '\\r' | sed 's/^package://' | grep -E '^com\\.lagradost\\.cloudstream3(\\.prerelease)?
-      - name: Sonuçları yükle
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kayra-doctor-${{ github.run_id }}
-          path: doctor-results/
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Otomatik düzeltme branch gönder
-        if: always() && steps.doctor.outputs.success == 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          BRANCH="${{ steps.doctor.outputs.fix_branch }}"
-          if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then exit 0; fi
-          git checkout "$BRANCH"
-          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then exit 0; fi
-          git add -A
-          git commit -m "Kayra Doctor otomatik düzeltme"
-          git push --set-upstream origin "$BRANCH"
-
-      - name: Başarılı düzeltme PR
-        if: steps.doctor.outputs.success == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          BRANCH="${{ steps.doctor.outputs.fix_branch }}"
-          if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then exit 0; fi
-          if git diff --quiet master...HEAD; then exit 0; fi
-          git push --set-upstream origin "$BRANCH" || true
-          gh pr create --repo "$GITHUB_REPOSITORY" --base master --head "$BRANCH" --title "Kayra Doctor: otomatik düzeltme" --body "Kayra Doctor build/site kontrollerinde hata buldu, kaynak kodu otomatik düzeltti ve tekrar test etti."
- | head -n 1 || true)"
+            CS_PACKAGE="$(adb shell pm list packages | tr -d '\\r' | sed 's/^package://' | grep -E '^com\\.lagradost\\.cloudstream3(\\.prerelease)?$' | head -n 1 || true)"
             if [ -z "$CS_PACKAGE" ]; then
               echo "CloudStream package bulunamadı."
               exit 1
