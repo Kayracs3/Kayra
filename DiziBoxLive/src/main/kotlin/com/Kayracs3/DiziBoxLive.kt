@@ -556,7 +556,7 @@ class DiziBoxLive : MainAPI() {
         return null
     }
 
-    private fun collectSubtitles(
+    private suspend fun collectSubtitles(
         document: Document,
         subtitleCallback: (SubtitleFile) -> Unit,
     ) {
