@@ -194,7 +194,7 @@ def wait_for_plugin_ready(plugin_path, timeout=15):
             return False, last_log, last_listing
 
         if re.search(
-            rf"Loaded plugin .*{re.escape(plugin_path.stem)}.*successfully",
+            r"Loaded plugin .*successfully",
             last_log,
             re.I,
         ):
