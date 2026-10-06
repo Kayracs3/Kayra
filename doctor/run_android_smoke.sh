@@ -52,4 +52,4 @@ python3 -u doctor/playback_smoke.py \
   --plugins-dir doctor-results/cs3 \
   --config doctor/providers.json \
   --output doctor-results/android/playback-smoke.json \
-  --timeout 45
+  --timeout 20
