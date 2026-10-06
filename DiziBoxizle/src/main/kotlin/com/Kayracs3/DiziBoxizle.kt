@@ -117,8 +117,8 @@ class DiziBoxizle : MainAPI() {
                 plot = pagePlot(document)
                 year = pageYear(document)
                 pageRating(document)?.let { score = Score.from10(it) }
-                pageGenres(document).takeIf { it.isNotEmpty() }?.let { tags = it }
-                pageActors(document).takeIf { it.isNotEmpty() }?.let { actors = it }
+            pageGenres(document).takeIf { it.isNotEmpty() }?.let { tags = it }
+            pageActors(document).takeIf { it.isNotEmpty() }?.let { actors = it }
             }
         }
 
@@ -622,37 +622,48 @@ class DiziBoxizle : MainAPI() {
                         interceptedUrl
                 )
 
-                if (interceptedUrl.contains("m3u8", ignoreCase = true) ||
-                    interceptedUrl.contains("master.txt", ignoreCase = true)
-                ) {
-                    val webViewHeaders = linkedMapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to pageUrl,
-                        "Accept" to "*/*",
-                        "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
-                    )
-
-                    // First try CloudStream's HLS parser. If the provider returns a
-                    // playlist format the helper does not expand, emit the intercepted
-                    // URL directly as a final fallback.
-                    runCatching {
-                        M3u8Helper.generateM3u8(
-                            source = name,
-                            streamUrl = interceptedUrl,
-                            referer = pageUrl,
-                            headers = webViewHeaders,
+                when {
+                    interceptedUrl.contains("m3u8", ignoreCase = true) ||
+                        interceptedUrl.contains("master.txt", ignoreCase = true) -> {
+                        val webViewHeaders = linkedMapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to pageUrl,
+                            "Accept" to "*/*",
+                            "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
                         )
-                    }.getOrDefault(emptyList()).forEach(providerReportLink)
 
-                    if (providerEmittedLinks == beforeWebViewLinks) {
+                        // First try CloudStream's HLS parser. If the provider returns a
+                        // playlist format the helper does not expand, emit the intercepted
+                        // URL directly as a final fallback.
+                        runCatching {
+                            M3u8Helper.generateM3u8(
+                                source = name,
+                                streamUrl = interceptedUrl,
+                                referer = pageUrl,
+                                headers = webViewHeaders,
+                            )
+                        }.getOrDefault(emptyList()).forEach(providerReportLink)
+
+                        if (providerEmittedLinks == beforeWebViewLinks) {
+                            emitMediaLink(
+                                interceptedUrl,
+                                pageUrl,
+                                providerReportLink,
+                            )
+                        }
+
+                        found = providerEmittedLinks > beforeWebViewLinks
+                    }
+
+                    interceptedUrl.contains(".mp4", ignoreCase = true) ||
+                        interceptedUrl.contains(".webm", ignoreCase = true) -> {
                         emitMediaLink(
                             interceptedUrl,
                             pageUrl,
                             providerReportLink,
                         )
+                        found = providerEmittedLinks > beforeWebViewLinks
                     }
-
-                    found = providerEmittedLinks > beforeWebViewLinks
                 }
             }
 
@@ -1427,11 +1438,12 @@ class DiziBoxizle : MainAPI() {
         val actorLine = document
             .getAllElements()
             .asSequence()
-            .map { it.ownText().trim() }
-            .firstOrNull {
+            .map { it.text().trim() }
+            .filter {
                 it.startsWith("Oyuncular", ignoreCase = true) &&
                     it.contains(":")
             }
+            .minByOrNull { it.length }
             ?: return emptyList()
 
         return actorLine
