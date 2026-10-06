@@ -96,12 +96,12 @@ def check_url(item):
             }
 
     except HTTPError as exc:
-        if exc.code in {401, 403, 429, 503}:
+        if exc.code in {401, 403, 429, 451, 503}:
             return {
                 **item,
                 "status": "protected",
                 "http_status": exc.code,
-                "detail": "site responded but blocks automated requests",
+                "detail": "site responded but blocks automated requests or is unavailable to this runner for legal/policy reasons",
             }
 
         return {
