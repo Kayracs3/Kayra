@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: kayra-doctor-${ github.ref }
+  group: kayra-doctor-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: master
-          token: ${ secrets.GITHUB_TOKEN }
+          token: ${{ github.token }}
 
       - name: Python hazırla
         uses: actions/setup-python@v5
@@ -67,9 +67,9 @@ jobs:
         id: doctor
         shell: bash
         env:
-          OPENAI_API_KEY: ${ secrets.OPENAI_API_KEY }
-          OPENAI_MODEL: ${ vars.OPENAI_MODEL }
-          OPENAI_BASE_URL: ${ vars.OPENAI_BASE_URL }
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
         run: |
           set -u -o pipefail
 
@@ -138,7 +138,7 @@ jobs:
         if: steps.doctor.outputs.success == 'true'
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          GH_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GH_TOKEN: ${{ github.token }}
         with:
           api-level: 35
           target: google_apis
@@ -181,7 +181,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kayra-doctor-${github.run_id}
+          name: kayra-doctor-${{ github.run_id }}
           path: doctor-results/
           if-no-files-found: ignore
           retention-days: 14
@@ -191,7 +191,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BRANCH="${steps.doctor.outputs.fix_branch}"
+          BRANCH="${{ steps.doctor.outputs.fix_branch }}"
           if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then exit 0; fi
           git checkout "$BRANCH"
           if git diff --quiet && [ -z "$(git status --porcelain)" ]; then exit 0; fi
@@ -203,10 +203,10 @@ jobs:
         if: steps.doctor.outputs.success == 'true'
         shell: bash
         env:
-          GH_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          BRANCH="${steps.doctor.outputs.fix_branch}"
+          BRANCH="${{ steps.doctor.outputs.fix_branch }}"
           if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then exit 0; fi
           if git diff --quiet master...HEAD; then exit 0; fi
           git push --set-upstream origin "$BRANCH" || true
