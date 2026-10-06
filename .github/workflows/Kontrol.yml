@@ -32,11 +32,11 @@ jobs:
         id: health
         shell: bash
         run: |
-          set +e
+          set -uo pipefail
           mkdir -p domain-health
-          python doctor/http_health.py             --root .             --output domain-health/http-health.json
+
+          python doctor/http_health.py --root . --output domain-health/http-health.json
           CODE=$?
-          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
 
           if [ ! -f domain-health/http-health.json ]; then
             echo "Sağlık kontrolü çıktı dosyası üretmedi."
@@ -47,8 +47,9 @@ jobs:
           import json
           from pathlib import Path
 
-          path = Path("domain-health/http-health.json")
-          data = json.loads(path.read_text(encoding="utf-8"))
+          data = json.loads(
+              Path("domain-health/http-health.json").read_text(encoding="utf-8")
+          )
 
           print("Domain sağlık özeti:")
           print(f"  Sağlayıcı: {data.get('providers', 0)}")
@@ -57,25 +58,32 @@ jobs:
           print(f"  Hard failure: {data.get('failed', 0)}")
 
           for item in data.get("results", []):
-              status = item.get("status", "unknown")
-              name = item.get("name", "unknown")
-              url = item.get("url", "")
-              print(f"  [{status}] {name} -> {url}")
+              print(
+                  f"  [{item.get('status', 'unknown')}] "
+                  f"{item.get('name', 'unknown')} -> {item.get('url', '')}"
+              )
           PY
 
           {
             echo "## Domain Sağlık Kontrolü"
             echo
-            echo "- Sağlayıcı: ${{ '' }}$(python -c 'import json; print(json.load(open("domain-health/http-health.json", encoding="utf-8")).get("providers", 0))')"
-            echo "- OK: $(python -c 'import json; print(json.load(open("domain-health/http-health.json", encoding="utf-8")).get("ok", 0))')"
-            echo "- Protected: $(python -c 'import json; print(json.load(open("domain-health/http-health.json", encoding="utf-8")).get("protected", 0))')"
-            echo "- Hard failure: $(python -c 'import json; print(json.load(open("domain-health/http-health.json", encoding="utf-8")).get("failed", 0))')"
-            echo
-            echo "> Bu workflow artık silinmiş `KONTROL.py` dosyasını kullanmaz. Domain değişikliği yapmaz; yalnızca sağlık raporu üretir."
-          } >> "$GITHUB_STEP_SUMMARY"
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          data = json.load(open("domain-health/http-health.json", encoding="utf-8"))
+          print(f"- Sağlayıcı: {data.get('providers', 0)}")
+          print(f"- OK: {data.get('ok', 0)}")
+          print(f"- Protected: {data.get('protected', 0)}")
+          print(f"- Hard failure: {data.get('failed', 0)}")
+          print()
+          print("> Bu workflow artık silinmiş KONTROL.py dosyasını kullanmaz.")
+          print("> Domain değişikliği yapmaz; yalnızca güncel sağlık raporu üretir.")
+          PY
+          }
 
-          # Site erişim problemleri raporlanır fakat bu yardımcı workflow
-          # ana plugin build/doctor pipeline'ını bozmaz.
+          echo "http_health_exit_code=$CODE" >> "$GITHUB_OUTPUT"
+
+          # Domain erişim sorunları raporlanır. Bu yardımcı workflow,
+          # ana Kayra Doctor build/playback pipeline'ını durdurmaz.
           exit 0
 
       - name: Sonucu yükle
