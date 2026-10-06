@@ -129,6 +129,23 @@ def main():
     root = Path(args.root).resolve()
     providers = find_providers(root)
 
+    config_path = root / "doctor" / "providers.json"
+    if config_path.exists():
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception:
+            config = {}
+        configured = config.get("providers", {})
+        for provider in list(providers):
+            extra = configured.get(provider["name"], {})
+            test_url = extra.get("testUrl")
+            if test_url:
+                providers.append({
+                    "name": provider["name"] + "::deep",
+                    "url": str(test_url).rstrip("/"),
+                    "source": provider["source"],
+                })
+
     results = []
 
     with ThreadPoolExecutor(max_workers=8) as pool:
