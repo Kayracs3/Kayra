@@ -15,7 +15,6 @@ import org.jsoup.nodes.Element
 import java.net.URLEncoder
 import java.net.URI
 
-
 class DiziBoxizle : MainAPI() {
 
     override var mainUrl = "https://diziboxizle.com"
@@ -118,6 +117,8 @@ class DiziBoxizle : MainAPI() {
                 plot = pagePlot(document)
                 year = pageYear(document)
                 pageRating(document)?.let { score = Score.from10(it) }
+                pageGenres(document).takeIf { it.isNotEmpty() }?.let { tags = it }
+                pageActors(document).takeIf { it.isNotEmpty() }?.let { actors = it }
             }
         }
 
@@ -151,6 +152,8 @@ class DiziBoxizle : MainAPI() {
                 plot = pagePlot(document)
                 year = pageYear(document)
                 pageRating(document)?.let { score = Score.from10(it) }
+                pageGenres(document).takeIf { it.isNotEmpty() }?.let { tags = it }
+                pageActors(document).takeIf { it.isNotEmpty() }?.let { actors = it }
             }
         }
 
@@ -165,6 +168,8 @@ class DiziBoxizle : MainAPI() {
             plot = pagePlot(document)
             year = pageYear(document)
             pageRating(document)?.let { score = Score.from10(it) }
+                pageGenres(document).takeIf { it.isNotEmpty() }?.let { tags = it }
+                pageActors(document).takeIf { it.isNotEmpty() }?.let { actors = it }
         }
     }
 
@@ -470,6 +475,10 @@ class DiziBoxizle : MainAPI() {
 
             val sourceUrls = LinkedHashSet<String>()
 
+            providerDocument.select("video, video source, source").forEach { element ->
+                extractUrlFromElement(element)?.let(sourceUrls::add)
+            }
+
             PROVIDER_SOURCE_PATTERN.findAll(searchableHtml)
                 .mapNotNull { it.groupValues.getOrNull(1)?.trim() }
                 .map { it.decodeEmbeddedText() }
@@ -522,7 +531,9 @@ class DiziBoxizle : MainAPI() {
             // Use CloudStream's WebView interceptor as a last-resort fallback.
             val needsWebViewFallback =
                 pageUrl.contains("oynatloload.top", ignoreCase = true) ||
-                    pageUrl.contains("vidmoly", ignoreCase = true)
+                    pageUrl.contains("vidmoly", ignoreCase = true) ||
+                    pageUrl.contains("ok.ru", ignoreCase = true) ||
+                    pageUrl.contains("odnoklassniki", ignoreCase = true)
 
             if (!found && needsWebViewFallback) {
                 val beforeWebViewLinks = providerEmittedLinks
@@ -537,8 +548,12 @@ class DiziBoxizle : MainAPI() {
 
                 val webViewResult = runCatching {
                     val resolver = WebViewResolver(
-                        interceptUrl = Regex("""(?:m3u8|master\.txt)"""),
-                        additionalUrls = listOf(Regex("""(?:m3u8|master\.txt)""")),
+                        interceptUrl = Regex(
+                            """(?i)(?:m3u8|master\.txt|playlist\.txt|\.mp4(?:\?|$)|\.webm(?:\?|$)|/hls2?/)"""
+                        ),
+                        additionalUrls = listOf(
+                            Regex("""(?i)(?:m3u8|master\.txt|playlist\.txt|\.mp4(?:\?|$)|\.webm(?:\?|$)|/hls2?/)""")
+                        ),
                         useOkhttp = false,
                         script = """
                             (function() {
@@ -1228,24 +1243,32 @@ class DiziBoxizle : MainAPI() {
             value.contains("doodstream") ||
             value.contains("streamtape") ||
             value.contains("filemoon") ||
-            value.contains("oynatloload.top")
+            value.contains("oynatloload.top") ||
+            (
+                value.contains("/embed") &&
+                    !value.contains("youtube.com") &&
+                    !value.contains("youtube-nocookie.com")
+            )
     }
 
     private fun isMediaUrl(url: String): Boolean {
         val value = url.lowercase()
 
-        return Regex(
-            "(?i)\\.(m3u8|mpd|mp4|webm|txt)(?:$|[?#])"
-        ).containsMatchIn(value) &&
-            (
-                value.endsWith(".m3u8") ||
-                    value.contains("master.txt") ||
-                    value.contains("playlist.txt") ||
-                    value.contains("index.txt") ||
-                    value.contains("/hls")
-            ) ||
-            (value.contains("/hls2/") && value.contains(".m3u8")) ||
-            (value.contains(".vmeas.cloud/") && (value.contains(".m3u8") || value.contains(".txt")))
+        if (Regex(
+                "(?i)\\.(m3u8|mpd|mp4|webm|txt)(?:$|[?#])"
+            ).containsMatchIn(value)
+        ) {
+            return value.contains(".m3u8") ||
+                value.contains(".mpd") ||
+                value.contains(".mp4") ||
+                value.contains(".webm") ||
+                value.contains("master.txt") ||
+                value.contains("playlist.txt") ||
+                value.contains("index.txt") ||
+                value.contains("/hls")
+        }
+
+        return value.contains("/hls2/") && value.contains("m3u8")
     }
 
     private fun String.decodeEmbeddedText(): String {
@@ -1355,16 +1378,69 @@ class DiziBoxizle : MainAPI() {
     }
 
     private fun pageRating(document: Document): Double? {
-        val text = document.text()
-
-        return Regex(
-            "(?i)(?:IMDb|IMDB)\\s*[:/]?\\s*([0-9]+(?:[.,][0-9]+)?)"
+        val ratingRegex = Regex(
+            "(?i)^IMDb\\s*[:/]?\\s*([0-9]+(?:[.,][0-9]+)?)\\s*$"
         )
-            .find(text)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.replace(',', '.')
-            ?.toDoubleOrNull()
+
+        document
+            .getAllElements()
+            .asSequence()
+            .map { it.ownText().trim() }
+            .mapNotNull { ratingRegex.find(it) }
+            .mapNotNull {
+                it.groupValues.getOrNull(1)
+                    ?.replace(',', '.')
+                    ?.toDoubleOrNull()
+            }
+            .firstOrNull()
+            ?.let { return it }
+
+        document
+            .select("[itemprop='ratingValue'], meta[name='rating'], meta[itemprop='ratingValue']")
+            .asSequence()
+            .map { it.attr("content").ifBlank { it.text() }.trim() }
+            .mapNotNull { it.replace(',', '.').toDoubleOrNull() }
+            .firstOrNull()
+            ?.let { return it }
+
+        return null
+    }
+
+    private fun pageGenres(document: Document): List<String> {
+        return document
+            .select("a[href*='/tur/'], a[href*='/dizi-turu/']")
+            .map { it.text().trim() }
+            .filter { it.isNotBlank() }
+            .filterNot {
+                it.equals("filmler", ignoreCase = true) ||
+                    it.equals("diziler", ignoreCase = true) ||
+                    it.equals("bölümler", ignoreCase = true) ||
+                    it.equals("tüm filmler", ignoreCase = true) ||
+                    it.equals("tüm diziler", ignoreCase = true) ||
+                    it.equals("dizi arşivi", ignoreCase = true)
+            }
+            .distinct()
+            .take(12)
+    }
+
+    private fun pageActors(document: Document): List<ActorData> {
+        val actorLine = document
+            .getAllElements()
+            .asSequence()
+            .map { it.ownText().trim() }
+            .firstOrNull {
+                it.startsWith("Oyuncular", ignoreCase = true) &&
+                    it.contains(":")
+            }
+            ?: return emptyList()
+
+        return actorLine
+            .substringAfter(':')
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .map { ActorData(Actor(it)) }
     }
 
     private fun posterOf(document: Document): String? {
