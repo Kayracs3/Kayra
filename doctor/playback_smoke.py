@@ -341,7 +341,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
         start_output = open_search(package, query)
         result["lastAmStart"] = start_output[-1200:]
 
-        search_node, last_ui = wait_for_node(resource="search_result_root", timeout=7)
+        search_node, last_ui = wait_for_node(resource="search_result_root", timeout=5)
         if search_node:
             selected_query = query
             result_title_node = find_resource_node(last_ui, "imageText")
@@ -373,7 +373,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
 
     if episode_text:
         print(f"[{provider}] bölüm aranıyor: {episode_text}", flush=True)
-        episode_node, last_ui = wait_for_node(text=episode_text, timeout=min(timeout_seconds, 20))
+        episode_node, last_ui = wait_for_node(text=episode_text, timeout=min(timeout_seconds, 15))
         if not episode_node:
             episode_node, last_ui = wait_for_node(
                 resource="episode_holder", timeout=min(timeout_seconds, 20)
@@ -387,13 +387,13 @@ def test_case(package, plugins_dir, item, timeout_seconds):
         tap_node(episode_node)
     else:
         movie_node, last_ui = wait_for_node(
-            resource="result_play_movie", timeout=10
+            resource="result_play_movie", timeout=8
         )
         if movie_node:
             tap_node(movie_node)
         else:
             episode_node, last_ui = wait_for_node(
-                resource="episode_holder", timeout=timeout_seconds
+                resource="episode_holder", timeout=min(timeout_seconds, 15)
             )
             if not episode_node:
                 result["detail"] = (
@@ -406,7 +406,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             tap_node(episode_node)
 
     print(f"[{provider}] playback kontrolü başladı", flush=True)
-    deadline = time.time() + min(timeout_seconds, 30)
+    deadline = time.time() + min(timeout_seconds, 20)
     stable_since = None
     last_log = ""
     last_ui = ""
@@ -461,6 +461,13 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             f"fatalMediaError={result['fatalMediaError']!r}"
         )
 
+    print(
+        f"[{provider}] playback sonucu: status={result['status']} "
+        f"sourceFound={result['sourceFound']} "
+        f"playerSurface={result['playerSurface']} "
+        f"fatal={result['fatalMediaError']!r}",
+        flush=True,
+    )
     result["logTail"] = last_log[-10000:]
     result["uiTail"] = last_ui[-5000:]
     stop_app(package)
