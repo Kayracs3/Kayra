@@ -77,6 +77,9 @@ jobs:
           FIX_BRANCH="doctor/auto-fix-${GITHUB_RUN_ID}"
           BRANCH_CREATED=0
           SUCCESS=0
+          BUILD_VALID=0
+          CS3_VALID=0
+          HTTP_VALID=0
 
           build_once() {
             rm -f doctor-results/gradle.log doctor-results/build-error.txt
@@ -108,17 +111,27 @@ jobs:
 
             build_once && build_ok=1
             [ "$build_ok" -eq 1 ] && collect_cs3 && cs3_ok=1
-            [ "$build_ok" -eq 1 ] && [ "$cs3_ok" -eq 1 ] && run_http_health && http_ok=1
 
-            if [ "$build_ok" -eq 1 ] && [ "$cs3_ok" -eq 1 ] && [ "$http_ok" -eq 1 ]; then
-              SUCCESS=1
+            # Build + CS3 validity is the gate for Android playback smoke.
+            # HTTP/site health is diagnostic and must not block real playback tests.
+            if [ "$build_ok" -eq 1 ] && [ "$cs3_ok" -eq 1 ]; then
+              BUILD_VALID=1
+              CS3_VALID=1
+              run_http_health && http_ok=1
+              [ "$http_ok" -eq 1 ] && HTTP_VALID=1 || HTTP_VALID=0
+
+              if [ "$http_ok" -eq 1 ]; then
+                SUCCESS=1
+              else
+                echo "Build ve CS3 başarılı; site/health katmanı başarısız. Android playback smoke yine çalışacak."
+              fi
               break
             fi
 
             # AI source repair is only valid when the Kotlin/Gradle build itself failed.
-            # A protected/blocked site must not cause arbitrary Kotlin edits.
+            # Invalid/generated CS3 or blocked sites must not cause arbitrary Kotlin edits.
             if [ "$build_ok" -eq 1 ]; then
-              echo "Build başarılı; site/health katmanı başarısız. Kaynak kodu otomatik değiştirmiyorum."
+              echo "Build başarılı fakat CS3 doğrulaması başarısız. Otomatik kaynak düzeltmesi yapılmıyor."
               break
             fi
 
@@ -132,17 +145,25 @@ jobs:
               BRANCH_CREATED=1
             fi
 
-            python3 doctor/auto_fix.py               --repo-root .               --build-log doctor-results/gradle.log               --build-error doctor-results/build-error.txt               --health-log doctor-results/http-health.json               --attempt "$attempt"
+            python3 doctor/auto_fix.py \
+              --repo-root . \
+              --build-log doctor-results/gradle.log \
+              --build-error doctor-results/build-error.txt \
+              --health-log doctor-results/http-health.json \
+              --attempt "$attempt"
 
             git diff --check
             git diff --quiet && { echo "AI source değişikliği üretmedi."; break; } || true
           done
 
           [ "$SUCCESS" -eq 1 ] && echo "success=true" >> "$GITHUB_OUTPUT" || echo "success=false" >> "$GITHUB_OUTPUT"
+          [ "$BUILD_VALID" -eq 1 ] && echo "build_ok=true" >> "$GITHUB_OUTPUT" || echo "build_ok=false" >> "$GITHUB_OUTPUT"
+          [ "$CS3_VALID" -eq 1 ] && echo "cs3_ok=true" >> "$GITHUB_OUTPUT" || echo "cs3_ok=false" >> "$GITHUB_OUTPUT"
+          [ "$HTTP_VALID" -eq 1 ] && echo "http_ok=true" >> "$GITHUB_OUTPUT" || echo "http_ok=false" >> "$GITHUB_OUTPUT"
           echo "fix_branch=$FIX_BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Android CloudStream smoke
-        if: steps.doctor.outputs.success == 'true'
+        if: steps.doctor.outputs.build_ok == 'true' && steps.doctor.outputs.cs3_ok == 'true'
         uses: reactivecircus/android-emulator-runner@v2
         env:
           GH_TOKEN: ${{ github.token }}
@@ -171,7 +192,8 @@ jobs:
             adb shell mkdir -p /sdcard/Cloudstream3/plugins
             adb push doctor-results/cs3/. /sdcard/Cloudstream3/plugins/
 
-            adb shell am start -n com.lagradost.cloudstream3.prerelease/.ui.account.AccountSelectActivity ||               adb shell am start -n com.lagradost.cloudstream3/.ui.account.AccountSelectActivity
+            adb shell am start -n com.lagradost.cloudstream3.prerelease/.ui.account.AccountSelectActivity || \
+              adb shell am start -n com.lagradost.cloudstream3/.ui.account.AccountSelectActivity
 
             sleep 10
 
