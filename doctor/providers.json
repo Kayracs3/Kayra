@@ -1,18 +1,23 @@
 {
-  "version": 2,
+  "version": 3,
   "notes": [
     "Generic HTTP checks discover mainUrl automatically.",
     "testUrl adds a deeper page check for that provider.",
-    "playbackUrl is a real content/episode URL opened through CloudStream's HTTPS deep link.",
-    "A playback test passes only after CloudStream reports an ExtractorLink and the player surface remains visible for at least 5 seconds.",
-    "Providers without playbackUrl are reported as not-configured rather than falsely marked as passing."
+    "searchQuery enables the real CloudStream playback smoke test.",
+    "Only the provider's own .cs3 file is installed during its playback test.",
+    "A playback test must find the configured result, open the movie/episode, receive an ExtractorLink, and keep the player surface visible for at least 5 seconds."
   ],
   "providers": {
     "DiziBoxLive": {
       "testUrl": "https://www.dizibox.live/24-7-sezon-10-bolum-izle/",
-      "expectedStatus": [200, 301, 302],
-      "playbackUrl": "https://www.dizibox.live/24-7-sezon-10-bolum-izle/",
-      "expectedTitle": "24 7.Sezon 10.Bölüm"
+      "expectedStatus": [
+        200,
+        301,
+        302
+      ],
+      "searchQuery": "24",
+      "expectedTitle": "24",
+      "episodeText": "7.Sezon 10.Bölüm"
     }
   }
 }
