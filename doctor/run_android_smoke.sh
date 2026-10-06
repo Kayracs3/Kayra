@@ -36,7 +36,7 @@ echo "CloudStream APK kuruluyor..."
 adb install -r "$APK"
 
 echo "CloudStream paketi keşfediliyor..."
-CS_PACKAGE="$(adb shell pm list packages | sed 's/\\r$//' | sed 's/^package://' | grep -E '^com\.lagradost\.cloudstream3(\.prerelease)?$' | head -n 1 || true)"
+CS_PACKAGE="$(adb shell pm list packages | grep -E '^package:com\.lagradost\.cloudstream3(\.prerelease)?' | head -n 1 | cut -d: -f2 | tr -d '[:space:]' || true)"
 if [ -z "$CS_PACKAGE" ]; then
   echo "CloudStream paketi bulunamadı."
   adb shell pm list packages | grep -i cloudstream || true
@@ -52,7 +52,7 @@ echo "CloudStream launcher activity keşfediliyor..."
 LAUNCHER="$(adb shell cmd package resolve-activity --brief \
   -a android.intent.action.MAIN \
   -c android.intent.category.LAUNCHER \
-  "$CS_PACKAGE" 2>/dev/null | sed 's/\\r$//' | tail -n 1 || true)"
+  "$CS_PACKAGE" 2>/dev/null | tail -n 1 | tr -d '[:space:]' || true)"
 
 if [ -z "$LAUNCHER" ] || [ "$LAUNCHER" = "No activity found" ]; then
   echo "resolve-activity launcher bulamadı; monkey ile launcher açılacak."
