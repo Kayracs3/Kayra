@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "notes": [
+    "Generic checks discover mainUrl automatically.",
+    "testUrl adds a deeper page check for that provider."
+  ],
+  "providers": {
+    "DiziBoxLive": {
+      "testUrl": "https://www.dizibox.live/efsane-diziler/",
+      "expectedStatus": [200, 301, 302]
+    }
+  }
+}
