@@ -118,29 +118,98 @@ def open_search(package, query):
     )
 
 
+REMOTE_PLUGIN_DIR = "/storage/emulated/0/Cloudstream3/plugins"
+
+
+def remote_plugin_listing():
+    return adb(
+        "shell", "ls", "-la", REMOTE_PLUGIN_DIR,
+        check=False, timeout=15
+    )
+
+
 def push_only_plugin(package, plugin_path):
-    remote_dir = "/sdcard/Cloudstream3/plugins"
-    adb("shell", "mkdir", "-p", remote_dir, check=False, timeout=15)
-    adb("shell", "rm", "-f", remote_dir + "/*.cs3", check=False, timeout=15)
-    adb("shell", "rm", "-f", remote_dir + "/*.zip", check=False, timeout=15)
-    adb("push", str(plugin_path), remote_dir + "/", check=True, timeout=60)
+    adb("shell", "mkdir", "-p", REMOTE_PLUGIN_DIR, check=False, timeout=15)
+    adb(
+        "shell", "sh", "-c",
+        f"rm -f {REMOTE_PLUGIN_DIR}/*.cs3 {REMOTE_PLUGIN_DIR}/*.zip",
+        check=False, timeout=15,
+    )
+    adb("push", str(plugin_path), REMOTE_PLUGIN_DIR + "/", check=True, timeout=60)
+
+    listing = remote_plugin_listing()
+    expected_name = plugin_path.name
+    if expected_name not in listing:
+        raise RuntimeError(
+            f"Plugin push doğrulanamadı: {expected_name} bulunamadı. "
+            f"Remote listing: {listing[-3000:]}"
+        )
+
     stop_app(package)
 
 
 def launch_account_activity(package):
-    candidates = [
-        package + "/.ui.account.AccountSelectActivity",
-        package + "/com.lagradost.cloudstream3.ui.account.AccountSelectActivity",
-    ]
-    for activity in candidates:
-        out = run(
-            ["adb", "shell", "am", "start", "-n", activity],
+    resolved = run(
+        [
+            "adb", "shell", "cmd", "package", "resolve-activity",
+            "--brief",
+            "-a", "android.intent.action.MAIN",
+            "-c", "android.intent.category.LAUNCHER",
+            package,
+        ],
+        check=False,
+        timeout=20,
+    )
+    launcher = resolved.replace("\r", "").strip().splitlines()[-1] if resolved.strip() else ""
+    if launcher and launcher != "No activity found" and "/" in launcher:
+        return run(
+            ["adb", "shell", "am", "start", "-W", "-n", launcher],
             check=False,
             timeout=20,
         )
-        if "Error type 3" not in out and "unable to resolve" not in out.lower():
-            return out
-    return ""
+
+    return run(
+        [
+            "adb", "shell", "monkey",
+            "-p", package,
+            "-c", "android.intent.category.LAUNCHER",
+            "1",
+        ],
+        check=False,
+        timeout=20,
+    )
+
+
+def wait_for_plugin_ready(plugin_path, timeout=15):
+    expected_name = plugin_path.name
+    deadline = time.time() + timeout
+    last_log = ""
+    last_listing = ""
+
+    while time.time() < deadline:
+        last_listing = remote_plugin_listing()
+        last_log = logcat()
+
+        if expected_name not in last_listing:
+            return False, last_log, last_listing
+
+        if re.search(
+            rf"Loaded plugin .*{re.escape(plugin_path.stem)}.*successfully",
+            last_log,
+            re.I,
+        ):
+            return True, last_log, last_listing
+
+        if re.search(
+            rf"Failed to load .*{re.escape(plugin_path.stem)}",
+            last_log,
+            re.I,
+        ):
+            return False, last_log, last_listing
+
+        time.sleep(1)
+
+    return False, last_log, last_listing
 
 
 def player_surface_visible(xml_text):
@@ -238,9 +307,23 @@ def test_case(package, plugins_dir, item, timeout_seconds):
         "detail": "",
     }
 
+    adb("logcat", "-c", check=False, timeout=15)
     push_only_plugin(package, plugin_file)
     launch_account_activity(package)
-    time.sleep(3)
+
+    plugin_ready, plugin_log, plugin_listing = wait_for_plugin_ready(
+        plugin_file, timeout=min(15, max(5, timeout_seconds // 3))
+    )
+    result["pluginReady"] = plugin_ready
+    result["pluginRemoteListing"] = plugin_listing[-3000:]
+    if not plugin_ready:
+        result["status"] = "fail"
+        result["detail"] = (
+            "CloudStream plugin yüklenmedi veya yükleme teyit edilemedi."
+        )
+        result["logTail"] = plugin_log[-8000:]
+        stop_app(package)
+        return result
 
     selected_query = None
     result_title = None
