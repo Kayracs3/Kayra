@@ -18,9 +18,15 @@ def main():
     parser.add_argument("--attempt", required=True)
     args = parser.parse_args()
     root = Path(args.repo_root).resolve()
-    log = Path(args.build_error).read_text(encoding="utf-8", errors="ignore")
+    build_error_path = Path(args.build_error)
+    if build_error_path.exists():
+        log = build_error_path.read_text(encoding="utf-8", errors="ignore")
+    else:
+        log = ""
     if not log.strip():
-        log = Path(args.build_log).read_text(encoding="utf-8", errors="ignore")
+        build_log_path = Path(args.build_log)
+        if build_log_path.exists():
+            log = build_log_path.read_text(encoding="utf-8", errors="ignore")
 
     match = FILE_RE.search(log)
     relative = match.group(1).replace("\\", "/") if match else None
