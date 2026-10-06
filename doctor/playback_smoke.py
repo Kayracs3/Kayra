@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -77,12 +78,12 @@ def tap_node(node):
 
 
 def find_text_node(xml_text, text):
-    wanted = re.sub(r"\\s+", " ", text.casefold().strip())
+    wanted = re.sub(r"\s+", " ", text.casefold().strip())
     exact = []
     partial = []
     for node in parse_ui(xml_text):
-        value = re.sub(r"\\s+", " ", node.attrib.get("text", "").casefold().strip())
-        desc = re.sub(r"\\s+", " ", node.attrib.get("content-desc", "").casefold().strip())
+        value = re.sub(r"\s+", " ", node.attrib.get("text", "").casefold().strip())
+        desc = re.sub(r"\s+", " ", node.attrib.get("content-desc", "").casefold().strip())
         if not wanted:
             continue
         if value == wanted or desc == wanted:
@@ -203,14 +204,6 @@ def discover_queries(item):
     return unique
 
 
-def find_first_search_result(xml_text):
-    return find_resource_node(xml_text, "search_result_root")
-
-
-def find_first_episode(xml_text):
-    return find_resource_node(xml_text, "episode_holder")
-
-
 def test_case(package, plugins_dir, item, timeout_seconds):
     provider = str(item.get("name", "unknown"))
     plugin_file = plugins_dir / (provider + ".cs3")
@@ -277,7 +270,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             "playback failure."
         )
         result["logTail"] = logcat()[-8000:]
-        result["uiTail"] = last_ui[-5000:] if 'last_ui' in locals() else ""
+        result["uiTail"] = last_ui[-5000:] if "last_ui" in locals() else ""
         stop_app(package)
         return result
 
@@ -286,7 +279,6 @@ def test_case(package, plugins_dir, item, timeout_seconds):
     time.sleep(3)
 
     episode_text = str(item.get("episodeText", "")).strip()
-    expected_title = str(item.get("expectedTitle", "")).strip()
 
     if episode_text:
         episode_node, last_ui = wait_for_node(text=episode_text, timeout=timeout_seconds)
@@ -374,6 +366,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
     stop_app(package)
     return result
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--package", required=True)
@@ -397,7 +390,34 @@ def main():
         item["name"] = name
         cases.append(item)
 
-    results = [test_case(args.package, plugins_dir, item, args.timeout) for item in cases]
+    results = []
+    for item in cases:
+        provider = str(item.get("name", "unknown"))
+        try:
+            results.append(test_case(args.package, plugins_dir, item, args.timeout))
+        except subprocess.TimeoutExpired as exc:
+            results.append({
+                "provider": provider,
+                "status": "fail",
+                "detail": f"ADB/command timeout: {exc}",
+                "traceback": traceback.format_exc(),
+            })
+            try:
+                stop_app(args.package)
+            except Exception:
+                pass
+        except Exception as exc:
+            results.append({
+                "provider": provider,
+                "status": "fail",
+                "detail": f"Unhandled smoke-test error: {type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(),
+            })
+            try:
+                stop_app(args.package)
+            except Exception:
+                pass
+
     failures = [x for x in results if x["status"] == "fail"]
     unverified = [x for x in results if x["status"] == "unverified"]
     disabled = [x for x in results if x["status"] == "disabled"]
