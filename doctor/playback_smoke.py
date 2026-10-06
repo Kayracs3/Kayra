@@ -337,7 +337,9 @@ def test_case(package, plugins_dir, item, timeout_seconds):
         start_output = open_search(package, query)
         result["lastAmStart"] = start_output[-1200:]
 
-        search_node, last_ui = wait_for_node(resource="search_result_root", timeout=6)
+        search_node, last_ui = wait_for_node(
+            resource="search_result_root", timeout=6
+        )
         plugin_log = logcat()
 
         if re.search(
@@ -361,8 +363,21 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             if tap_node(search_node):
                 break
     else:
-        result["pluginReady"] = plugin_ready
-        print(f"[{provider}] pluginReady={plugin_ready}", flush=True)
+        print(f"[{provider}] arama sonucu bulunamadı -> unverified", flush=True)
+        result["status"] = "unverified"
+        result["detail"] = (
+            "Automatic query discovery did not find a CloudStream search result "
+            "for the configured provider. This is unverified, not a confirmed "
+            "playback failure."
+        )
+        result["logTail"] = logcat()[-8000:]
+        result["uiTail"] = last_ui[-5000:]
+        stop_app(package)
+        return result
+
+    result["pluginReady"] = plugin_ready
+    print(f"[{provider}] pluginReady={plugin_ready}", flush=True)
+
     result["selectedQuery"] = selected_query
     result["resultTitle"] = result_title
     time.sleep(3)
