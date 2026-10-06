@@ -191,7 +191,9 @@ jobs:
           disable-animations: true
           disable-linux-hw-accel: false
           script: |
-            set -euo pipefail
+            # android-emulator-runner scriptini /bin/sh çalıştırdığı için
+            # bash'e özgü pipefail kullanmıyoruz.
+            set -eu
             mkdir -p doctor-results/android
             APK_DIR="$RUNNER_TEMP/cloudstream"
             mkdir -p "$APK_DIR"
