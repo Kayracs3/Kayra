@@ -77,15 +77,19 @@ def tap_node(node):
 
 
 def find_text_node(xml_text, text):
-    wanted = text.casefold().strip()
+    wanted = re.sub(r"\\s+", " ", text.casefold().strip())
+    exact = []
+    partial = []
     for node in parse_ui(xml_text):
-        value = node.attrib.get("text", "").strip()
-        desc = node.attrib.get("content-desc", "").strip()
-        if wanted and (
-            value.casefold() == wanted or desc.casefold() == wanted
-        ):
-            return node
-    return None
+        value = re.sub(r"\\s+", " ", node.attrib.get("text", "").casefold().strip())
+        desc = re.sub(r"\\s+", " ", node.attrib.get("content-desc", "").casefold().strip())
+        if not wanted:
+            continue
+        if value == wanted or desc == wanted:
+            exact.append(node)
+        elif wanted in value or wanted in desc:
+            partial.append(node)
+    return exact[0] if exact else (partial[0] if partial else None)
 
 
 def find_resource_node(xml_text, suffix):
