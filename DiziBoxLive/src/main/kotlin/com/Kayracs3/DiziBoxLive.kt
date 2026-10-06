@@ -30,7 +30,7 @@ class DiziBoxLive : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "$mainUrl/dizi-takvimi/" to "Dizi Takvimi",
+        "$mainUrl/efsane-diziler/" to "Evsane Diziler",
         "$mainUrl/arsiv/" to "Arşiv",
     )
 
