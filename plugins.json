@@ -41,11 +41,11 @@
         "name": "ClipBox"
     },
     {
-        "iconUrl": "https://diziboxizle.com/favicon.ico",
-        "fileHash": "sha256-a616d742c0241ac11721972defb0cdf0996e58e638c0e71b257c1e65b1ed7b60",
+        "iconUrl": "https://www.dizibox.live/favicon.ico",
+        "fileHash": "sha256-bedcba6ad9509d171e0b21e765417c8f2493088c2f5ead35d3c091ccb09083d2",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 53010,
+        "fileSize": 30200,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -55,10 +55,10 @@
             "TvSeries"
         ],
         "version": 1,
-        "internalName": "DiziBoxizle",
-        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziBoxizle.cs3",
-        "name": "DiziBoxizle"
+        "internalName": "DiziBoxLive",
+        "description": "DiziBOX Live yabanc\u0131 dizi katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziBoxLive.cs3",
+        "name": "DiziBoxLive"
     },
     {
         "iconUrl": "https://dizigecesi.com/favicon.ico",
