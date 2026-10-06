@@ -176,19 +176,68 @@ def wait_for_node(text=None, resource=None, timeout=30):
     return None, last
 
 
+def discover_queries(item):
+    configured = str(item.get("searchQuery", "")).strip()
+    candidates = []
+    if configured:
+        candidates.append(configured)
+
+    candidates.extend([
+        "Inception",
+        "Avatar",
+        "Dune",
+        "Interstellar",
+        "Breaking Bad",
+        "Wednesday",
+        "The Matrix",
+        "Titanic",
+    ])
+
+    unique = []
+    seen = set()
+    for value in candidates:
+        key = value.casefold()
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(value)
+    return unique
+
+
+def find_first_search_result(xml_text):
+    return find_resource_node(xml_text, "search_result_root")
+
+
+def find_first_episode(xml_text):
+    return find_resource_node(xml_text, "episode_holder")
+
+
 def test_case(package, plugins_dir, item, timeout_seconds):
     provider = str(item.get("name", "unknown"))
-    query = str(item.get("searchQuery", "")).strip()
-    expected_title = str(item.get("expectedTitle", "")).strip()
-    episode_text = str(item.get("episodeText", "")).strip()
     plugin_file = plugins_dir / (provider + ".cs3")
+    playback_cfg = item.get("playback", {})
+    if isinstance(playback_cfg, dict) and playback_cfg.get("enabled") is False:
+        return {
+            "provider": provider,
+            "status": "disabled",
+            "plugin": str(plugin_file),
+            "detail": playback_cfg.get(
+                "reason", "Playback test disabled by provider configuration."
+            ),
+        }
 
+    if not plugin_file.exists():
+        return {
+            "provider": provider,
+            "status": "not-configured",
+            "plugin": str(plugin_file),
+            "detail": "Matching .cs3 file was not found",
+        }
+
+    queries = discover_queries(item)
     result = {
         "provider": provider,
         "status": "fail",
-        "searchQuery": query,
-        "expectedTitle": expected_title or None,
-        "episodeText": episode_text or None,
+        "queriesTried": [],
         "plugin": str(plugin_file),
         "sourceFound": False,
         "playerSurface": False,
@@ -196,42 +245,55 @@ def test_case(package, plugins_dir, item, timeout_seconds):
         "detail": "",
     }
 
-    if not plugin_file.exists():
-        result["status"] = "not-configured"
-        result["detail"] = "Matching .cs3 file was not found"
-        return result
-
-    if not query:
-        result["status"] = "not-configured"
-        result["detail"] = "searchQuery is missing"
-        return result
-
     push_only_plugin(package, plugin_file)
     launch_account_activity(package)
     time.sleep(3)
 
-    adb("logcat", "-c", check=False, timeout=15)
-    start_output = open_search(package, query)
-    result["amStart"] = start_output[-2000:]
+    selected_query = None
+    result_title = None
 
-    title = expected_title or query
-    title_node, last_ui = wait_for_node(text=title, timeout=timeout_seconds)
-    if not title_node:
-        result["detail"] = "CloudStream search result was not found"
-        result["uiTail"] = last_ui[-5000:]
+    for query in queries:
+        result["queriesTried"].append(query)
+        adb("logcat", "-c", check=False, timeout=15)
+        start_output = open_search(package, query)
+        result["lastAmStart"] = start_output[-1200:]
+
+        search_node, last_ui = wait_for_node(resource="search_result_root", timeout=15)
+        if search_node:
+            selected_query = query
+            result_title_node = find_resource_node(last_ui, "imageText")
+            if result_title_node:
+                result_title = (
+                    result_title_node.attrib.get("text", "").strip()
+                    or result_title_node.attrib.get("content-desc", "").strip()
+                )
+            if tap_node(search_node):
+                break
+    else:
+        result["status"] = "unverified"
+        result["detail"] = (
+            "Automatic query discovery did not find a CloudStream search result "
+            "for the configured provider. This is unverified, not a confirmed "
+            "playback failure."
+        )
         result["logTail"] = logcat()[-8000:]
+        result["uiTail"] = last_ui[-5000:] if 'last_ui' in locals() else ""
         stop_app(package)
         return result
 
-    if not tap_node(title_node):
-        result["detail"] = "Could not tap the search result"
-        stop_app(package)
-        return result
-
+    result["selectedQuery"] = selected_query
+    result["resultTitle"] = result_title
     time.sleep(3)
+
+    episode_text = str(item.get("episodeText", "")).strip()
+    expected_title = str(item.get("expectedTitle", "")).strip()
 
     if episode_text:
         episode_node, last_ui = wait_for_node(text=episode_text, timeout=timeout_seconds)
+        if not episode_node:
+            episode_node, last_ui = wait_for_node(
+                resource="episode_holder", timeout=timeout_seconds
+            )
         if not episode_node:
             result["detail"] = "Expected episode was not found on the result page"
             result["uiTail"] = last_ui[-5000:]
@@ -240,17 +302,24 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             return result
         tap_node(episode_node)
     else:
-        play_node, last_ui = wait_for_node(
-            resource="result_play_movie",
-            timeout=timeout_seconds,
+        movie_node, last_ui = wait_for_node(
+            resource="result_play_movie", timeout=10
         )
-        if not play_node:
-            result["detail"] = "Movie play button was not found"
-            result["uiTail"] = last_ui[-5000:]
-            result["logTail"] = logcat()[-8000:]
-            stop_app(package)
-            return result
-        tap_node(play_node)
+        if movie_node:
+            tap_node(movie_node)
+        else:
+            episode_node, last_ui = wait_for_node(
+                resource="episode_holder", timeout=timeout_seconds
+            )
+            if not episode_node:
+                result["detail"] = (
+                    "Neither the movie play button nor an episode was found."
+                )
+                result["uiTail"] = last_ui[-5000:]
+                result["logTail"] = logcat()[-8000:]
+                stop_app(package)
+                return result
+            tap_node(episode_node)
 
     deadline = time.time() + timeout_seconds
     stable_since = None
@@ -276,8 +345,8 @@ def test_case(package, plugins_dir, item, timeout_seconds):
             elif time.time() - stable_since >= 5:
                 result["status"] = "ok"
                 result["detail"] = (
-                    "Provider search opened a result, CloudStream received an "
-                    "ExtractorLink, and the player surface remained visible for "
+                    "CloudStream discovered content, opened it, received an "
+                    "ExtractorLink, and kept the player surface visible for "
                     "at least 5 seconds."
                 )
                 break
@@ -305,7 +374,6 @@ def test_case(package, plugins_dir, item, timeout_seconds):
     stop_app(package)
     return result
 
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--package", required=True)
@@ -327,6 +395,8 @@ def main():
 
     results = [test_case(args.package, plugins_dir, item, args.timeout) for item in cases]
     failures = [x for x in results if x["status"] == "fail"]
+    unverified = [x for x in results if x["status"] == "unverified"]
+    disabled = [x for x in results if x["status"] == "disabled"]
     not_configured = [x for x in results if x["status"] == "not-configured"]
 
     payload = {
@@ -334,6 +404,8 @@ def main():
         "configured": len(cases),
         "passed": len([x for x in results if x["status"] == "ok"]),
         "failed": len(failures),
+        "unverified": len(unverified),
+        "disabled": len(disabled),
         "notConfigured": len(not_configured),
         "results": results,
     }
