@@ -385,13 +385,17 @@ def main():
 
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
     plugins_dir = Path(args.plugins_dir)
+    overrides = config.get("providers", {})
     cases = []
 
-    for name, data in config.get("providers", {}).items():
-        if isinstance(data, dict) and data.get("searchQuery"):
-            item = dict(data)
-            item["name"] = name
-            cases.append(item)
+    for plugin_file in sorted(plugins_dir.glob("*.cs3")):
+        name = plugin_file.stem
+        data = overrides.get(name, {})
+        if not isinstance(data, dict):
+            data = {}
+        item = dict(data)
+        item["name"] = name
+        cases.append(item)
 
     results = [test_case(args.package, plugins_dir, item, args.timeout) for item in cases]
     failures = [x for x in results if x["status"] == "fail"]
