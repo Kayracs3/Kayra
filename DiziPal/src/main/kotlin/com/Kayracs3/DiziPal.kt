@@ -488,21 +488,6 @@ class DiziPal : MainAPI() {
             val key = canonicalContentPath(href)
             if (!seen.add(key)) return@forEachIndexed
 
-            val linkContext = buildString {
-                links.forEach { link ->
-                    append(' ')
-                    append(link.text())
-                    append(' ')
-                    append(link.attr("title"))
-                    append(' ')
-                    append(link.attr("aria-label"))
-                    append(' ')
-                    append(link.selectFirst("img")?.attr("alt").orEmpty())
-                }
-                append(' ')
-                append(href)
-            }
-
             // Use a card's text for parsing numbers, but only if the card
             // contains links to this one episode. This avoids reading details
             // from neighbouring episode cards.
@@ -1379,6 +1364,25 @@ class DiziPal : MainAPI() {
 
             if (!oneEpisodeCard && !oneCatalogueCard) {
                 continue
+            }
+
+            // On DiziPal, an episode-title anchor can point to /bolum/... while
+            // the poster anchor beside it points to /series/.... When the same
+            // small card has exactly one episode and one series URL, read the
+            // image directly from that series anchor rather than requiring the
+            // whole card to contain only one distinct image (badges may exist).
+            if (oneEpisodeCard && catalogueTargets.size == 1) {
+                val cataloguePath = canonicalContentPath(catalogueTargets.first())
+                val catalogueAnchor = ancestor.select("a[href]").firstOrNull { candidate ->
+                    val candidateUrl = normalizeUrl(candidate.attr("href"), baseUrl)
+                    isCatalogItemUrl(candidateUrl) &&
+                        canonicalContentPath(candidateUrl) == cataloguePath
+                }
+                val linkedSeriesPoster = posterFromElement(catalogueAnchor, baseUrl)
+                    ?.takeIf {
+                        it.startsWith("http://", true) || it.startsWith("https://", true)
+                    }
+                if (!linkedSeriesPoster.isNullOrBlank()) return linkedSeriesPoster
             }
 
             val posters = ancestor.select(posterImageSelector())
