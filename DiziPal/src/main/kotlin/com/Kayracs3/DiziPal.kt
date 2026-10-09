@@ -546,27 +546,36 @@ class DiziPal : MainAPI() {
             val isMovie = lower.contains("/movies/") || lower.contains("/movie/")
             if (!isSeries && !isMovie) return@forEach
 
-            // Prefer an image inside this exact link. If the image is a sibling,
-            // only accept a nearby card whose detail links all point to this
-            // same title. This prevents a parent "Trending" carousel from
-            // lending its first poster to every item inside the carousel.
+            // Prefer the image attached to this exact link. For sibling images,
+            // accept only a card whose content links all point to this same item
+            // and that contains exactly one distinct poster URL. Ancestors that
+            // wrap the whole Trending carousel are therefore rejected.
             val directPoster = posterFromElement(link, baseUrl)
-            val card = if (directPoster != null) null else link.parents().firstOrNull { ancestor ->
-                val itemUrls = ancestor.select("a[href]")
-                    .mapNotNull { candidate ->
-                        normalizeUrl(candidate.attr("href"), baseUrl)
-                            .takeIf { isCatalogItemUrl(it) }
-                    }
-                    .toSet()
+            val poster = directPoster ?: posterFromNearbyCard(link, href, baseUrl)
+            val card = if (directPoster != null || poster == null) {
+                null
+            } else {
+                link.parents().firstOrNull { ancestor ->
+                    val cardTargets = ancestor.select("a[href]")
+                        .mapNotNull { candidate ->
+                            normalizeUrl(candidate.attr("href"), baseUrl)
+                                .takeIf { isContentTargetUrl(it) }
+                        }
+                        .toSet()
+                    val cardPosterUrls = ancestor.select(posterSelector)
+                        .mapNotNull { candidate ->
+                            posterRawFromElement(candidate)
+                                ?.let { normalizeUrl(it, baseUrl) }
+                                ?.takeIf { it.startsWith("http", true) }
+                        }
+                        .toSet()
 
-                itemUrls.size == 1 &&
-                    itemUrls.contains(href) &&
-                    ancestor.select(posterSelector).any { candidate ->
-                        posterRawFromElement(candidate) != null
-                    }
+                    cardTargets.size == 1 &&
+                        cardTargets.contains(href) &&
+                        cardPosterUrls.size == 1 &&
+                        cardPosterUrls.contains(poster)
+                }
             }
-
-            val poster = directPoster ?: posterFromElement(card, baseUrl)
             val title = cleanCardTitle(
                 listOf(
                     link.selectFirst("img")?.attr("alt"),
@@ -739,15 +748,15 @@ class DiziPal : MainAPI() {
     ): String? {
         if (element == null) return null
 
+        val selfRaw = posterRawFromElement(element)
         val image = if (
             element.tagName().equals("img", true) ||
-            element.tagName().equals("source", true)
+            element.tagName().equals("source", true) ||
+            !selfRaw.isNullOrBlank()
         ) {
             element
         } else {
-            element.select(
-                "img, picture source, [data-background], [data-bg], [style*=background]"
-            ).firstOrNull { candidate ->
+            element.select(posterImageSelector()).firstOrNull { candidate ->
                 posterRawFromElement(candidate) != null
             } ?: return null
         }
@@ -759,6 +768,57 @@ class DiziPal : MainAPI() {
             it.startsWith("http://", true) ||
                 it.startsWith("https://", true)
         }
+    }
+
+    private fun posterFromNearbyCard(
+        link: Element,
+        targetUrl: String,
+        baseUrl: String,
+    ): String? {
+        for (ancestor in link.parents()) {
+            val contentTargets = ancestor.select("a[href]")
+                .mapNotNull { candidate ->
+                    normalizeUrl(candidate.attr("href"), baseUrl)
+                        .takeIf { isContentTargetUrl(it) }
+                }
+                .toSet()
+
+            // Do not borrow an image from a wrapper containing other shows.
+            if (contentTargets.size != 1 || !contentTargets.contains(targetUrl)) {
+                continue
+            }
+
+            val posters = ancestor.select(posterImageSelector())
+                .mapNotNull { candidate ->
+                    posterRawFromElement(candidate)
+                        ?.let { normalizeUrl(it, baseUrl) }
+                        ?.takeIf { it.startsWith("http", true) }
+                }
+                .toSet()
+
+            if (posters.size == 1) return posters.first()
+        }
+        return null
+    }
+
+    private fun isContentTargetUrl(url: String): Boolean {
+        if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
+            return false
+        }
+        val path = runCatching { URI(url).path.orEmpty().lowercase() }
+            .getOrDefault("")
+            .trimEnd('/')
+        if (path.isBlank() || path == "/") return false
+
+        val excludedPrefixes = listOf(
+            "/kanal/", "/category/", "/tag/", "/arama", "/search", "/profil",
+            "/iletisim", "/login", "/register", "/yabanci-dizi-izle",
+            "/hd-film-izle", "/page/", "/wp-", "/feed",
+        )
+        if (excludedPrefixes.any { path.startsWith(it) }) return false
+
+        return isCatalogItemUrl(url) || isEpisodeUrl(url) ||
+            path.trim('/').split('/').filter { it.isNotBlank() }.size >= 2
     }
 
     private fun posterRequestHeaders(baseUrl: String = mainUrl): Map<String, String> {
@@ -775,18 +835,33 @@ class DiziPal : MainAPI() {
         document: Document,
     ): String? {
         val baseUrl = documentBase(document, mainUrl)
+        val title = pageTitle(document, baseUrl).orEmpty()
 
-        // Open Graph is page-specific and is safer than taking the first
-        // arbitrary image on the page (often a poster from the Trending rail).
+        // If Open Graph points to a trending poster with a different title,
+        // reject it instead of copying that image into every episode.
         val ogImage = document.selectFirst("meta[property='og:image'], meta[name='og:image']")
-            ?.attr("content")
+            ?.attr("content')
             ?.takeIf { it.isNotBlank() }
             ?.let { normalizeUrl(it, baseUrl) }
-        if (!ogImage.isNullOrBlank() && isLikelyPosterUrl(ogImage)) return ogImage
 
-        // Explicit poster containers first. Do not use a global "img" fallback:
-        // that was allowing a trending/sidebar poster to become the detail
-        // poster and then get copied onto every episode in the series.
+        if (!ogImage.isNullOrBlank() && isLikelyPosterUrl(ogImage)) {
+            val correspondingImage = document.select(posterImageSelector())
+                .firstOrNull { element ->
+                    posterRawFromElement(element)
+                        ?.let { normalizeUrl(it, baseUrl) == ogImage } == true
+                }
+            if (correspondingImage != null &&
+                isPosterLabelCompatible(correspondingImage, title)
+            ) {
+                return ogImage
+            }
+
+            if (posterUrlContainsTitle(ogImage, title)) return ogImage
+        }
+
+        // Use title-specific poster containers first. A labelled image whose
+        // name belongs to Reacher/another Trending show must not be reused for
+        // an unrelated page.
         val selectors = listOf(
             "[itemprop='image']",
             ".detail-poster img",
@@ -807,15 +882,16 @@ class DiziPal : MainAPI() {
 
         for (selector in selectors) {
             for (element in document.select(selector)) {
+                if (!isPosterLabelCompatible(element, title)) continue
                 posterFromElement(element, baseUrl)
                     ?.takeIf(::isLikelyPosterUrl)
                     ?.let { return it }
             }
         }
 
-        // Some themes render the hero image as a sibling of the title.
-        // Walk only a small number of ancestors and only accept containers
-        // that do not contain links to multiple catalogue items.
+        // A hero image may sit close to the title, but only accept an ancestor
+        // that contains no links to other content items and an unambiguous
+        // image, so a Trend carousel can never lend its first poster.
         val heading = document.selectFirst("h1")
         var ancestor = heading?.parent()
         repeat(4) {
@@ -823,24 +899,81 @@ class DiziPal : MainAPI() {
             val itemUrls = container.select("a[href]")
                 .mapNotNull { link ->
                     normalizeUrl(link.attr("href"), baseUrl)
-                        .takeIf { isCatalogItemUrl(it) }
+                        .takeIf { isContentTargetUrl(it) }
                 }
                 .toSet()
+            val images = container.select(posterImageSelector())
+                .filter { posterRawFromElement(it) != null }
+            val imageUrls = images.mapNotNull { element ->
+                posterRawFromElement(element)
+                    ?.let { normalizeUrl(it, baseUrl) }
+                    ?.takeIf { it.startsWith("http", true) }
+            }.toSet()
 
-            if (itemUrls.size <= 1) {
-                val candidate = container.select(posterImageSelector()).firstOrNull {
-                    posterRawFromElement(it) != null
+            if (itemUrls.isEmpty() && imageUrls.size == 1) {
+                val candidate = images.firstOrNull()
+                if (candidate != null && isPosterLabelCompatible(candidate, title)) {
+                    posterFromElement(candidate, baseUrl)
+                        ?.takeIf(::isLikelyPosterUrl)
+                        ?.let { return it }
                 }
-                posterFromElement(candidate, baseUrl)
-                    ?.takeIf(::isLikelyPosterUrl)
-                    ?.let { return it }
             }
             ancestor = container.parent()
         }
 
-        // No trustworthy page-specific poster found. Missing is better than
-        // assigning a poster from another title's Trending card.
+        // Missing is preferable to displaying a poster for a different show.
         return null
+    }
+
+    private fun isPosterLabelCompatible(element: Element, pageTitle: String): Boolean {
+        val labels = listOf(
+            element.attr("alt"),
+            element.attr("title"),
+            element.attr("data-title"),
+            element.attr("data-name"),
+            element.attr("aria-label"),
+        )
+        val label = labels.firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        if (label.isBlank()) return true
+
+        val normalizedLabel = normalizeTitleForMatch(label)
+        val normalizedTitle = normalizeTitleForMatch(pageTitle)
+        if (normalizedLabel in setOf("poster", "image", "thumbnail", "afis", "cover")) {
+            return true
+        }
+        if (normalizedLabel.isBlank() || normalizedTitle.isBlank()) return true
+
+        if (normalizedLabel.contains(normalizedTitle) ||
+            normalizedTitle.contains(normalizedLabel)
+        ) return true
+
+        val titleTokens = normalizedTitle.split(" ").filter { it.length >= 3 }.toSet()
+        val labelTokens = normalizedLabel.split(" ").filter { it.length >= 3 }.toSet()
+        if (titleTokens.isEmpty() || labelTokens.isEmpty()) return true
+        return titleTokens.intersect(labelTokens).size.toDouble() /
+            titleTokens.size.toDouble() >= 0.5
+    }
+
+    private fun normalizeTitleForMatch(value: String): String =
+        value.lowercase()
+            .replace("&", " and ")
+            .replace(Regex("(?i)\\b(izle|hd|dizi|film|poster|afis|cover|image)\\b"), " ")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private fun posterUrlContainsTitle(url: String, title: String): Boolean {
+        val path = runCatching { URI(url).path.orEmpty() }
+            .getOrDefault("")
+            .substringAfterLast('/')
+        if (path.isBlank()) return false
+        val titleTokens = normalizeTitleForMatch(title)
+            .split(" ").filter { it.length >= 3 }.toSet()
+        val pathTokens = normalizeTitleForMatch(path)
+            .split(" ").filter { it.length >= 3 }.toSet()
+        if (titleTokens.isEmpty() || pathTokens.isEmpty()) return false
+        return titleTokens.intersect(pathTokens).size.toDouble() /
+            titleTokens.size.toDouble() >= 0.5
     }
 
     private fun posterImageSelector(): String =
