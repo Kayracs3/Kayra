@@ -755,13 +755,45 @@ class DiziPal : MainAPI() {
         var bestCount = 0
 
         if (currentHeading != null) {
-            // Keep the links belonging to "Güncel Bölümler" only. Among its
-            // ancestor containers choose the largest set, so a nested 3-card
-            // carousel cannot replace the complete 11-item row.
+            // Read the document in DOM order starting immediately after the
+            // "Güncel Bölümler" heading, and stop at the next page-level
+            // section. This avoids accidentally choosing a nested 3-card
+            // carousel as the complete section.
+            val allElements = document.getAllElements()
+            val headingIndex = allElements.indexOfFirst { it === currentHeading }
+
+            if (headingIndex >= 0) {
+                val sectionLinks = ArrayList<Element>()
+                for (index in (headingIndex + 1) until allElements.size) {
+                    val element = allElements[index]
+                    val tag = element.tagName().lowercase()
+
+                    // Episode-card titles are commonly h3/h4; only h1/h2
+                    // mark the next top-level section.
+                    if (tag == "h1" || tag == "h2") break
+                    if (tag != "a" || !element.hasAttr("href")) continue
+
+                    val href = normalizeUrl(element.attr("href"), baseUrl)
+                    if (isEpisodeUrl(href) && !isInsideHardExcludedSection(element)) {
+                        sectionLinks.add(element)
+                    }
+                }
+
+                val sectionCount = sectionLinks
+                    .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
+                    .distinct()
+                    .size
+
+                if (sectionCount > 0) {
+                    bestLinks = sectionLinks
+                    bestCount = sectionCount
+                }
+            }
+
+            // Fallback for site revisions whose episode cards are rendered
+            // outside the heading's DOM section. Prefer a larger valid result
+            // set, never a smaller nested group.
             for (ancestor in currentHeading.parents()) {
-                // h3/h4 tags are commonly used for each episode card's
-                // title; they must not make us discard the entire section.
-                // Stop only when we cross into another page-level section.
                 val otherHeading = ancestor.select("h1,h2")
                     .any { it !== currentHeading }
                 if (otherHeading) continue
@@ -782,8 +814,8 @@ class DiziPal : MainAPI() {
             }
         }
 
-        // Fallback for revisions that omit an h2 but keep the episode links
-        // in HTML. Deliberately do not include movie/series cards or trend links.
+        // Last fallback for revisions that omit the section heading but keep
+        // episode links in HTML. Do not include movie/series cards or Trend.
         if (bestLinks.isEmpty()) {
             val source = document.selectFirst("main, #main, #content, #primary, .site-main, .main-content")
                 ?: document.body()
