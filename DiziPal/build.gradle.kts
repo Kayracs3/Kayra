@@ -1,4 +1,4 @@
-version = 10
+version = 11
 cloudstream {
     description = "Dizipal dizi ve film sağlayıcısı"
     authors = listOf("Kayracs3")
