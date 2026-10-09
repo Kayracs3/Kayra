@@ -918,16 +918,37 @@ class DiziPal : MainAPI() {
         targetUrl: String,
         baseUrl: String,
     ): String? {
+        val targetPath = canonicalContentPath(normalizeUrl(targetUrl, baseUrl))
+
         for (ancestor in link.parents()) {
+            // The cover and title are often separate links inside the same
+            // card. Prefer an image explicitly linked to this exact series or
+            // movie; this works even when the card also contains badges/logos.
+            val matchingLinks = ancestor.select("a[href]").filter { candidate ->
+                val candidateUrl = normalizeUrl(candidate.attr("href"), baseUrl)
+                isCatalogItemUrl(candidateUrl) &&
+                    canonicalContentPath(candidateUrl) == targetPath
+            }
+            for (candidate in matchingLinks) {
+                val linkedPoster = posterFromElement(candidate, baseUrl)
+                    ?.takeIf(::isLikelyPosterUrl)
+                if (!linkedPoster.isNullOrBlank()) return linkedPoster
+            }
+
+            // Fallback for cards that use an unlinked background image. Only
+            // accept it when this small card points to one catalog item and
+            // has one unambiguous image, so a neighbouring Trend poster cannot
+            // be borrowed.
             val contentTargets = ancestor.select("a[href]")
                 .mapNotNull { candidate ->
                     normalizeUrl(candidate.attr("href"), baseUrl)
-                        .takeIf { isContentTargetUrl(it) }
+                        .takeIf { isCatalogItemUrl(it) }
                 }
-                .toSet()
+                .distinctBy { canonicalContentPath(it) }
 
-            // Do not borrow an image from a wrapper containing other shows.
-            if (contentTargets.size != 1 || !contentTargets.contains(targetUrl)) {
+            if (contentTargets.size != 1 ||
+                canonicalContentPath(contentTargets.first()) != targetPath
+            ) {
                 continue
             }
 
@@ -935,7 +956,7 @@ class DiziPal : MainAPI() {
                 .mapNotNull { candidate ->
                     posterRawFromElement(candidate)
                         ?.let { normalizeUrl(it, baseUrl) }
-                        ?.takeIf { it.startsWith("http", true) }
+                        ?.takeIf { isLikelyPosterUrl(it) }
                 }
                 .toSet()
 
@@ -1087,23 +1108,42 @@ class DiziPal : MainAPI() {
 
     private fun isDetailPosterContext(element: Element, pageUrl: String): Boolean {
         var current: Element? = element
+        val excludedSection = Regex(
+            "(?i)(trend|trending|popular|populer|recommend|related|carousel|swiper|slick|owl|sidebar|footer)"
+        )
+        val pageBoundary = Regex(
+            "(?i)(site-main|site-content|content-area|main-content|page-content|archive-content|primary-content|entry-content)"
+        )
+
         repeat(8) {
             val node = current ?: return true
+            val classesAndId = node.attr("class") + " " + node.id()
 
-            // Jsoup Element.select() does not include the element itself. Check
-            // an enclosing <a href=...> directly; this was the missed case
-            // that allowed a Trend image to pass as the current show's poster.
+            // Reject a poster inside an identified Trend/recommendation card.
+            if (excludedSection.containsMatchIn(classesAndId)) return false
+
+            // Detail pages often include their season/episode links alongside
+            // the real cover. Stop before scanning the whole page, where those
+            // links (and recommendations) would incorrectly invalidate it.
+            if (node.tagName().lowercase() in setOf("main", "body", "html", "footer") ||
+                pageBoundary.containsMatchIn(classesAndId)
+            ) return true
+
+            // Jsoup Element.select() excludes the current element itself.
+            // Check an enclosing anchor directly so a linked Trend image fails.
             if (node.tagName().equals("a", true) && node.hasAttr("href")) {
                 val target = normalizeUrl(node.attr("href"), pageUrl)
-                if (isContentTargetUrl(target) && !sameContentUrl(target, pageUrl)) {
+                if (isCatalogItemUrl(target) && !sameContentUrl(target, pageUrl)) {
                     return false
                 }
             }
 
+            // Only other series/movie links can invalidate a detail poster.
+            // Episode links on the current series page are expected and safe.
             val targets = node.select("a[href]")
                 .mapNotNull { link ->
                     normalizeUrl(link.attr("href"), pageUrl)
-                        .takeIf { isContentTargetUrl(it) }
+                        .takeIf { isCatalogItemUrl(it) }
                 }
                 .distinctBy { canonicalContentPath(it) }
 
