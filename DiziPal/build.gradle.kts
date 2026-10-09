@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "Dizipal dizi ve film sağlayıcısı"
@@ -6,7 +6,7 @@ cloudstream {
     status = 1
     tvTypes = listOf("TvSeries", "Movie")
     language = "tr"
-    iconUrl = "https://dizipal1586.com/favicon.ico"
+    iconUrl = "https://dizipal1588.com/favicon.ico"
 }
 
 android {
