@@ -882,8 +882,23 @@ class DiziPal : MainAPI() {
 
         for (selector in selectors) {
             for (element in document.select(selector)) {
-                if (!isPosterLabelCompatible(element, title)) continue
-                posterFromElement(element, baseUrl)
+                val image = if (
+                    element.tagName().equals("img", true) ||
+                    element.tagName().equals("source", true) ||
+                    !posterRawFromElement(element).isNullOrBlank()
+                ) {
+                    element
+                } else {
+                    element.select(posterImageSelector()).firstOrNull { candidate ->
+                        posterRawFromElement(candidate) != null
+                    }
+                } ?: continue
+
+                // Validate the actual image node, not just its wrapper. The
+                // wrapper normally has no alt/title and could hide a Trending
+                // poster labelled with a different show's name.
+                if (!isPosterLabelCompatible(image, title)) continue
+                posterFromElement(image, baseUrl)
                     ?.takeIf(::isLikelyPosterUrl)
                     ?.let { return it }
             }
