@@ -35,8 +35,14 @@ jobs:
           set -uo pipefail
           mkdir -p domain-health
 
-          python doctor/http_health.py --root . --output domain-health/http-health.json
-          CODE=$?
+          # Health failures are diagnostic in this helper workflow. Do not
+          # let the checker’s expected exit code 1 stop the report step.
+          if python doctor/http_health.py --root . --output domain-health/http-health.json; then
+            CODE=0
+          else
+            CODE=$?
+            echo "HTTP sağlık kontrolünde erişilemeyen/korunan siteler var; rapor yine de üretilecek."
+          fi
 
           if [ ! -f domain-health/http-health.json ]; then
             echo "Sağlık kontrolü çıktı dosyası üretmedi."
