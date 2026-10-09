@@ -463,12 +463,11 @@ class DiziPal : MainAPI() {
         baseUrl: String,
     ): List<Episode> {
         val result = ArrayList<Episode>()
-
-        // Group every anchor for the same canonical episode URL first.
-        // Many site themes render the thumbnail and episode title as sibling
-        // <a> elements. Processing only the first one made the result depend
-        // on markup order and could borrow a neighbouring episode's image.
         val linksByEpisode = LinkedHashMap<String, MutableList<Element>>()
+
+        // Collect all visible links before filtering by episode numbering.
+        // Some cards expose season/episode text on a sibling link rather than
+        // on the title link, so grouping by canonical URL is important.
         document.select("a[href]").forEach { link ->
             val href = normalizeUrl(link.attr("href"), baseUrl)
             if (!isEpisodeUrl(href)) return@forEach
@@ -478,12 +477,12 @@ class DiziPal : MainAPI() {
         }
 
         val seen = HashSet<String>()
-        linksByEpisode.values.forEach { links ->
+        linksByEpisode.values.forEachIndexed { index, links ->
             val href = normalizeUrl(links.first().attr("href"), baseUrl)
             val key = canonicalContentPath(href)
-            if (!seen.add(key)) return@forEach
+            if (!seen.add(key)) return@forEachIndexed
 
-            val context = buildString {
+            val linkContext = buildString {
                 links.forEach { link ->
                     append(' ')
                     append(link.text())
@@ -498,13 +497,25 @@ class DiziPal : MainAPI() {
                 append(href)
             }
 
+            // Use a card's text for parsing numbers, but only if the card
+            // contains links to this one episode. This avoids reading details
+            // from neighbouring episode cards.
+            val cardContext = episodeCardContext(links.first(), href, baseUrl)
+            val context = "$linkContext $cardContext"
             val numbers = episodeNumbersFrom(context)
-                ?: return@forEach
 
-            // Only use artwork inside a link that itself points to this exact
-            // episode. Never inspect a broad ancestor: it may contain another
-            // episode's poster or a carousel image. The stable series poster
-            // is the fallback when the episode has no directly linked image.
+            // Do not drop a valid /bolum/ URL simply because the website's
+            // markup omits "Sezon/Bölüm" from its text. This was why only a
+            // few of the site's episode cards could appear at a time.
+            val episodeName = if (numbers != null) {
+                "Bölüm " + numbers.second
+            } else {
+                episodeNameFallback(links, cardContext, href, index + 1)
+            }
+
+            // Only use an image inside an anchor for this exact episode URL.
+            // Never borrow the first image from a parent that may contain
+            // several episode cards.
             val episodePoster = links.asSequence()
                 .mapNotNull { link ->
                     posterFromElement(link, baseUrl)
@@ -517,44 +528,162 @@ class DiziPal : MainAPI() {
                 ?: poster
 
             result += newEpisode(href) {
-                name = "Bölüm " + numbers.second
-                season = numbers.first
-                episode = numbers.second
+                name = episodeName
+                if (numbers != null) {
+                    season = numbers.first
+                    episode = numbers.second
+                }
                 posterUrl = episodePoster
             }
         }
 
-        // Some episodes are only listed in scripts/templates and have no
-        // visible card image. Keep them, but use only the stable series cover.
+        // Also inspect script/template data. The previous pattern only caught
+        // absolute URLs; sites may store these as relative "/bolum/..." paths.
         val html = document.html().decodeEscapes()
-        Regex(
-            """(?i)(?:https?:)?//[^"'<>\\s]+/bolum/[^"'<>\\s]+"""
-        ).findAll(html).forEach { match ->
-            val href = normalizeUrl(match.value, baseUrl)
-            if (!isEpisodeUrl(href)) return@forEach
-
-            val key = canonicalContentPath(href)
-            if (!seen.add(key)) return@forEach
-
-            val numbers = episodeNumbersFrom(href)
-                ?: return@forEach
-
-            result += newEpisode(href) {
-                name = "Bölüm " + numbers.second
-                season = numbers.first
-                episode = numbers.second
-                posterUrl = poster
-            }
+        val absoluteEpisodeUrl = Regex(
+            """(?i)(?:https?:)?//[^"'<>\\s]+/bolum/[^"'<>\\s"'?&,#]+"""
+        )
+        for (match in absoluteEpisodeUrl.findAll(html)) {
+            addScriptEpisode(match.value, baseUrl, poster, seen, result)
         }
 
-        return result
-            .distinctBy {
-                canonicalContentPath(it.data)
-            }
-            .sortedWith(
-                compareBy<Episode> { it.season ?: 0 }
-                    .thenBy { it.episode ?: 0 }
+        val relativeEpisodeUrl = Regex(
+            """(?i)(?<![A-Za-z0-9])(/bolum/[^"'<>\\s"'?&,#]+)"""
+        )
+        for (match in relativeEpisodeUrl.findAll(html)) {
+            addScriptEpisode(
+                match.groupValues.getOrNull(1).orEmpty(),
+                baseUrl,
+                poster,
+                seen,
+                result,
             )
+        }
+
+        val finalEpisodes = result
+            .distinctBy { canonicalContentPath(it.data) }
+            .sortedWith(
+                compareBy<Episode> { it.season ?: Int.MAX_VALUE }
+                    .thenBy { it.episode ?: Int.MAX_VALUE }
+                    .thenBy { it.name.orEmpty() }
+            )
+
+        Log.d(
+            "DiziPal",
+            "Bölüm ayrıştırma: " + finalEpisodes.size +
+                " bölüm bulundu; " +
+                finalEpisodes.count { !it.posterUrl.isNullOrBlank() } +
+                " bölümde afiş var",
+        )
+        return finalEpisodes
+    }
+
+    private fun episodeCardContext(
+        link: Element,
+        episodeUrl: String,
+        baseUrl: String,
+    ): String {
+        val targetPath = canonicalContentPath(normalizeUrl(episodeUrl, baseUrl))
+        var current: Element? = link.parent()
+
+        repeat(6) {
+            val card = current ?: return ""
+            val episodeTargets = card.select("a[href]")
+                .mapNotNull { candidate ->
+                    normalizeUrl(candidate.attr("href"), baseUrl)
+                        .takeIf { isEpisodeUrl(it) }
+                }
+                .distinctBy { canonicalContentPath(it) }
+
+            if (episodeTargets.size == 1 &&
+                canonicalContentPath(episodeTargets.first()) == targetPath
+            ) {
+                val imageLabels = card.select("img[alt], img[title], [aria-label], [title]")
+                    .map { element ->
+                        element.attr("alt") + " " +
+                            element.attr("title") + " " +
+                            element.attr("aria-label")
+                    }
+                    .joinToString(" ")
+
+                return card.text() + " " + imageLabels
+            }
+
+            current = card.parent()
+        }
+        return ""
+    }
+
+    private fun episodeNameFallback(
+        links: List<Element>,
+        cardContext: String,
+        episodeUrl: String,
+        fallbackNumber: Int,
+    ): String {
+        val ignored = setOf(
+            "izle", "bölümü izle", "bolumu izle", "oynat", "fragman",
+            "watch", "play", "poster", "afiş", "afis",
+        )
+        val candidates = buildList {
+            links.forEach { link ->
+                add(link.attr("title"))
+                add(link.attr("aria-label"))
+                add(link.selectFirst("img")?.attr("alt").orEmpty())
+                add(link.text())
+            }
+            add(cardContext)
+        }.map { cleanCardTitle(it).trim() }
+            .filter { it.isNotBlank() && it.lowercase() !in ignored }
+
+        candidates.firstOrNull {
+            Regex("""(?i)(sezon|season|bölüm|bolum|episode)\s*\d+""")
+                .containsMatchIn(it)
+        }?.let { return it }
+
+        candidates.firstOrNull { it.length in 4..100 }
+            ?.let { return it }
+
+        val slug = runCatching {
+            URI(episodeUrl).path.orEmpty()
+                .substringAfterLast('/')
+                .replace('-', ' ')
+                .replace('_', ' ')
+                .replace(Regex("""(?i)\b(bolum|episode|sezon|season)\b"""), " ")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+        }.getOrDefault("")
+
+        return slug.takeIf { it.isNotBlank() } ?: "Bölüm $fallbackNumber"
+    }
+
+    private fun addScriptEpisode(
+        rawUrl: String,
+        baseUrl: String,
+        poster: String?,
+        seen: MutableSet<String>,
+        result: MutableList<Episode>,
+    ) {
+        val href = normalizeUrl(rawUrl, baseUrl)
+        if (!isEpisodeUrl(href)) return
+
+        val key = canonicalContentPath(href)
+        if (!seen.add(key)) return
+
+        // Script-only links may not have card titles or images. Preserve every
+        // unique episode route and use the series poster as a safe fallback.
+        val numbers = episodeNumbersFrom(href)
+        result += newEpisode(href) {
+            name = if (numbers != null) {
+                "Bölüm " + numbers.second
+            } else {
+                episodeNameFallback(emptyList(), "", href, result.size + 1)
+            }
+            if (numbers != null) {
+                season = numbers.first
+                episode = numbers.second
+            }
+            posterUrl = poster
+        }
     }
 
     private fun parseListing(
