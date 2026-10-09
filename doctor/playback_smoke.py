@@ -129,29 +129,54 @@ def remote_plugin_listing():
 
 
 def clear_remote_plugins():
-    adb("shell", "mkdir", "-p", REMOTE_PLUGIN_DIR, check=False, timeout=30)
+    adb("shell", "mkdir", "-p", REMOTE_PLUGIN_DIR, check=True, timeout=30)
 
-    # Android's shared-storage shell implementation can return a non-zero
-    # status for unmatched wildcards. Iterate files and test existence first.
-    # This also keeps the exact deletion error in the Actions log if access is
-    # denied instead of masking it behind a generic CalledProcessError.
-    command = (
-        "for f in "
-        + REMOTE_PLUGIN_DIR
-        + "/*.cs3 "
-        + REMOTE_PLUGIN_DIR
-        + "/*.zip; do "
-        + '[ -f "$f" ] || continue; '
-        + 'if ! rm -f "$f"; then echo "cleanup-delete-failed:$f" >&2; exit 1; fi; '
-        + "done; echo cleanup-ok"
-    )
+    # Avoid nested remote-shell quoting: adb shell joins arguments before
+    # Android's shell parses them, which breaks a quoted "sh -c for ... do"
+    # loop. List files via ADB and delete each plugin archive separately.
     last_error = None
     for attempt in range(3):
         try:
-            output = adb("shell", "sh", "-c", command, check=True, timeout=45)
-            print(f"Uzak plugin temizliği: {output.strip()}", flush=True)
+            listing = adb(
+                "shell", "ls", "-1", REMOTE_PLUGIN_DIR,
+                check=True, timeout=20
+            )
+            names = [
+                line.strip()
+                for line in listing.replace("\\r", "").splitlines()
+                if line.strip().endswith((".cs3", ".zip"))
+                and line.strip() not in (".", "..")
+                and "/" not in line.strip()
+            ]
+
+            for name in names:
+                adb(
+                    "shell", "rm", "-f", f"{REMOTE_PLUGIN_DIR}/{name}",
+                    check=True, timeout=20
+                )
+
+            # Verify cleanup rather than assuming a successful rm command.
+            remaining_listing = adb(
+                "shell", "ls", "-1", REMOTE_PLUGIN_DIR,
+                check=True, timeout=20
+            )
+            remaining = [
+                line.strip()
+                for line in remaining_listing.replace("\\r", "").splitlines()
+                if line.strip().endswith((".cs3", ".zip"))
+                and "/" not in line.strip()
+            ]
+            if remaining:
+                raise RuntimeError(
+                    "Uzak plugin dosyaları silinemedi: " + ", ".join(remaining)
+                )
+
+            print(
+                f"Uzak plugin temizliği başarılı; silinen dosya sayısı: {len(names)}",
+                flush=True,
+            )
             return
-        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, RuntimeError) as exc:
             last_error = exc
             diagnostic = getattr(exc, "stdout", None) or getattr(exc, "output", None) or ""
             if isinstance(diagnostic, bytes):
@@ -170,7 +195,6 @@ def clear_remote_plugins():
                 time.sleep(2)
 
     raise RuntimeError(f"Uzak plugin klasörü 3 denemede temizlenemedi: {last_error}")
-
 
 def push_only_plugin(package, plugin_path):
     clear_remote_plugins()
