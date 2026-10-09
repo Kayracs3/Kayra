@@ -755,49 +755,11 @@ class DiziPal : MainAPI() {
         var bestCount = 0
 
         if (currentHeading != null) {
-            // Read the document in DOM order starting immediately after the
-            // "Güncel Bölümler" heading, and stop at the next page-level
-            // section. This avoids accidentally choosing a nested 3-card
-            // carousel as the complete section.
-            val allElements = document.getAllElements()
-            val headingIndex = allElements.indexOfFirst { it === currentHeading }
-
-            if (headingIndex >= 0) {
-                val sectionLinks = ArrayList<Element>()
-                for (index in (headingIndex + 1) until allElements.size) {
-                    val element = allElements[index]
-                    val tag = element.tagName().lowercase()
-
-                    // Episode-card titles are commonly h3/h4; only h1/h2
-                    // mark the next top-level section.
-                    if (tag == "h1" || tag == "h2") break
-                    if (tag != "a" || !element.hasAttr("href")) continue
-
-                    val href = normalizeUrl(element.attr("href"), baseUrl)
-                    if (isEpisodeUrl(href) && !isInsideHardExcludedSection(element)) {
-                        sectionLinks.add(element)
-                    }
-                }
-
-                val sectionCount = sectionLinks
-                    .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
-                    .distinct()
-                    .size
-
-                if (sectionCount > 0) {
-                    bestLinks = sectionLinks
-                    bestCount = sectionCount
-                }
-            }
-
-            // Fallback for site revisions whose episode cards are rendered
-            // outside the heading's DOM section. Prefer a larger valid result
-            // set, never a smaller nested group.
+            // Look at each ancestor, including containers that also contain
+            // h2/h3 card titles. Card headings are not section boundaries.
+            // The real episode strip typically contains 11-25 unique links;
+            // a 3-card nested carousel must not win over its larger parent.
             for (ancestor in currentHeading.parents()) {
-                val otherHeading = ancestor.select("h1,h2")
-                    .any { it !== currentHeading }
-                if (otherHeading) continue
-
                 val candidates = ancestor.select("a[href]").filter { link ->
                     val href = normalizeUrl(link.attr("href"), baseUrl)
                     isEpisodeUrl(href) && !isInsideHardExcludedSection(link)
@@ -807,21 +769,76 @@ class DiziPal : MainAPI() {
                     .distinct()
                     .size
 
-                if (count in 1..100 && count > bestCount) {
+                if (count in 11..40 && count > bestCount) {
                     bestLinks = candidates
                     bestCount = count
                 }
             }
+
+            // Some site revisions wrap the heading separately from the list.
+            // Scan forward until a known major homepage section starts. Do not
+            // stop at generic h2 tags because those may be episode-card titles.
+            if (bestCount < 11) {
+                val allElements = document.getAllElements()
+                val headingIndex = allElements.indexOfFirst { it === currentHeading }
+                if (headingIndex >= 0) {
+                    val sectionLinks = ArrayList<Element>()
+                    for (index in (headingIndex + 1) until allElements.size) {
+                        val element = allElements[index]
+                        val tag = element.tagName().lowercase()
+
+                        if (tag in setOf("h1", "h2", "h3", "h4")) {
+                            val headingText = normalizeTitleForMatch(element.text())
+                            val isMajorBoundary = listOf(
+                                "trend filmler",
+                                "son eklenen filmler",
+                                "en cok izlenen diziler",
+                                "en cok izlenen filmler",
+                                "yabanci dizi izle",
+                                "hd film izle",
+                                "tum filmler",
+                                "dizi arsivi",
+                            ).any { headingText.contains(it) }
+
+                            if (isMajorBoundary) break
+                        }
+
+                        if (tag != "a" || !element.hasAttr("href")) continue
+                        val href = normalizeUrl(element.attr("href"), baseUrl)
+                        if (isEpisodeUrl(href) && !isInsideHardExcludedSection(element)) {
+                            sectionLinks.add(element)
+                        }
+                    }
+
+                    val count = sectionLinks
+                        .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
+                        .distinct()
+                        .size
+
+                    if (count > bestCount) {
+                        bestLinks = sectionLinks
+                        bestCount = count
+                    }
+                }
+            }
         }
 
-        // Last fallback for revisions that omit the section heading but keep
-        // episode links in HTML. Do not include movie/series cards or Trend.
-        if (bestLinks.isEmpty()) {
-            val source = document.selectFirst("main, #main, #content, #primary, .site-main, .main-content")
-                ?: document.body()
-            bestLinks = source.select("a[href]").filter { link ->
+        // Last-resort fallback: retain all real episode links from the page
+        // instead of returning just a small nested carousel. Duplicate URLs are
+        // removed below, and links in Trend/sidebar/footer sections are rejected.
+        if (bestCount < 11 || bestLinks.isEmpty()) {
+            val allEpisodeLinks = document.select("a[href]").filter { link ->
                 val href = normalizeUrl(link.attr("href"), baseUrl)
                 isEpisodeUrl(href) && !isInsideHardExcludedSection(link)
+            }
+            val allCount = allEpisodeLinks
+                .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
+                .distinct()
+                .size
+
+            if (allCount > bestCount) {
+                bestLinks = allEpisodeLinks
+                bestCount = allCount
             }
         }
 
@@ -859,7 +876,8 @@ class DiziPal : MainAPI() {
         Log.d(
             "DiziPal",
             "Güncel Bölümler: ${results.size} kayıt, " +
-                "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
+                "${results.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
+                "seçilen bağlantı: $bestCount",
         )
         return results
     }
