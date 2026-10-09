@@ -686,6 +686,53 @@ class DiziPal : MainAPI() {
         }
     }
 
+    private fun episodeListingTitle(
+        link: Element,
+        episodeUrl: String,
+        baseUrl: String,
+        card: Element?,
+    ): String {
+        val cardContext = episodeCardContext(link, episodeUrl, baseUrl)
+        val candidates = listOf(
+            link.selectFirst("h1,h2,h3,h4,.title,.name")?.text(),
+            link.attr("title"),
+            link.attr("aria-label"),
+            link.text(),
+            link.selectFirst("img")?.attr("alt"),
+            card?.selectFirst(".title,.name,h1,h2,h3,h4")?.text(),
+            card?.text(),
+            cardContext,
+        ).filterNot { it.isNullOrBlank() }.map { it.orEmpty().trim() }
+
+        val raw = candidates.firstOrNull {
+            Regex("""(?i)(?:sezon|season|bölüm|bolum|episode)\s*\d+""")
+                .containsMatchIn(it)
+        } ?: candidates.firstOrNull().orEmpty()
+
+        var title = raw
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        title = title.replace(
+            Regex("""(?i)\s+\d+\s+(?:saniye|dakika|saat|gün|gun|hafta|ay|yıl|yil)\s+önce\s*$"""),
+            "",
+        ).trim()
+        title = title.replace(
+            Regex("""(?i)^\s*\d+\s+(?=.*(?:sezon|season|bölüm|bolum|episode))"""),
+            "",
+        ).trim()
+        title = title.replace(Regex("""(?i)^(?:dublaj|altyazı)\s+"""), "").trim()
+
+        if (title.isNotBlank()) return title
+
+        return runCatching {
+            URI(episodeUrl).path.orEmpty()
+                .substringAfterLast('/')
+                .replace('-', ' ')
+                .replace('_', ' ')
+                .trim()
+        }.getOrDefault("").ifBlank { "Bölüm" }
+    }
+
     private fun parseListing(
         document: Document,
         baseUrl: String,
@@ -698,9 +745,15 @@ class DiziPal : MainAPI() {
         var posterCount = 0
         anchors.forEach { link ->
             val href = normalizeUrl(link.attr("href"), baseUrl)
-            if (href.isBlank() || !isCatalogItemUrl(href)) return@forEach
+            val isEpisode = isEpisodeUrl(href)
+            if (href.isBlank() || (!isCatalogItemUrl(href) && !isEpisode)) return@forEach
             if (trendUrls.any { sameContentUrl(it, href) }) return@forEach
-            if (isInsideExcludedSection(link, baseUrl)) return@forEach
+            // Episode cards are often placed in a Swiper/carousel. Keep those
+            // when they are genuine episode entries, but still reject Trend,
+            // related, sidebar, and footer sections.
+            if (if (isEpisode) isInsideHardExcludedSection(link) else isInsideExcludedSection(link, baseUrl)) {
+                return@forEach
+            }
 
             val lower = href.lowercase()
             if (lower.contains("/arama-yap") ||
@@ -712,7 +765,7 @@ class DiziPal : MainAPI() {
 
             val isSeries = lower.contains("/series/")
             val isMovie = lower.contains("/movies/") || lower.contains("/movie/")
-            if (!isSeries && !isMovie) return@forEach
+            if (!isSeries && !isMovie && !isEpisode) return@forEach
 
             // First inspect the exact detail link. Only if it has no image,
             // allow borrowing a single image from its own one-title card.
@@ -744,16 +797,20 @@ class DiziPal : MainAPI() {
                 }
             }
 
-            val title = cleanCardTitle(
-                listOf(
-                    link.selectFirst("img")?.attr("alt"),
-                    link.selectFirst("h1,h2,h3,h4,.title,.name")?.text(),
-                    link.attr("title"),
-                    link.attr("aria-label"),
-                    link.text(),
-                    card?.selectFirst("[title]")?.attr("title"),
-                ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
-            )
+            val title = if (isEpisode) {
+                episodeListingTitle(link, href, baseUrl, card)
+            } else {
+                cleanCardTitle(
+                    listOf(
+                        link.selectFirst("img")?.attr("alt"),
+                        link.selectFirst("h1,h2,h3,h4,.title,.name")?.text(),
+                        link.attr("title"),
+                        link.attr("aria-label"),
+                        link.text(),
+                        card?.selectFirst("[title]")?.attr("title"),
+                    ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
+                )
+            }
             if (title.isBlank()) return@forEach
 
             val existing = resultsByUrl[href]
@@ -772,14 +829,14 @@ class DiziPal : MainAPI() {
                 listOf(link.text(), link.attr("title"), card?.text())
                     .joinToString(" ")
             )
-            val item: SearchResponse = if (isMovie) {
-                newMovieSearchResponse(title, href, TvType.Movie) {
+            val item: SearchResponse = when {
+                isMovie -> newMovieSearchResponse(title, href, TvType.Movie) {
                     posterUrl = poster
                     posterHeaders = posterRequestHeaders(baseUrl)
                     rating?.let { score = Score.from10(it) }
                 }
-            } else {
-                newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+
+                else -> newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
                     posterUrl = poster
                     posterHeaders = posterRequestHeaders(baseUrl)
                     rating?.let { score = Score.from10(it) }
@@ -818,6 +875,9 @@ class DiziPal : MainAPI() {
         // Use its nearest bounded results container, not every link in the
         // complete document (which also contains the Trending footer).
         if (resultsHeading != null) {
+            var bestCandidates: List<Element> = emptyList()
+            var bestCount = 0
+
             for (ancestor in resultsHeading.parents()) {
                 val hasOtherSection = ancestor.select("h1,h2,h3,h4,h5,h6").any { heading ->
                     heading !== resultsHeading && isExcludedSectionHeading(heading.text())
@@ -826,18 +886,26 @@ class DiziPal : MainAPI() {
 
                 val candidates = ancestor.select("a[href]").filter { link ->
                     val url = normalizeUrl(link.attr("href"), baseUrl)
-                    isCatalogItemUrl(url) &&
+                    isListingItemUrl(url) &&
                         trendUrls.none { sameContentUrl(it, url) } &&
-                        !isInsideExcludedSection(link, baseUrl)
+                        !shouldSkipListingLink(link, url, baseUrl)
                 }
                 val distinctCount = candidates
                     .map { normalizeUrl(it.attr("href"), baseUrl) }
                     .distinctBy { canonicalContentPath(it) }
                     .size
 
-                if (distinctCount in 3..120) return candidates
+                // Do not stop at the first 3-card carousel. Keep examining
+                // the same bounded section and use the ancestor with the
+                // largest number of unique content/episode links.
+                if (distinctCount in 3..120 && distinctCount > bestCount) {
+                    bestCandidates = candidates
+                    bestCount = distinctCount
+                }
                 if (distinctCount > 120) break
             }
+
+            if (bestCount >= 3) return bestCandidates
         }
 
         // Fallback: use the page's main content region when it exists.
@@ -848,9 +916,9 @@ class DiziPal : MainAPI() {
         val source = main?.select("a[href]") ?: document.select("a[href]")
         return source.filter { link ->
             val url = normalizeUrl(link.attr("href"), baseUrl)
-            isCatalogItemUrl(url) &&
+            isListingItemUrl(url) &&
                 trendUrls.none { sameContentUrl(it, url) } &&
-                !isInsideExcludedSection(link, baseUrl)
+                !shouldSkipListingLink(link, url, baseUrl)
         }
     }
 
@@ -869,7 +937,7 @@ class DiziPal : MainAPI() {
                 val urls = ancestor.select("a[href]")
                     .mapNotNull { link ->
                         normalizeUrl(link.attr("href"), baseUrl)
-                            .takeIf { isCatalogItemUrl(it) }
+                            .takeIf { isListingItemUrl(it) }
                     }
                     .distinctBy { canonicalContentPath(it) }
 
@@ -1401,6 +1469,38 @@ class DiziPal : MainAPI() {
             "[data-echo], [data-echo-lazy], [data-background], " +
             "[data-background-image], [data-background-src], [data-bg], " +
             "[data-bg-src], [data-srcset], [data-lazy-srcset], [style*=background]"
+
+    private fun isListingItemUrl(url: String): Boolean {
+        return isCatalogItemUrl(url) || isEpisodeUrl(url)
+    }
+
+    private fun shouldSkipListingLink(
+        link: Element,
+        url: String,
+        baseUrl: String,
+    ): Boolean {
+        return if (isEpisodeUrl(url)) {
+            isInsideHardExcludedSection(link)
+        } else {
+            isInsideExcludedSection(link, baseUrl)
+        }
+    }
+
+    private fun isInsideHardExcludedSection(element: Element): Boolean {
+        val excluded = Regex(
+            "(?i)(trend|trending|popular|populer|sidebar|footer|recommend|related|" +
+                "breadcrumb|navbar|navigation|menu)"
+        )
+        var current: Element? = element
+        repeat(10) {
+            val node = current ?: return false
+            if (excluded.containsMatchIn(node.attr("class")) ||
+                excluded.containsMatchIn(node.id())
+            ) return true
+            current = node.parent()
+        }
+        return false
+    }
 
     private fun isCatalogItemUrl(url: String): Boolean {
         val path = runCatching { URI(url).path.orEmpty().lowercase() }
