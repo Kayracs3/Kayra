@@ -122,11 +122,11 @@
         "name": "Dizilla"
     },
     {
-        "iconUrl": "https://dizipal1586.com/favicon.ico",
-        "fileHash": "sha256-5494470cf85cb10f47b5a4c8441e39ab708ad1018aa70b9489f33b4fb9e66222",
+        "iconUrl": "https://dizipal1588.com/favicon.ico",
+        "fileHash": "sha256-aa22f2e1d6fb5fe47c9903361b0347660e2567f69f59ef26041004556ffc2b3b",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 54260,
+        "fileSize": 58025,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -136,7 +136,7 @@
             "TvSeries",
             "Movie"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "DiziPal",
         "description": "Dizipal dizi ve film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPal.cs3",
