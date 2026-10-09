@@ -752,10 +752,6 @@ class DiziPal : MainAPI() {
                 excludedClassOrId.containsMatchIn(node.id())
             ) return true
 
-            val hasTrendHeading = node.select("h1,h2,h3,h4,h5,h6")
-                .any { isTrendHeading(it.text()) }
-            if (hasTrendHeading) return true
-
             current = node.parent()
         }
         return false
