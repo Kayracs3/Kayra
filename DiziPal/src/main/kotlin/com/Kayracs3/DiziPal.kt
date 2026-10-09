@@ -457,6 +457,71 @@ class DiziPal : MainAPI() {
         }
     }
 
+    private fun episodePosterFromCard(
+        link: Element,
+        episodeUrl: String,
+        baseUrl: String,
+    ): String? {
+        val targetPath = canonicalContentPath(normalizeUrl(episodeUrl, baseUrl))
+
+        // Some themes put the thumbnail and episode title in separate anchors
+        // that point to the same episode URL.
+        val direct = posterFromElement(link, baseUrl)
+            ?.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+        if (!direct.isNullOrBlank()) return direct
+
+        var ancestor: Element? = link.parent()
+        repeat(7) {
+            val card = ancestor ?: return null
+
+            val sameEpisodeLinks = card.select("a[href]").filter { candidate ->
+                val candidateUrl = normalizeUrl(candidate.attr("href"), baseUrl)
+                isEpisodeUrl(candidateUrl) &&
+                    canonicalContentPath(candidateUrl) == targetPath
+            }
+
+            for (candidate in sameEpisodeLinks) {
+                val candidatePoster = posterFromElement(candidate, baseUrl)
+                    ?.takeIf {
+                        it.startsWith("http://", true) ||
+                            it.startsWith("https://", true)
+                    }
+                if (!candidatePoster.isNullOrBlank()) return candidatePoster
+            }
+
+            // Background thumbnails are sometimes placed on a div rather
+            // than an img. Borrow one only from a card that links to this one
+            // episode and has exactly one image URL.
+            val episodeTargets = card.select("a[href]")
+                .mapNotNull { candidate ->
+                    normalizeUrl(candidate.attr("href"), baseUrl)
+                        .takeIf { isEpisodeUrl(it) }
+                }
+                .distinctBy { canonicalContentPath(it) }
+
+            if (episodeTargets.size == 1 &&
+                canonicalContentPath(episodeTargets.first()) == targetPath
+            ) {
+                val imageUrls = card.select(posterImageSelector())
+                    .mapNotNull { image ->
+                        posterRawFromElement(image)
+                            ?.let { normalizeUrl(it, baseUrl) }
+                            ?.takeIf {
+                                it.startsWith("http://", true) ||
+                                    it.startsWith("https://", true)
+                            }
+                    }
+                    .distinct()
+
+                if (imageUrls.size == 1) return imageUrls.first()
+            }
+
+            ancestor = card.parent()
+        }
+
+        return null
+    }
+
     private fun parseEpisodes(
         document: Document,
         poster: String?,
@@ -480,11 +545,19 @@ class DiziPal : MainAPI() {
             val numbers = episodeNumbersFrom(context)
                 ?: return@forEach
 
+            val episodePoster = episodePosterFromCard(
+                link,
+                href,
+                baseUrl,
+            ) ?: poster
+
             result += newEpisode(href) {
                 name = "Bölüm " + numbers.second
                 season = numbers.first
                 episode = numbers.second
-                posterUrl = poster
+                // Prefer the episode's own thumbnail; use the series cover
+                // only if the site's episode card has no image.
+                posterUrl = episodePoster
             }
         }
 
@@ -849,18 +922,30 @@ class DiziPal : MainAPI() {
             image.attr("data-lazy-src"),
             image.attr("data-lazy"),
             image.attr("data-lazyload"),
+            image.attr("data-lazyload-src"),
             image.attr("data-src-original"),
             image.attr("data-original"),
             image.attr("data-original-src"),
+            image.attr("data-original-url"),
             image.attr("data-image"),
             image.attr("data-image-src"),
+            image.attr("data-image-original"),
             image.attr("data-img"),
+            image.attr("data-img-url"),
             image.attr("data-thumb"),
+            image.attr("data-thumb-url"),
             image.attr("data-poster"),
             image.attr("data-poster-url"),
+            image.attr("data-poster-src"),
+            image.attr("data-flickity-lazyload"),
+            image.attr("data-flickity-lazyload-src"),
+            image.attr("data-echo"),
+            image.attr("data-echo-lazy"),
             image.attr("data-background"),
             image.attr("data-background-image"),
+            image.attr("data-background-src"),
             image.attr("data-bg"),
+            image.attr("data-bg-src"),
             image.attr("data-url"),
             image.attr("data-cfsrc"),
             image.attr("data-cf-src"),
@@ -1214,8 +1299,16 @@ class DiziPal : MainAPI() {
     }
 
     private fun posterImageSelector(): String =
-        "img, picture source, [data-background], [data-background-image], " +
-            "[data-bg], [style*=background]"
+        "img, picture source, " +
+            "[data-src], [data-lazy-src], [data-lazyload], [data-lazyload-src], " +
+            "[data-original], [data-original-src], [data-original-url], " +
+            "[data-image], [data-image-src], [data-image-original], " +
+            "[data-img], [data-img-url], [data-thumb], [data-thumb-url], " +
+            "[data-poster], [data-poster-url], [data-poster-src], " +
+            "[data-flickity-lazyload], [data-flickity-lazyload-src], " +
+            "[data-echo], [data-echo-lazy], [data-background], " +
+            "[data-background-image], [data-background-src], [data-bg], " +
+            "[data-bg-src], [data-srcset], [data-lazy-srcset], [style*=background]"
 
     private fun isCatalogItemUrl(url: String): Boolean {
         val path = runCatching { URI(url).path.orEmpty().lowercase() }
