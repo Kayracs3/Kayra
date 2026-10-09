@@ -20,7 +20,7 @@ import javax.crypto.spec.SecretKeySpec
 
 class DiziPal : MainAPI() {
 
-    override var mainUrl = "https://dizipal1587.com"
+    override var mainUrl = "https://dizipal1588.com"
     override var name = "DiziPal"
     override var lang = "tr"
     override val hasMainPage = true
@@ -160,6 +160,7 @@ class DiziPal : MainAPI() {
                 pageUrl,
             ) {
                 posterUrl = poster
+                posterHeaders = posterRequestHeaders(documentBase(document, pageUrl))
                 this.plot = plot
                 this.year = year
                 rating?.let { score = Score.from10(it) }
@@ -175,6 +176,7 @@ class DiziPal : MainAPI() {
             episodes,
         ) {
             posterUrl = poster
+            posterHeaders = posterRequestHeaders(documentBase(document, pageUrl))
             this.plot = plot
             this.year = year
             rating?.let { score = Score.from10(it) }
@@ -448,6 +450,7 @@ class DiziPal : MainAPI() {
             listOf(episode),
         ) {
             posterUrl = poster
+            posterHeaders = posterRequestHeaders(documentBase(document, url))
             plot = pagePlot(document)
             year = pageYear(document)
             pageRating(document)?.let { score = Score.from10(it) }
@@ -587,6 +590,7 @@ class DiziPal : MainAPI() {
                     TvType.Movie,
                 ) {
                     posterUrl = poster
+                    posterHeaders = posterRequestHeaders(baseUrl)
                     rating?.let { score = Score.from10(it) }
                 }
             } else {
@@ -596,6 +600,7 @@ class DiziPal : MainAPI() {
                     TvType.TvSeries,
                 ) {
                     posterUrl = poster
+                    posterHeaders = posterRequestHeaders(baseUrl)
                     rating?.let { score = Score.from10(it) }
                 }
             }
@@ -684,14 +689,25 @@ class DiziPal : MainAPI() {
         val candidates = listOf(
             image.attr("data-src"),
             image.attr("data-lazy-src"),
+            image.attr("data-lazy"),
+            image.attr("data-lazyload"),
+            image.attr("data-src-original"),
             image.attr("data-original"),
             image.attr("data-original-src"),
             image.attr("data-image"),
+            image.attr("data-image-src"),
+            image.attr("data-img"),
             image.attr("data-thumb"),
             image.attr("data-poster"),
+            image.attr("data-poster-url"),
             image.attr("data-background"),
+            image.attr("data-background-image"),
             image.attr("data-bg"),
+            image.attr("data-url"),
+            image.attr("data-cfsrc"),
+            image.attr("data-cf-src"),
             srcSetCandidate(image.attr("data-srcset")),
+            srcSetCandidate(image.attr("data-lazy-srcset")),
             image.attr("src"),
             srcSetCandidate(image.attr("srcset")),
             image.attr("content"),
@@ -704,7 +720,10 @@ class DiziPal : MainAPI() {
                 !value.startsWith("data:", true) &&
                 !value.equals("about:blank", true) &&
                 !value.contains("placeholder", true) &&
-                !value.contains("loading.gif", true)
+                !value.contains("loading.gif", true) &&
+                !value.contains("transparent.gif", true) &&
+                !value.contains("spacer.gif", true) &&
+                !value.contains("pixel.gif", true)
         }
     }
 
@@ -734,6 +753,16 @@ class DiziPal : MainAPI() {
             it.startsWith("http://", true) ||
                 it.startsWith("https://", true)
         }
+    }
+
+    private fun posterRequestHeaders(baseUrl: String = mainUrl): Map<String, String> {
+        val siteOrigin = originOf(baseUrl) ?: mainUrl
+        return mapOf(
+            "User-Agent" to USER_AGENT,
+            "Referer" to "$siteOrigin/",
+            "Origin" to siteOrigin,
+            "Accept" to "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        )
     }
 
     private fun posterOf(
