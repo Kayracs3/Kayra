@@ -131,18 +131,34 @@ def remote_plugin_listing():
 def clear_remote_plugins():
     adb("shell", "mkdir", "-p", REMOTE_PLUGIN_DIR, check=False, timeout=30)
 
-    # Use rm/globs rather than find: the emulator can stall on find over
-    # shared storage, which used to turn a cleanup into a false provider fail.
-    command = f"rm -f {REMOTE_PLUGIN_DIR}/*.cs3 {REMOTE_PLUGIN_DIR}/*.zip"
+    # Android's shared-storage shell implementation can return a non-zero
+    # status for unmatched wildcards. Iterate files and test existence first.
+    # This also keeps the exact deletion error in the Actions log if access is
+    # denied instead of masking it behind a generic CalledProcessError.
+    command = (
+        "for f in "
+        + REMOTE_PLUGIN_DIR
+        + "/*.cs3 "
+        + REMOTE_PLUGIN_DIR
+        + "/*.zip; do "
+        + '[ -f "$f" ] || continue; '
+        + 'if ! rm -f "$f"; then echo "cleanup-delete-failed:$f" >&2; exit 1; fi; '
+        + "done; echo cleanup-ok"
+    )
     last_error = None
     for attempt in range(3):
         try:
-            adb("shell", "sh", "-c", command, check=True, timeout=35)
+            output = adb("shell", "sh", "-c", command, check=True, timeout=45)
+            print(f"Uzak plugin temizliği: {output.strip()}", flush=True)
             return
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
             last_error = exc
+            diagnostic = getattr(exc, "stdout", None) or getattr(exc, "output", None) or ""
+            if isinstance(diagnostic, bytes):
+                diagnostic = diagnostic.decode("utf-8", errors="replace")
             print(
-                f"Uzak plugin temizleme denemesi {attempt + 1}/3 başarısız: {exc}",
+                f"Uzak plugin temizleme denemesi {attempt + 1}/3 başarısız: "
+                f"{exc}; çıktı={str(diagnostic)[-1500:]}",
                 flush=True,
             )
             if attempt < 2:
