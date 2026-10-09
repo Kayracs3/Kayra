@@ -601,10 +601,10 @@ class DiziPal : MainAPI() {
         // poster, fetch that exact series page as the last reliable fallback.
         val seriesTitle = title
             .replace(
-                Regex("""(?i)\\s*\\d+\\s*(?:\\.\\s*)?(?:sezon|season)\\s*\\d+\\s*(?:\\.\\s*)?(?:bölüm|bolum|episode).*?$"""),
+                Regex("""(?i)\s*\d+\s*(?:\.\s*)?(?:sezon|season)\s*\d+\s*(?:\.\s*)?(?:bölüm|bolum|episode).*?$"""),
                 "",
             )
-            .replace(Regex("""(?i)\\s*\\d+\\s*[x×]\\s*\\d+.*$"""), "")
+            .replace(Regex("""(?i)\s*\d+\s*[x×]\s*\d+.*$"""), "")
             .trim()
         val seriesTokens = posterMatchTokens(seriesTitle)
         val seriesPage = document.select("a[href]")
@@ -1820,7 +1820,7 @@ class DiziPal : MainAPI() {
                 token.length >= 3 &&
                     token !in stopWords &&
                     !token.all { it.isDigit() } &&
-                    !Regex("""(?i)^(?:s\\d+e\\d+|\\d+x\\d+)$""").matches(token)
+                    !Regex("""(?i)^(?:s\d+e\d+|\d+x\d+)$""").matches(token)
             }
             .toSet()
     }
