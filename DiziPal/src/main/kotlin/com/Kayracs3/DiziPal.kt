@@ -41,7 +41,6 @@ class DiziPal : MainAPI() {
     // Cache poster URLs discovered from individual episode pages. Failed lookups are
     // remembered too, so repeated home-page refreshes do not refetch the same page.
     private val episodePosterCache = LinkedHashMap<String, String>()
-    private val attemptedEpisodePosterLookups = HashSet<String>()
 
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Güncel Bölümler",
@@ -486,10 +485,12 @@ class DiziPal : MainAPI() {
                 return@forEach
             }
 
-            // Do not retry a failed URL on every refresh.
-            if (!attemptedEpisodePosterLookups.add(key)) return@forEach
+            // Cap fallback requests per refresh, but do not permanently remember
+            // failures: a timeout or temporary site error must be retryable.
+            if (requested >= 8) return@forEach
             requested++
 
+            Log.d("DiziPal", "Afiş yedeği deneniyor: ${item.url}")
             val poster = findPosterOnEpisodeDetailPage(item.url)
             if (!poster.isNullOrBlank()) {
                 episodePosterCache[key] = poster
@@ -530,8 +531,9 @@ class DiziPal : MainAPI() {
             ?.takeIf(::isLikelyPosterUrl)
             ?.let { return it }
 
-        // Some episode pages expose a reliable title-matched social image while
-        // the visible poster is rendered by a script or CSS class.
+        // On an exact /bolum/ page, its OpenGraph/Twitter image belongs to
+        // this episode's series. The CDN filename is often an opaque ID, so
+        // requiring the series title to appear in the URL incorrectly drops it.
         val metadataImages = document.select(
             "meta[property='og:image'], meta[name='og:image'], " +
                 "meta[name='twitter:image'], meta[property='twitter:image'], " +
@@ -542,8 +544,11 @@ class DiziPal : MainAPI() {
         }.distinct()
 
         metadataImages.firstOrNull { image ->
-            isLikelyPosterUrl(image) && posterUrlContainsTitle(image, title)
-        }?.let { return it }
+            isLikelyPosterUrl(image)
+        }?.let {
+            Log.d("DiziPal", "Afiş yedeği: bölüm meta görseli bulundu")
+            return it
+        }
 
         // The episode page frequently links to its parent series separately
         // from the episode URL. Select only a non-recommendation series link
@@ -583,10 +588,89 @@ class DiziPal : MainAPI() {
             Triple(score, poster, label)
         }
 
-        return seriesCandidates
+        val matchedSeries = seriesCandidates
             .filter { it.first >= 0.30 }
             .maxByOrNull { it.first }
             ?.second
+        if (!matchedSeries.isNullOrBlank()) {
+            Log.d("DiziPal", "Afiş yedeği: bölüm sayfasındaki dizi kartı bulundu")
+            return matchedSeries
+        }
+
+        // If the episode page links to its parent series but does not embed its
+        // poster, fetch that exact series page as the last reliable fallback.
+        val seriesTitle = title
+            .replace(
+                Regex("""(?i)\\s*\\d+\\s*(?:\\.\\s*)?(?:sezon|season)\\s*\\d+\\s*(?:\\.\\s*)?(?:bölüm|bolum|episode).*?$"""),
+                "",
+            )
+            .replace(Regex("""(?i)\\s*\\d+\\s*[x×]\\s*\\d+.*$"""), "")
+            .trim()
+        val seriesTokens = posterMatchTokens(seriesTitle)
+        val seriesPage = document.select("a[href]")
+            .mapNotNull { anchor ->
+                val target = normalizeUrl(anchor.attr("href"), baseUrl)
+                if (!isCatalogItemUrl(target) ||
+                    isInsideHardExcludedSection(anchor)
+                ) return@mapNotNull null
+
+                val label = listOf(
+                    anchor.text(),
+                    anchor.attr("title"),
+                    anchor.attr("aria-label"),
+                    anchor.selectFirst("img")?.attr("alt").orEmpty(),
+                    target.substringAfterLast('/').replace('-', ' '),
+                ).filter { it.isNotBlank() }.joinToString(" ")
+                val tokens = posterMatchTokens(label)
+                val score = if (seriesTokens.isEmpty()) 0.0 else {
+                    seriesTokens.intersect(tokens).size.toDouble() /
+                        seriesTokens.size.toDouble()
+                }
+                if (score < 0.50) return@mapNotNull null
+                score to target
+            }
+            .maxByOrNull { it.first }
+            ?.second
+
+        if (!seriesPage.isNullOrBlank()) {
+            val seriesResponse = runCatching {
+                app.get(
+                    seriesPage,
+                    headers = headers + ("Referer" to episodeUrl),
+                    referer = episodeUrl,
+                    timeout = 2500,
+                    allowRedirects = true,
+                )
+            }.getOrNull()
+            if (seriesResponse != null && seriesResponse.isSuccessful) {
+                val seriesDocument = seriesResponse.document
+                val seriesBase = documentBase(seriesDocument, seriesPage)
+                posterOf(seriesDocument)
+                    ?.takeIf(::isLikelyPosterUrl)
+                    ?.let {
+                        Log.d("DiziPal", "Afiş yedeği: dizi detay sayfasından bulundu")
+                        return it
+                    }
+
+                val imageFromSeries = seriesDocument.select(
+                    "meta[property='og:image'], meta[name='og:image'], " +
+                        "meta[name='twitter:image'], meta[property='twitter:image'], " +
+                        "[itemprop='image']"
+                ).mapNotNull { element ->
+                    val raw = element.attr("content")
+                        .ifBlank { element.attr("src") }
+                        .ifBlank { element.attr("data-src") }
+                    raw.takeIf { it.isNotBlank() }?.let { normalizeUrl(it, seriesBase) }
+                }.firstOrNull(::isLikelyPosterUrl)
+                if (!imageFromSeries.isNullOrBlank()) {
+                    Log.d("DiziPal", "Afiş yedeği: dizi meta görselinden bulundu")
+                    return imageFromSeries
+                }
+            }
+        }
+
+        Log.d("DiziPal", "Afiş yedeği sonuçsuz: $episodeUrl")
+        return null
     }
 
     private suspend fun loadEpisode(
