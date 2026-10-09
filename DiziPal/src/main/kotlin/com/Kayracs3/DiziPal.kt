@@ -457,119 +457,84 @@ class DiziPal : MainAPI() {
         }
     }
 
-    private fun episodePosterFromCard(
-        link: Element,
-        episodeUrl: String,
-        baseUrl: String,
-    ): String? {
-        val targetPath = canonicalContentPath(normalizeUrl(episodeUrl, baseUrl))
-
-        // Some themes put the thumbnail and episode title in separate anchors
-        // that point to the same episode URL.
-        val direct = posterFromElement(link, baseUrl)
-            ?.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
-        if (!direct.isNullOrBlank()) return direct
-
-        var ancestor: Element? = link.parent()
-        repeat(7) {
-            val card = ancestor ?: return null
-
-            val sameEpisodeLinks = card.select("a[href]").filter { candidate ->
-                val candidateUrl = normalizeUrl(candidate.attr("href"), baseUrl)
-                isEpisodeUrl(candidateUrl) &&
-                    canonicalContentPath(candidateUrl) == targetPath
-            }
-
-            for (candidate in sameEpisodeLinks) {
-                val candidatePoster = posterFromElement(candidate, baseUrl)
-                    ?.takeIf {
-                        it.startsWith("http://", true) ||
-                            it.startsWith("https://", true)
-                    }
-                if (!candidatePoster.isNullOrBlank()) return candidatePoster
-            }
-
-            // Background thumbnails are sometimes placed on a div rather
-            // than an img. Borrow one only from a card that links to this one
-            // episode and has exactly one image URL.
-            val episodeTargets = card.select("a[href]")
-                .mapNotNull { candidate ->
-                    normalizeUrl(candidate.attr("href"), baseUrl)
-                        .takeIf { isEpisodeUrl(it) }
-                }
-                .distinctBy { canonicalContentPath(it) }
-
-            if (episodeTargets.size == 1 &&
-                canonicalContentPath(episodeTargets.first()) == targetPath
-            ) {
-                val imageUrls = card.select(posterImageSelector())
-                    .mapNotNull { image ->
-                        posterRawFromElement(image)
-                            ?.let { normalizeUrl(it, baseUrl) }
-                            ?.takeIf {
-                                it.startsWith("http://", true) ||
-                                    it.startsWith("https://", true)
-                            }
-                    }
-                    .distinct()
-
-                if (imageUrls.size == 1) return imageUrls.first()
-            }
-
-            ancestor = card.parent()
-        }
-
-        return null
-    }
-
     private fun parseEpisodes(
         document: Document,
         poster: String?,
         baseUrl: String,
     ): List<Episode> {
         val result = ArrayList<Episode>()
-        val seen = HashSet<String>()
 
+        // Group every anchor for the same canonical episode URL first.
+        // Many site themes render the thumbnail and episode title as sibling
+        // <a> elements. Processing only the first one made the result depend
+        // on markup order and could borrow a neighbouring episode's image.
+        val linksByEpisode = LinkedHashMap<String, MutableList<Element>>()
         document.select("a[href]").forEach { link ->
             val href = normalizeUrl(link.attr("href"), baseUrl)
             if (!isEpisodeUrl(href)) return@forEach
-            if (!seen.add(href)) return@forEach
 
-            val context = listOf(
-                link.text(),
-                link.attr("title"),
-                link.attr("aria-label"),
-                href,
-            ).joinToString(" ")
+            val key = canonicalContentPath(href)
+            linksByEpisode.getOrPut(key) { ArrayList() }.add(link)
+        }
+
+        val seen = HashSet<String>()
+        linksByEpisode.values.forEach { links ->
+            val href = normalizeUrl(links.first().attr("href"), baseUrl)
+            val key = canonicalContentPath(href)
+            if (!seen.add(key)) return@forEach
+
+            val context = buildString {
+                links.forEach { link ->
+                    append(' ')
+                    append(link.text())
+                    append(' ')
+                    append(link.attr("title"))
+                    append(' ')
+                    append(link.attr("aria-label"))
+                    append(' ')
+                    append(link.selectFirst("img")?.attr("alt").orEmpty())
+                }
+                append(' ')
+                append(href)
+            }
 
             val numbers = episodeNumbersFrom(context)
                 ?: return@forEach
 
-            val episodePoster = episodePosterFromCard(
-                link,
-                href,
-                baseUrl,
-            ) ?: poster
+            // Only use artwork inside a link that itself points to this exact
+            // episode. Never inspect a broad ancestor: it may contain another
+            // episode's poster or a carousel image. The stable series poster
+            // is the fallback when the episode has no directly linked image.
+            val episodePoster = links.asSequence()
+                .mapNotNull { link ->
+                    posterFromElement(link, baseUrl)
+                        ?.takeIf {
+                            it.startsWith("http://", true) ||
+                                it.startsWith("https://", true)
+                        }
+                }
+                .firstOrNull()
+                ?: poster
 
             result += newEpisode(href) {
                 name = "Bölüm " + numbers.second
                 season = numbers.first
                 episode = numbers.second
-                // Prefer the episode's own thumbnail; use the series cover
-                // only if the site's episode card has no image.
                 posterUrl = episodePoster
             }
         }
 
-        // Hidden episode links can occur inside script/template blocks.
+        // Some episodes are only listed in scripts/templates and have no
+        // visible card image. Keep them, but use only the stable series cover.
         val html = document.html().decodeEscapes()
-
         Regex(
             """(?i)(?:https?:)?//[^"'<>\\s]+/bolum/[^"'<>\\s]+"""
         ).findAll(html).forEach { match ->
             val href = normalizeUrl(match.value, baseUrl)
             if (!isEpisodeUrl(href)) return@forEach
-            if (!seen.add(href)) return@forEach
+
+            val key = canonicalContentPath(href)
+            if (!seen.add(key)) return@forEach
 
             val numbers = episodeNumbersFrom(href)
                 ?: return@forEach
@@ -584,9 +549,7 @@ class DiziPal : MainAPI() {
 
         return result
             .distinctBy {
-                (it.season ?: 0).toString() + "-" +
-                    (it.episode ?: 0).toString() + "-" +
-                    it.data
+                canonicalContentPath(it.data)
             }
             .sortedWith(
                 compareBy<Episode> { it.season ?: 0 }
