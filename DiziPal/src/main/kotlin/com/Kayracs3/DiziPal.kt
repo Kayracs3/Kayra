@@ -851,6 +851,7 @@ class DiziPal : MainAPI() {
                         ?.let { normalizeUrl(it, baseUrl) == ogImage } == true
                 }
             if (correspondingImage != null &&
+                isDetailPosterContext(correspondingImage, baseUrl) &&
                 isPosterLabelCompatible(correspondingImage, title)
             ) {
                 return ogImage
@@ -897,6 +898,7 @@ class DiziPal : MainAPI() {
                 // Validate the actual image node, not just its wrapper. The
                 // wrapper normally has no alt/title and could hide a Trending
                 // poster labelled with a different show's name.
+                if (!isDetailPosterContext(image, baseUrl)) continue
                 if (!isPosterLabelCompatible(image, title)) continue
                 posterFromElement(image, baseUrl)
                     ?.takeIf(::isLikelyPosterUrl)
@@ -938,6 +940,25 @@ class DiziPal : MainAPI() {
 
         // Missing is preferable to displaying a poster for a different show.
         return null
+    }
+
+    private fun isDetailPosterContext(element: Element, pageUrl: String): Boolean {
+        var current: Element? = element
+        repeat(3) {
+            val node = current ?: return true
+            val targets = node.select("a[href]")
+                .mapNotNull { link ->
+                    normalizeUrl(link.attr("href"), pageUrl)
+                        .takeIf { isContentTargetUrl(it) }
+                }
+                .toSet()
+
+            // A poster inside a link to a different show belongs to a
+            // Trending/recommendation card, not to the page being loaded.
+            if (targets.any { it != pageUrl }) return false
+            current = node.parent()
+        }
+        return true
     }
 
     private fun isPosterLabelCompatible(element: Element, pageTitle: String): Boolean {
