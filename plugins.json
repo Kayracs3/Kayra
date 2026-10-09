@@ -123,10 +123,10 @@
     },
     {
         "iconUrl": "https://dizipal1588.com/favicon.ico",
-        "fileHash": "sha256-3d986f8e14b6d40069ec9b45e0390db07ba75db0569c964194f1b670b8194c18",
+        "fileHash": "sha256-8ff78ba526837366e02d7dfed1a045dfcc04b253d4f5b7c63be8fe7aa4906168",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 68179,
+        "fileSize": 68598,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -136,7 +136,7 @@
             "TvSeries",
             "Movie"
         ],
-        "version": 10,
+        "version": 11,
         "internalName": "DiziPal",
         "description": "Dizipal dizi ve film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPal.cs3",
