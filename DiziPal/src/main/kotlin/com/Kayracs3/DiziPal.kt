@@ -930,8 +930,14 @@ class DiziPal : MainAPI() {
                     canonicalContentPath(candidateUrl) == targetPath
             }
             for (candidate in matchingLinks) {
+                // Because this anchor points to the exact catalog item, trust
+                // its non-placeholder image URL even when the server uses a
+                // URL without a .jpg/.webp suffix.
                 val linkedPoster = posterFromElement(candidate, baseUrl)
-                    ?.takeIf(::isLikelyPosterUrl)
+                    ?.takeIf {
+                        it.startsWith("http://", true) ||
+                            it.startsWith("https://", true)
+                    }
                 if (!linkedPoster.isNullOrBlank()) return linkedPoster
             }
 
@@ -956,7 +962,10 @@ class DiziPal : MainAPI() {
                 .mapNotNull { candidate ->
                     posterRawFromElement(candidate)
                         ?.let { normalizeUrl(it, baseUrl) }
-                        ?.takeIf { isLikelyPosterUrl(it) }
+                        ?.takeIf {
+                            it.startsWith("http://", true) ||
+                                it.startsWith("https://", true)
+                        }
                 }
                 .toSet()
 
