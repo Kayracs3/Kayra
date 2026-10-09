@@ -20,7 +20,7 @@ import javax.crypto.spec.SecretKeySpec
 
 class DiziPal : MainAPI() {
 
-    override var mainUrl = "https://dizipal1586.com"
+    override var mainUrl = "https://dizipal1587.com"
     override var name = "DiziPal"
     override var lang = "tr"
     override val hasMainPage = true
@@ -71,7 +71,12 @@ class DiziPal : MainAPI() {
             false,
         )
 
-        val results = parseListing(document)
+        val baseUrl = documentBase(document, url)
+        val results = parseListing(document, baseUrl)
+        Log.d(
+            "DiziPal",
+            "Ana sayfa yükleme: ${results.size} kayıt, ${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
+        )
 
         return newHomePageResponse(
             request.name,
@@ -103,7 +108,8 @@ class DiziPal : MainAPI() {
                 ).document
             }.getOrNull() ?: continue
 
-            val results = parseListing(document)
+            val baseUrl = documentBase(document, url)
+            val results = parseListing(document, baseUrl)
                 .filterNot { isEpisodeUrl(it.url) }
                 .distinctBy { it.url }
 
@@ -160,7 +166,7 @@ class DiziPal : MainAPI() {
             }
         }
 
-        val episodes = parseEpisodes(document, poster)
+        val episodes = parseEpisodes(document, poster, documentBase(document, pageUrl))
 
         return newTvSeriesLoadResponse(
             title,
@@ -451,12 +457,13 @@ class DiziPal : MainAPI() {
     private fun parseEpisodes(
         document: Document,
         poster: String?,
+        baseUrl: String,
     ): List<Episode> {
         val result = ArrayList<Episode>()
         val seen = HashSet<String>()
 
         document.select("a[href]").forEach { link ->
-            val href = normalizeUrl(link.attr("href"), mainUrl)
+            val href = normalizeUrl(link.attr("href"), baseUrl)
             if (!isEpisodeUrl(href)) return@forEach
             if (!seen.add(href)) return@forEach
 
@@ -484,7 +491,7 @@ class DiziPal : MainAPI() {
         Regex(
             """(?i)(?:https?:)?//[^"'<>\\s]+/bolum/[^"'<>\\s]+"""
         ).findAll(html).forEach { match ->
-            val href = normalizeUrl(match.value, mainUrl)
+            val href = normalizeUrl(match.value, baseUrl)
             if (!isEpisodeUrl(href)) return@forEach
             if (!seen.add(href)) return@forEach
 
@@ -513,17 +520,19 @@ class DiziPal : MainAPI() {
 
     private fun parseListing(
         document: Document,
+        baseUrl: String,
     ): List<SearchResponse> {
         val results = ArrayList<SearchResponse>()
         val seen = HashSet<String>()
+        val baseRoot = (originOf(baseUrl) ?: mainUrl).trimEnd('/') + "/"
 
         document.select("a[href]").forEach { link ->
-            val href = normalizeUrl(link.attr("href"), mainUrl)
+            val href = normalizeUrl(link.attr("href"), baseUrl)
             if (href.isBlank()) return@forEach
 
             val lower = href.lowercase()
 
-            if (lower == "$mainUrl/" ||
+            if (lower == baseRoot ||
                 lower.contains("/arama-yap") ||
                 lower.contains("/profil") ||
                 lower.contains("/iletisim") ||
@@ -538,9 +547,15 @@ class DiziPal : MainAPI() {
             if (!isSeries && !isMovie) return@forEach
             if (!seen.add(href)) return@forEach
 
-            val card = link.closest(
-                "article, li, .card, .item, .post, .movie, .series, div"
-            )
+            // The old generic div selector often picked a small title-only
+            // wrapper. Find the nearest ancestor that really contains a poster.
+            val card = link.parents().firstOrNull { ancestor ->
+                ancestor.select(
+                    "img, picture source, [data-background], [data-bg], [style*=background]"
+                ).any { candidate ->
+                    posterRawFromElement(candidate) != null
+                }
+            }
 
             val title = cleanCardTitle(
                 listOf(
@@ -548,13 +563,14 @@ class DiziPal : MainAPI() {
                     link.selectFirst("h1,h2,h3,h4,.title,.name")?.text(),
                     link.attr("title"),
                     link.text(),
+                    card?.selectFirst("[title]")?.attr("title"),
                 ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
             )
 
             if (title.isBlank()) return@forEach
 
-            val poster =
-                posterFromElement(link) ?: posterFromElement(card)
+            val poster = posterFromElement(link, baseUrl)
+                ?: posterFromElement(card, baseUrl)
 
             val rating = scoreFromText(
                 listOf(
@@ -623,31 +639,112 @@ class DiziPal : MainAPI() {
         }
     }
 
+    private fun documentBase(
+        document: Document,
+        fallback: String,
+    ): String {
+        val location = document.location().trim()
+        return location.takeIf {
+            it.startsWith("http://", true) ||
+                it.startsWith("https://", true)
+        } ?: fallback
+    }
+
+    private fun srcSetCandidate(
+        value: String,
+    ): String? {
+        if (value.isBlank()) return null
+
+        return value.split(",")
+            .mapNotNull { candidate ->
+                val parts = candidate.trim().split(Regex("\\s+"))
+                val url = parts.firstOrNull().orEmpty()
+                if (url.isBlank()) return@mapNotNull null
+
+                val descriptor = parts.getOrNull(1).orEmpty()
+                val size = descriptor.removeSuffix("w")
+                    .removeSuffix("x")
+                    .toDoubleOrNull() ?: 0.0
+
+                url to size
+            }
+            .maxByOrNull { it.second }
+            ?.first
+    }
+
+    private fun posterRawFromElement(
+        image: Element,
+    ): String? {
+        val styleUrl = Regex(
+            """(?i)url\\(\\s*['"]?([^'")]+)['"]?\\s*\\)"""
+        ).find(image.attr("style"))
+            ?.groupValues
+            ?.getOrNull(1)
+
+        val candidates = listOf(
+            image.attr("data-src"),
+            image.attr("data-lazy-src"),
+            image.attr("data-original"),
+            image.attr("data-original-src"),
+            image.attr("data-image"),
+            image.attr("data-thumb"),
+            image.attr("data-poster"),
+            image.attr("data-background"),
+            image.attr("data-bg"),
+            srcSetCandidate(image.attr("data-srcset")),
+            image.attr("src"),
+            srcSetCandidate(image.attr("srcset")),
+            image.attr("content"),
+            styleUrl,
+        )
+
+        return candidates.firstOrNull { raw ->
+            val value = raw.orEmpty().trim()
+            value.isNotBlank() &&
+                !value.startsWith("data:", true) &&
+                !value.equals("about:blank", true) &&
+                !value.contains("placeholder", true) &&
+                !value.contains("loading.gif", true)
+        }
+    }
+
     private fun posterFromElement(
         element: Element?,
+        baseUrl: String = mainUrl,
     ): String? {
         if (element == null) return null
 
-        val image = element.selectFirst("img")
-            ?: if (element.tagName().equals("img", true)) element else return null
+        val image = if (
+            element.tagName().equals("img", true) ||
+            element.tagName().equals("source", true)
+        ) {
+            element
+        } else {
+            element.select(
+                "img, picture source, [data-background], [data-bg], [style*=background]"
+            ).firstOrNull { candidate ->
+                posterRawFromElement(candidate) != null
+            } ?: return null
+        }
 
-        val raw = image.attr("data-src")
-            .ifBlank { image.attr("data-lazy-src") }
-            .ifBlank { image.attr("data-original") }
-            .ifBlank { image.attr("src") }
+        val raw = posterRawFromElement(image) ?: return null
+        val url = normalizeUrl(raw, baseUrl)
 
-        return raw
-            .takeIf { it.isNotBlank() }
-            ?.let { normalizeUrl(it, mainUrl) }
+        return url.takeIf {
+            it.startsWith("http://", true) ||
+                it.startsWith("https://", true)
+        }
     }
 
     private fun posterOf(
         document: Document,
     ): String? {
+        val baseUrl = documentBase(document, mainUrl)
+
         document.selectFirst("meta[property='og:image']")
             ?.attr("content")
             ?.takeIf { it.isNotBlank() }
-            ?.let { return normalizeUrl(it, mainUrl) }
+            ?.let { return normalizeUrl(it, baseUrl) }
 
         val selectors = listOf(
             "main img",
@@ -656,13 +753,16 @@ class DiziPal : MainAPI() {
             ".details img",
             ".page-top img",
             "img",
+            "picture source",
+            "[data-background]",
+            "[data-bg]",
+            "[style*=background]",
         )
 
         for (selector in selectors) {
-            val image = document.selectFirst(selector)
-                ?: continue
-
-            posterFromElement(image)?.let { return it }
+            for (image in document.select(selector)) {
+                posterFromElement(image, baseUrl)?.let { return it }
+            }
         }
 
         return null
