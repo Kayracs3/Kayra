@@ -762,7 +762,10 @@ class DiziPal : MainAPI() {
             for (ancestor in currentHeading.parents()) {
                 val candidates = ancestor.select("a[href]").filter { link ->
                     val href = normalizeUrl(link.attr("href"), baseUrl)
-                    isEpisodeUrl(href) && !isInsideHardExcludedSection(link)
+                    // This heading already scopes us to "Güncel Bölümler".
+                    // Do not discard its links based on generic CSS names like
+                    // "popular" or "related"; themes reuse those on current episodes.
+                    isEpisodeUrl(href)
                 }
                 val count = candidates
                     .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
@@ -805,7 +808,7 @@ class DiziPal : MainAPI() {
 
                         if (tag != "a" || !element.hasAttr("href")) continue
                         val href = normalizeUrl(element.attr("href"), baseUrl)
-                        if (isEpisodeUrl(href) && !isInsideHardExcludedSection(element)) {
+                        if (isEpisodeUrl(href)) {
                             sectionLinks.add(element)
                         }
                     }
