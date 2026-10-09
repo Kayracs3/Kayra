@@ -74,14 +74,50 @@ class DiziPal : MainAPI() {
 
         val baseUrl = documentBase(document, url)
         val isLatestEpisodesPage = request.data.trimEnd('/') == mainUrl.trimEnd('/')
-        val results = if (isLatestEpisodesPage) {
+        var results = if (isLatestEpisodesPage) {
             parseCurrentEpisodeSection(document, baseUrl)
         } else {
             parseListing(document, baseUrl)
         }
+
+        // The homepage carousel can expose only a small subset of its entries
+        // in static HTML. If fewer than 11 unique episodes were parsed, follow
+        // that section's own "Tümünü Gör" link and use the full listing too.
+        if (isLatestEpisodesPage && results.size < 11) {
+            val moreUrl = findCurrentEpisodesMoreUrl(document, baseUrl)
+            if (!moreUrl.isNullOrBlank()) {
+                val moreDocument = runCatching {
+                    app.get(
+                        moreUrl,
+                        headers = headers + ("Referer" to url),
+                        referer = url,
+                        allowRedirects = true,
+                    ).document
+                }.getOrNull()
+
+                if (moreDocument != null) {
+                    val moreBaseUrl = documentBase(moreDocument, moreUrl)
+                    val moreResults = parseCurrentEpisodeSection(moreDocument, moreBaseUrl)
+                    if (moreResults.size > results.size) {
+                        results = mergeEpisodeSearchResults(moreResults, results)
+                    }
+                    Log.d(
+                        "DiziPal",
+                        "Tümünü Gör kontrolü: adres=$moreUrl; ana=${results.size}; " +
+                            "tam liste=${moreResults.size}",
+                    )
+                } else {
+                    Log.d("DiziPal", "Tümünü Gör sayfası açılamadı: $moreUrl")
+                }
+            } else {
+                Log.d("DiziPal", "Güncel Bölümler için Tümünü Gör bağlantısı bulunamadı")
+            }
+        }
+
         Log.d(
             "DiziPal",
-            "Ana sayfa yükleme (${request.name}): ${results.size} kayıt, ${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
+            "Ana sayfa yükleme (${request.name}): ${results.size} kayıt, " +
+                "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
         )
 
         return newHomePageResponse(
@@ -733,6 +769,91 @@ class DiziPal : MainAPI() {
                 .replace('_', ' ')
                 .trim()
         }.getOrDefault("").ifBlank { "Bölüm" }
+    }
+
+    private fun findCurrentEpisodesMoreUrl(
+        document: Document,
+        baseUrl: String,
+    ): String? {
+        val heading = document.select("h1,h2,h3,h4,h5,h6").firstOrNull {
+            val title = normalizeTitleForMatch(it.text())
+            title.contains("guncel bolum") ||
+                title.contains("son eklenen bolum") ||
+                title.contains("yeni bolumler")
+        } ?: return null
+
+        var current: Element? = heading.parent()
+        repeat(10) {
+            val container = current ?: return null
+            val hasEpisodeLinks = container.select("a[href]").any { link ->
+                isEpisodeUrl(normalizeUrl(link.attr("href"), baseUrl))
+            }
+            if (hasEpisodeLinks) {
+                val more = container.select("a[href]").firstOrNull { link ->
+                    val label = normalizeTitleForMatch(
+                        link.text() + " " +
+                            link.attr("aria-label") + " " +
+                            link.attr("title")
+                    )
+                    label.contains("tumunu gor") ||
+                        label.contains("tum bolumleri gor") ||
+                        label.contains("hepsini gor")
+                }
+
+                if (more != null) {
+                    val href = normalizeUrl(more.attr("href"), baseUrl)
+                    val samePage = canonicalContentPath(href) ==
+                        canonicalContentPath(baseUrl)
+                    val sameSite = originOf(href) == originOf(baseUrl)
+                    if (href.startsWith("http", true) && !samePage && sameSite) {
+                        return href
+                    }
+                }
+            }
+            current = container.parent()
+        }
+
+        // Some templates place the control just outside the heading container.
+        for (link in document.select("a[href]")) {
+            val label = normalizeTitleForMatch(
+                link.text() + " " + link.attr("aria-label") + " " + link.attr("title")
+            )
+            if (!label.contains("tumunu gor")) continue
+            val href = normalizeUrl(link.attr("href"), baseUrl)
+            if (!href.startsWith("http", true) ||
+                originOf(href) != originOf(baseUrl) ||
+                canonicalContentPath(href) == canonicalContentPath(baseUrl)
+            ) continue
+
+            val surroundingHasEpisodes = link.parents().take(5).any { ancestor ->
+                ancestor.select("a[href]").count { item ->
+                    isEpisodeUrl(normalizeUrl(item.attr("href"), baseUrl))
+                } >= 3
+            }
+            if (surroundingHasEpisodes) return href
+        }
+
+        return null
+    }
+
+    private fun mergeEpisodeSearchResults(
+        preferred: List<SearchResponse>,
+        additional: List<SearchResponse>,
+    ): List<SearchResponse> {
+        val merged = LinkedHashMap<String, SearchResponse>()
+
+        (preferred + additional).forEach { item ->
+            val key = canonicalContentPath(normalizeUrl(item.url, mainUrl))
+            val previous = merged[key]
+            if (previous == null) {
+                merged[key] = item
+            } else if (previous.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank()) {
+                previous.posterUrl = item.posterUrl
+                previous.posterHeaders = item.posterHeaders
+            }
+        }
+
+        return merged.values.toList()
     }
 
     private fun parseCurrentEpisodeSection(
