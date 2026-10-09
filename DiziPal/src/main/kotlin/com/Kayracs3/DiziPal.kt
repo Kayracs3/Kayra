@@ -1171,7 +1171,7 @@ class DiziPal : MainAPI() {
             // movie; this works even when the card also contains badges/logos.
             val matchingLinks = ancestor.select("a[href]").filter { candidate ->
                 val candidateUrl = normalizeUrl(candidate.attr("href"), baseUrl)
-                isCatalogItemUrl(candidateUrl) &&
+                isListingItemUrl(candidateUrl) &&
                     canonicalContentPath(candidateUrl) == targetPath
             }
             for (candidate in matchingLinks) {
@@ -1193,7 +1193,7 @@ class DiziPal : MainAPI() {
             val contentTargets = ancestor.select("a[href]")
                 .mapNotNull { candidate ->
                     normalizeUrl(candidate.attr("href"), baseUrl)
-                        .takeIf { isCatalogItemUrl(it) }
+                        .takeIf { isListingItemUrl(it) }
                 }
                 .distinctBy { canonicalContentPath(it) }
 
