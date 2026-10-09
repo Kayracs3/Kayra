@@ -525,14 +525,17 @@ class DiziPal : MainAPI() {
         document: Document,
         baseUrl: String,
     ): List<SearchResponse> {
-        // Keep one response per detail URL, but do not let a title-only link
-        // block a later image link to the same entry.
         val resultsByUrl = LinkedHashMap<String, SearchResponse>()
         val posterSelector = posterImageSelector()
+        val trendUrls = findTrendUrls(document, baseUrl)
+        val anchors = listingAnchors(document, baseUrl, trendUrls)
 
-        document.select("a[href]").forEach { link ->
+        var posterCount = 0
+        anchors.forEach { link ->
             val href = normalizeUrl(link.attr("href"), baseUrl)
             if (href.isBlank() || !isCatalogItemUrl(href)) return@forEach
+            if (trendUrls.any { sameContentUrl(it, href) }) return@forEach
+            if (isInsideExcludedSection(link, baseUrl)) return@forEach
 
             val lower = href.lowercase()
             if (lower.contains("/arama-yap") ||
@@ -546,36 +549,36 @@ class DiziPal : MainAPI() {
             val isMovie = lower.contains("/movies/") || lower.contains("/movie/")
             if (!isSeries && !isMovie) return@forEach
 
-            // Prefer the image attached to this exact link. For sibling images,
-            // accept only a card whose content links all point to this same item
-            // and that contains exactly one distinct poster URL. Ancestors that
-            // wrap the whole Trending carousel are therefore rejected.
+            // First inspect the exact detail link. Only if it has no image,
+            // allow borrowing a single image from its own one-title card.
             val directPoster = posterFromElement(link, baseUrl)
             val poster = directPoster ?: posterFromNearbyCard(link, href, baseUrl)
             val card = if (directPoster != null || poster == null) {
                 null
             } else {
                 link.parents().firstOrNull { ancestor ->
-                    val cardTargets = ancestor.select("a[href]")
+                    val targets = ancestor.select("a[href]")
                         .mapNotNull { candidate ->
                             normalizeUrl(candidate.attr("href"), baseUrl)
                                 .takeIf { isContentTargetUrl(it) }
                         }
-                        .toSet()
-                    val cardPosterUrls = ancestor.select(posterSelector)
+                        .distinctBy { canonicalContentPath(it) }
+
+                    val posterUrls = ancestor.select(posterSelector)
                         .mapNotNull { candidate ->
                             posterRawFromElement(candidate)
                                 ?.let { normalizeUrl(it, baseUrl) }
                                 ?.takeIf { it.startsWith("http", true) }
                         }
-                        .toSet()
+                        .distinct()
 
-                    cardTargets.size == 1 &&
-                        cardTargets.contains(href) &&
-                        cardPosterUrls.size == 1 &&
-                        cardPosterUrls.contains(poster)
+                    targets.size == 1 &&
+                        sameContentUrl(targets.first(), href) &&
+                        posterUrls.size == 1 &&
+                        posterUrls.first() == poster
                 }
             }
+
             val title = cleanCardTitle(
                 listOf(
                     link.selectFirst("img")?.attr("alt"),
@@ -590,12 +593,12 @@ class DiziPal : MainAPI() {
 
             val existing = resultsByUrl[href]
             if (existing != null) {
-                // A repeated title/image link may supply the poster missing
-                // from the first link, but must never overwrite a real poster
-                // with an unrelated image.
+                // Repeated links to the same title may fill a missing poster,
+                // but may not replace a poster that already belongs to it.
                 if (existing.posterUrl.isNullOrBlank() && !poster.isNullOrBlank()) {
                     existing.posterUrl = poster
                     existing.posterHeaders = posterRequestHeaders(baseUrl)
+                    posterCount++
                 }
                 return@forEach
             }
@@ -619,9 +622,153 @@ class DiziPal : MainAPI() {
             }
 
             resultsByUrl[href] = item
+            if (!poster.isNullOrBlank()) posterCount++
         }
 
+        Log.d(
+            "DiziPal",
+            "Katalog: " + resultsByUrl.size + " kayıt, " + posterCount +
+                " afiş; " + trendUrls.size + " trend bağlantısı listeden çıkarıldı",
+        )
         return resultsByUrl.values.toList()
+    }
+
+    private fun listingAnchors(
+        document: Document,
+        baseUrl: String,
+        trendUrls: Set<String>,
+    ): List<Element> {
+        val headings = document.select("h1,h2,h3,h4,h5,h6")
+        val resultsHeading = headings.firstOrNull {
+            val title = normalizeTitleForMatch(it.text())
+            title.contains("filtrelenmis sonuclar") ||
+                title == "diziler" ||
+                title.contains("yabanci dizi") ||
+                title.contains("dizi arsivi") ||
+                title.contains("tum diziler") ||
+                title.contains("tum filmler")
+        }
+
+        // Platform pages have an explicit "Filtrelenmiş Sonuçlar" heading.
+        // Use its nearest bounded results container, not every link in the
+        // complete document (which also contains the Trending footer).
+        if (resultsHeading != null) {
+            for (ancestor in resultsHeading.parents()) {
+                val hasOtherSection = ancestor.select("h1,h2,h3,h4,h5,h6").any { heading ->
+                    heading !== resultsHeading && isExcludedSectionHeading(heading.text())
+                }
+                if (hasOtherSection) continue
+
+                val candidates = ancestor.select("a[href]").filter { link ->
+                    val url = normalizeUrl(link.attr("href"), baseUrl)
+                    isCatalogItemUrl(url) &&
+                        trendUrls.none { sameContentUrl(it, url) } &&
+                        !isInsideExcludedSection(link, baseUrl)
+                }
+                val distinctCount = candidates
+                    .map { normalizeUrl(it.attr("href"), baseUrl) }
+                    .distinctBy { canonicalContentPath(it) }
+                    .size
+
+                if (distinctCount in 3..120) return candidates
+                if (distinctCount > 120) break
+            }
+        }
+
+        // Fallback: use the page's main content region when it exists.
+        val main = document.selectFirst(
+            "main, #main, #content, #primary, .site-main, .main-content, " +
+                ".content-area, .archive-content, .catalog-content"
+        )
+        val source = main?.select("a[href]") ?: document.select("a[href]")
+        return source.filter { link ->
+            val url = normalizeUrl(link.attr("href"), baseUrl)
+            isCatalogItemUrl(url) &&
+                trendUrls.none { sameContentUrl(it, url) } &&
+                !isInsideExcludedSection(link, baseUrl)
+        }
+    }
+
+    private fun findTrendUrls(
+        document: Document,
+        baseUrl: String,
+    ): Set<String> {
+        val result = LinkedHashSet<String>()
+        val headings = document.select("h1,h2,h3,h4,h5,h6")
+        for (heading in headings) {
+            if (!isTrendHeading(heading.text())) continue
+
+            // The first ancestor containing actual title links is the trend
+            // component; stop before climbing into a page-wide content wrapper.
+            for (ancestor in heading.parents()) {
+                val urls = ancestor.select("a[href]")
+                    .mapNotNull { link ->
+                        normalizeUrl(link.attr("href"), baseUrl)
+                            .takeIf { isCatalogItemUrl(it) }
+                    }
+                    .distinctBy { canonicalContentPath(it) }
+
+                if (urls.isNotEmpty() && urls.size <= 18) {
+                    result.addAll(urls)
+                    break
+                }
+                if (urls.size > 18) break
+            }
+        }
+
+        return result
+    }
+
+    private fun isTrendHeading(value: String): Boolean {
+        val title = normalizeTitleForMatch(value)
+        return title.contains("trend diz") ||
+            title.contains("populer diz") ||
+            title.contains("trending") ||
+            title.contains("onerilen diz") ||
+            title.contains("benzer diz")
+    }
+
+    private fun isExcludedSectionHeading(value: String): Boolean {
+        val title = normalizeTitleForMatch(value)
+        return isTrendHeading(value) ||
+            title.contains("son eklenen") ||
+            title.contains("benzer") ||
+            title.contains("onerilen")
+    }
+
+    private fun isInsideExcludedSection(
+        element: Element,
+        baseUrl: String,
+    ): Boolean {
+        val excludedClassOrId = Regex(
+            "(?i)(trend|trending|popular|populer|sidebar|footer|recommend|" +
+                "related|carousel|swiper|slick|owl|breadcrumb|navbar|navigation|menu)"
+        )
+
+        var current: Element? = element
+        repeat(8) {
+            val node = current ?: return false
+            if (excludedClassOrId.containsMatchIn(node.attr("class")) ||
+                excludedClassOrId.containsMatchIn(node.id())
+            ) return true
+
+            val hasTrendHeading = node.select("h1,h2,h3,h4,h5,h6")
+                .any { isTrendHeading(it.text()) }
+            if (hasTrendHeading) return true
+
+            current = node.parent()
+        }
+        return false
+    }
+
+    private fun canonicalContentPath(url: String): String {
+        return runCatching {
+            URI(url).path.orEmpty().lowercase().trimEnd('/')
+        }.getOrDefault(url.lowercase().trimEnd('/'))
+    }
+
+    private fun sameContentUrl(first: String, second: String): Boolean {
+        return canonicalContentPath(first) == canonicalContentPath(second)
     }
 
     private fun hasNextPage(
@@ -944,18 +1091,27 @@ class DiziPal : MainAPI() {
 
     private fun isDetailPosterContext(element: Element, pageUrl: String): Boolean {
         var current: Element? = element
-        repeat(3) {
+        repeat(8) {
             val node = current ?: return true
+
+            // Jsoup Element.select() does not include the element itself. Check
+            // an enclosing <a href=...> directly; this was the missed case
+            // that allowed a Trend image to pass as the current show's poster.
+            if (node.tagName().equals("a", true) && node.hasAttr("href")) {
+                val target = normalizeUrl(node.attr("href"), pageUrl)
+                if (isContentTargetUrl(target) && !sameContentUrl(target, pageUrl)) {
+                    return false
+                }
+            }
+
             val targets = node.select("a[href]")
                 .mapNotNull { link ->
                     normalizeUrl(link.attr("href"), pageUrl)
                         .takeIf { isContentTargetUrl(it) }
                 }
-                .toSet()
+                .distinctBy { canonicalContentPath(it) }
 
-            // A poster inside a link to a different show belongs to a
-            // Trending/recommendation card, not to the page being loaded.
-            if (targets.any { it != pageUrl }) return false
+            if (targets.any { !sameContentUrl(it, pageUrl) }) return false
             current = node.parent()
         }
         return true
