@@ -676,7 +676,7 @@ class DiziPal : MainAPI() {
         image: Element,
     ): String? {
         val styleUrl = Regex(
-            """(?i)url\\(\\s*['"]?([^'")]+)['"]?\\s*\\)"""
+            """(?i)url\(\s*['"]?([^'")]+)['"]?\s*\)"""
         ).find(image.attr("style"))
             ?.groupValues
             ?.getOrNull(1)
