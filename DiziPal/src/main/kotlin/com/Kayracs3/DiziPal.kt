@@ -840,7 +840,7 @@ class DiziPal : MainAPI() {
         // If Open Graph points to a trending poster with a different title,
         // reject it instead of copying that image into every episode.
         val ogImage = document.selectFirst("meta[property='og:image'], meta[name='og:image']")
-            ?.attr("content')
+            ?.attr("content")
             ?.takeIf { it.isNotBlank() }
             ?.let { normalizeUrl(it, baseUrl) }
 
