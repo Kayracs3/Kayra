@@ -416,7 +416,7 @@ class DiziPal : MainAPI() {
     ): LoadResponse {
         val title = pageTitle(document, url) ?: "DiziPal Bölüm"
         val poster = posterOf(document)
-        val numbers = episodeNumbersFrom(title + " " + url)
+        val numbers = episodeNumbersFrom(title) ?: episodeNumbersFrom(url.substringBefore("?"))
 
         val episode = newEpisode(url) {
             name = if (numbers != null) {
@@ -507,17 +507,28 @@ class DiziPal : MainAPI() {
             // contains links to this one episode. This avoids reading details
             // from neighbouring episode cards.
             val cardContext = episodeCardContext(links.first(), href, baseUrl)
-            val context = "$linkContext $cardContext"
-            val numbers = episodeNumbersFrom(context)
+            // Only parse numbers from this episode's own title labels or URL.
+            // The surrounding card may contain season tabs and unrelated numbers.
+            val numbers = links.asSequence()
+                .flatMap { link ->
+                    sequenceOf(
+                        link.text(),
+                        link.attr("title"),
+                        link.attr("aria-label"),
+                        link.selectFirst("img")?.attr("alt").orEmpty(),
+                    )
+                }
+                .mapNotNull { candidate -> episodeNumbersFrom(candidate) }
+                .firstOrNull()
+                ?: episodeNumbersFrom(href.substringBefore("?"))
 
             // Do not drop a valid /bolum/ URL simply because the website's
             // markup omits "Sezon/Bölüm" from its text. This was why only a
             // few of the site's episode cards could appear at a time.
-            val episodeName = if (numbers != null) {
-                "Bölüm " + numbers.second
-            } else {
-                episodeNameFallback(links, cardContext, href, index + 1)
-            }
+            val episodeName = episodeNameFallback(links, cardContext, href, index + 1)
+                .ifBlank {
+                    if (numbers != null) "Bölüm " + numbers.second else "Bölüm " + (index + 1)
+                }
 
             // Only use an image inside an anchor for this exact episode URL.
             // Never borrow the first image from a parent that may contain
@@ -832,7 +843,7 @@ class DiziPal : MainAPI() {
         if (bestCount < 11 || bestLinks.isEmpty()) {
             val allEpisodeLinks = document.select("a[href]").filter { link ->
                 val href = normalizeUrl(link.attr("href"), baseUrl)
-                isEpisodeUrl(href) && !isInsideHardExcludedSection(link)
+                isEpisodeUrl(href)
             }
             val allCount = allEpisodeLinks
                 .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
@@ -876,11 +887,14 @@ class DiziPal : MainAPI() {
             }
         }
 
+        val pageEpisodeCount = document.select("a[href]")
+            .count { isEpisodeUrl(normalizeUrl(it.attr("href"), baseUrl)) }
         Log.d(
             "DiziPal",
             "Güncel Bölümler: ${results.size} kayıt, " +
                 "${results.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
-                "seçilen bağlantı: $bestCount",
+                "seçilen bağlantı: $bestCount; başlık=${currentHeading?.text().orEmpty()}; " +
+                "sayfadaki bölüm bağlantısı=$pageEpisodeCount",
         )
         return results
     }
@@ -1349,9 +1363,21 @@ class DiziPal : MainAPI() {
                 }
                 .distinctBy { canonicalContentPath(it) }
 
-            if (contentTargets.size != 1 ||
-                canonicalContentPath(contentTargets.first()) != targetPath
-            ) {
+            val targetIsEpisode = isEpisodeUrl(targetUrl)
+            val episodeTargets = contentTargets.filter { isEpisodeUrl(it) }
+                .distinctBy { canonicalContentPath(it) }
+            val catalogueTargets = contentTargets.filter { isCatalogItemUrl(it) }
+                .distinctBy { canonicalContentPath(it) }
+
+            val oneEpisodeCard = targetIsEpisode &&
+                episodeTargets.size == 1 &&
+                canonicalContentPath(episodeTargets.first()) == targetPath &&
+                catalogueTargets.size <= 1
+            val oneCatalogueCard = !targetIsEpisode &&
+                contentTargets.size == 1 &&
+                canonicalContentPath(contentTargets.first()) == targetPath
+
+            if (!oneEpisodeCard && !oneCatalogueCard) {
                 continue
             }
 
@@ -1820,31 +1846,31 @@ class DiziPal : MainAPI() {
             .replace(Regex("\\s+"), " ")
             .trim()
 
+        // Accept only explicit, adjacent season/episode pairs. Avoid pairing
+        // unrelated numbers from page/card text, which caused scrambled metadata.
         val patterns = listOf(
             Regex(
-                """(?ix)(?:sezon|season)\s*[-._ ]?\s*(\d+)\D{0,30}?(?:bölüm|bolum|episode)\s*[-._ ]?\s*(\d+)"""
+                """(?i)\b(?:sezon|season)[\s._:#-]*(\d{1,2})[\s._:#-]*(?:bölüm|bolum|episode)[\s._:#-]*(\d{1,3})\b"""
             ),
             Regex(
-                """(?ix)(?:bölüm|bolum|episode)\s*[-._ ]?\s*(\d+)\D{0,30}?(?:sezon|season)\s*[-._ ]?\s*(\d+)"""
+                """(?i)\b(?:bölüm|bolum|episode)[\s._:#-]*(\d{1,3})[\s._:#-]*(?:sezon|season)[\s._:#-]*(\d{1,2})\b"""
             ),
             Regex(
-                """(?ix)\b(\d+)\s*[xX]\s*(\d+)\b"""
+                """(?i)\bS(\d{1,2})[\s._-]*E(\d{1,3})\b"""
+            ),
+            Regex(
+                """(?i)\b(\d{1,2})[\s._-]*x[\s._-]*(\d{1,3})\b"""
             ),
         )
 
         for ((index, regex) in patterns.withIndex()) {
             val match = regex.find(source) ?: continue
-            val first = match.groupValues[1]
-                .toIntOrNull()
-                ?: continue
-            val second = match.groupValues[2]
-                .toIntOrNull()
-                ?: continue
+            val first = match.groupValues[1].toIntOrNull() ?: continue
+            val second = match.groupValues[2].toIntOrNull() ?: continue
+            val numbers = if (index == 1) second to first else first to second
 
-            return if (index == 1) {
-                second to first
-            } else {
-                first to second
+            if (numbers.first in 1..100 && numbers.second in 1..999) {
+                return numbers
             }
         }
 
