@@ -759,7 +759,10 @@ class DiziPal : MainAPI() {
             // ancestor containers choose the largest set, so a nested 3-card
             // carousel cannot replace the complete 11-item row.
             for (ancestor in currentHeading.parents()) {
-                val otherHeading = ancestor.select("h1,h2,h3,h4,h5,h6")
+                // h3/h4 tags are commonly used for each episode card's
+                // title; they must not make us discard the entire section.
+                // Stop only when we cross into another page-level section.
+                val otherHeading = ancestor.select("h1,h2")
                     .any { it !== currentHeading }
                 if (otherHeading) continue
 
