@@ -38,6 +38,11 @@ class DiziPal : MainAPI() {
         "Referer" to "$mainUrl/",
     )
 
+    // Cache poster URLs discovered from individual episode pages. Failed lookups are
+    // remembered too, so repeated home-page refreshes do not refetch the same page.
+    private val episodePosterCache = LinkedHashMap<String, String>()
+    private val attemptedEpisodePosterLookups = HashSet<String>()
+
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Güncel Bölümler",
         "$mainUrl/yabanci-dizi-izle" to "Diziler",
@@ -112,6 +117,12 @@ class DiziPal : MainAPI() {
             } else {
                 Log.d("DiziPal", "Güncel Bölümler için Tümünü Gör bağlantısı bulunamadı")
             }
+        }
+
+        // If a homepage/listing card exposes no image URL, try the exact episode page
+        // as a fallback instead of leaving that entry posterless.
+        if (isLatestEpisodesPage) {
+            results = resolveMissingEpisodePosters(results, baseUrl)
         }
 
         Log.d(
@@ -444,6 +455,130 @@ class DiziPal : MainAPI() {
         }
 
         return found
+    }
+
+    private suspend fun resolveMissingEpisodePosters(
+        results: List<SearchResponse>,
+        baseUrl: String,
+    ): List<SearchResponse> {
+        var requested = 0
+        var fixed = 0
+
+        results.forEach { item ->
+            if (!item.posterUrl.isNullOrBlank() || !isEpisodeUrl(item.url)) {
+                return@forEach
+            }
+
+            val key = canonicalContentPath(normalizeUrl(item.url, baseUrl))
+            val cachedPoster = episodePosterCache[key]
+            if (!cachedPoster.isNullOrBlank()) {
+                item.posterUrl = cachedPoster
+                item.posterHeaders = posterRequestHeaders(item.url)
+                fixed++
+                return@forEach
+            }
+
+            // Do not retry a failed URL on every refresh.
+            if (!attemptedEpisodePosterLookups.add(key)) return@forEach
+            requested++
+
+            val poster = findPosterOnEpisodeDetailPage(item.url)
+            if (!poster.isNullOrBlank()) {
+                episodePosterCache[key] = poster
+                item.posterUrl = poster
+                item.posterHeaders = posterRequestHeaders(item.url)
+                fixed++
+            }
+        }
+
+        Log.d(
+            "DiziPal",
+            "Eksik afiş yedeği: $requested bölüm sayfası kontrol edildi, " +
+                "$fixed afiş tamamlandı, " +
+                "${results.count { it.posterUrl.isNullOrBlank() }} afiş hâlâ eksik",
+        )
+        return results
+    }
+
+    private suspend fun findPosterOnEpisodeDetailPage(episodeUrl: String): String? {
+        val response = runCatching {
+            app.get(
+                episodeUrl,
+                headers = headers + ("Referer" to "$mainUrl/"),
+                referer = "$mainUrl/",
+                timeout = 3500,
+                allowRedirects = true,
+            )
+        }.getOrNull() ?: return null
+
+        if (!response.isSuccessful) return null
+
+        val document = response.document
+        val baseUrl = documentBase(document, episodeUrl)
+        val title = pageTitle(document, baseUrl).orEmpty()
+
+        // Prefer the provider's strict detail-page poster parser first.
+        posterOf(document)
+            ?.takeIf(::isLikelyPosterUrl)
+            ?.let { return it }
+
+        // Some episode pages expose a reliable title-matched social image while
+        // the visible poster is rendered by a script or CSS class.
+        val metadataImages = document.select(
+            "meta[property='og:image'], meta[name='og:image'], " +
+                "meta[name='twitter:image'], meta[property='twitter:image'], " +
+                "meta[itemprop='image'], link[rel='image_src']"
+        ).mapNotNull { element ->
+            val raw = element.attr("content").ifBlank { element.attr("href") }
+            raw.takeIf { it.isNotBlank() }?.let { normalizeUrl(it, baseUrl) }
+        }.distinct()
+
+        metadataImages.firstOrNull { image ->
+            isLikelyPosterUrl(image) && posterUrlContainsTitle(image, title)
+        }?.let { return it }
+
+        // The episode page frequently links to its parent series separately
+        // from the episode URL. Select only a non-recommendation series link
+        // whose label overlaps the episode title, then read its own image.
+        val titleTokens = normalizeTitleForMatch(title)
+            .split(" ")
+            .filter { it.length >= 3 && !it.all(Char::isDigit) }
+            .filterNot { it in setOf("sezon", "season", "bolum", "episode") }
+            .toSet()
+
+        val seriesCandidates = document.select("a[href]").mapNotNull { anchor ->
+            val target = normalizeUrl(anchor.attr("href"), baseUrl)
+            if (!isCatalogItemUrl(target) || isInsideHardExcludedSection(anchor)) {
+                return@mapNotNull null
+            }
+
+            val label = listOf(
+                anchor.text(),
+                anchor.attr("title"),
+                anchor.attr("aria-label"),
+                anchor.selectFirst("img")?.attr("alt").orEmpty(),
+                target.substringAfterLast('/').replace('-', ' '),
+            ).filter { it.isNotBlank() }.joinToString(" ")
+            val anchorTokens = normalizeTitleForMatch(label)
+                .split(" ")
+                .filter { it.length >= 3 && !it.all(Char::isDigit) }
+                .toSet()
+            val score = if (titleTokens.isEmpty()) 0.0 else {
+                titleTokens.intersect(anchorTokens).size.toDouble() /
+                    titleTokens.size.toDouble()
+            }
+
+            val poster = posterFromElement(anchor, baseUrl)
+                ?.takeIf(::isLikelyPosterUrl)
+                ?: return@mapNotNull null
+
+            Triple(score, poster, label)
+        }
+
+        return seriesCandidates
+            .filter { it.first >= 0.30 }
+            .maxByOrNull { it.first }
+            ?.second
     }
 
     private suspend fun loadEpisode(
