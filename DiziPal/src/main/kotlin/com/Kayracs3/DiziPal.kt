@@ -103,13 +103,21 @@ class DiziPal : MainAPI() {
                 if (moreDocument != null) {
                     val moreBaseUrl = documentBase(moreDocument, moreUrl)
                     val moreResults = parseCurrentEpisodeSection(moreDocument, moreBaseUrl)
-                    if (moreResults.size > results.size) {
+                    val homepageCount = results.size
+                    val homepagePosterCount = results.count { !it.posterUrl.isNullOrBlank() }
+                    if (moreResults.isNotEmpty()) {
+                        // Do not discard this response just because it has fewer
+                        // cards: a carousel and its full-list page may expose
+                        // posters for different entries.
                         results = mergeEpisodeSearchResults(moreResults, results)
                     }
                     Log.d(
                         "DiziPal",
-                        "Tümünü Gör kontrolü: adres=$moreUrl; ana=${results.size}; " +
-                            "tam liste=${moreResults.size}",
+                        "Tümünü Gör kontrolü: adres=$moreUrl; ana=$homepageCount/" +
+                            "$homepagePosterCount afiş; tam liste=${moreResults.size}/" +
+                            "${moreResults.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
+                            "birleşik=${results.size}/" +
+                            "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
                     )
                 } else {
                     Log.d("DiziPal", "Tümünü Gör sayfası açılamadı: $moreUrl")
@@ -1573,6 +1581,64 @@ class DiziPal : MainAPI() {
         val targetPath = canonicalContentPath(normalizeUrl(targetUrl, baseUrl))
 
         for (ancestor in link.parents()) {
+        val episodeLabel = episodeListingTitle(link, targetUrl, baseUrl, null) +
+            " " + targetUrl.substringAfterLast('/').replace('-', ' ').replace('_', ' ')
+        val targetTokens = posterMatchTokens(episodeLabel)
+
+            // Some homepage cards expose the poster on a sibling series anchor or
+            // a CSS/lazy-load image instead of the episode anchor. Match image
+            // labels and linked slugs to this episode so we can find its own
+            // poster even when the card wrapper also contains other links.
+            if (targetTokens.isNotEmpty()) {
+                val labelledPosters = ancestor.select(posterImageSelector())
+                    .mapNotNull { image ->
+                        val poster = posterFromElement(image, baseUrl)
+                            ?.takeIf { candidate ->
+                                candidate.startsWith("http://", true) ||
+                                    candidate.startsWith("https://", true)
+                            }
+                            ?: return@mapNotNull null
+                        if (!isLikelyPosterUrl(poster)) return@mapNotNull null
+
+                        val imageAnchor = image.parents()
+                            .firstOrNull { it.tagName().equals("a", true) }
+                        val candidateLabel = listOf(
+                            image.attr("alt"),
+                            image.attr("title"),
+                            image.attr("data-title"),
+                            image.attr("data-name"),
+                            image.attr("aria-label"),
+                            imageAnchor?.text().orEmpty(),
+                            imageAnchor?.attr("title").orEmpty(),
+                            imageAnchor?.attr("aria-label").orEmpty(),
+                            imageAnchor?.attr("href").orEmpty()
+                                .substringAfterLast('/').replace('-', ' '),
+                            poster.substringBefore('?').substringBefore('#')
+                                .substringAfterLast('/').replace('-', ' ').replace('_', ' '),
+                        ).filter { it.isNotBlank() }.joinToString(" ")
+
+                        val candidateTokens = posterMatchTokens(candidateLabel)
+                        val overlap = targetTokens.intersect(candidateTokens).size
+                        val score = overlap.toDouble() / targetTokens.size.toDouble()
+                        val minimumOverlap = if (targetTokens.size <= 2) 1 else 2
+                        if (overlap < minimumOverlap || score < 0.40) {
+                            return@mapNotNull null
+                        }
+                        Triple(score, poster, imageAnchor?.attr("href").orEmpty())
+                    }
+
+                val bestScore = labelledPosters.maxOfOrNull { it.first }
+                if (bestScore != null && bestScore >= 0.40) {
+                    val bestPosters = labelledPosters
+                        .filter { it.first == bestScore }
+                        .map { it.second }
+                        .distinct()
+                    // Only use a label match when it uniquely identifies an
+                    // image URL; otherwise leave it blank rather than borrow
+                    // another show's poster.
+                    if (bestPosters.size == 1) return bestPosters.first()
+                }
+            }
             // The cover and title are often separate links inside the same
             // card. Prefer an image explicitly linked to this exact series or
             // movie; this works even when the card also contains badges/logos.
@@ -1655,6 +1721,24 @@ class DiziPal : MainAPI() {
             if (posters.size == 1) return posters.first()
         }
         return null
+    }
+
+    private fun posterMatchTokens(value: String): Set<String> {
+        val stopWords = setOf(
+            "sezon", "season", "bolum", "episode", "izle", "watch",
+            "poster", "afis", "cover", "image", "thumbnail",
+            "jpg", "jpeg", "png", "webp", "avif", "gif", "cdn",
+            "series", "movie", "movies", "dizi", "film",
+        )
+        return normalizeTitleForMatch(value)
+            .split(" ")
+            .filter { token ->
+                token.length >= 3 &&
+                    token !in stopWords &&
+                    !token.all { it.isDigit() } &&
+                    !Regex("""(?i)^(?:s\\d+e\\d+|\\d+x\\d+)$""").matches(token)
+            }
+            .toSet()
     }
 
     private fun isContentTargetUrl(url: String): Boolean {
