@@ -129,18 +129,31 @@ def remote_plugin_listing():
 
 
 def clear_remote_plugins():
-    adb("shell", "mkdir", "-p", REMOTE_PLUGIN_DIR, check=False, timeout=15)
-    adb(
-        "shell", "sh", "-c",
-        (
-            "find "
-            + REMOTE_PLUGIN_DIR
-            + " -maxdepth 1 -type f "
-            + "\\( -name '*.cs3' -o -name '*.zip' \\) -delete"
-        ),
-        check=False,
-        timeout=15,
-    )
+    adb("shell", "mkdir", "-p", REMOTE_PLUGIN_DIR, check=False, timeout=30)
+
+    # Use rm/globs rather than find: the emulator can stall on find over
+    # shared storage, which used to turn a cleanup into a false provider fail.
+    command = f"rm -f {REMOTE_PLUGIN_DIR}/*.cs3 {REMOTE_PLUGIN_DIR}/*.zip"
+    last_error = None
+    for attempt in range(3):
+        try:
+            adb("shell", "sh", "-c", command, check=True, timeout=35)
+            return
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
+            last_error = exc
+            print(
+                f"Uzak plugin temizleme denemesi {attempt + 1}/3 başarısız: {exc}",
+                flush=True,
+            )
+            if attempt < 2:
+                try:
+                    adb("start-server", check=False, timeout=10)
+                    adb("wait-for-device", check=False, timeout=30)
+                except Exception:
+                    pass
+                time.sleep(2)
+
+    raise RuntimeError(f"Uzak plugin klasörü 3 denemede temizlenemedi: {last_error}")
 
 
 def push_only_plugin(package, plugin_path):
