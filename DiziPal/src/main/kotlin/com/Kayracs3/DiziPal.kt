@@ -39,6 +39,7 @@ class DiziPal : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
+        "$mainUrl/" to "Güncel Bölümler",
         "$mainUrl/yabanci-dizi-izle" to "Diziler",
         "$mainUrl/hd-film-izle" to "Filmler",
         "$mainUrl/kanal/exxen" to "Exxen",
@@ -72,10 +73,15 @@ class DiziPal : MainAPI() {
         )
 
         val baseUrl = documentBase(document, url)
-        val results = parseListing(document, baseUrl)
+        val isLatestEpisodesPage = request.data.trimEnd('/') == mainUrl.trimEnd('/')
+        val results = if (isLatestEpisodesPage) {
+            parseCurrentEpisodeSection(document, baseUrl)
+        } else {
+            parseListing(document, baseUrl)
+        }
         Log.d(
             "DiziPal",
-            "Ana sayfa yükleme: ${results.size} kayıt, ${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
+            "Ana sayfa yükleme (${request.name}): ${results.size} kayıt, ${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
         )
 
         return newHomePageResponse(
@@ -731,6 +737,96 @@ class DiziPal : MainAPI() {
                 .replace('_', ' ')
                 .trim()
         }.getOrDefault("").ifBlank { "Bölüm" }
+    }
+
+    private fun parseCurrentEpisodeSection(
+        document: Document,
+        baseUrl: String,
+    ): List<SearchResponse> {
+        val headings = document.select("h1,h2,h3,h4,h5,h6")
+        val currentHeading = headings.firstOrNull {
+            val title = normalizeTitleForMatch(it.text())
+            title.contains("guncel bolum") ||
+                title.contains("son eklenen bolum") ||
+                title.contains("yeni bolumler")
+        }
+
+        var bestLinks: List<Element> = emptyList()
+        var bestCount = 0
+
+        if (currentHeading != null) {
+            // Keep the links belonging to "Güncel Bölümler" only. Among its
+            // ancestor containers choose the largest set, so a nested 3-card
+            // carousel cannot replace the complete 11-item row.
+            for (ancestor in currentHeading.parents()) {
+                val otherHeading = ancestor.select("h1,h2,h3,h4,h5,h6")
+                    .any { it !== currentHeading }
+                if (otherHeading) continue
+
+                val candidates = ancestor.select("a[href]").filter { link ->
+                    val href = normalizeUrl(link.attr("href"), baseUrl)
+                    isEpisodeUrl(href) && !isInsideHardExcludedSection(link)
+                }
+                val count = candidates
+                    .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
+                    .distinct()
+                    .size
+
+                if (count in 1..100 && count > bestCount) {
+                    bestLinks = candidates
+                    bestCount = count
+                }
+            }
+        }
+
+        // Fallback for revisions that omit an h2 but keep the episode links
+        // in HTML. Deliberately do not include movie/series cards or trend links.
+        if (bestLinks.isEmpty()) {
+            val source = document.selectFirst("main, #main, #content, #primary, .site-main, .main-content")
+                ?: document.body()
+            bestLinks = source.select("a[href]").filter { link ->
+                val href = normalizeUrl(link.attr("href"), baseUrl)
+                isEpisodeUrl(href) && !isInsideHardExcludedSection(link)
+            }
+        }
+
+        val grouped = LinkedHashMap<String, MutableList<Element>>()
+        bestLinks.forEach { link ->
+            val href = normalizeUrl(link.attr("href"), baseUrl)
+            if (!isEpisodeUrl(href)) return@forEach
+            grouped.getOrPut(canonicalContentPath(href)) { ArrayList() }.add(link)
+        }
+
+        val results = ArrayList<SearchResponse>()
+        grouped.values.forEachIndexed { index, links ->
+            val href = normalizeUrl(links.first().attr("href"), baseUrl)
+            val poster = links.asSequence()
+                .mapNotNull { link ->
+                    posterFromElement(link, baseUrl)
+                        ?.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+                }
+                .firstOrNull()
+                ?: links.asSequence()
+                    .mapNotNull { link -> posterFromNearbyCard(link, href, baseUrl) }
+                    .firstOrNull()
+
+            val title = links.asSequence()
+                .map { link -> episodeListingTitle(link, href, baseUrl, null) }
+                .firstOrNull { it.isNotBlank() }
+                ?: "Bölüm ${index + 1}"
+
+            results += newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+                posterUrl = poster
+                posterHeaders = posterRequestHeaders(baseUrl)
+            }
+        }
+
+        Log.d(
+            "DiziPal",
+            "Güncel Bölümler: ${results.size} kayıt, " +
+                "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
+        )
+        return results
     }
 
     private fun parseListing(
