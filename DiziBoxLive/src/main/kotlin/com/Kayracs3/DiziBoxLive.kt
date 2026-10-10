@@ -51,13 +51,7 @@ class DiziBoxLive : MainAPI() {
         val document = requestDocument(url)
             ?: return newHomePageResponse(request.name, emptyList(), false)
 
-        val results = document
-            .select("a[href*='/diziler/']")
-            .asSequence()
-            .filterNot { isEpisodeAnchor(it) }
-            .mapNotNull { it.toSearchResponse() }
-            .distinctBy { it.url }
-            .toList()
+        val results = seriesResponses(document)
 
         return newHomePageResponse(
             request.name,
@@ -83,13 +77,7 @@ class DiziBoxLive : MainAPI() {
         for (url in urls) {
             val document = requestDocument(url) ?: continue
 
-            val results = document
-                .select("a[href*='/diziler/']")
-                .asSequence()
-                .filterNot { isEpisodeAnchor(it) }
-                .mapNotNull { it.toSearchResponse() }
-                .distinctBy { it.url }
-                .toList()
+            val results = seriesResponses(document)
 
             if (results.isNotEmpty()) return results
         }
@@ -781,11 +769,13 @@ class DiziBoxLive : MainAPI() {
 
         if (!path.contains("/diziler/") || isEpisodeAnchor(this)) return null
 
-        val title = text()
-            .trim()
-            .ifBlank { selectFirst("img")?.attr("alt")?.trim().orEmpty() }
+        val title = selectFirst(".title, .name, h2, h3, h4")?.text()?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: attr("title").trim().takeIf { it.isNotBlank() }
+            ?: selectFirst("img")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() }
+            ?: text().trim()
 
-        if (title.isBlank() || title.length > 120) return null
+        if (title.isBlank() || title.length > 120 || isEpisodeAnchor(this)) return null
 
         return newTvSeriesSearchResponse(
             title,
@@ -796,62 +786,147 @@ class DiziBoxLive : MainAPI() {
         }
     }
 
+    private fun Element.hasSeriesCardContext(): Boolean {
+        return closest(
+            "article, .dizi, .dizi-item, .dizi-box, .series, .series-item, .series-box, " +
+                ".show, .show-item, .movie, .film, .post, .item, .box, .card, .owl-item, " +
+                ".swiper-slide, .grid-item, [class*=dizi], [class*=series], [class*=show], " +
+                "[class*=poster], [class*=entry], [id*=dizi], [id*=series], [id*=poster]"
+        ) != null
+    }
+
+    /**
+     * Navigasyondaki A-Z/arama bağlantılarını afişsiz dizi kartları sanma.
+     * Önce afişi bulunan kartları seçer; kart yapısı belli ama afiş URL'si gizli
+     * olanlar için detay sayfasındaki og:image alanını yedek olarak kullanır.
+     */
+    private suspend fun seriesResponses(document: Document): List<SearchResponse> {
+        val entries = LinkedHashMap<String, Pair<SearchResponse, Boolean>>()
+        document.select("a[href*='/diziler/']").forEach { element ->
+            val response = element.toSearchResponse() ?: return@forEach
+            val cardContext = element.hasSeriesCardContext()
+            val old = entries[response.url]
+            if (old == null || (old.first.posterUrl.isNullOrBlank() && !response.posterUrl.isNullOrBlank())) {
+                entries[response.url] = response to cardContext
+            }
+        }
+
+        if (entries.isEmpty()) return emptyList()
+
+        val all = entries.values.toList()
+        val withPoster = all.filter { !it.first.posterUrl.isNullOrBlank() }
+        val withCardContext = all.filter { it.second }
+        val selected = when {
+            withPoster.isNotEmpty() -> withPoster
+            withCardContext.isNotEmpty() -> withCardContext
+            else -> all.take(30)
+        }.toMutableList()
+
+        var detailLookups = 0
+        for ((response, hasCardContext) in selected) {
+            if (!response.posterUrl.isNullOrBlank() || !hasCardContext || detailLookups >= 20) continue
+            detailLookups++
+            val detailPoster = requestDocument(response.url)?.let { posterOf(it) }
+            if (!detailPoster.isNullOrBlank()) response.posterUrl = detailPoster
+        }
+
+        return selected.map { it.first }.distinctBy { it.url }
+    }
+
     // =========================================================================
     //  Afiş
     // =========================================================================
 
     private fun posterOf(document: Document): String? {
-        return document.selectFirst("meta[property='og:image']")
+        document.selectFirst("meta[property='og:image'], meta[name='twitter:image']")
             ?.attr("content")
             ?.trim()
             ?.takeIf { it.isNotBlank() }
-            ?.let(::fixUrl)
-            ?: document
-                .select("img")
-                .asSequence()
-                .mapNotNull { posterOfElement(it) }
-                .firstOrNull()
+            ?.let { posterCandidate(it) }
+            ?.let { return it }
+
+        return document
+            .select("img, source, [data-poster], [data-thumbnail], [data-thumb], [style*=background]")
+            .asSequence()
+            .mapNotNull { posterOfElement(it) }
+            .firstOrNull()
     }
 
     private fun posterFromElement(element: Element): String? {
-        element.selectFirst("img")?.let {
-            posterOfElement(it)?.let { value -> return value }
+        posterOfElement(element)?.let { return it }
+
+        element.select(
+            "img, picture source, [data-poster], [data-thumbnail], [data-thumb], " +
+                "[data-image], [data-img], [style*=background]"
+        ).forEach { imageLike ->
+            posterOfElement(imageLike)?.let { return it }
         }
 
+        // Sadece aynı kartın kapsayıcılarını tara; sayfanın tüm üst bloklarından
+        // rastgele ilk görseli almak başka dizinin afişini bağlayabiliyor.
         var current: Element? = element.parent()
-
-        repeat(4) {
+        repeat(5) {
             val parent = current ?: return@repeat
+            val classAndId = (parent.className() + " " + parent.id()).lowercase()
+            val hasCardHint = parent.tagName() == "article" ||
+                Regex("""(dizi|series|show|poster|entry|episode|film|movie|card|item|box|post|owl-item|swiper-slide)""")
+                    .containsMatchIn(classAndId)
 
-            parent.select("img").firstOrNull()?.let {
-                posterOfElement(it)?.let { value -> return value }
+            if (hasCardHint) {
+                parent.select(
+                    "img, picture source, [data-poster], [data-thumbnail], [data-thumb], " +
+                        "[data-image], [data-img], [style*=background]"
+                ).forEach { imageLike ->
+                    posterOfElement(imageLike)?.let { return it }
+                }
+                posterOfElement(parent)?.let { return it }
             }
-
             current = parent.parent()
         }
 
         return null
     }
 
-    private fun posterOfElement(element: Element): String? {
-        val raw = listOf(
-            element.attr("data-src"),
-            element.attr("data-lazy-src"),
-            element.attr("data-original"),
-            element.attr("data-image"),
-            element.attr("src"),
-            element.attr("data-srcset"),
-            element.attr("srcset"),
-        ).firstOrNull { it.isNotBlank() && !it.startsWith("data:", ignoreCase = true) }
-            ?: return null
+    private fun posterCandidate(rawValue: String?): String? {
+        val raw = rawValue?.trim()?.decodeEmbedded().orEmpty()
+        if (raw.isBlank() || raw.startsWith("data:", true) || raw.startsWith("javascript:", true)) return null
 
-        return raw
-            .split(",")
-            .firstOrNull()
-            ?.trim()
-            ?.substringBefore(" ")
-            ?.takeIf { it.isNotBlank() }
-            ?.let(::fixUrl)
+        val candidate = runCatching { fixUrl(raw) }.getOrNull()?.trim().orEmpty()
+        if (candidate.isBlank() || !candidate.startsWith("http", true)) return null
+        val low = candidate.lowercase()
+        if (low.contains("placeholder") || low.contains("blank.gif") || low.contains("spacer.gif") ||
+            low.contains("/avatar") || low.contains("/favicon") || low.contains("logo") ||
+            low.endsWith(".svg") || low.contains("data:image")
+        ) return null
+        return candidate
+    }
+
+    private fun posterOfElement(element: Element): String? {
+        val attributes = listOf(
+            "data-poster", "data-thumbnail", "data-thumb", "data-image-url", "data-image",
+            "data-img", "data-lazy-src", "data-original-src", "data-original", "data-src",
+            "data-lazyload", "data-lazy", "data-cfsrc", "data-url", "data-background",
+            "data-bg", "data-srcset", "srcset", "src"
+        )
+
+        attributes.forEach { attribute ->
+            val raw = element.attr(attribute).trim()
+            if (raw.isBlank()) return@forEach
+            val candidate = if (attribute.contains("srcset")) {
+                raw.substringBefore(",").trim().substringBefore(" ")
+            } else {
+                raw
+            }
+            posterCandidate(candidate)?.let { return it }
+        }
+
+        val style = element.attr("style")
+        val background = Regex(
+            """(?i)background(?:-image)?\s*:[^;]*?url\(\s*['"]?([^)'"]+)"""
+        ).find(style)?.groupValues?.getOrNull(1)
+        posterCandidate(background)?.let { return it }
+
+        return null
     }
 
     // =========================================================================
