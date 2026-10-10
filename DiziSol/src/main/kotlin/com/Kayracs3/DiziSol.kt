@@ -103,7 +103,7 @@ class DiziSol : MainAPI() {
             .let(::decode)
             .replace(Regex("""(?i)\s*[\-|–]\s*DİZİSOL.*$"""), "")
             .replace(Regex("""(?i)\s*\|\s*DIZISOL.*$"""), "")
-            .replace(Regex("""(?i)\s+izle\s*$"""), "")
+            .replace(Regex("""(?i)\s+izle\b.*$"""), "")
             .replace(Regex("""(?i)\s+\d+\.?\s*sezon\s+\d+\.?\s*bölüm.*$"""), "")
             .replace(Regex("""(?i)\s+\(\s*(?:film|dizi)\s*\)\s*$"""), "")
             .replace(Regex("""\s+"""), " ")
@@ -536,14 +536,20 @@ class DiziSol : MainAPI() {
             val href = fixUrl(link.attr("href"), pageUrl) ?: return@forEach
             val context = (link.text() + " " + link.className() + " " +
                 link.id() + " " + link.parent()?.className().orEmpty()).lowercase()
-            if (isMediaUrl(href) || (context.contains("server") || context.contains("player") ||
-                context.contains("kaynak") || context.contains("izle") || context.contains("embed"))
+            if (isMediaUrl(href) || ((context.contains("server") || context.contains("player") ||
+                context.contains("kaynak") || context.contains("izle") || context.contains("embed")) &&
+                (!isSameSite(href) || pathOf(href).contains("/embed", true) ||
+                    pathOf(href).contains("/player", true)))
             ) {
                 if (href != pageUrl && !isStaticAsset(href)) found += href
             }
         }
         return found.toList()
     }
+
+    private fun isSameSite(url: String): Boolean = runCatching {
+        URI(url).host.equals(URI(mainUrl).host, ignoreCase = true)
+    }.getOrDefault(false)
 
     private fun isStaticAsset(url: String): Boolean =
         Regex("""(?i)\.(?:jpe?g|png|gif|webp|svg|ico|css|js|woff2?|ttf)(?:$|[?#])""")
@@ -566,7 +572,7 @@ class DiziSol : MainAPI() {
     private fun host(url: String): String =
         runCatching { URI(url).host }.getOrNull()?.removePrefix("www.") ?: "DiziSol"
 
-    private fun emitMedia(
+    private suspend fun emitMedia(
         url: String,
         sourcePage: String,
         callback: (ExtractorLink) -> Unit
@@ -596,7 +602,7 @@ class DiziSol : MainAPI() {
         )
     }
 
-    private fun collectSubtitles(doc: Document, pageUrl: String, callback: (SubtitleFile) -> Unit) {
+    private suspend fun collectSubtitles(doc: Document, pageUrl: String, callback: (SubtitleFile) -> Unit) {
         val seen = HashSet<String>()
         doc.select("track[src], track[data-src], track[data-url], a[href$='.vtt'], a[href$='.srt']")
             .forEach { el ->
