@@ -841,17 +841,61 @@ class SinezyTo : MainAPI() {
             }
         }
 
-        if (!manifestVerified) {
+        var playbackUrl = mediaUrl
+        if (manifestVerified) {
+            // Probe GET'i bazı signed-CDN imzalarında sonraki oynatma isteğini geçersiz
+            // kılabiliyor. Profil seçimi için kullanılan adresi tekrar kullanma:
+            // getVideo API'sinden ayrı, taze bir imzalı URL al.
+            val renewedResponse = runCatching {
+                app.post(
+                    apiUrl,
+                    headers = apiHeaders,
+                    referer = iframeUrl,
+                    data = mapOf(
+                        "hash" to videoId,
+                        "r" to pageReferer
+                    )
+                )
+            }.onFailure {
+                Log.w("SinezyTo", "filmizle API renewal failed for id=$videoId", it)
+            }.getOrNull()
+
+            if (renewedResponse?.isSuccessful == true) {
+                val renewedBody = renewedResponse.text
+                val renewedRawUrl = runCatching {
+                    JSONObject(renewedBody).optString("securedLink").takeIf {
+                        it.isNotBlank() && !it.equals("null", true)
+                    }
+                }.getOrNull() ?: Regex(
+                    """["']?(?:securedLink|videoSource)["']?\s*:\s*["']([^"']+)["']""",
+                    RegexOption.IGNORE_CASE
+                ).find(renewedBody)?.groupValues?.getOrNull(1)
+
+                val renewedUrl = fixUrl(renewedRawUrl, iframeUrl)
+                if (!renewedUrl.isNullOrBlank()) {
+                    playbackUrl = renewedUrl
+                    Log.d(
+                        "SinezyTo",
+                        "filmizle API renewal HTTP=${renewedResponse.code}, " +
+                            "urlRefreshed=${renewedUrl != mediaUrl}, signedUrlReady=true"
+                    )
+                } else {
+                    Log.w("SinezyTo", "filmizle API renewal returned no secured URL; using probed URL")
+                }
+            } else {
+                Log.w("SinezyTo", "filmizle API renewal failed; using probed URL")
+            }
+
+            Log.d("SinezyTo", "filmizle HLS probe selected referer=$selectedReferer")
+        } else {
             Log.w(
                 "SinezyTo",
                 "filmizle HLS probe: all header profiles rejected for id=$videoId; " +
                     "emitting default link for fallback"
             )
-        } else {
-            Log.d("SinezyTo", "filmizle HLS probe selected referer=$selectedReferer")
         }
 
-        publishDirect(mediaUrl, selectedReferer, callback, selectedHeaders)
+        publishDirect(playbackUrl, selectedReferer, callback, selectedHeaders)
         return true
     }
 
