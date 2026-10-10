@@ -41,6 +41,26 @@
         "name": "ClipBox"
     },
     {
+        "iconUrl": "https://www.ddizi.tel/favicon.ico",
+        "fileHash": "sha256-2b792799871d41706a808296509de8065135ade656192950299584f466b49a0e",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 30941,
+        "status": 3,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "DdiziTel",
+        "description": "DDizi T\u00fcrk\u00e7e dizi ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DdiziTel.cs3",
+        "name": "DdiziTel"
+    },
+    {
         "iconUrl": "https://www.dizibox.live/favicon.ico",
         "fileHash": "sha256-4c54d12eab1fdbb3522389f86dc438a09d0b3c62bc0d533d4476914312acde65",
         "apiVersion": 1,
