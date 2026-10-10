@@ -239,30 +239,31 @@ class DiziSol : MainAPI() {
         // kapsayıcıda tek bir farklı içerik URL'si ve tek bir aday görsel varsa kullan.
         val linkUrl = fixUrl(link.attr("href"), baseUrl)?.let(::canonicalResultUrl)
         var parent = link.parent()
-        repeat(5) {
-            if (parent == null) return@repeat
-
+        var depth = 0
+        while (parent != null && depth < 5) {
+            val currentParent = parent
             val contentTargets = LinkedHashSet<String>()
-            if (parent.tagName().equals("a", true)) {
-                fixUrl(parent.attr("href"), baseUrl)?.let { href ->
+            if (currentParent.tagName().equals("a", true)) {
+                fixUrl(currentParent.attr("href"), baseUrl)?.let { href ->
                     if (isFilmUrl(href) || isSeriesUrl(href)) contentTargets += canonicalResultUrl(href)
                 }
             }
-            parent.select("a[href]").forEach { a ->
+            currentParent.select("a[href]").forEach { a ->
                 val href = fixUrl(a.attr("href"), baseUrl) ?: return@forEach
                 if (isFilmUrl(href) || isSeriesUrl(href)) contentTargets += canonicalResultUrl(href)
             }
 
             if (linkUrl != null && contentTargets.size == 1 && contentTargets.first() == linkUrl) {
                 val urls = LinkedHashSet<String>()
-                parent.select("img, [style*=background], [data-bg], [data-background], " +
+                currentParent.select("img, [style*=background], [data-bg], [data-background], " +
                     "[data-background-image], [data-poster], [data-thumb], [data-thumbnail]").forEach { element ->
                     val url = imageUrl(element, baseUrl) ?: backgroundImageUrl(element, baseUrl)
                     if (url != null) urls += url
                 }
                 if (urls.size == 1) return urls.first()
             }
-            parent = parent.parent()
+            parent = currentParent.parent()
+            depth++
         }
         return null
     }
@@ -300,10 +301,10 @@ class DiziSol : MainAPI() {
         val explicitSelectors = listOf(
             "main [itemprop=image]", "article [itemprop=image]", "[itemprop=image]",
             "main .detail-poster img", ".detail-poster img",
-            "main [class*=poster] img", "main [class*=cover] img",
-            "article [class*=poster] img", "article [class*=cover] img",
+            "main .movie-detail [class*=poster] img", "main .series-detail [class*=poster] img",
             "main .movie-detail img", "main .series-detail img",
-            "article .poster img", "article img[itemprop=image]"
+            "article .movie-detail img", "article .series-detail img",
+            "article img[itemprop=image]"
         )
         for (selector in explicitSelectors) {
             val element = doc.selectFirst(selector) ?: continue
@@ -321,15 +322,17 @@ class DiziSol : MainAPI() {
         // Bazı sayfalarda afiş, h1 başlığı ile aynı detay kapsayıcısındadır.
         val heading = doc.selectFirst("main h1, article h1, h1")
         var ancestor = heading?.parent()
-        repeat(5) {
-            if (ancestor == null) return@repeat
+        var headingDepth = 0
+        while (ancestor != null && headingDepth < 5) {
+            val currentAncestor = ancestor
             val candidates = LinkedHashSet<String>()
-            ancestor.select(imageSelector).forEach { element ->
+            currentAncestor.select(imageSelector).forEach { element ->
                 val url = imageUrl(element, baseUrl) ?: backgroundImageUrl(element, baseUrl)
                 if (url != null) candidates += url
             }
             if (candidates.size == 1) return candidates.first()
-            ancestor = ancestor.parent()
+            ancestor = currentAncestor.parent()
+            headingDepth++
         }
 
         // Genel fallback yalnızca ana içerikteki tekil görsel için uygulanır.
