@@ -272,35 +272,150 @@ class DdiziTel : MainAPI() {
         val term = query.trim()
         if (term.isBlank()) return newSearchResponseList(emptyList(), false)
 
-        val home = runCatching {
-            app.get(mainUrl, headers = requestHeaders)
-        }.getOrNull()
-        val form = home?.document?.select("form")?.firstOrNull { candidate ->
-            candidate.select("input").any {
-                val type = it.attr("type").lowercase()
-                type == "text" || type == "search" || it.attr("name").isNotBlank()
+        val results = LinkedHashMap<String, SearchResponse>()
+
+        fun remember(items: List<SearchResponse>) {
+            for (item in items) {
+                val key = item.url.trimEnd('/')
+                results.putIfAbsent(key, item)
             }
         }
 
-        val searchUrl = if (form != null) {
-            val field = form.select("input[name]").firstOrNull {
-                val type = it.attr("type").lowercase()
-                type == "text" || type == "search" || type.isBlank()
-            }?.attr("name").orEmpty().ifBlank { "s" }
-            val action = fixUrl(form.attr("action"), mainUrl) ?: mainUrl
-            val separator = if (action.contains("?")) "&" else "?"
-            "$action$separator" + URLEncoder.encode(field, "UTF-8") + "=" +
-                URLEncoder.encode(term, "UTF-8")
-        } else {
-            "$mainUrl/?s=" + URLEncoder.encode(term, "UTF-8")
+        suspend fun tryRequest(
+            label: String,
+            url: String,
+            postData: Map<String, String>? = null
+        ): Boolean {
+            val response = runCatching {
+                if (postData != null) {
+                    app.post(
+                        url,
+                        data = postData,
+                        headers = requestHeaders + ("Content-Type" to "application/x-www-form-urlencoded"),
+                        referer = mainUrl
+                    )
+                } else {
+                    app.get(url, headers = requestHeaders, referer = mainUrl)
+                }
+            }.onFailure {
+                Log.w("DDizi", "search request failed: " + label, it)
+            }.getOrNull() ?: return false
+
+            if (!response.isSuccessful) {
+                Log.w("DDizi", "search request unsuccessful: " + label + " status=" + response.code)
+                return false
+            }
+
+            val parsed = parseCards(response.document)
+            Log.d(
+                "DDizi",
+                "search attempt=" + label +
+                    " status=" + response.code +
+                    " title=" + response.document.title() +
+                    " contentLinks=" + response.document.select("a[href]").size +
+                    " results=" + parsed.size
+            )
+            remember(parsed)
+            return parsed.isNotEmpty()
         }
 
-        val response = runCatching {
-            app.get(searchUrl, headers = requestHeaders, referer = mainUrl)
-        }.getOrNull() ?: return newSearchResponseList(emptyList(), false)
-        if (!response.isSuccessful) return newSearchResponseList(emptyList(), false)
-        val items = parseCards(response.document)
-        return newSearchResponseList(items, false)
+        // DDizi'nin arama ucu form gönderimi kullanıyor. Önce bilinen POST biçimini
+        // dene; önceki sürüm ana sayfadaki ilgisiz bir formu seçip yanlış GET atabiliyordu.
+        if (tryRequest(
+                "POST /arama/",
+                "$mainUrl/arama/",
+                mapOf("arama" to term)
+            )
+        ) {
+            return newSearchResponseList(results.values.toList(), false)
+        }
+
+        // Ana sayfadaki gerçek arama formunu bul. Gizli alanları da koru; formu
+        // sadece herhangi bir input'u var diye seçme (bülten/yorum formları olabilir).
+        val home = runCatching {
+            app.get(mainUrl, headers = requestHeaders)
+        }.onFailure {
+            Log.w("DDizi", "search home request failed", it)
+        }.getOrNull()
+
+        val forms = home?.document?.select("form").orEmpty()
+        val form = forms
+            .mapNotNull { candidate ->
+                val searchInput = candidate.select("input[name], input[type=search], input[type=text]")
+                    .firstOrNull { input ->
+                        val name = input.attr("name").lowercase()
+                        val id = input.id().lowercase()
+                        val placeholder = input.attr("placeholder").lowercase()
+                        val type = input.attr("type").lowercase()
+                        type == "search" ||
+                            name in setOf("s", "q", "arama", "search", "query", "keyword", "term") ||
+                            name.contains("search") || name.contains("arama") ||
+                            id.contains("search") || id.contains("arama") ||
+                            placeholder.contains("search") || placeholder.contains("arama")
+                    } ?: return@mapNotNull null
+
+                val marker = (
+                    candidate.attr("action") + " " + candidate.id() + " " +
+                        candidate.className() + " " + searchInput.attr("name") + " " +
+                        searchInput.attr("placeholder")
+                    ).lowercase()
+                val score = (if (marker.contains("search") || marker.contains("arama")) 5 else 0) +
+                    (if (searchInput.attr("type").equals("search", true)) 3 else 0) +
+                    (if (searchInput.attr("name").lowercase() in setOf("s", "q", "arama", "search", "query")) 2 else 0)
+                Triple(candidate, searchInput, score)
+            }
+            .maxByOrNull { it.third }
+
+        if (form != null) {
+            val formElement = form.first
+            val searchInput = form.second
+            val action = fixUrl(formElement.attr("action"), mainUrl) ?: mainUrl
+            val fieldName = searchInput.attr("name").ifBlank {
+                searchInput.id().ifBlank { "s" }
+            }
+            val fields = LinkedHashMap<String, String>()
+            for (input in formElement.select("input[name]")) {
+                val name = input.attr("name")
+                if (name.isBlank()) continue
+                val type = input.attr("type").lowercase()
+                if (type == "submit" || type == "button" || type == "image") continue
+                fields[name] = if (name == searchInput.attr("name") || name == fieldName) {
+                    term
+                } else {
+                    input.attr("value")
+                }
+            }
+            fields[fieldName] = term
+
+            val method = formElement.attr("method").ifBlank { "GET" }.uppercase()
+            if (method == "POST") {
+                tryRequest("site search form POST", action, fields)
+            } else {
+                val queryFields = fields.entries.joinToString("&") {
+                    URLEncoder.encode(it.key, "UTF-8") + "=" +
+                        URLEncoder.encode(it.value, "UTF-8")
+                }
+                val separator = if (action.contains("?")) "&" else "?"
+                tryRequest("site search form GET", action + separator + queryFields)
+            }
+        }
+
+        // WordPress ve özel arama uçları için yedek adresler.
+        if (results.isEmpty()) {
+            val encoded = URLEncoder.encode(term, "UTF-8")
+            tryRequest("GET /?s=", "$mainUrl/?s=$encoded")
+        }
+        if (results.isEmpty()) {
+            val encoded = URLEncoder.encode(term, "UTF-8")
+            tryRequest("GET /?arama=", "$mainUrl/?arama=$encoded")
+        }
+        if (results.isEmpty()) {
+            val encoded = URLEncoder.encode(term, "UTF-8")
+            tryRequest("GET /arama/?arama=", "$mainUrl/arama/?arama=$encoded")
+        }
+
+        Log.d("DDizi", "search final results=" + results.size)
+        return newSearchResponseList(results.values.toList(), false)
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? =
