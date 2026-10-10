@@ -18,8 +18,8 @@ class SinezyTo : MainAPI() {
 
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Ana Sayfa",
-        "$mainUrl/filmler" to "Filmler",
-        "$mainUrl/diziler" to "Diziler"
+        "$mainUrl/izle/en-yeni-filmler/" to "Filmler",
+        "$mainUrl/izle/bilim-kurgu-filmleri/" to "Bilimkurgu"
     )
 
     private val headers = mapOf(
