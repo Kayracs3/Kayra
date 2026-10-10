@@ -374,10 +374,10 @@
     },
     {
         "iconUrl": "https://sinezy.si/favicon.ico",
-        "fileHash": "sha256-d79251910d4d698c4c01bcfdcb1024d820c9a79f0e96ae3892f9b03f19cca4a7",
+        "fileHash": "sha256-3dd93157a3e31ca7a22af93ce6c9e50931d1493b7ff10eef5416552ddfbc0c52",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 45991,
+        "fileSize": 47642,
         "status": 1,
         "language": "tr",
         "authors": [
