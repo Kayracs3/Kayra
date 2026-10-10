@@ -135,19 +135,35 @@ def changed_areas(paths, root: Path):
     return sorted(areas, key=str.lower) or ["Repo / CI"]
 
 
-def get_commits(before: str, after: str):
-    if after and before and not re.fullmatch(r"0+", before):
+def parse_log_lines(output: str):
+    commits = []
+    for line in output.splitlines():
+        parts = line.split("\x1f", 2)
+        if len(parts) == 3:
+            commits.append((parts[0], parts[1].strip(), parts[2][:10]))
+    return commits
+
+
+def get_commits(before: str, after: str, known: set[str]):
+    # Workflow runs can cancel one another when a burst of commits arrives.
+    # Re-scan from the earliest changelog marker so cancelled runs never lose notes.
+    if known:
+        history = git("log", "--reverse", "--format=%H%x1f%s%x1f%aI")
+        all_commits = parse_log_lines(history.stdout)
+        first_known = next(
+            (index for index, item in enumerate(all_commits) if item[0] in known),
+            None,
+        )
+        if first_known is not None:
+            return all_commits[first_known + 1:]
+
+    if after and before and re.fullmatch(r"[0-9a-fA-F]{40}", before) and not re.fullmatch(r"0+", before):
         result = git("log", "--reverse", "--format=%H%x1f%s%x1f%aI", f"{before}..{after}")
     elif after:
         result = git("log", "-20", "--reverse", "--format=%H%x1f%s%x1f%aI", after)
     else:
         result = git("log", "-20", "--reverse", "--format=%H%x1f%s%x1f%aI")
-    commits = []
-    for line in result.stdout.splitlines():
-        parts = line.split("\x1f", 2)
-        if len(parts) == 3:
-            commits.append((parts[0], parts[1].strip(), parts[2][:10]))
-    return commits
+    return parse_log_lines(result.stdout)
 
 
 def update_changelog(root: Path, path: Path, before: str, after: str):
@@ -157,7 +173,7 @@ def update_changelog(root: Path, path: Path, before: str, after: str):
     )
     known = set(re.findall(r'<!-- kayra-commit:([0-9a-f]{40}) -->', original))
     fresh = []
-    for sha, subject, date in get_commits(before, after):
+    for sha, subject, date in get_commits(before, after, known):
         if sha in known:
             continue
         paths = changed_paths(sha)
