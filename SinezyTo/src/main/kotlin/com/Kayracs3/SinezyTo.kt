@@ -750,6 +750,8 @@ class SinezyTo : MainAPI() {
         if (!host.matches(Regex("""[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?"""))) return
 
         val low = candidate.lowercase()
+        // Loglarda görülen BTK TLS hatalı bstrfcdn.com bağlantısı video değil reklam yönlendirmesi.
+        if (host == "bstrfcdn.com" || host.endsWith(".bstrfcdn.com")) return
         if (low.contains("google-analytics") || low.contains("doubleclick") ||
             low.contains("facebook.com") || low.contains("twitter.com") ||
             low.contains("api.whatsapp.com") ||
