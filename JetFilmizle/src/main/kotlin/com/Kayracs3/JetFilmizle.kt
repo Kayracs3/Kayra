@@ -153,48 +153,70 @@ class JetFilmizle : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val q = query.trim()
         if (q.isBlank()) return emptyList()
-
         val encoded = URLEncoder.encode(q, "UTF-8")
-        val response = runCatching {
-            app.get(
-                "$mainUrl/arama-json?q=$encoded",
-                headers = pageHeaders,
-                referer = "$mainUrl/",
-            ).text
-        }.getOrNull() ?: return emptyList()
 
-        return try {
-            val body = response.substringAfter("<body>", response).substringBefore("</body>", response)
-            val json = org.json.JSONObject(body)
-            val results = json.optJSONArray("results") ?: return emptyList()
+        // Önce sitenin JSON arama ucunu kullan; boş veya farklı bir cevap dönerse
+        // geleneksel HTML arama sayfalarını da dene.
+        val apiUrl = "$mainUrl/arama-json?q=$encoded"
+        val apiText = runCatching {
+            app.get(apiUrl, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).text
+        }.onFailure {
+            Log.w(JET_TAG, "JSON search request failed", it)
+        }.getOrNull()
 
-            buildList {
-                for (i in 0 until results.length()) {
-                    val item = results.optJSONObject(i) ?: continue
-                    val title = item.optString("title").trim()
-                    val rawUrl = item.optString("url").trim()
-                    if (title.isBlank() || rawUrl.isBlank()) continue
-
-                    val fullUrl = fixUrlNull(
-                        if (rawUrl.startsWith("http")) rawUrl else "$mainUrl/$rawUrl"
-                    ) ?: continue
-
-                    val poster = fixUrlNull(item.optString("poster").trim())
-                    val year = item.optString("year").toIntOrNull()
-                    val rating = item.optString("rating")
-                    val type = if (item.optString("type").equals("dizi", true)) TvType.TvSeries else TvType.Movie
-
-                    add(newMovieSearchResponse(title, fullUrl, type) {
-                        posterUrl = poster
-                        this.year = year
-                        this.score = Score.from10(rating)
-                    })
-                }
-            }.distinctBy { it.url }
-        } catch (e: Exception) {
-            Log.e(JET_TAG, "search hata: ${e.message}")
-            emptyList()
+        if (!apiText.isNullOrBlank()) {
+            val body = Regex("""(?is)<body[^>]*>(.*?)</body>""")
+                .find(apiText)?.groupValues?.getOrNull(1)?.trim().orEmpty().ifBlank { apiText.trim() }
+            val apiResults = runCatching {
+                val json = org.json.JSONObject(body)
+                val results = json.optJSONArray("results") ?: return@runCatching emptyList()
+                buildList {
+                    for (i in 0 until results.length()) {
+                        val item = results.optJSONObject(i) ?: continue
+                        val title = item.optString("title").trim()
+                        val rawUrl = item.optString("url").trim()
+                        if (title.isBlank() || rawUrl.isBlank()) continue
+                        val fullUrl = fixUrlNull(
+                            if (rawUrl.startsWith("http", true)) rawUrl else "$mainUrl/${rawUrl.trimStart('/')}"
+                        ) ?: continue
+                        val poster = fixUrlNull(item.optString("poster").trim())
+                        val year = item.optString("year").toIntOrNull()
+                        val rating = item.optString("rating")
+                        val type = if (item.optString("type").equals("dizi", true)) TvType.TvSeries else TvType.Movie
+                        add(newMovieSearchResponse(title, fullUrl, type) {
+                            posterUrl = poster
+                            this.year = year
+                            this.score = Score.from10(rating)
+                        })
+                    }
+                }.distinctBy { it.url }
+            }.getOrElse {
+                Log.d(JET_TAG, "JSON search parse failed: ${it.message}")
+                emptyList()
+            }
+            if (apiResults.isNotEmpty()) return apiResults
         }
+
+        val fallbackUrls = listOf(
+            "$mainUrl/?s=$encoded",
+            "$mainUrl/?search=$encoded",
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/search?q=$encoded",
+        ).distinct()
+        for (url in fallbackUrls) {
+            val document = runCatching {
+                app.get(url, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
+            }.onFailure {
+                Log.w(JET_TAG, "HTML search request failed: $url", it)
+            }.getOrNull() ?: continue
+
+            val results = document.select(
+                "article.movie, .movie-card, .movie-item, .film-card, .film-item, .card.movie, a[href*='/film/'], a[href*='/dizi/']"
+            ).mapNotNull { it.toSearchResult() }.distinctBy { it.url }
+            Log.d(JET_TAG, "HTML search $url -> ${results.size} results")
+            if (results.isNotEmpty()) return results
+        }
+        return emptyList()
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
