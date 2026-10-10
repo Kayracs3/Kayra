@@ -38,28 +38,72 @@ class SinezyTo : MainAPI() {
         }
     }
 
+    /** Lazy-load placeholder'larını (data:image, boş, gif) eler. */
+    private fun realImage(value: String?): String? {
+        val v = value?.trim().orEmpty()
+        if (v.isBlank() || v.startsWith("data:", true)) return null
+        return fixUrl(v)
+    }
+
+    /** Kartın afişini bulur: lazy-load öznitelikleri src'den ÖNCE denenir. */
+    private fun posterOf(link: org.jsoup.nodes.Element): String? {
+        val img = link.selectFirst("img")
+            ?: link.parent()?.selectFirst("img")
+            ?: link.parent()?.parent()?.selectFirst("img")
+            ?: return null
+
+        val attrs = listOf(
+            "data-src", "data-lazy-src", "data-original", "data-lazy", "data-img", "src"
+        )
+        for (a in attrs) realImage(img.attr(a))?.let { return it }
+
+        // srcset / data-srcset -> ilk adres
+        for (a in listOf("data-srcset", "srcset")) {
+            val first = img.attr(a).split(",").firstOrNull()?.trim()?.substringBefore(" ")
+            realImage(first)?.let { return it }
+        }
+        return null
+    }
+
+    /** "Poster 6.5 Saplantı" gibi bozuk link metni yerine temiz başlık üretir. */
+    private fun titleOf(link: org.jsoup.nodes.Element): String {
+        val fromTitle = link.attr("title").trim().removeSuffix(" izle").removeSuffix(" İzle").trim()
+        if (fromTitle.isNotBlank()) return fromTitle
+        val fromAlt = link.selectFirst("img")?.attr("alt")?.trim().orEmpty()
+            .removeSuffix(" izle").trim()
+        if (fromAlt.isNotBlank()) return fromAlt
+        return link.text().trim()
+            .removePrefix("Poster").trim()
+            .replace(Regex("^\\d+(\\.\\d+)?\\s+"), "")
+            .trim()
+    }
+
+    private fun parseCards(document: org.jsoup.nodes.Document): List<SearchResponse> {
+        return document.select("a[href]").mapNotNull { link ->
+            val href = fixUrl(link.attr("href")) ?: return@mapNotNull null
+            val isDizi = href.contains("/dizi/", true)
+            val looksLikeCard = link.attr("title").trim().endsWith("izle", true) && link.selectFirst("img") != null
+            if (!href.contains("/film/", true) && !isDizi && !looksLikeCard) return@mapNotNull null
+
+            val title = titleOf(link)
+            if (title.isBlank()) return@mapNotNull null
+            val poster = posterOf(link)
+
+            if (isDizi) {
+                newTvSeriesSearchResponse(title, href) { posterUrl = poster }
+            } else {
+                newMovieSearchResponse(title, href) { posterUrl = poster }
+            }
+        }.distinctBy { it.url }
+    }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
-        val pageUrl = if (page <= 1) request.data else "${request.data}?page=$page"
+        // site sayfalaması: /page/N/
+        val pageUrl = if (page <= 1) request.data else "${request.data.trimEnd('/')}/page/$page/"
         val response = app.get(pageUrl, headers = headers, referer = mainUrl)
         if (!response.isSuccessful) return null
 
-        val items = response.document.select("a[href]").mapNotNull { link ->
-            val href = fixUrl(link.attr("href")) ?: return@mapNotNull null
-            if (!href.contains("/film/", true) && !href.contains("/dizi/", true)) return@mapNotNull null
-
-            val title = link.text().trim()
-            if (title.isBlank()) return@mapNotNull null
-
-            if (href.contains("/film/", true)) {
-                newMovieSearchResponse(title, href) {
-                    posterUrl = link.selectFirst("img")?.attr("src")?.let(::fixUrl)
-                }
-            } else {
-                newTvSeriesSearchResponse(title, href) {
-                    posterUrl = link.selectFirst("img")?.attr("src")?.let(::fixUrl)
-                }
-            }
-        }.distinctBy { it.url }
+        val items = parseCards(response.document)
 
         return newHomePageResponse(request.name, items, hasNext = items.isNotEmpty())
     }
@@ -73,23 +117,7 @@ class SinezyTo : MainAPI() {
             return newSearchResponseList(emptyList(), false)
         }
 
-        val items = response.document.select("a[href]").mapNotNull { link ->
-            val href = fixUrl(link.attr("href")) ?: return@mapNotNull null
-            if (!href.contains("/film/", true) && !href.contains("/dizi/", true)) return@mapNotNull null
-
-            val title = link.text().trim()
-            if (title.isBlank()) return@mapNotNull null
-
-            if (href.contains("/film/", true)) {
-                newMovieSearchResponse(title, href) {
-                    posterUrl = link.selectFirst("img")?.attr("src")?.let(::fixUrl)
-                }
-            } else {
-                newTvSeriesSearchResponse(title, href) {
-                    posterUrl = link.selectFirst("img")?.attr("src")?.let(::fixUrl)
-                }
-            }
-        }.distinctBy { it.url }
+        val items = parseCards(response.document)
 
         return newSearchResponseList(items, hasNext = false)
     }
