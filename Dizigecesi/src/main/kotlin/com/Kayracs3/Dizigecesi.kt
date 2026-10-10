@@ -146,32 +146,50 @@ class Dizigecesi : MainAPI() {
         if (q.length < 2) return newSearchResponseList(emptyList(), false)
 
         val encoded = URLEncoder.encode(q, "UTF-8")
-        val targetUrl = if (page <= 1) {
-            mainUrl + "/?s=" + encoded
-        } else {
-            mainUrl + "/page/" + page + "/?s=" + encoded
-        }
-
-        val document = runCatching {
-            app.get(
-                targetUrl,
-                headers = browserHeaders,
-                referer = mainUrl + "/",
-                allowRedirects = true
-            ).document
-        }.getOrNull() ?: return newSearchResponseList(emptyList(), false)
-
-        val results = parseSearchResults(document)
-        return newSearchResponseList(
-            results,
-            hasNext = page < 20 && hasNextPage(document, page)
+        val pagePrefix = if (page <= 1) "" else "/page/$page/"
+        val urls = if (page <= 1) listOf(
+            "$mainUrl/?s=$encoded",
+            "$mainUrl/?search=$encoded",
+            "$mainUrl/arama/?s=$encoded",
+            "$mainUrl/arama?q=$encoded",
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/arama/$encoded",
+        ) else listOf(
+            "$mainUrl$pagePrefix?s=$encoded",
+            "$mainUrl$pagePrefix?search=$encoded",
+            "$mainUrl/?s=$encoded&page=$page",
         )
+
+        val merged = LinkedHashMap<String, SearchResponse>()
+        var hasNext = false
+        for (url in urls) {
+            val document = runCatching {
+                app.get(
+                    url,
+                    headers = browserHeaders,
+                    referer = "$mainUrl/",
+                    allowRedirects = true
+                )
+            }.onFailure {
+                android.util.Log.w("Dizigecesi", "Arama isteği başarısız: $url", it)
+            }.getOrNull()?.takeIf { it.isSuccessful }?.document ?: continue
+
+            val items = parseSearchResults(document)
+            android.util.Log.d("Dizigecesi", "Arama: $url -> ${items.size} sonuç")
+            items.forEach { merged.putIfAbsent(it.url, it) }
+            if (items.isNotEmpty()) {
+                hasNext = page < 20 && hasNextPage(document, page)
+                break
+            }
+        }
+        return newSearchResponseList(merged.values.toList(), hasNext)
     }
 
-
     fun parseSearchResults(document: Document): List<SearchResponse> {
+        // Arama ve ana sayfa kartlarının class adı aynı olmayabiliyor.
+        // URL türüne göre bağlantıları topla; toSearchResult geçersiz linkleri ayıklar.
         val elements = document.select(
-            "a.card-series[href*='/dizi/'], a.card-series[href*='/film/']"
+            "a[href*='/dizi/'], a[href*='/film/']"
         )
 
         return elements.mapNotNull { toSearchResult(it) }
