@@ -643,7 +643,7 @@ class DdiziTel : MainAPI() {
         val textVariants = LinkedHashSet<String>()
         textVariants.add(decodedHtml)
         val base64Pattern = Regex(
-            """(?i)(?:atob|base64_decode|base64)\\s*\\(\\s*["']([A-Za-z0-9+/]{20,}={0,2})["']\\s*\\)"""
+            """(?i)(?:atob|base64_decode|base64)\s*\(\s*["']([A-Za-z0-9+/]{20,}={0,2})["']\s*\)"""
         )
         for (match in base64Pattern.findAll(decodedHtml).take(20)) {
             val encoded = match.groupValues[1]
@@ -654,10 +654,10 @@ class DdiziTel : MainAPI() {
         }
 
         val directPattern = Regex(
-            """(?i)(?:https?:)?//[^"'<>\\\\\\s]+?\\.(?:m3u8|mp4|m4v|webm|mpd|m3u|txt)(?:\\?[^"'<>\\\\\\s]*)?"""
+            """(?i)(?:https?:)?//[^"'<>\\\s]+?\.(?:m3u8|mp4|m4v|webm|mpd|m3u|txt)(?:\?[^"'<>\\\s]*)?"""
         )
         val attrPattern = Regex(
-            """(?i)\\b(?:src|file|fileurl|file_url|iframe|embed|video|source|stream|streamurl|stream_url|url|link|hls|playlist|contenturl|content_url|master|media|m3u8|mp4)\\s*["']?\\s*[:=]\\s*["']([^"'<>]{5,2000})["']"""
+            """(?i)\b(?:src|file|fileurl|file_url|iframe|embed|video|source|stream|streamurl|stream_url|url|link|hls|playlist|contenturl|content_url|master|media|m3u8|mp4)\s*["']?\s*[:=]\s*["']([^"'<>]{5,2000})["']"""
         )
         for (textVariant in textVariants) {
             directPattern.findAll(textVariant).forEach { addCandidate(output, it.value, base) }
