@@ -264,26 +264,35 @@ class DiziYou : MainAPI() {
     private fun Document.selectSeriesAnchors(): List<Element> = selectSeriesCards()
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val encoded = URLEncoder.encode(query.trim(), "UTF-8")
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+        val encoded = URLEncoder.encode(q, "UTF-8")
         val urls = listOf(
             "$mainUrl/?s=$encoded",
             "$mainUrl/?s=${encoded.replace("+", "%20")}",
-        )
+            "$mainUrl/?search=$encoded",
+            "$mainUrl/?q=$encoded",
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/ara/$encoded",
+            "$mainUrl/search?q=$encoded",
+        ).distinct()
 
+        val found = LinkedHashMap<String, SearchResponse>()
         for (url in urls) {
-            val results = runCatching {
-                app.get(url).document
-                    .selectSeriesAnchors()
-                    .mapNotNull { it.toSearchResponse() }
-                    .distinctBy { it.url }
-            }.getOrElse {
-                emptyList()
-            }
+            val document = runCatching {
+                app.get(url, headers = requestHeaders, referer = "$mainUrl/", allowRedirects = true).document
+            }.onFailure {
+                Log.w("DIZIYOU", "Arama isteği başarısız: $url", it)
+            }.getOrNull() ?: continue
 
-            if (results.isNotEmpty()) return results
+            val results = document.selectSeriesAnchors()
+                .mapNotNull { it.toSearchResponse() }
+                .distinctBy { it.url }
+            Log.d("DIZIYOU", "Arama: $url -> ${results.size} sonuç")
+            results.forEach { found.putIfAbsent(it.url, it) }
+            if (found.isNotEmpty()) break
         }
-
-        return emptyList()
+        return found.values.toList()
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
