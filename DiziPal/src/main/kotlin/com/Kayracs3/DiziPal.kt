@@ -85,46 +85,65 @@ class DiziPal : MainAPI() {
         }
 
         // The homepage carousel may expose episode names but omit their posters
-        // from the anchor itself. Consult the full "Tümünü Gör" listing whenever
-        // any poster is missing, even if the homepage already returned 11+ entries.
+        // from the anchor itself. Consult page 1 of the full listing first: the
+        // homepage's "Tümünü Gör" link points to page 2, which contains older episodes.
         if (isLatestEpisodesPage &&
             (results.size < 11 || results.any { it.posterUrl.isNullOrBlank() })
         ) {
-            val moreUrl = findCurrentEpisodesMoreUrl(document, baseUrl)
-                ?: "$mainUrl/yeni-eklenen-dizi-bolumler?page=2"
-            val moreDocument = runCatching {
-                app.get(
-                    moreUrl,
-                    headers = headers + ("Referer" to url),
-                    referer = url,
-                    allowRedirects = true,
-                    timeout = 12000,
-                ).document
-            }.onFailure {
-                Log.d("DiziPal", "Tümünü Gör istek hatası: $moreUrl; ${it.message}")
-            }.getOrNull()
+            val linkedMoreUrl = findCurrentEpisodesMoreUrl(document, baseUrl)
+            val candidateUrls = listOf(
+                "$mainUrl/yeni-eklenen-dizi-bolumler?page=1",
+                linkedMoreUrl.orEmpty(),
+            ).filter { it.isNotBlank() }.distinct()
 
-            if (moreDocument != null) {
-                val moreBaseUrl = documentBase(moreDocument, moreUrl)
-                val moreResults = parseCurrentEpisodeSection(moreDocument, moreBaseUrl)
-                val homepageCount = results.size
-                val homepagePosterCount = results.count { !it.posterUrl.isNullOrBlank() }
-                if (moreResults.isNotEmpty()) {
-                    // Full-list posters take precedence; homepage results fill
-                    // missing posters for entries that are absent from that page.
-                    results = mergeEpisodeSearchResults(moreResults, results)
+            var usedUrl = ""
+            var moreResults: List<SearchResponse> = emptyList()
+            var bestPosterCount = -1
+
+            for (candidateUrl in candidateUrls) {
+                val moreDocument = runCatching {
+                    app.get(
+                        candidateUrl,
+                        headers = headers + ("Referer" to url),
+                        referer = url,
+                        allowRedirects = true,
+                        timeout = 12000,
+                    ).document
+                }.onFailure {
+                    Log.d("DiziPal", "Bölüm liste isteği hatası: $candidateUrl; ${it.message}")
+                }.getOrNull() ?: continue
+
+                val candidateBase = documentBase(moreDocument, candidateUrl)
+                val candidateResults = parseCurrentEpisodeSection(moreDocument, candidateBase)
+                val candidatePosterCount = candidateResults.count { !it.posterUrl.isNullOrBlank() }
+
+                if (candidateResults.isNotEmpty() && candidatePosterCount > bestPosterCount) {
+                    moreResults = candidateResults
+                    usedUrl = candidateUrl
+                    bestPosterCount = candidatePosterCount
                 }
-                Log.d(
-                    "DiziPal",
-                    "Tümünü Gör kontrolü: adres=$moreUrl; ana=$homepageCount/" +
-                        "$homepagePosterCount afiş; tam liste=${moreResults.size}/" +
-                        "${moreResults.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
-                        "birleşik=${results.size}/" +
-                        "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
-                )
-            } else {
-                Log.d("DiziPal", "Tümünü Gör sayfası açılamadı: $moreUrl")
+
+                // The first page is preferred, but if it contains no posters,
+                // inspect the site's linked page-2 listing as a fallback.
+                if (candidatePosterCount > 0) break
             }
+
+            val homepageCount = results.size
+            val homepagePosterCount = results.count { !it.posterUrl.isNullOrBlank() }
+            if (moreResults.isNotEmpty()) {
+                // Keep the newest homepage entries first. The listing only fills
+                // missing posters for matching episode URLs and appends other entries.
+                results = mergeEpisodeSearchResults(results, moreResults)
+            }
+
+            Log.d(
+                "DiziPal",
+                "Tam bölüm listesi kontrolü: adres=$usedUrl; ana=$homepageCount/" +
+                    "$homepagePosterCount afiş; liste=${moreResults.size}/" +
+                    "${moreResults.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
+                    "birleşik=${results.size}/" +
+                    "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
+            )
         }
 
         // If a homepage/listing card exposes no image URL, try the exact episode page
