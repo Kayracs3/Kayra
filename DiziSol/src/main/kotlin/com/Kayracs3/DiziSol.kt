@@ -1383,6 +1383,19 @@ class DiziSol : MainAPI() {
         }
 
         inspect(first, pageUrl, 0)
+
+        // SPA pages may contain only a small HTML shell; their player is initialized
+        // client-side and therefore no iframe/source appears in Jsoup's static DOM.
+        // In that case, give the actual content page one WebView interception pass.
+        if (linkCount == 0) {
+            webViewCount++
+            val resolved = resolveWebView(pageUrl, "$mainUrl/", countedCallback)
+            Log.i(
+                name,
+                "Video teşhis ana sayfa WebView fallback: sonuç=$resolved bulunanBağlantı=$linkCount"
+            )
+        }
+
         Log.i(
             name,
             "Video çözümleme sonucu: sayfa=${safeLogUrl(pageUrl)} ziyaretEdilenSayfa=${visitedPages.size} adayMedya=${seenMedia.size} bağlantı=$linkCount webViewDenemesi=$webViewCount"
