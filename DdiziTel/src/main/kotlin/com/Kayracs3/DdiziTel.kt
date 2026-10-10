@@ -574,22 +574,31 @@ class DdiziTel : MainAPI() {
     private fun isDdiziHost(host: String): Boolean =
         host.equals("ddizi.tel", true) || host.endsWith(".ddizi.tel", true)
 
-    private fun isYandexDownloader(url: String): Boolean {
+    private fun yandexDiskOrigin(url: String): String? {
         val host = runCatching { URI(url).host.orEmpty().lowercase() }.getOrDefault("")
-        return host == "downloader.disk.yandex.com.tr" ||
-            host == "downloader.disk.yandex.ru" ||
-            host.endsWith(".disk.yandex.com.tr") ||
-            host.endsWith(".disk.yandex.ru")
+        return when {
+            host == "downloader.disk.yandex.com.tr" || host.endsWith(".disk.yandex.com.tr") ->
+                "https://disk.yandex.com.tr/"
+            host == "downloader.disk.yandex.ru" || host.endsWith(".disk.yandex.ru") ->
+                "https://disk.yandex.ru/"
+            else -> null
+        }
     }
+
+    private fun isYandexDownloader(url: String): Boolean = yandexDiskOrigin(url) != null
 
     private fun streamHeaders(referer: String, mediaUrl: String? = null): Map<String, String> {
         val headers = linkedMapOf(
             "User-Agent" to USER_AGENT,
             "Accept" to "*/*"
         )
-        // Yandex'in bazı doğrudan indirme uç noktaları üçüncü taraf Referer başlığıyla
-        // 403 döndürüyor. İmzalı indirme URL'sine Referer eklemeyerek isteği dene.
-        if (mediaUrl.isNullOrBlank() || !isYandexDownloader(mediaUrl)) {
+        val yandexOrigin = mediaUrl?.let(::yandexDiskOrigin)
+        if (yandexOrigin != null) {
+            // DDizi sayfası Referer'iyle Yandex indirme uç noktası 403 verebiliyor.
+            // Boş Referer ile 422 alındığından isteği Yandex Disk kaynağıyla dene.
+            headers["Referer"] = yandexOrigin
+            headers["Origin"] = yandexOrigin.trimEnd('/')
+        } else {
             headers["Referer"] = referer
         }
         return headers
@@ -797,7 +806,7 @@ class DdiziTel : MainAPI() {
                         url = candidate,
                         type = type
                     ) {
-                        this.referer = if (isYandexDownloader(candidate)) "" else referer
+                        this.referer = mediaHeaders["Referer"].orEmpty()
                         this.headers = mediaHeaders
                         this.quality = Regex("""(?i)(2160|1440|1080|720|480|360)""")
                             .find(candidate)?.groupValues?.get(1)?.toIntOrNull()
