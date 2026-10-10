@@ -55,6 +55,7 @@ class DdiziTel : MainAPI() {
             val resolved = when {
                 value.startsWith("https://", true) || value.startsWith("http://", true) -> value
                 value.startsWith("//") -> "https:$value"
+                value.startsWith("www.", true) -> "https://$value"
                 else -> URI(base).resolve(value).toString()
             }
             val uri = URI(resolved)
@@ -561,6 +562,18 @@ class DdiziTel : MainAPI() {
     private fun isDirectMedia(url: String): Boolean =
         Regex("""(?i)\.(?:m3u8|mp4|m4v|webm|mpd)(?:[?#].*)?$""").containsMatchIn(url)
 
+    // DDizi'nin mevcut oynatıcısı HLS listesini .txt uzantılı endpoint'ten
+    // döndürebiliyor; uzantısı .m3u8 değil diye bunu HTML sanıp taramaya girme.
+    private fun isPlaylistEndpoint(url: String): Boolean {
+        val path = pathOf(url)
+        return isDirectMedia(url) ||
+            Regex("""(?i)/(?:master|playlist|index)\.txt$""").containsMatchIn(path) ||
+            (path.contains("/hls/") && path.endsWith(".txt"))
+    }
+
+    private fun isDdiziHost(host: String): Boolean =
+        host.equals("ddizi.tel", true) || host.endsWith(".ddizi.tel", true)
+
     private fun isScriptEndpoint(url: String): Boolean {
         val path = pathOf(url)
         val fileName = path.substringAfterLast('/')
@@ -575,14 +588,28 @@ class DdiziTel : MainAPI() {
         val scheme = uri.scheme?.lowercase()
         val host = uri.host?.lowercase() ?: return
         if (scheme != "http" && scheme != "https") return
-        if (host.contains("google-analytics") || host.contains("doubleclick") ||
-            host.contains("googlesyndication") || host.contains("facebook.com") ||
-            host.contains("api.whatsapp.com")
+        if (host.contains("google-analytics") || host.contains("googletagmanager") ||
+            host.contains("doubleclick") || host.contains("googlesyndication") ||
+            host.contains("facebook.com") || host.contains("api.whatsapp.com")
         ) return
+
+        val candidatePath = uri.path.orEmpty().lowercase()
+        if (isDdiziHost(host)) {
+            // Video sayfası, dizi kataloğu ve ana sayfa asla player adayı olamaz.
+            if (candidatePath.startsWith("/izle/") || candidatePath.startsWith("/diziler/") ||
+                candidatePath.isBlank() || candidatePath == "/"
+            ) return
+            val allowedInternal = candidatePath.startsWith("/player/oynat/") ||
+                candidatePath == "/ajax.php" || candidatePath == "/geox.php" ||
+                candidatePath.endsWith(".js") ||
+                candidatePath.substringAfterLast('/').startsWith("scripts")
+            if (!allowedInternal) return
+        }
+
         if (Regex("""(?i)\.(?:css|js|png|jpe?g|gif|webp|svg|woff2?|ttf|ico)(?:[?#].*)?$""")
                 .containsMatchIn(candidate)) return
         if (candidate.trimEnd('/') == base.trimEnd('/')) return
-        if (output.size < 40) output.add(candidate)
+        if (output.size < 24) output.add(candidate)
     }
 
     private fun collectPlayerUrls(document: Document, html: String, base: String): LinkedHashSet<String> {
@@ -603,18 +630,33 @@ class DdiziTel : MainAPI() {
         directPattern.findAll(decodedHtml).forEach { addCandidate(output, it.value, base) }
 
         val attrPattern = Regex(
-            """(?i)(?:src|file|url|iframe|embed|video|source)\s*["']?\s*[:=]\s*["']([^"'<>]{5,1500})["']"""
+            """(?i)(?:src|file|iframe|embed|video|source|hls|playlist)\s*["']?\s*[:=]\s*["']([^"'<>]{5,1500})["']"""
         )
-        attrPattern.findAll(decodedHtml).forEach { addCandidate(output, it.groupValues[1], base) }
+        attrPattern.findAll(decodedHtml).forEach { match ->
+            val raw = match.groupValues[1]
+            val candidate = fixUrl(raw, base) ?: return@forEach
+            val path = pathOf(candidate)
+            // Genel "url" değişkenleri analytics ve sayfa içi bağlantıları da yakalıyordu.
+            if (isDirectMedia(candidate) || isPlaylistEndpoint(candidate) ||
+                path.contains("/player/") || path.contains("/embed/") ||
+                path.contains("/hls/") || path.endsWith("/ajax.php") ||
+                path.endsWith("/geox.php") || isScriptEndpoint(candidate)
+            ) addCandidate(output, candidate, base)
+        }
 
         for (link in document.select("a[href]")) {
             val label = link.text().trim()
             val href = link.attr("href")
-            if (Regex("""(?i)(parça|parca|\bpart\b|oynatıcı|oynatici|server|kaynak|\bvideo\b|\bizle\b)""")
-                    .containsMatchIn(label) ||
-                href.contains("/player/oynat/", true)
-            ) {
-                addCandidate(output, href, base)
+            val fixed = fixUrl(href, base) ?: continue
+            val path = pathOf(fixed)
+            val explicitPlayer = path.contains("/player/oynat/")
+            val explicitExternalSource = !isDdiziHost(
+                runCatching { URI(fixed).host.orEmpty() }.getOrDefault("")
+            ) && Regex("""(?i)(parça|parca|\bpart\b|oynatıcı|oynatici|server|kaynak|\bvideo\b)""")
+                .containsMatchIn(label) &&
+                !isEpisodeUrl(fixed) && !isSeriesUrl(fixed)
+            if (explicitPlayer || explicitExternalSource) {
+                addCandidate(output, fixed, base)
             }
         }
         return output
@@ -639,14 +681,24 @@ class DdiziTel : MainAPI() {
 
         suspend fun resolve(candidate: String, referer: String, depth: Int) {
             if (depth > 3 || !visited.add(candidate)) return
-            if (isDirectMedia(candidate)) {
+            if (isPlaylistEndpoint(candidate)) {
                 if (emitted.add(candidate)) {
                     val type = when {
-                        candidate.contains(".m3u8", true) -> ExtractorLinkType.M3U8
+                        isPlaylistEndpoint(candidate) &&
+                            (candidate.contains(".m3u8", true) ||
+                                Regex("""(?i)/(?:master|playlist|index)\.txt(?:[?#]|$)""")
+                                    .containsMatchIn(candidate) ||
+                                pathOf(candidate).contains("/hls/") && pathOf(candidate).endsWith(".txt")
+                            ) -> ExtractorLinkType.M3U8
                         candidate.contains(".mpd", true) -> INFER_TYPE
                         else -> ExtractorLinkType.VIDEO
                     }
-                    callback(newExtractorLink(source = name, name = "DDizi", url = candidate, type = type) {
+                    callback(newExtractorLink(
+                        source = name,
+                        name = if (type == ExtractorLinkType.M3U8) "DDizi HLS" else "DDizi",
+                        url = candidate,
+                        type = type
+                    ) {
                         this.referer = referer
                         this.headers = requestHeaders + ("Referer" to referer)
                         this.quality = Regex("""(?i)(2160|1440|1080|720|480|360)""")
