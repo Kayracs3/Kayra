@@ -189,7 +189,7 @@ class DdiziTel : MainAPI() {
             val element = current ?: return false
             val marker = (element.id() + " " + element.className()).lowercase()
             if (Regex(
-                    """(?i)(film|dizi|series|poster|card|item|entry|archive|result|grid|list)"""
+                    """(?i)(film|dizi|series|poster|card|entry|archive|result|grid)"""
                 ).containsMatchIn(marker)
             ) return true
             current = element.parent()
