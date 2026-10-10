@@ -1869,10 +1869,15 @@ class DiziPal : MainAPI() {
 
     private fun posterRequestHeaders(baseUrl: String = mainUrl): Map<String, String> {
         val siteOrigin = originOf(baseUrl) ?: mainUrl
+        val pageReferer = baseUrl.takeIf {
+            it.startsWith("http://", true) || it.startsWith("https://", true)
+        } ?: "$siteOrigin/"
+
+        // Poster CDN uses hotlink protection. Send the page that actually
+        // embedded the image as Referer; avoid adding Origin to image GETs.
         return mapOf(
             "User-Agent" to USER_AGENT,
-            "Referer" to "$siteOrigin/",
-            "Origin" to siteOrigin,
+            "Referer" to pageReferer,
             "Accept" to "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         )
     }
