@@ -162,37 +162,64 @@ class DiziPod : MainAPI() {
     // ------------------------------------------------------------------ arama
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val q = norm(query)
-        fun relevant(list: List<SearchResponse>) =
-            list.filter { norm(it.name).contains(q) }.ifEmpty { list }
+        val rawQuery = query.trim()
+        val q = norm(rawQuery)
+        if (q.isBlank()) return emptyList()
 
-        // 1) WordPress canlı arama (AJAX)
-        val ajax = runCatching {
+        fun relevant(list: List<SearchResponse>): List<SearchResponse> =
+            list.filter {
+                val title = norm(it.name)
+                title.isNotBlank() && (title.contains(q) || q.contains(title))
+            }
+
+        val enc = URLEncoder.encode(rawQuery, "UTF-8")
+        val ajaxDocument = runCatching {
             app.post(
                 "$mainUrl/wp/wp-admin/admin-ajax.php",
                 headers = headers() + ("X-Requested-With" to "XMLHttpRequest"),
                 data = mapOf(
                     "action" to "dp_live_search",
-                    "query" to query,
-                    "search" to query,
-                    "term" to query
+                    "query" to rawQuery,
+                    "search" to rawQuery,
+                    "term" to rawQuery
                 )
             ).document
-        }.getOrNull()?.let { relevant(parseCards(it)) }.orEmpty()
+        }.onFailure {
+            Log.w(TAG, "Live search isteği başarısız", it)
+        }.getOrNull()
 
-        if (ajax.isNotEmpty()) {
-            Log.d(TAG, "SEARCH q=$query items=${ajax.size}")
-            return ajax
+        if (ajaxDocument != null) {
+            val parsed = parseCards(ajaxDocument).distinctBy { it.url }
+            val matched = relevant(parsed)
+            if (matched.isNotEmpty()) {
+                Log.d(TAG, "SEARCH ajax q=$rawQuery items=${matched.size}")
+                return matched
+            }
         }
 
-        // 2) Klasik ?s= araması
-        val enc = URLEncoder.encode(query, "UTF-8")
-        val doc = app.get("$mainUrl/?s=$enc", headers = headers()).document
-        val scope = doc.selectFirst("main, #main, .search-results, .content-area, #content")
-            ?.outerHtml()?.let { Jsoup.parse(it, mainUrl) } ?: doc
-        val res = relevant(parseCards(scope))
-        Log.d(TAG, "SEARCH q=$query items=${res.size}")
-        return res
+        val urls = listOf(
+            "$mainUrl/?s=$enc",
+            "$mainUrl/?search=$enc",
+            "$mainUrl/?q=$enc",
+            "$mainUrl/search/?q=$enc",
+            "$mainUrl/arama/?q=$enc",
+            "$mainUrl/arama/$enc"
+        ).distinct()
+
+        for (url in urls) {
+            val doc = runCatching {
+                app.get(url, headers = headers(), referer = "$mainUrl/", allowRedirects = true).document
+            }.onFailure {
+                Log.w(TAG, "SEARCH GET failed: $url", it)
+            }.getOrNull() ?: continue
+            val scope = doc.selectFirst("main, #main, .search-results, .content-area, #content")
+                ?.outerHtml()?.let { Jsoup.parse(it, mainUrl) } ?: doc
+            val parsed = parseCards(scope).distinctBy { it.url }
+            val matched = relevant(parsed)
+            Log.d(TAG, "SEARCH url=$url parsed=${parsed.size} matched=${matched.size}")
+            if (matched.isNotEmpty()) return matched
+        }
+        return emptyList()
     }
 
     // ------------------------------------------------------------------- load
