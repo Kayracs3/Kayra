@@ -74,7 +74,11 @@ class DiziBoxLive : MainAPI() {
         val urls = listOf(
             "$mainUrl/?s=$encoded",
             "$mainUrl/?search=$encoded",
-        )
+            "$mainUrl/?q=$encoded",
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/arama/?s=$encoded",
+            "$mainUrl/search?q=$encoded",
+        ).distinct()
 
         for (url in urls) {
             val document = requestDocument(url) ?: continue
