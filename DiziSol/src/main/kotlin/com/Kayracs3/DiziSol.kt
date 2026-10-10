@@ -162,6 +162,53 @@ class DiziSol : MainAPI() {
         return backgroundImageUrl(image, baseUrl)
     }
 
+    /**
+     * DiziSol kartlarında TMDB görseli bazen HTML img alanında değil, HTML/JSON
+     * içindeki doğrudan image.tmdb.org URL'si veya poster_path olarak bulunuyor.
+     * Yalnızca kapsamdaki bütün TMDB adayları aynı dosyaya işaret ediyorsa döndür.
+     */
+    private fun tmdbPosterFromRaw(raw: String, baseUrl: String = mainUrl): String? {
+        val normalized = decode(raw)
+            .replace("\\u002e", ".", ignoreCase = true)
+            .replace("\\x2e", ".", ignoreCase = true)
+            .replace("\\u002f", "/", ignoreCase = true)
+            .replace("\\x2f", "/", ignoreCase = true)
+            .replace("\\/", "/")
+
+        val fileNames = LinkedHashSet<String>()
+        val direct = Regex(
+            """(?i)(?:https?:)?//image\.tmdb\.org/t/p/(?:w(?:92|154|185|342|500|780)|original)/([A-Za-z0-9_%.-]+\.(?:jpe?g|png|webp))"""
+        )
+        direct.findAll(normalized).forEach { match ->
+            fileNames += match.groupValues[1]
+        }
+
+        val posterPath = Regex(
+            """(?i)["']poster_path["']\s*:\s*["'](\/?[^"'\\\s,}]+\.(?:jpe?g|png|webp))["']"""
+        )
+        posterPath.findAll(normalized).forEach { match ->
+            val file = match.groupValues[1].trimStart('/').substringAfterLast('/')
+            if (file.matches(Regex("""(?i)[A-Za-z0-9_%.-]+\.(?:jpe?g|png|webp)"""))) {
+                fileNames += file
+            }
+        }
+
+        val posterPathAttribute = Regex(
+            """(?i)(?:data-)?poster[-_]path\s*=\s*["']\/?([^"']+\.(?:jpe?g|png|webp))["']"""
+        )
+        posterPathAttribute.findAll(normalized).forEach { match ->
+            val file = match.groupValues[1].trimStart('/').substringAfterLast('/')
+            if (file.matches(Regex("""(?i)[A-Za-z0-9_%.-]+\.(?:jpe?g|png|webp)"""))) {
+                fileNames += file
+            }
+        }
+
+        if (fileNames.size != 1) return null
+        val url = "https://image.tmdb.org/t/p/w500/${fileNames.first()}"
+        return fixUrl(url.replace("__FILENAME__", fileNames.first()), baseUrl)
+            ?.takeUnless(::isRejectedPoster)
+    }
+
     private fun isRejectedPoster(url: String): Boolean =
         Regex("""(?i)\.(?:svg|gif|ico)(?:[?#]|$)""").containsMatchIn(url) ||
             listOf("logo", "avatar", "placeholder", "blank.", "no-image", "no_image").any {
@@ -215,6 +262,8 @@ class DiziSol : MainAPI() {
     }
 
     private fun posterFromCard(link: Element, baseUrl: String = mainUrl): String? {
+        tmdbPosterFromRaw(link.outerHtml(), baseUrl)?.let { return it }
+
         val imageSelector =
             "img, source[srcset], [style*=background], [data-bg], [data-background], " +
                 "[data-background-image], [data-src], [data-lazy-src], [data-original], " +
@@ -229,6 +278,7 @@ class DiziSol : MainAPI() {
                 ".episode-item, .post-item, .swiper-slide, .grid-item, .film-box, .dizi-box, " +
                 ".thumb, .thumbnail, .post, .item, .card, li"
         )
+        card?.let { tmdbPosterFromRaw(it.outerHtml(), baseUrl) }?.let { return it }
         val cardImage = card?.selectFirst(imageSelector)
         imageUrl(cardImage, baseUrl)?.let { return it }
         backgroundImageUrl(cardImage, baseUrl)?.let { return it }
@@ -254,6 +304,7 @@ class DiziSol : MainAPI() {
             }
 
             if (linkUrl != null && contentTargets.size == 1 && contentTargets.first() == linkUrl) {
+                tmdbPosterFromRaw(currentParent.outerHtml(), baseUrl)?.let { return it }
                 val urls = LinkedHashSet<String>()
                 currentParent.select("img, [style*=background], [data-bg], [data-background], " +
                     "[data-background-image], [data-poster], [data-thumb], [data-thumbnail]").forEach { element ->
@@ -293,6 +344,7 @@ class DiziSol : MainAPI() {
             for (key in listOf("image", "thumbnailUrl", "thumbnail", "poster", "posterUrl", "cover")) {
                 structuredImageUrl(node.opt(key), baseUrl)?.let { return it }
             }
+            tmdbPosterFromRaw(node.toString(), baseUrl)?.let { return it }
         }
 
         val imageSelector =
