@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths-ignore:
       - "README.md"
+      - "doctor/README.md"
       - "CHANGELOG.md"
       - ".github/workflows/RepoYonetimi.yml"
   workflow_dispatch:
@@ -52,7 +53,7 @@ jobs:
           set -euo pipefail
           git config user.name "Kayra Repo Manager"
           git config user.email "actions@github.com"
-          git add README.md CHANGELOG.md
+          git add -A -- README.md doctor/README.md CHANGELOG.md
           if git diff --cached --quiet; then
             echo "Generated docs are already up to date."
             exit 0
