@@ -2,6 +2,15 @@
 
 ## 2026-10-10
 
+<!-- kayra-commit:30f115941bef60c290b892107d8dcda17b769eac -->
+### Handle typed mainUrl properties in plugin catalog
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [30f1159](https://github.com/Kayracs3/Kayra/commit/30f115941bef60c290b892107d8dcda17b769eac)
+
+
+## 2026-10-10
+
 <!-- kayra-commit:fc70ef38fdf66e7e7f5e6eabac4bc16fd5c8741e -->
 ### Avoid full doctor runs for catalog and domain registry metadata
 
