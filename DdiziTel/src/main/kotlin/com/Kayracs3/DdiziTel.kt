@@ -559,8 +559,35 @@ class DdiziTel : MainAPI() {
         }
     }
 
-    private fun isDirectMedia(url: String): Boolean =
-        Regex("""(?i)\.(?:m3u8|mp4|m4v|webm|mpd)(?:[?#].*)?$""").containsMatchIn(url)
+    private fun isDirectMedia(url: String): Boolean {
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        val path = uri.path.orEmpty()
+        // Dosya uzantısı URL yolunda aranmalı; sorgudaki filename=...mp4 ifadesi
+        // Yandex /preview/ görüntüsünü yanlışlıkla video kaynağına dönüştürmemeli.
+        if (Regex("""(?i)\.(?:m3u8|mp4|m4v|webm|mpd)$""").containsMatchIn(path)) return true
+
+        val host = uri.host.orEmpty().lowercase()
+        val isYandex = host == "downloader.disk.yandex.ru" ||
+            host == "downloader.disk.yandex.com.tr" ||
+            host.endsWith(".disk.yandex.ru") ||
+            host.endsWith(".disk.yandex.com.tr")
+        if (isYandex && path.startsWith("/disk/")) {
+            return Regex(
+                """(?i)(?:^|&)filename=[^&]*\.(?:m3u8|mp4|m4v|webm|mpd)(?:&|$)"""
+            ).containsMatchIn(uri.rawQuery.orEmpty())
+        }
+        return false
+    }
+
+    private fun isYandexPreview(url: String): Boolean {
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        val host = uri.host.orEmpty().lowercase()
+        val isYandex = host == "downloader.disk.yandex.ru" ||
+            host == "downloader.disk.yandex.com.tr" ||
+            host.endsWith(".disk.yandex.ru") ||
+            host.endsWith(".disk.yandex.com.tr")
+        return isYandex && uri.path.orEmpty().startsWith("/preview/")
+    }
 
     // DDizi'nin mevcut oynatıcısı HLS listesini .txt uzantılı endpoint'ten
     // döndürebiliyor; uzantısı .m3u8 değil diye bunu HTML sanıp taramaya girme.
@@ -631,6 +658,10 @@ class DdiziTel : MainAPI() {
         ) return
 
         val candidatePath = uri.path.orEmpty().lowercase()
+        if (isYandexPreview(candidate)) {
+            Log.d("DDizi", "Ignoring Yandex preview thumbnail: " + candidate)
+            return
+        }
         if (isDdiziHost(host)) {
             // Video sayfası, dizi kataloğu ve ana sayfa asla player adayı olamaz.
             if (candidatePath.startsWith("/izle/") || candidatePath.startsWith("/diziler/") ||
