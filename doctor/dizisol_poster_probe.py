@@ -157,7 +157,11 @@ def image_candidates(node, base_url):
     for item in node.walk():
         attrs = item.attrs
         for key, raw in attrs.items():
-            if not raw or not IMAGE_ATTR_RE.search(key):
+            if not raw or not (
+                IMAGE_ATTR_RE.search(key)
+                or key.lower() == "style"
+                or key.lower().startswith("data-bg")
+            ):
                 continue
             for candidate in re.split(r"\s*,\s*", raw):
                 candidate = candidate.strip().split(" ")[0].strip("\"'")

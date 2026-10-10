@@ -2,6 +2,11 @@ name: Kayra Doctor
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - "doctor/dizisol_poster_probe.py"
+      - ".github/workflows/Derleyici.yml"
+      - ".github/workflows/KayraDoctor.yml"
+      - ".github/workflows/DiziSolPosterProbe.yml"
   workflow_dispatch:
 
 concurrency:

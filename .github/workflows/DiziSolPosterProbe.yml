@@ -1,0 +1,40 @@
+name: DiziSol Poster Probe
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "doctor/dizisol_poster_probe.py"
+      - "DiziSol/src/main/kotlin/com/Kayracs3/DiziSol.kt"
+      - ".github/workflows/DiziSolPosterProbe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poster-probe:
+    name: DiziSol poster HTML probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+
+      - name: Python hazırla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: DiziSol görsel alanlarını incele
+        run: |
+          python3 doctor/dizisol_poster_probe.py --output poster-probe/dizisol-poster-probe.json
+
+      - name: Tanılama raporunu yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dizisol-poster-probe-${{ github.run_id }}
+          path: poster-probe/dizisol-poster-probe.json
+          if-no-files-found: warn
+          retention-days: 7
