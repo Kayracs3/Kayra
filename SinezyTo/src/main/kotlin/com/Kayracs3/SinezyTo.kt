@@ -629,10 +629,26 @@ class SinezyTo : MainAPI() {
     }
 
     private fun addCandidate(output: MutableSet<String>, raw: String?, base: String, force: Boolean = false) {
-        val candidate = fixUrl(raw, base) ?: return
+        val value = decode(raw.orEmpty()).trim().trim('"', '\'')
+        if (value.isBlank() || value.length > 2000 || value.any { it.isWhitespace() }) return
+
+        // JavaScript ifadeleri (ör. player.seek(localStorage[...]) URL değildir.
+        // Bunları URL'ye dönüştürüp ContentX gibi extractor'lara göndermeyi engelle.
+        if (Regex(
+                """(?i)(localStorage|sessionStorage|player\s*\.\s*seek|document\.|window\.|javascript:|data:|blob:|(?:\bfunction\b|\breturn\b)|=>)"""
+            ).containsMatchIn(value)
+        ) return
+
+        val candidate = fixUrl(value, base) ?: return
+        val parsed = runCatching { URI(candidate) }.getOrNull() ?: return
+        val host = parsed.host?.lowercase() ?: return
+        if (parsed.scheme?.lowercase() !in listOf("http", "https")) return
+        if (!host.matches(Regex("""[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?"""))) return
+
         val low = candidate.lowercase()
         if (low.contains("google-analytics") || low.contains("doubleclick") ||
             low.contains("facebook.com") || low.contains("twitter.com") ||
+            low.contains("api.whatsapp.com") ||
             Regex("""\.(css|js|png|jpe?g|gif|webp|svg|woff2?|ttf|ico)(?:[?#].*)?$""")
                 .containsMatchIn(low)
         ) return
@@ -769,7 +785,8 @@ class SinezyTo : MainAPI() {
             .filter { scriptUrl ->
                 val path = runCatching { URI(scriptUrl).path.orEmpty().lowercase() }
                     .getOrDefault(scriptUrl.lowercase())
-                path.endsWith(".js")
+                path.endsWith(".js") ||
+                    (path.endsWith(".php") && path.contains("script"))
             }
             .filterNot { scriptUrl ->
                 blockedHints.any { scriptUrl.lowercase().contains(it) }
@@ -795,7 +812,7 @@ class SinezyTo : MainAPI() {
             if (body.isBlank() || body.length > 2_000_000) continue
             fetchedCount++
 
-            val extracted = collectCandidates(Jsoup.parse("", base), body, base)
+            val extracted = collectCandidates(Jsoup.parse("", scriptUrl), body, scriptUrl)
             output.addAll(extracted)
         }
 
