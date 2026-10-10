@@ -612,9 +612,10 @@ class DdiziTel : MainAPI() {
             if (candidatePath.startsWith("/izle/") || candidatePath.startsWith("/diziler/") ||
                 candidatePath.isBlank() || candidatePath == "/"
             ) return
-            val allowedInternal = candidatePath.startsWith("/player/oynat/") ||
+            val allowedInternal = candidatePath.startsWith("/player/") ||
+                candidatePath.contains("/embed/") || candidatePath.startsWith("/video/") ||
                 candidatePath == "/ajax.php" || candidatePath == "/geox.php" ||
-                candidatePath.endsWith(".js") ||
+                candidatePath.endsWith(".php") || candidatePath.endsWith(".js") ||
                 candidatePath.substringAfterLast('/').startsWith("scripts")
             if (!allowedInternal) return
         }
@@ -633,6 +634,21 @@ class DdiziTel : MainAPI() {
         )) {
             for (attr in attrs) {
                 if (element.hasAttr(attr)) addCandidate(output, element.attr(attr), base)
+            }
+        }
+
+        // Bazı DDizi sayfaları oynatıcı adresini yalnızca Open Graph/Twitter
+        // video metaverisinde veriyor; iframe veya kaynak etiketi olarak koymayabiliyor.
+        val playerMetaSelectors = listOf(
+            "meta[property=og:video]",
+            "meta[property=og:video:url]",
+            "meta[property=og:video:secure_url]",
+            "meta[property=og:video:iframe]",
+            "meta[name=twitter:player]"
+        )
+        for (selector in playerMetaSelectors) {
+            for (meta in document.select(selector)) {
+                addCandidate(output, meta.attr("content"), base)
             }
         }
 
@@ -829,11 +845,15 @@ class DdiziTel : MainAPI() {
                     " candidates=" + nestedCandidates.size + " at=" + candidate +
                     " body=" + nestedPreview
             )
+            if (nestedCandidates.isNotEmpty()) {
+                Log.d("DDizi", "nested player URL candidates: " + nestedCandidates.joinToString(" | "))
+            }
             for (next in nestedCandidates) resolve(next, candidate, depth + 1)
         }
 
         val candidates = collectPlayerUrls(pageResponse.document, pageResponse.text, data)
         Log.d("DDizi", "loadLinks candidates=" + candidates.size + " for " + data)
+        Log.d("DDizi", "player URL candidates: " + candidates.joinToString(" | "))
         for (candidate in candidates) resolve(candidate, data, 0)
         if (!found) Log.w("DDizi", "No playable source found for " + data)
         return found
