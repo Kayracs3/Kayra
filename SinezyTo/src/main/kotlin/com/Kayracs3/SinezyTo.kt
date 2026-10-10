@@ -241,13 +241,36 @@ class SinezyTo : MainAPI() {
     }
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
-        val encoded = URLEncoder.encode(query.trim(), "UTF-8")
-        val url = "$mainUrl/arama/?s=$encoded"
-        val response = app.get(url, headers = requestHeaders, referer = mainUrl)
-        if (!response.isSuccessful) return newSearchResponseList(emptyList(), false)
+        val q = query.trim()
+        if (q.isBlank()) return newSearchResponseList(emptyList(), false)
+        val encoded = URLEncoder.encode(q, "UTF-8")
+        val urls = listOf(
+            "$mainUrl/arama/?s=$encoded",
+            "$mainUrl/?s=$encoded",
+            "$mainUrl/arama/?search=$encoded",
+            "$mainUrl/arama?q=$encoded",
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/arama/$encoded",
+        ).distinct()
 
-        val items = parseCards(response.document)
-        return newSearchResponseList(items, hasNext = false)
+        val found = LinkedHashMap<String, SearchResponse>()
+        for (url in urls) {
+            val response = runCatching {
+                app.get(url, headers = requestHeaders, referer = mainUrl, allowRedirects = true)
+            }.onFailure {
+                android.util.Log.w("Sinezy", "Arama isteği başarısız: $url", it)
+            }.getOrNull() ?: continue
+            if (!response.isSuccessful) continue
+
+            // Hem film hem dizi kartlarını dene; kategori ve arama sayfaları farklı
+            // class isimleri kullanabiliyor.
+            val items = (parseCards(response.document, false) + parseCards(response.document, true))
+                .distinctBy { it.url }
+            android.util.Log.d("Sinezy", "Arama: $url -> ${items.size} sonuç")
+            items.forEach { found.putIfAbsent(it.url, it) }
+            if (found.isNotEmpty()) break
+        }
+        return newSearchResponseList(found.values.toList(), false)
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? {
