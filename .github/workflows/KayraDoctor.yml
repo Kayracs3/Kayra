@@ -4,6 +4,12 @@ on:
     branches: [master]
     paths-ignore:
       - "doctor/dizisol_poster_probe.py"
+      - "doctor/domains.json"
+      - "doctor/repo_catalog.py"
+      - ".github/workflows/RepoYonetimi.yml"
+      - ".github/workflows/ReleaseNotes.yml"
+      - "README.md"
+      - "CHANGELOG.md"
       - ".github/workflows/Derleyici.yml"
       - ".github/workflows/KayraDoctor.yml"
       - ".github/workflows/DiziSolPosterProbe.yml"
