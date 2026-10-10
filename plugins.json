@@ -123,10 +123,10 @@
     },
     {
         "iconUrl": "https://dizipal1588.com/favicon.ico",
-        "fileHash": "sha256-9b16a2a6e0f183c76abe3d7882ccf23f9b0e45cd70edc2cb5b5293b0e3faa24c",
+        "fileHash": "sha256-0d061e562da42b73379a68fa4573f6143f9537d73913c8f47e789128dcd85468",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 84793,
+        "fileSize": 86530,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -354,7 +354,7 @@
     },
     {
         "iconUrl": "https://sinezy.to/favicon.ico",
-        "fileHash": "sha256-e3a7224beba1bf5b15d9a0d5f1d1754fa0f1672f3f7948ca9ae35e1873e03e8a",
+        "fileHash": "sha256-13f27a9352a1eebd8576b3981b217670e8a4ad1e0f14a30c21b7d7d638d9fc8e",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 13268,
