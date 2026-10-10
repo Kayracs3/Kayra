@@ -1427,7 +1427,9 @@ class DiziSol : MainAPI() {
         Log.i(name, "Video teşhis başladı: ${safeLogUrl(pageUrl)}")
 
         // API response has a distinct site ID and TMDB ID; never treat them as interchangeable.
-        val tmdbId = tmdbIdFromUrl(pageUrl)
+        // Pages opened from HTML fallback may not have an explicit ?tmdbId= query.
+        // DiziSol's slug suffix is base-36 encoded and the site itself uses it for /api/tmdb/... calls.
+        val tmdbId = tmdbIdFromUrl(pageUrl) ?: contentIdFromUrl(pageUrl)
         val mediaType = if (isFilmUrl(pageUrl)) "movie" else "tv"
         val coordinates = if (mediaType == "tv") seasonEpisode(pageUrl) else null
         if (tmdbId != null) {
