@@ -34,6 +34,12 @@ class SinezyTo : MainAPI() {
 
     private fun decode(value: String): String = value
         .replace("\\/", "/")
+        .replace("\\u002f", "/")
+        .replace("\\x2f", "/")
+        .replace("\\u003a", ":")
+        .replace("\\x3a", ":")
+        .replace("\\u002e", ".")
+        .replace("\\x2e", ".")
         .replace("\\u0026", "&")
         .replace("\\x26", "&")
         .replace("\\u003d", "=")
@@ -667,7 +673,7 @@ class SinezyTo : MainAPI() {
         Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+?\.(?:m3u8|mp4|webm|mpd)(?:\?[^"'<>\\\s]*)?""")
             .findAll(decodedHtml).forEach { addCandidate(output, it.value, base, force = true) }
 
-        val scripts = document.select("script").joinToString("\n") { it.data() + "\n" + it.html() }
+        val scripts = document.select("script").joinToString("\n") { it.data() + "\n" + it.html() } + "\n" + html
         val decodedScripts = decode(scripts)
 
         // Sinezy player HTML'sini Base64 ile "ilkpartkod" değişkenine gömebiliyor.
@@ -735,6 +741,72 @@ class SinezyTo : MainAPI() {
         return output
     }
 
+    /**
+     * Bazı oynatıcılar kaynak adreslerini ana HTML yerine harici JavaScript dosyalarında tutar.
+     * Sadece sayfanın script[src] adresleri taranır; reklam/analitik dosyaları atlanır
+     * ve aynı dosya farklı iframe seviyelerinde ikinci kez istenmez.
+     */
+    private suspend fun collectExternalScriptCandidates(
+        document: Document,
+        base: String,
+        referer: String,
+        scannedScripts: MutableSet<String>
+    ): LinkedHashSet<String> {
+        val output = LinkedHashSet<String>()
+        val blockedHints = listOf(
+            "google-analytics", "googletagmanager", "doubleclick", "adservice",
+            "analytics", "hotjar", "clarity", "facebook", "twitter", "cookie",
+            "adsystem", "advert", "social", "whatsapp"
+        )
+        val playerHints = listOf(
+            "player", "video", "stream", "embed", "film", "hls", "jwplayer",
+            "plyr", "media", "source", "app", "main"
+        )
+
+        val scripts = document.select("script[src]")
+            .mapNotNull { fixUrl(it.attr("src"), base) }
+            .distinct()
+            .filter { scriptUrl ->
+                val path = runCatching { URI(scriptUrl).path.orEmpty().lowercase() }
+                    .getOrDefault(scriptUrl.lowercase())
+                path.endsWith(".js")
+            }
+            .filterNot { scriptUrl ->
+                blockedHints.any { scriptUrl.lowercase().contains(it) }
+            }
+            .sortedByDescending { scriptUrl ->
+                playerHints.any { scriptUrl.lowercase().contains(it) }
+            }
+            .take(10)
+
+        var fetchedCount = 0
+        for (scriptUrl in scripts) {
+            if (!scannedScripts.add(scriptUrl)) continue
+            val response = runCatching {
+                app.get(
+                    scriptUrl,
+                    headers = requestHeaders + ("Referer" to referer),
+                    referer = referer
+                )
+            }.getOrNull() ?: continue
+
+            if (!response.isSuccessful) continue
+            val body = response.text
+            if (body.isBlank() || body.length > 2_000_000) continue
+            fetchedCount++
+
+            val extracted = collectCandidates(Jsoup.parse("", base), body, base)
+            output.addAll(extracted)
+        }
+
+        Log.d(
+            "SinezyTo",
+            "collectExternalScriptCandidates: fetched=" + fetchedCount +
+                ", candidates=" + output.size + ", page=" + base
+        )
+        return output
+    }
+
     private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         val type = when {
             url.contains(".m3u8", true) -> ExtractorLinkType.M3U8
@@ -792,6 +864,7 @@ class SinezyTo : MainAPI() {
         }
 
         val visited = HashSet<String>()
+        val scannedScriptUrls = HashSet<String>()
         var found = false
         val countingCallback: (ExtractorLink) -> Unit = {
             found = true
@@ -814,6 +887,11 @@ class SinezyTo : MainAPI() {
                 if (!nested.isSuccessful) return
                 publishSubtitles(nested.document, nested.text, candidate, subtitleCallback)
                 val nestedCandidates = collectCandidates(nested.document, nested.text, candidate)
+                nestedCandidates.addAll(
+                    collectExternalScriptCandidates(
+                        nested.document, candidate, candidate, scannedScriptUrls
+                    )
+                )
                 for (next in nestedCandidates) resolveCandidate(next, candidate, depth + 1)
             } else {
                 runCatching {
@@ -834,6 +912,11 @@ class SinezyTo : MainAPI() {
                     if (nested != null && nested.isSuccessful) {
                         publishSubtitles(nested.document, nested.text, candidate, subtitleCallback)
                         val nestedCandidates = collectCandidates(nested.document, nested.text, candidate)
+                        nestedCandidates.addAll(
+                            collectExternalScriptCandidates(
+                                nested.document, candidate, candidate, scannedScriptUrls
+                            )
+                        )
                         Log.d(
                             "SinezyTo",
                             "loadLinks: external embed candidates=${nestedCandidates.size} for $candidate"
@@ -846,6 +929,11 @@ class SinezyTo : MainAPI() {
 
         publishSubtitles(pageResponse.document, pageResponse.text, data, subtitleCallback)
         val candidates = collectCandidates(pageResponse.document, pageResponse.text, data)
+        candidates.addAll(
+            collectExternalScriptCandidates(
+                pageResponse.document, data, data, scannedScriptUrls
+            )
+        )
         Log.d(
             "SinezyTo",
             "loadLinks: candidates=${candidates.size}; urls=${candidates.take(15).joinToString(" | ")}"
