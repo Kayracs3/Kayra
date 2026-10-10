@@ -782,6 +782,35 @@ class SinezyTo : MainAPI() {
             (path.endsWith(".php") && fileName.startsWith("scripts"))
     }
 
+    private fun isTrailerCandidate(rawUrl: String, label: String = ""): Boolean {
+        val labelText = label.lowercase()
+        if (Regex("""(?i)\b(fragman|trailer|teaser|tanıtım fragmanı|tanitim fragmani)\b""")
+                .containsMatchIn(labelText)
+        ) return true
+
+        val uri = runCatching { URI(rawUrl) }.getOrNull() ?: return false
+        val host = uri.host.orEmpty().lowercase().removePrefix("www.")
+        if (host in setOf(
+                "youtube.com", "m.youtube.com", "youtu.be", "youtube-nocookie.com",
+                "vimeo.com", "player.vimeo.com", "dailymotion.com", "dai.ly"
+            )
+        ) return true
+
+        val path = uri.path.orEmpty().lowercase()
+        return Regex("""(?i)(^|[/_.-])(fragman|trailer|teaser|tanitim-fragmani)([/_.-]|$)""")
+            .containsMatchIn(path) ||
+            Regex("""(?i)[?&](?:type|kind|video_type)=(?:trailer|teaser|fragman)(?:&|$)""")
+                .containsMatchIn(uri.rawQuery.orEmpty())
+    }
+
+    private fun trailerLabel(element: Element): String = listOf(
+        element.text(),
+        element.attr("title"),
+        element.attr("aria-label"),
+        element.className(),
+        element.id()
+    ).filter { it.isNotBlank() }.joinToString(" ")
+
     private fun looksLikePlayerUrl(url: String): Boolean {
         val low = url.lowercase()
         return isDirectMedia(url) ||
@@ -808,6 +837,7 @@ class SinezyTo : MainAPI() {
         if (!host.matches(Regex("""[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?"""))) return
 
         val low = candidate.lowercase()
+        if (isTrailerCandidate(candidate)) return
         // Loglarda görülen BTK TLS hatalı bstrfcdn.com bağlantısı video değil reklam yönlendirmesi.
         if (host == "bstrfcdn.com" || host.endsWith(".bstrfcdn.com")) return
         if (low.contains("google-analytics") || low.contains("doubleclick") ||
@@ -831,13 +861,17 @@ class SinezyTo : MainAPI() {
         for (element in document.select(
             "iframe, video, source, embed, [data-src], [data-url], [data-embed], [data-iframe], [data-player], [data-video]"
         )) {
+            val elementLabel = trailerLabel(element)
             for (attr in attrs) {
+                if (isTrailerCandidate(element.attr(attr), elementLabel)) continue
                 if (element.hasAttr(attr)) addCandidate(output, element.attr(attr), base, force = true)
             }
         }
 
         for (link in document.select("a[href]")) {
             val text = link.text().trim()
+            val label = trailerLabel(link)
+            if (isTrailerCandidate(link.attr("href"), label)) continue
             val hints = listOf("dual", "fid", "player", "server", "kaynak", "video", "izle")
             if (hints.any { text.contains(it, true) } ||
                 link.className().contains("player", true) ||
@@ -1002,18 +1036,14 @@ class SinezyTo : MainAPI() {
         val host = runCatching { URI(url).host.orEmpty().lowercase() }.getOrDefault("")
         val filmIzleHls = host == "player.filmizle.in" &&
             runCatching { URI(url).path.orEmpty().startsWith("/cdn/hls/") }.getOrDefault(false)
-        // İmzalı CDN URL'si, URL'yi üreten player sayfasının tam Referer değeriyle istenmeli.
-        // HLS için kök domaine düşürmek 403'e neden olabiliyor.
-        val mediaReferer = referer
+        // FirePlayer HLS çağrıları genellikle player kök Referer'i ve User-Agent ile yapılır.
+        // API isteğinde oturum cookie'si korunur; medya isteğine rastgele Origin/CH/Cookie eklemeyiz.
+        val mediaReferer = if (filmIzleHls) "https://player.filmizle.in/" else referer
         val mediaHeaders = if (filmIzleHls) {
             requestHeaders + mapOf(
                 "Accept" to "*/*",
-                "Origin" to "https://player.filmizle.in",
                 "Referer" to mediaReferer
-            ) + mapOf(
-                "Sec-CH-UA-Mobile" to "?0",
-                "Sec-CH-UA-Platform" to "\"Windows\""
-            ) + extraHeaders
+            )
         } else {
             requestHeaders + ("Referer" to mediaReferer) + extraHeaders
         }
