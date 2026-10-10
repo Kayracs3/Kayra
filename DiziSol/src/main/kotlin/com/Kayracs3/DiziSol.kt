@@ -590,6 +590,10 @@ class DiziSol : MainAPI() {
         val shortCode = Regex("""-([a-z0-9]+)$""", RegexOption.IGNORE_CASE)
             .find(slug)?.groupValues?.getOrNull(1)
         if (!shortCode.isNullOrBlank()) {
+            // Old generated URLs used the decimal TMDB ID directly (often 5-6 digits).
+            if (shortCode.length >= 5 && shortCode.all { it.isDigit() }) {
+                shortCode.toIntOrNull()?.let { return it }
+            }
             shortCode.toIntOrNull(36)?.let { return it }
         }
 
