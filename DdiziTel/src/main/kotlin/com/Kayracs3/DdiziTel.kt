@@ -21,8 +21,7 @@ class DdiziTel : MainAPI() {
         "$mainUrl/" to "Son Eklenen Bölümler",
         "$mainUrl/yeni-eklenenler8" to "Yeni Eklenenler",
         "$mainUrl/yabanci-dizi-izle" to "Yabancı Diziler",
-        "$mainUrl/eski.diziler" to "Eski Diziler",
-        "$mainUrl/populer.videolar" to "Popüler Bölümler"
+        "$mainUrl/eski.diziler" to "Eski Diziler"
     )
 
     private val requestHeaders = mapOf(
@@ -83,15 +82,26 @@ class DdiziTel : MainAPI() {
     private fun cleanSeriesTitle(raw: String?): String {
         var title = cleanTitle(raw)
         title = title.replace(
-            Regex("(?i)\\s+(?:son\\s+)?(?:bölüm|bolum)(?:\\s+final)?\\s*$"), ""
-        )
-        title = title.replace(Regex("(?i)\\s+son\\s+bölüm\\s*$"), "")
-        title = title.replace(Regex("(?i)\\s+dizisi\\s*$"), "")
-        title = title.replace(
             Regex("(?i)\\s+\\d{1,3}\\s*\\.?\\s*(?:bölüm|bolum|episode|ep)\\b.*$"), ""
         )
+        title = title.replace(Regex("(?i)\\s+son\\s+bölüm\\s*$"), "")
+        title = title.replace(
+            Regex("(?i)\\s+\\d{1,2}\\s*\\.?\\s*(?:sezon|season)\\b.*$"), ""
+        )
+        title = title.replace(Regex("(?i)\\s+dizisi\\s*$"), "")
         return title.trim()
     }
+
+    private fun normalizeTitleForMatch(raw: String): String =
+        cleanSeriesTitle(raw).lowercase()
+            .replace("ı", "i")
+            .replace("ş", "s")
+            .replace("ğ", "g")
+            .replace("ü", "u")
+            .replace("ö", "o")
+            .replace("ç", "c")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
 
     private fun titleFromUrl(url: String): String {
         val slug = pathOf(url).substringAfterLast('/').substringBeforeLast('.')
@@ -143,11 +153,13 @@ class DdiziTel : MainAPI() {
         return cleanTitle(raw).ifBlank { titleFromUrl(url) }
     }
 
-    private fun parseCards(document: Document): List<SearchResponse> {
+    private fun parseCards(document: Document, mode: String? = null): List<SearchResponse> {
         val found = LinkedHashMap<String, SearchResponse>()
         for (link in document.select("a[href]")) {
             val url = fixUrl(link.attr("href")) ?: continue
             if (!isContentUrl(url)) continue
+            if (mode == "episodes" && !isEpisodeUrl(url)) continue
+            if (mode == "series" && !isSeriesUrl(url)) continue
             val title = cardTitle(link, url)
             if (title.length < 2 || title.length > 180) continue
             if (title.equals("izle", true) || title.equals("dizi izle", true)) continue
@@ -170,6 +182,7 @@ class DdiziTel : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
+        val base = request.data.trimEnd('/')
         val first = runCatching {
             app.get(request.data, headers = requestHeaders, referer = mainUrl)
         }.getOrNull() ?: return null
@@ -178,24 +191,30 @@ class DdiziTel : MainAPI() {
         var document = first.document
         if (page > 1) {
             val nextUrl = findPageUrl(document, page)
-                ?: when {
-                    request.name.contains("Yeni Eklenenler", true) ->
-                        "$mainUrl/yeni-eklenenler" + (7 + page)
-                    request.data.contains("eski.diziler", true) ->
-                        "$mainUrl/eski.diziler/" + page
-                    else -> "$mainUrl/page/$page"
+                ?: if (base == "$mainUrl/yeni-eklenenler8") {
+                    return newHomePageResponse(request.name, emptyList(), hasNext = false)
+                } else {
+                    "$base/page/$page/"
                 }
             val next = runCatching {
                 app.get(nextUrl, headers = requestHeaders, referer = request.data)
             }.getOrNull()
-            if (next != null && next.isSuccessful) document = next.document
+            if (next == null || !next.isSuccessful) {
+                return newHomePageResponse(request.name, emptyList(), hasNext = false)
+            }
+            document = next.document
         }
 
-        val items = parseCards(document)
+        val listingMode = when {
+            base.contains("/yabanci-dizi-izle", true) ||
+                base.contains("/eski.diziler", true) -> "series"
+            else -> "episodes"
+        }
+        val items = parseCards(document, listingMode)
         return newHomePageResponse(
             request.name,
             items,
-            hasNext = items.isNotEmpty() && page < 35
+            hasNext = items.isNotEmpty() && findPageUrl(document, page + 1) != null
         )
     }
 
@@ -263,7 +282,13 @@ class DdiziTel : MainAPI() {
     private fun isPartLink(title: String): Boolean =
         Regex("""(?i)\b(?:\d+\s*\.?\s*)?(?:parça|parca|part)\b""").containsMatchIn(title)
 
-    private fun parseEpisodes(document: Document, baseUrl: String): List<Episode> {
+    private fun parseEpisodes(
+        document: Document,
+        baseUrl: String,
+        expectedSeriesTitle: String? = null
+    ): List<Episode> {
+        val expected = expectedSeriesTitle?.takeIf { it.isNotBlank() }
+            ?.let(::normalizeTitleForMatch).orEmpty()
         val episodes = LinkedHashMap<String, Episode>()
         for (link in document.select("a[href]")) {
             val url = fixUrl(link.attr("href"), baseUrl) ?: continue
@@ -272,6 +297,16 @@ class DdiziTel : MainAPI() {
                 .ifBlank { titleFromUrl(url) }
             val title = cleanTitle(rawTitle)
             if (title.isBlank() || isPartLink(title)) continue
+
+            // Dizi sayfasının yan sütunundaki güncel bölümler farklı dizilere ait
+            // olabiliyor. Beklenen dizi adıyla uyuşmayanları sezon listesine katma.
+            if (expected.isNotBlank()) {
+                val candidateSeries = normalizeTitleForMatch(title)
+                if (candidateSeries != expected &&
+                    !candidateSeries.startsWith("$expected ") &&
+                    !expected.startsWith("$candidateSeries ")
+                ) continue
+            }
 
             val number = episodeNumber(title, url) ?: continue
             if (number < 1) continue
@@ -378,8 +413,8 @@ class DdiziTel : MainAPI() {
         val poster = posterOf(metadataDocument, seriesUrl ?: url)
             ?: posterOf(document, url)
         val plot = plotFrom(metadataDocument) ?: plotFrom(document)
-        val episodes = parseEpisodes(metadataDocument, seriesUrl ?: url)
-            .ifEmpty { parseEpisodes(document, url) }
+        val episodes = parseEpisodes(metadataDocument, seriesUrl ?: url, title)
+            .ifEmpty { parseEpisodes(document, url, title) }
             .ifEmpty {
                 if (isEpisodePage) {
                     val n = episodeNumber(pageTitle, url) ?: 1
@@ -458,10 +493,12 @@ class DdiziTel : MainAPI() {
 
         for (link in document.select("a[href]")) {
             val label = link.text().trim()
-            if (Regex("""(?i)(parça|parca|\bpart\b|oynatıcı|oynatici|server|kaynak)""")
-                    .containsMatchIn(label)
+            val href = link.attr("href")
+            if (Regex("""(?i)(parça|parca|\bpart\b|oynatıcı|oynatici|server|kaynak|\bvideo\b|\bizle\b)""")
+                    .containsMatchIn(label) ||
+                href.contains("/player/oynat/", true)
             ) {
-                addCandidate(output, link.attr("href"), base)
+                addCandidate(output, href, base)
             }
         }
         return output
