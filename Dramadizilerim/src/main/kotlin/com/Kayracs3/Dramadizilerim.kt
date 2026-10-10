@@ -42,32 +42,41 @@ class Dramadizilerim : MainAPI() {
     // ------------------------------------------------------------------------
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val q = URLEncoder.encode(query.trim(), "UTF-8")
-        if (query.isBlank()) return emptyList()
-
+        val rawQuery = query.trim()
+        if (rawQuery.isBlank()) return emptyList()
+        val encoded = URLEncoder.encode(rawQuery, "UTF-8")
+        val wanted = normalizeSearch(rawQuery)
         val candidates = listOf(
-            "$mainUrl/dizi?search=$q&page=1",
-            "$mainUrl/series?search=$q&page=1",
-            "$mainUrl/dizi?s=$q&page=1"
-        )
+            "$mainUrl/dizi?search=$encoded&page=1",
+            "$mainUrl/series?search=$encoded&page=1",
+            "$mainUrl/dizi?s=$encoded&page=1",
+            "$mainUrl/arama?q=$encoded",
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/?s=$encoded",
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/dizi?page=1",
+            "$mainUrl/series?page=1",
+        ).distinct()
 
         val found = linkedMapOf<String, SearchResponse>()
-
         for (url in candidates) {
-            runCatching {
-                val doc = app.get(url, headers = browserHeaders).document
-                parseCards(doc).forEach { item ->
-                    val normalized = normalizeSearch(item.title)
-                    val wanted = normalizeSearch(query)
-                    if (normalized.contains(wanted) || wanted.contains(normalized)) {
-                        found[item.url] = item.toSearchResponse(this@Dramadizilerim)
-                    }
+            val doc = runCatching {
+                app.get(url, headers = browserHeaders, referer = "$mainUrl/", allowRedirects = true).document
+            }.onFailure {
+                android.util.Log.w("DramaDizilerim", "Arama isteği başarısız: $url", it)
+            }.getOrNull() ?: continue
+
+            val cards = parseCards(doc)
+            for (item in cards) {
+                val normalized = normalizeSearch(item.title)
+                if (normalized.isBlank() || wanted.isBlank()) continue
+                if (normalized.contains(wanted) || wanted.contains(normalized)) {
+                    found.putIfAbsent(item.url, item.toSearchResponse(this@Dramadizilerim))
                 }
             }
+            android.util.Log.d("DramaDizilerim", "Arama: $url cards=${cards.size}, matches=${found.size}")
+            if (found.isNotEmpty()) break
         }
-
-        // Bazı kurulumlarda arama parametresi çalışmıyorsa ilgili ilk sayfayı
-        // tekrar kullanmamak için başlık benzerliği olan kayıtları döndürürüz.
         return found.values.toList()
     }
 
