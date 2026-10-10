@@ -250,10 +250,16 @@ def analyze_page(page):
 
     direct_tmdb = list(dict.fromkeys(TMDB_RE.findall(body)))
     poster_paths = list(dict.fromkeys(POSTER_PATH_RE.findall(body)))
+    script_urls = list(dict.fromkeys(
+        urljoin(page["final_url"], node.attrs.get("src", "").strip())
+        for node in all_nodes
+        if node.tag == "script" and node.attrs.get("src", "").strip()
+    ))
     all_image_nodes = [
         n for n in all_nodes
         if n.tag in {"img", "source"} or any(
-            IMAGE_ATTR_RE.search(key) for key in n.attrs
+            IMAGE_ATTR_RE.search(key) or key.lower() == "style" or key.lower().startswith("data-bg")
+            for key in n.attrs
         )
     ]
     return {
@@ -271,7 +277,61 @@ def analyze_page(page):
         "image_attribute_node_count": len(all_image_nodes),
         "content_anchor_count": len(anchors),
         "content_anchors": anchors[:30],
-        "html_start": body[:1400],
+        "script_urls": script_urls[:40],
+        "script_count": len(script_urls),
+        "html_start": body[:1800],
+    }
+
+
+def inspect_js_bundle(url):
+    page = fetch(url)
+    body = page["body"]
+    patterns = [
+        ("tmdb_image_base", re.compile(r"(?i)image\.tmdb\.org/t/p")),
+        ("poster_path", re.compile(r"(?i)poster[_-]?path")),
+        ("poster_field", re.compile(r"(?i)poster(?:Url|URL|Image|Path)?")),
+        ("api_route", re.compile(r"""(?i)["']/(?:api|v1|v2|graphql|trpc|search|movies|movie|series|dizi|film|episodes|episode|season)(?:/|["'?])""")),
+        ("fetch_call", re.compile(r"(?i)\bfetch\s*\(")),
+        ("axios", re.compile(r"(?i)\baxios\b")),
+        ("base_url", re.compile(r"(?i)\b(?:baseURL|BASE_URL|VITE_[A-Z0-9_]+|API_URL|API_BASE_URL)\b")),
+        ("tmdb", re.compile(r"(?i)\btmdb\b")),
+        ("graphql", re.compile(r"(?i)\bgraphql\b")),
+        ("supabase", re.compile(r"(?i)\bsupabase\b")),
+        ("firebase", re.compile(r"(?i)\bfirebase\b")),
+        ("search", re.compile(r"(?i)\bsearch(?:Movies|Series|Films|Dizi)?\b")),
+        ("episode_data", re.compile(r"(?i)\b(?:episodes|episodeList|seasonEpisodes|season_number|episode_number)\b")),
+        ("movie_data", re.compile(r"(?i)\b(?:movies|movieList|seriesList|posterUrl|poster_path|backdrop_path)\b")),
+    ]
+    indicators = []
+    for label, pattern in patterns:
+        taken = 0
+        seen_context = set()
+        for match in pattern.finditer(body):
+            start = max(0, match.start() - 160)
+            end = min(len(body), match.end() + 260)
+            context = re.sub(r"\s+", " ", body[start:end]).strip()
+            if context in seen_context:
+                continue
+            seen_context.add(context)
+            indicators.append({"type": label, "match": match.group(0)[:120], "context": context[:520]})
+            taken += 1
+            if taken >= 8:
+                break
+    endpoint_strings = list(dict.fromkeys(
+        re.findall(r"""(?i)(?:https?:)?//[A-Za-z0-9._-]+(?:/[A-Za-z0-9._~%/?#=&+-]*)?""", body)
+        + re.findall(r"""["'](\/(?:api|v1|v2|graphql|trpc|search|movies|movie|series|dizi|film|episodes|episode|season)[A-Za-z0-9._~%/?#=&+-]*)["']""", body)
+    ))
+    return {
+        "url": url,
+        "status": page["status"],
+        "content_type": page["content_type"],
+        "bytes": len(body.encode("utf-8")),
+        "error": page["error"],
+        "tmdb_urls": list(dict.fromkeys(TMDB_RE.findall(body)))[:100],
+        "poster_paths": list(dict.fromkeys(POSTER_PATH_RE.findall(body)))[:100],
+        "endpoint_strings": endpoint_strings[:100],
+        "indicators": indicators[:100],
+        "first_1000_chars": body[:1000],
     }
 
 
@@ -280,14 +340,22 @@ def main():
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    pages = []
-    for path in PAGES:
-        pages.append(analyze_page(fetch(urljoin(BASE, path))))
+    pages = [analyze_page(fetch(urljoin(BASE, path))) for path in PAGES]
+    script_urls = list(dict.fromkeys(
+        script_url
+        for page in pages
+        for script_url in page.get("script_urls", [])
+    ))
+    js_reports = []
+    for script_url in script_urls[:20]:
+        js_reports.append(inspect_js_bundle(script_url))
 
     payload = {
         "diagnostic_only": True,
         "base_url": BASE,
         "pages": pages,
+        "javascript_asset_count": len(script_urls),
+        "javascript_assets_inspected": js_reports,
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -301,9 +369,24 @@ def main():
         "poster_paths": p["poster_path_count"],
         "img_elements": p["image_element_count"],
         "content_anchors": p["content_anchor_count"],
+        "scripts": len(p.get("script_urls", [])),
         "error": p["error"],
     } for p in pages]
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    print(json.dumps({
+        "pages": summary,
+        "javascript_asset_count": len(script_urls),
+        "javascript_assets": [
+            {
+                "url": item["url"],
+                "status": item["status"],
+                "bytes": item["bytes"],
+                "tmdb_urls": len(item["tmdb_urls"]),
+                "poster_paths": len(item["poster_paths"]),
+                "endpoints": item["endpoint_strings"][:20],
+            }
+            for item in js_reports
+        ],
+    }, ensure_ascii=False, indent=2))
     return 0
 
 
