@@ -32,6 +32,10 @@ class DiziSol : MainAPI() {
         "Referer" to "$mainUrl/"
     )
 
+    private val apiHeaders = requestHeaders + (
+        "Accept" to "application/json,text/plain,*/*;q=0.9"
+    )
+
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Son Eklenenler",
         "$mainUrl/filmler" to "Filmler",
@@ -511,6 +515,193 @@ class DiziSol : MainAPI() {
     private fun canonicalResultUrl(url: String): String =
         if (isSeriesUrl(url)) seriesUrlOf(url) else url
 
+    // ---------------------------------------------------------------------
+    // DiziSol JSON API (the site is a client-rendered SPA; its HTML is only a shell)
+    // ---------------------------------------------------------------------
+
+    private suspend fun apiJson(url: String): Any? {
+        return try {
+            val response = app.get(
+                url,
+                headers = apiHeaders,
+                referer = "$mainUrl/",
+                allowRedirects = true,
+                timeout = 18000
+            )
+            if (!response.isSuccessful) {
+                Log.w(name, "API isteği başarısız: " + url)
+                null
+            } else {
+                JSONTokener(response.text).nextValue()
+            }
+        } catch (e: Exception) {
+            Log.w(name, "API yanıtı okunamadı: " + url, e)
+            null
+        }
+    }
+
+    private fun apiPosterUrl(raw: String?, size: String = "w500"): String? {
+        val value = decode(raw.orEmpty()).trim()
+        if (value.isBlank() || value.equals("null", true) || value == "false") return null
+        if (value.startsWith("https://", true) || value.startsWith("http://", true)) {
+            return value.takeUnless(::isRejectedPoster)
+        }
+        if (value.startsWith("//")) return ("https:" + value).takeUnless(::isRejectedPoster)
+
+        val path = value.trimStart('/')
+        if (path.isBlank() || path.contains(" ")) return null
+        val resolved = "https://image.tmdb.org/t/p/" + size + "/" + path
+        return resolved.takeUnless(::isRejectedPoster)
+    }
+
+    private fun apiTitle(item: JSONObject): String {
+        val title = item.optString("title").trim()
+        if (title.isNotBlank() && !title.equals("null", true)) return cleanTitle(title)
+        val name = item.optString("name").trim()
+        if (name.isNotBlank() && !name.equals("null", true)) return cleanTitle(name)
+        return ""
+    }
+
+    private fun apiMediaType(item: JSONObject, fallbackType: String? = null): String {
+        val raw = item.optString("media_type").ifBlank {
+            item.optString("type")
+        }.lowercase()
+        if (raw == "tv" || raw.contains("series") || raw.contains("dizi")) return "tv"
+        if (raw == "movie" || raw == "film") return "movie"
+        if (!fallbackType.isNullOrBlank()) return fallbackType
+        return if (item.optString("first_air_date").isNotBlank()) "tv" else "movie"
+    }
+
+    private fun contentIdFromUrl(url: String): Int? {
+        val pathParts = pathOf(url).trim('/').split('/').filter { it.isNotBlank() }
+        if (pathParts.isEmpty()) return null
+        val slug = when (pathParts.firstOrNull()?.lowercase()) {
+            "film", "dizi" -> pathParts.getOrNull(1).orEmpty()
+            else -> pathParts.last()
+        }.substringBefore('?')
+        Regex("""(\d+)$""").find(slug)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+        return Regex("""\d+""").findAll(slug).mapNotNull { it.value.toIntOrNull() }.lastOrNull()
+    }
+
+    private fun slugifyTitle(raw: String): String {
+        return cleanTitle(raw).lowercase()
+            .replace("ç", "c")
+            .replace("ğ", "g")
+            .replace("ı", "i")
+            .replace("ö", "o")
+            .replace("ş", "s")
+            .replace("ü", "u")
+            .replace(Regex("""[^a-z0-9]+"""), "-")
+            .trim('-')
+    }
+
+    private fun contentUrl(mediaType: String, id: Int, title: String): String {
+        val route = if (mediaType == "tv") "dizi" else "film"
+        val slug = slugifyTitle(title).ifBlank { "icerik" }
+        // DiziSol's router uses /film/{title-slug}-{tmdb-id} and /dizi/{title-slug}-{tmdb-id}.
+        return mainUrl.trimEnd('/') + "/" + route + "/" + slug + "-" + id
+    }
+
+    private fun collectApiContent(
+        value: Any?,
+        output: MutableList<JSONObject>,
+        seen: MutableSet<String>,
+        fallbackType: String? = null,
+        depth: Int = 0
+    ) {
+        if (depth > 9 || output.size >= 100) return
+        when (value) {
+            is JSONObject -> {
+                val id = value.optInt("id", value.optInt("tmdbId", 0))
+                val title = apiTitle(value)
+                val mediaType = apiMediaType(value, fallbackType)
+                val rawPoster = value.optString("poster_path").ifBlank {
+                    value.optString("poster")
+                }
+                val poster = apiPosterUrl(rawPoster)
+                val rawType = value.optString("media_type").ifBlank {
+                    value.optString("type")
+                }.lowercase()
+                val hasMediaType = rawType == "movie" || rawType == "tv" ||
+                    rawType == "film" || rawType.contains("series") || rawType.contains("dizi") ||
+                    fallbackType == "movie" || fallbackType == "tv" ||
+                    value.optString("release_date").isNotBlank() ||
+                    value.optString("first_air_date").isNotBlank()
+
+                if (id > 0 && title.isNotBlank() && poster != null && hasMediaType &&
+                    mediaType in setOf("movie", "tv")
+                ) {
+                    val key = mediaType + ":" + id
+                    if (seen.add(key)) output += value
+                    return
+                }
+
+                val keys = value.keys()
+                while (keys.hasNext() && output.size < 100) {
+                    val key = keys.next()
+                    // Episode rows are handled within a selected series, not as movie/series cards.
+                    if (key.equals("latestEpisodes", true) || key.equals("episodes", true) ||
+                        key.equals("seasons", true)
+                    ) continue
+                    collectApiContent(value.opt(key), output, seen, fallbackType, depth + 1)
+                }
+            }
+            is JSONArray -> {
+                for (index in 0 until value.length()) {
+                    if (output.size >= 100) break
+                    collectApiContent(value.opt(index), output, seen, fallbackType, depth + 1)
+                }
+            }
+        }
+    }
+
+    private fun searchResponseFromApi(item: JSONObject, fallbackType: String? = null): SearchResponse? {
+        val id = item.optInt("id", item.optInt("tmdbId", 0))
+        val title = apiTitle(item)
+        if (id <= 0 || title.isBlank()) return null
+
+        val mediaType = apiMediaType(item, fallbackType)
+        if (mediaType != "movie" && mediaType != "tv") return null
+
+        val posterRaw = item.optString("poster_path").ifBlank { item.optString("poster") }
+        val poster = apiPosterUrl(posterRaw) ?: return null
+        val date = item.optString("release_date").ifBlank { item.optString("first_air_date") }
+        val year = yearRegex.find(date)?.value?.toIntOrNull()
+        val url = contentUrl(mediaType, id, title)
+
+        return if (mediaType == "tv") {
+            newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
+                posterUrl = poster
+                posterHeaders = requestHeaders
+                this.year = year
+            }
+        } else {
+            newMovieSearchResponse(title, url, TvType.Movie) {
+                posterUrl = poster
+                posterHeaders = requestHeaders
+                this.year = year
+            }
+        }
+    }
+
+    private fun searchResponsesFromApi(value: Any?, fallbackType: String? = null): List<SearchResponse> {
+        val objects = ArrayList<JSONObject>()
+        collectApiContent(value, objects, LinkedHashSet(), fallbackType)
+        return objects.mapNotNull { searchResponseFromApi(it, fallbackType) }
+    }
+
+    private fun apiPageUrl(requestData: String, page: Int): Pair<String, String?>? {
+        val path = pathOf(requestData).ifBlank { "/" }
+        return when {
+            path == "/" -> (mainUrl + "/api/library/home-feed") to null
+            path.startsWith("/filmler", true) ->
+                (mainUrl + "/api/library/browse?type=movie&page=" + page) to "movie"
+            path.startsWith("/diziler", true) ->
+                (mainUrl + "/api/library/browse?type=tv&page=" + page) to "tv"
+            else -> null
+        }
+    }
+
     private fun parseCards(doc: Document, pageUrl: String): List<SearchResponse> {
         val found = LinkedHashMap<String, SearchResponse>()
         for (link in doc.select("a[href]")) {
@@ -553,6 +744,27 @@ class DiziSol : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val apiPage = apiPageUrl(request.data, page)
+        if (apiPage != null) {
+            val (apiUrl, fallbackType) = apiPage
+            val json = apiJson(apiUrl)
+            if (json != null) {
+                val items = searchResponsesFromApi(json, fallbackType)
+                if (items.isNotEmpty()) {
+                    val response = json as? JSONObject
+                    val totalPages = response?.optInt(
+                        "total_pages",
+                        response.optInt("totalPages", 1)
+                    ) ?: 1
+                    val hasMore = apiUrl.contains("/api/library/browse?") && page < totalPages
+                    Log.d(name, "JSON API içerikleri yüklendi: " + apiUrl + "; kayıt=" + items.size)
+                    return newHomePageResponse(request.name, items, hasMore)
+                }
+                Log.w(name, "JSON API yanıtı posterli içerik döndürmedi: " + apiUrl)
+            }
+        }
+
+        // Keep a conservative HTML fallback for categories not exposed by the JSON API.
         val url = pageUrl(request.data, page)
         var doc = document(url)
         if ((doc == null || parseCards(doc, url).isEmpty()) && page > 1) {
@@ -567,7 +779,6 @@ class DiziSol : MainAPI() {
                 (page + 1).toString() == link.text().trim() ||
                 link.attr("href").contains("/page/" + (page + 1) + "/")
         }
-        Log.d(name, "Ana sayfa bölümüne ait içerikler ayrıştırıldı.")
         return newHomePageResponse(request.name, items, items.isNotEmpty() && more)
     }
 
@@ -575,6 +786,15 @@ class DiziSol : MainAPI() {
         val q = query.trim()
         if (q.length < 2) return emptyList()
         val encoded = URLEncoder.encode(q, "UTF-8")
+        val apiUrl = mainUrl + "/api/movies/search?q=" + encoded
+        val apiResult = apiJson(apiUrl)
+        if (apiResult != null) {
+            val results = searchResponsesFromApi(apiResult)
+            Log.d(name, "JSON API arama tamamlandı: " + apiUrl + "; sonuç=" + results.size)
+            return results
+        }
+
+        // HTML search is only a fallback if the API request itself failed.
         val candidates = listOf(
             "$mainUrl/?s=$encoded",
             "$mainUrl/?q=$encoded",
@@ -589,7 +809,6 @@ class DiziSol : MainAPI() {
         for (url in candidates) {
             val doc = document(url) ?: continue
             val results = parseCards(doc, url)
-            Log.d(name, "Arama isteği denendi: $url")
             if (results.isNotEmpty()) return results
         }
         return emptyList()
@@ -714,6 +933,58 @@ class DiziSol : MainAPI() {
         return clean.ifBlank { titleFromSlug(url) }
     }
 
+    private suspend fun episodesFromApi(
+        details: JSONObject,
+        seriesUrl: String,
+        fallbackPoster: String?
+    ): List<Episode> {
+        val seriesId = details.optInt("id", contentIdFromUrl(seriesUrl) ?: 0)
+        if (seriesId <= 0) return emptyList()
+        val seasons = details.optJSONArray("seasons") ?: return emptyList()
+        val found = LinkedHashMap<String, Episode>()
+
+        // The site uses TMDB's series/season endpoint for episode names and still images.
+        for (seasonIndex in 0 until seasons.length()) {
+            val seasonInfo = seasons.optJSONObject(seasonIndex) ?: continue
+            val seasonNumber = seasonInfo.optInt("season_number", 0)
+            if (seasonNumber <= 0) continue
+            if (seasonInfo.optInt("episode_count", 1) <= 0) continue
+
+            val seasonUrl = mainUrl + "/api/tmdb/tv/" + seriesId + "/season/" + seasonNumber
+            val seasonData = apiJson(seasonUrl) as? JSONObject ?: continue
+            val episodeList = seasonData.optJSONArray("episodes") ?: continue
+
+            for (episodeIndex in 0 until episodeList.length()) {
+                val episodeData = episodeList.optJSONObject(episodeIndex) ?: continue
+                val episodeNumber = episodeData.optInt("episode_number", 0)
+                if (episodeNumber <= 0) continue
+
+                val episodeUrl = seriesUrl.trimEnd('/') + "/" + seasonNumber +
+                    "-sezon-" + episodeNumber + "-bolum"
+                val episodeName = episodeData.optString("name").trim()
+                    .takeUnless { it.isBlank() || it.equals("null", true) }
+                    ?: "$seasonNumber. Sezon $episodeNumber. Bölüm"
+                val episodePoster = apiPosterUrl(
+                    episodeData.optString("still_path"),
+                    "w780"
+                ) ?: fallbackPoster
+                val key = "$seasonNumber:$episodeNumber"
+                found.putIfAbsent(
+                    key,
+                    newEpisode(episodeUrl) {
+                        name = episodeName
+                        season = seasonNumber
+                        episode = episodeNumber
+                        posterUrl = episodePoster
+                    }
+                )
+            }
+        }
+        return found.values.sortedWith(
+            compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 }
+        )
+    }
+
     private fun parseEpisodes(doc: Document, seriesUrl: String, fallbackPoster: String?): List<Episode> {
         val canonical = seriesUrlOf(seriesUrl).trimEnd('/')
         val found = LinkedHashMap<String, Episode>()
@@ -758,17 +1029,45 @@ class DiziSol : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         val normalized = fixUrl(url) ?: return null
-        val doc = document(normalized) ?: return null
         if (!isFilmUrl(normalized) && !isSeriesUrl(normalized)) {
             Log.w(name, "Desteklenmeyen detay yolu: $normalized")
             return null
         }
+        val doc = document(normalized) ?: return null
+        val isMovie = isFilmUrl(normalized)
+        val id = contentIdFromUrl(normalized)
+        val apiType = if (isMovie) "movie" else "tv"
+        val details = id?.let {
+            apiJson(mainUrl + "/api/tmdb/" + apiType + "/" + it) as? JSONObject
+        }
 
-        val title = pageTitle(doc, normalized)
-        val poster = pagePoster(doc)
+        val apiName = details?.let {
+            it.optString("title").takeUnless { title -> title.isBlank() || title.equals("null", true) }
+                ?: it.optString("name").takeUnless { title -> title.isBlank() || title.equals("null", true) }
+        }.orEmpty()
+        val title = cleanTitle(apiName).ifBlank { pageTitle(doc, normalized) }
+        val poster = apiPosterUrl(details?.optString("poster_path"))
+            ?: pagePoster(doc)
         val meta = meta(doc, normalized)
 
-        return if (isFilmUrl(normalized)) {
+        val date = details?.optString("release_date").orEmpty()
+            .ifBlank { details?.optString("first_air_date").orEmpty() }
+        val apiYear = yearRegex.find(date)?.value?.toIntOrNull()
+        val apiScore = details?.optDouble("vote_average", -1.0)?.takeIf { it >= 0.0 }
+        val apiPlot = details?.optString("overview")
+            ?.takeUnless { it.isBlank() || it.equals("null", true) }
+        val apiGenres = details?.optJSONArray("genres")?.let { genres ->
+            (0 until genres.length()).mapNotNull { index ->
+                genres.optJSONObject(index)?.optString("name")
+                    ?.takeIf { it.isNotBlank() && !it.equals("null", true) }
+            }
+        }.orEmpty()
+        val finalPlot = apiPlot ?: meta.plot
+        val finalYear = apiYear ?: meta.year
+        val finalGenres = apiGenres.ifEmpty { meta.genres }
+        val finalScore = apiScore ?: meta.score
+
+        return if (isMovie) {
             newMovieLoadResponse(
                 name = title,
                 url = normalized,
@@ -777,16 +1076,17 @@ class DiziSol : MainAPI() {
             ) {
                 posterUrl = poster
                 posterHeaders = requestHeaders
-                plot = meta.plot
-                year = meta.year
-                meta.score?.let { score = Score.from10(it) }
-                tags = meta.genres
+                plot = finalPlot
+                year = finalYear
+                finalScore?.let { score = Score.from10(it) }
+                tags = finalGenres
                 actors = meta.actors.map { ActorData(Actor(it)) }
                 addTrailer(meta.trailer)
             }
         } else {
             val canonicalSeries = seriesUrlOf(normalized)
-            val episodes = parseEpisodes(doc, canonicalSeries, poster)
+            val fromApi = details?.let { episodesFromApi(it, canonicalSeries, poster) }.orEmpty()
+            val episodes = fromApi.ifEmpty { parseEpisodes(doc, canonicalSeries, poster) }
             newTvSeriesLoadResponse(
                 title,
                 canonicalSeries,
@@ -795,10 +1095,10 @@ class DiziSol : MainAPI() {
             ) {
                 posterUrl = poster
                 posterHeaders = requestHeaders
-                plot = meta.plot
-                year = meta.year
-                meta.score?.let { score = Score.from10(it) }
-                tags = meta.genres
+                plot = finalPlot
+                year = finalYear
+                finalScore?.let { score = Score.from10(it) }
+                tags = finalGenres
                 actors = meta.actors.map { ActorData(Actor(it)) }
                 addTrailer(meta.trailer)
             }
