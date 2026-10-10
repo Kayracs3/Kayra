@@ -2,6 +2,15 @@
 
 ## 2026-10-10
 
+<!-- kayra-commit:fc70ef38fdf66e7e7f5e6eabac4bc16fd5c8741e -->
+### Avoid full doctor runs for catalog and domain registry metadata
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [fc70ef3](https://github.com/Kayracs3/Kayra/commit/fc70ef38fdf66e7e7f5e6eabac4bc16fd5c8741e)
+
+
+## 2026-10-10
+
 <!-- kayra-commit:7b31b8a5bebbecfd7403c069d918b4fc856b17a3 -->
 ### Generate GitHub release notes for version tags
 
