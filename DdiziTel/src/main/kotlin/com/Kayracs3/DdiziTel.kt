@@ -483,12 +483,12 @@ class DdiziTel : MainAPI() {
         val poster = posterOf(metadataDocument, seriesUrl ?: url)
             ?: posterOf(document, url)
         val plot = plotFrom(metadataDocument) ?: plotFrom(document)
-        val episodes = if (seriesUrl != null) {
+        val episodes = (if (seriesUrl != null) {
             collectPaginatedEpisodes(metadataDocument, seriesUrl, title)
                 .ifEmpty { parseEpisodes(document, url, title) }
         } else {
             parseEpisodes(metadataDocument, url, title)
-        }.ifEmpty {
+        }).ifEmpty {
             if (isEpisodePage) {
                 val n = episodeNumber(pageTitle, url) ?: 1
                 listOf(newEpisode(url) {
