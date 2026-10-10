@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import quote
 
-MAIN_URL_RE = re.compile(r'\bmainUrl\s*=\s*["\']([^"\']+)["\']')
+MAIN_URL_RE = re.compile(r'\bmainUrl\b[^=\n]*=\s*["\']([^"\']+)["\']')
 CAPABILITIES = [
     ("Search", re.compile(r'\boverride\s+(?:suspend\s+)?fun\s+(?:search|quickSearch)\s*\(')),
     ("Catalog", re.compile(r'hasMainPage\s*=\s*true|\boverride\s+suspend\s+fun\s+getMainPage\s*\(')),
