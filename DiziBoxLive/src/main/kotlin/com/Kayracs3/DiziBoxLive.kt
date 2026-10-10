@@ -787,12 +787,34 @@ class DiziBoxLive : MainAPI() {
     }
 
     private fun Element.hasSeriesCardContext(): Boolean {
-        return closest(
-            "article, .dizi, .dizi-item, .dizi-box, .series, .series-item, .series-box, " +
-                ".show, .show-item, .movie, .film, .post, .item, .box, .card, .owl-item, " +
-                ".swiper-slide, .grid-item, [class*=dizi], [class*=series], [class*=show], " +
-                "[class*=poster], [class*=entry], [id*=dizi], [id*=series], [id*=poster]"
-        ) != null
+        var current: Element? = this
+        repeat(5) {
+            val node = current ?: return@repeat
+            val tokens = node.classNames().map { it.lowercase() }
+            val id = node.id().lowercase()
+            val cardToken = tokens.any { token ->
+                token in setOf(
+                    "dizi", "series", "show", "movie", "film", "post", "item", "box",
+                    "card", "poster", "entry", "owl-item", "swiper-slide", "grid-item"
+                ) || Regex(
+                    """(?:^|[-_])(dizi|series|show|movie|film|post|item|box|card|poster|entry)(?:[-_]|$)"""
+                ).containsMatchIn(token) && !Regex(
+                    """(list|container|content|wrapper|archive|menu|nav|header|footer|grid)$"""
+                ).containsMatchIn(token)
+            }
+            val broadWrapper = Regex(
+                """(list|container|content|wrapper|archive|menu|nav|header|footer|grid)"""
+            ).containsMatchIn(id) || tokens.any { token ->
+                Regex("""(list|container|content|wrapper|archive|menu|nav|header|footer|grid)""")
+                    .containsMatchIn(token)
+            }
+            if (node.tagName() == "article" || (!broadWrapper && (cardToken ||
+                    id in setOf("dizi", "series", "poster", "series-card", "dizi-card") ||
+                    Regex("""(?:dizi|series|poster)[-_](?:item|card|box|entry)""").containsMatchIn(id)
+                ))) return true
+            current = node.parent()
+        }
+        return false
     }
 
     /**
@@ -816,9 +838,11 @@ class DiziBoxLive : MainAPI() {
         val all = entries.values.toList()
         val withPoster = all.filter { !it.first.posterUrl.isNullOrBlank() }
         val withCardContext = all.filter { it.second }
+        // If actual cards exist, retain them even when their thumbnails use a
+        // lazy-loading attribute that was not understood; then recover og:image.
         val selected = when {
-            withPoster.isNotEmpty() -> withPoster
             withCardContext.isNotEmpty() -> withCardContext
+            withPoster.isNotEmpty() -> withPoster
             else -> all.take(30)
         }.toMutableList()
 
