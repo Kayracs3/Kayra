@@ -499,7 +499,7 @@ class DiziBoxLive : MainAPI() {
         var current: Element? = document.selectFirst("h1")?.parent()
         var guard = 0
         while (current != null && guard < 5 && current.tagName() != "body") {
-            out += current
+            out.add(current)
             current = current.parent()
             guard++
         }
