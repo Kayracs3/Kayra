@@ -328,7 +328,7 @@ class DiziSol : MainAPI() {
     private fun meta(doc: Document, pageUrl: String): Meta {
         val nodes = jsonLdObjects(doc)
         val relevant = nodes.firstOrNull { node ->
-            val type = node.opt("@type").toString()
+            val type = node.opt("@type")?.toString().orEmpty()
             type.contains("Movie", true) || type.contains("TVSeries", true) ||
                 type.contains("CreativeWork", true) || type.contains("Episode", true)
         }
