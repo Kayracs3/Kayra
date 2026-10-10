@@ -27,6 +27,16 @@ API_PROBE_PATHS = [
     "/api/library/home-feed",
     "/api/library/browse?type=movie&page=1",
     "/api/library/browse?type=tv&page=1",
+    "/api/library/browse?type=tv&platform=netflix&page=1",
+    "/api/library/browse?type=tv&platform=disney-plus&page=1",
+    "/api/library/browse?type=tv&platform=disneyplus&page=1",
+    "/api/library/browse?type=tv&platform=prime-video&page=1",
+    "/api/library/browse?type=tv&platform=prime&page=1",
+    "/api/library/browse?type=tv&platform=amazon-prime&page=1",
+    "/api/library/browse?type=tv&platform=hbo-max&page=1",
+    "/api/library/browse?type=tv&platform=hbomax&page=1",
+    "/api/library/browse?type=tv&platform=tabii&page=1",
+    "/api/library/browse?type=tv&platform=tod&page=1",
     "/api/movies/search?q=Breaking%20Bad",
     "/api/library/tmdb-ids",
     "/api/tmdb/search/multi?query=Breaking%20Bad&page=1",
@@ -399,7 +409,9 @@ def inspect_js_bundle(url):
         "/netflix-dizileri", "/disney-dizileri", "/prime-dizileri",
         "/hbomax-dizileri", "/tabii-dizileri-izle", "/tod-dizileri",
         "Netflix", "Disney+", "Prime Video", "HBO Max", "tabii", "TOD",
-        "provider", "with_networks", "watch_provider", "network_ids",
+        "platformSlug", "&platform=", "platform:", "platform=", "netflix",
+        "disney-plus", "disneyplus", "prime-video", "amazon-prime",
+        "hbo-max", "hbomax", "provider", "with_networks", "watch_provider", "network_ids",
         "const ZK=", "poster_path", "function Fo", "Fo("
     ):
         count = 0
