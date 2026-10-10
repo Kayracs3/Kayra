@@ -170,18 +170,33 @@ class FilmModu : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val encoded = URLEncoder.encode(query.trim(), "UTF-8")
-        val document = runCatching {
-            app.get(
-                mainUrl + "/film-ara?term=" + encoded,
-                headers = headers()
-            ).document
-        }.getOrNull() ?: return emptyList()
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+        val encoded = URLEncoder.encode(q, "UTF-8")
+        val urls = listOf(
+            "$mainUrl/film-ara?term=$encoded",
+            "$mainUrl/film-ara?query=$encoded",
+            "$mainUrl/film-ara?q=$encoded",
+            "$mainUrl/?s=$encoded",
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/arama/$encoded",
+        ).distinct()
 
-        return document.select("a[href]")
-            .filter { isFilmDetailLink(it.attr("href")) }
-            .mapNotNull { it.toSearchResult() }
-            .distinctBy { it.url }
+        for (url in urls) {
+            val document = runCatching {
+                app.get(url, headers = headers(), referer = "$mainUrl/", allowRedirects = true).document
+            }.onFailure {
+                android.util.Log.w("FilmModu", "Arama isteği başarısız: $url", it)
+            }.getOrNull() ?: continue
+
+            val results = document.select("a[href]")
+                .filter { isFilmDetailLink(it.attr("href")) }
+                .mapNotNull { it.toSearchResult() }
+                .distinctBy { it.url }
+            android.util.Log.d("FilmModu", "Arama: $url -> ${results.size} sonuç")
+            if (results.isNotEmpty()) return results
+        }
+        return emptyList()
     }
 
     override suspend fun load(url: String): LoadResponse? {
