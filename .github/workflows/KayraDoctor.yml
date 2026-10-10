@@ -9,6 +9,7 @@ on:
       - ".github/workflows/RepoYonetimi.yml"
       - ".github/workflows/ReleaseNotes.yml"
       - "README.md"
+      - "doctor/README.md"
       - "CHANGELOG.md"
       - ".github/workflows/Derleyici.yml"
       - ".github/workflows/KayraDoctor.yml"
