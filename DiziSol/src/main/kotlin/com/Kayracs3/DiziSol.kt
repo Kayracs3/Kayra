@@ -1375,7 +1375,7 @@ class DiziSol : MainAPI() {
         return record
     }
 
-    private fun emitApiRecord(
+    private suspend fun emitApiRecord(
         record: JSONObject,
         sourcePage: String,
         subtitleCallback: (SubtitleFile) -> Unit,
