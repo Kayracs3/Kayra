@@ -682,7 +682,11 @@ class SinezyTo : MainAPI() {
         val encodedBlockList = encodedBlocks.toList()
         Log.d("SinezyTo", "collectCandidates: encoded player blocks=${encodedBlockList.size}, page=$base")
         for (block in encodedBlockList) {
-            val payload = decodeBase64Payload(block.groupValues[2]) ?: continue
+            val payload = decodeBase64Payload(block.groupValues[2])
+            if (payload == null) {
+                Log.d("SinezyTo", "collectCandidates: Base64 player block was not decodable")
+                continue
+            }
             val decodedPayload = decode(payload)
 
             // Legacy Sinezy player format sometimes stores an iframe snippet as plain text,
@@ -817,6 +821,26 @@ class SinezyTo : MainAPI() {
                 }.onFailure {
                     Log.w("SinezyTo", "loadLinks: extractor failed for candidate=$candidate", it)
                 }
+
+                // Some Sinezy servers are not supported by CloudStream's registered extractors.
+                // If no link was emitted, inspect that embed page for nested iframe/HLS sources.
+                if (!found && depth < 2) {
+                    val nested = runCatching {
+                        app.get(candidate, headers = requestHeaders + ("Referer" to referer), referer = referer)
+                    }.onFailure {
+                        Log.d("SinezyTo", "loadLinks: direct embed page fetch failed for candidate=$candidate")
+                    }.getOrNull()
+
+                    if (nested != null && nested.isSuccessful) {
+                        publishSubtitles(nested.document, nested.text, candidate, subtitleCallback)
+                        val nestedCandidates = collectCandidates(nested.document, nested.text, candidate)
+                        Log.d(
+                            "SinezyTo",
+                            "loadLinks: external embed candidates=${nestedCandidates.size} for $candidate"
+                        )
+                        for (next in nestedCandidates) resolveCandidate(next, candidate, depth + 1)
+                    }
+                }
             }
         }
 
@@ -831,6 +855,9 @@ class SinezyTo : MainAPI() {
             if (found) Log.d("SinezyTo", "loadLinks: playable source emitted")
         }
 
+        if (!found) {
+            Log.w("SinezyTo", "loadLinks: no playable link found; visited=${visited.size}, candidates=${candidates.size}")
+        }
         Log.d("SinezyTo", "loadLinks: finished found=$found, visited=${visited.size}")
         return found
     }
