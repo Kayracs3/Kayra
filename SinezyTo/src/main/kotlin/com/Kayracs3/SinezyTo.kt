@@ -936,13 +936,28 @@ class SinezyTo : MainAPI() {
             url.contains(".mp4", true) || url.contains(".webm", true) -> ExtractorLinkType.VIDEO
             else -> INFER_TYPE
         }
+        val host = runCatching { URI(url).host.orEmpty().lowercase() }.getOrDefault("")
+        val filmIzleHls = host == "player.filmizle.in" &&
+            runCatching { URI(url).path.orEmpty().startsWith("/cdn/hls/") }.getOrDefault(false)
+        // Filmizle CDN, iframe URL'si yerine player kökünü Referer olarak bekleyebilir.
+        // API isteğinin referer'i iframe olarak kalır; yalnız medya/HLS isteği bu başlıkları kullanır.
+        val mediaReferer = if (filmIzleHls) "https://player.filmizle.in/" else referer
+        val mediaHeaders = if (filmIzleHls) {
+            requestHeaders + mapOf(
+                "Accept" to "*/*",
+                "Origin" to "https://player.filmizle.in",
+                "Referer" to mediaReferer
+            )
+        } else {
+            requestHeaders + ("Referer" to mediaReferer)
+        }
         callback(
             newExtractorLink(source = name, name = name, url = url, type = type) {
-                this.referer = referer
+                this.referer = mediaReferer
                 this.quality = Regex("""(?i)(2160|1440|1080|720|480|360)""")
                     .find(url)?.groupValues?.get(1)?.toIntOrNull()
                     ?: Qualities.Unknown.value
-                this.headers = requestHeaders + ("Referer" to referer)
+                this.headers = mediaHeaders
             }
         )
     }
