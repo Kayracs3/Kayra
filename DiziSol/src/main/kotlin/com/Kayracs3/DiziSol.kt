@@ -139,13 +139,45 @@ class DiziSol : MainAPI() {
             ?.document
     }
 
+    private fun tmdbPosterFromAttributes(element: Element?, baseUrl: String): String? {
+        if (element == null) return null
+        val pathKeys = setOf(
+            "poster_path", "posterPath", "data-poster-path", "data-poster_path",
+            "data-tmdb-poster-path", "data-tmdb-poster", "data-tmdb-image"
+        )
+        for (key in pathKeys) {
+            val raw = decode(element.attr(key)).trim().trim('"', '\'')
+            if (raw.isBlank()) continue
+
+            if (raw.contains("image.tmdb.org/t/p/", true)) {
+                val direct = fixUrl(raw, baseUrl)
+                if (direct != null && !isRejectedPoster(direct)) return direct
+            }
+
+            // TMDB poster_path alanı yalnızca dosya yolu döndürebilir.
+            // Sadece adı açıkça TMDB/poster_path olan alanları TMDB tabanına ekle.
+            val pathOnly = raw.removePrefix("/")
+            if (!raw.startsWith("//") &&
+                !raw.startsWith("http://", true) &&
+                !raw.startsWith("https://", true) &&
+                pathOnly.matches(Regex("""(?i)(?:[^/]+/)?[A-Za-z0-9_%.-]+\.(?:jpe?g|png|webp)"""))
+            ) {
+                val filename = pathOnly.substringAfterLast("/")
+                return "https://image.tmdb.org/t/p/w500/$filename"
+            }
+        }
+        return tmdbPosterFromRaw(element.outerHtml(), baseUrl)
+    }
+
     private fun imageUrl(image: Element?, baseUrl: String = mainUrl): String? {
         if (image == null) return null
+        tmdbPosterFromAttributes(image, baseUrl)?.let { return it }
         val keys = listOf(
             "data-src", "data-lazy-src", "data-original", "data-original-src",
-            "data-src-original", "data-lazy", "data-image", "data-poster",
-            "data-thumb", "data-thumbnail", "data-url", "data-echo",
-            "data-srcset", "data-lazy-srcset", "srcset", "src", "poster", "content"
+            "data-src-original", "data-lazy", "data-image", "data-poster", "data-poster-url",
+            "data-image-url", "data-tmdb-poster", "data-tmdb-image", "poster_path", "posterPath",
+            "data-poster-path", "data-poster_path", "data-thumb", "data-thumbnail", "data-url",
+            "data-echo", "data-srcset", "data-lazy-srcset", "srcset", "src", "poster", "content"
         )
         for (key in keys) {
             val raw = image.attr(key).trim()
@@ -261,8 +293,63 @@ class DiziSol : MainAPI() {
         return null
     }
 
-    private fun posterFromCard(link: Element, baseUrl: String = mainUrl): String? {
+    /**
+     * Bazı sayfalarda başlık bağlantısı ile afiş bağlantısı farklı <a> öğelerindedir.
+     * Bu durumda yalnızca aynı içerik URL'sine giden görsel bağlantıları eşleştir.
+     * Aynı hedef için birden fazla farklı afiş varsa tahmin yürütme.
+     */
+    private fun posterFromMatchingAnchors(
+        link: Element,
+        baseUrl: String,
+        sourceDoc: Document?,
+        allowCanonicalFallback: Boolean
+    ): String? {
+        if (sourceDoc == null) return null
+        val targetUrl = fixUrl(link.attr("href"), baseUrl) ?: return null
+        val imageSelector =
+            "img, source[srcset], [style*=background], [data-bg], [data-background], " +
+                "[data-background-image], [data-src], [data-lazy-src], [data-original], " +
+                "[data-image], [data-url], [data-echo], [data-poster], [data-poster-path], " +
+                "[data-tmdb-poster], [data-tmdb-image], [data-thumb], [data-thumbnail]"
+
+        fun collect(canonical: Boolean): Set<String> {
+            val expected = if (canonical) canonicalResultUrl(targetUrl).trimEnd('/')
+                else targetUrl.trimEnd('/')
+            val posters = LinkedHashSet<String>()
+            for (candidate in sourceDoc.select("a[href]")) {
+                val candidateUrl = fixUrl(candidate.attr("href"), baseUrl) ?: continue
+                val actual = if (canonical) canonicalResultUrl(candidateUrl).trimEnd('/')
+                    else candidateUrl.trimEnd('/')
+                if (actual != expected) continue
+
+                val poster = tmdbPosterFromRaw(candidate.outerHtml(), baseUrl)
+                    ?: imageUrl(candidate.selectFirst(imageSelector), baseUrl)
+                    ?: backgroundImageUrl(candidate, baseUrl)
+                if (poster != null && !isRejectedPoster(poster)) posters += poster
+            }
+            return posters
+        }
+
+        val exactPosters = collect(canonical = false)
+        if (exactPosters.size == 1) return exactPosters.first()
+        if (exactPosters.size > 1) return null
+
+        if (allowCanonicalFallback) {
+            val canonicalPosters = collect(canonical = true)
+            if (canonicalPosters.size == 1) return canonicalPosters.first()
+        }
+        return null
+    }
+
+    private fun posterFromCard(
+        link: Element,
+        baseUrl: String = mainUrl,
+        sourceDoc: Document? = null,
+        allowCanonicalFallback: Boolean = true
+    ): String? {
         tmdbPosterFromRaw(link.outerHtml(), baseUrl)?.let { return it }
+        posterFromMatchingAnchors(link, baseUrl, sourceDoc, allowCanonicalFallback = false)
+            ?.let { return it }
 
         val imageSelector =
             "img, source[srcset], [style*=background], [data-bg], [data-background], " +
@@ -316,6 +403,10 @@ class DiziSol : MainAPI() {
             parent = currentParent.parent()
             depth++
         }
+        if (allowCanonicalFallback) {
+            posterFromMatchingAnchors(link, baseUrl, sourceDoc, allowCanonicalFallback = true)
+                ?.let { return it }
+        }
         return null
     }
 
@@ -346,6 +437,8 @@ class DiziSol : MainAPI() {
             }
             tmdbPosterFromRaw(node.toString(), baseUrl)?.let { return it }
         }
+        // Sayfa genelinde tek bir TMDB görsel dosyası varsa paylaşım/script alanları içinden yakala.
+        tmdbPosterFromRaw(doc.html(), baseUrl)?.let { return it }
 
         val imageSelector =
             "img, [style*=background], [data-bg], [data-background], [data-background-image], " +
@@ -428,7 +521,7 @@ class DiziSol : MainAPI() {
             if (title.isBlank() || title.length > 150 || title.equals("izle", true)) continue
             if (title.lowercase() in setOf("film izle", "dizi izle", "detaylar", "hemen izle")) continue
 
-            val poster = posterFromCard(link, pageUrl)
+            val poster = posterFromCard(link, pageUrl, doc, allowCanonicalFallback = true)
             val nearbyText = link.parent()?.text().orEmpty()
             val cardYear = yearRegex.find(nearbyText)?.value?.toIntOrNull()
             val response: SearchResponse = if (isSeriesUrl(href)) {
@@ -643,7 +736,7 @@ class DiziSol : MainAPI() {
                     this.season = season
                     this.episode = episodeNumber
                     // Bölüm afişi yalnızca aynı bölüm kartında açıkça bulunursa kullanılır.
-                    posterUrl = posterFromCard(link, doc.location()) ?: fallbackPoster
+                    posterUrl = posterFromCard(link, doc.location(), doc, allowCanonicalFallback = false) ?: fallbackPoster
                 }
             )
         }
