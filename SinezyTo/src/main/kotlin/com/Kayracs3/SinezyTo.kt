@@ -687,13 +687,13 @@ class SinezyTo : MainAPI() {
 
             // Legacy Sinezy player format sometimes stores an iframe snippet as plain text,
             // where Jsoup won't create an iframe node. Preserve the old src= extraction too.
-            Regex("""(?is)\\bsrc\\s*=\\s*["']?([^"'<>\\s]+)""")
+            Regex("""(?is)\bsrc\s*=\s*["']?([^"'<>\\\s]+)""")
                 .find(decodedPayload)?.groupValues?.getOrNull(1)?.let { rawSrc ->
                     addCandidate(output, rawSrc.trimEnd(';', ',', ')'), base, force = true)
                 }
 
             // Also handle player config objects that store the embed URL rather than an iframe tag.
-            Regex("""(?is)["']?(?:src|file|url|iframe|embed|player|video)["']?\\s*[:=]\\s*["']([^"']{5,800})["']""")
+            Regex("""(?is)["']?(?:src|file|url|iframe|embed|player|video)["']?\s*[:=]\s*["']([^"']{5,800})["']""")
                 .findAll(decodedPayload).forEach { match ->
                     addCandidate(output, match.groupValues[1], base, force = true)
                 }
