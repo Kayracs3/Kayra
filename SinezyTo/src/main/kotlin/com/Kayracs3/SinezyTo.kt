@@ -694,7 +694,7 @@ class SinezyTo : MainAPI() {
         // Bazı CDN'ler securedLink'i aynı player oturumuna bağlar. Önce iframe'i aç.
         val browserHintHeaders = mapOf(
             "Sec-CH-UA-Mobile" to "?0",
-            "Sec-CH-UA-Platform" to "`Windows`".replace("`", "\"")
+            "Sec-CH-UA-Platform" to "\"Windows\""
         )
         val playerPage = runCatching {
             app.get(
