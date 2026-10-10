@@ -1,7 +1,9 @@
 package com.Kayracs3
 
+import android.util.Base64
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
@@ -39,6 +41,28 @@ class SinezyTo : MainAPI() {
         .replace("\\'", "'")
         .replace("&amp;", "&")
         .replace("&#038;", "&")
+
+    /**
+     * Sinezy'nin bazı oynatıcı blokları Base64 içindeki iframe HTML'si olarak gelir.
+     * Hatalı/uygun olmayan değerleri sessizce yok sayar; yalnızca çözülebilir metin döndürür.
+     */
+    private fun decodeBase64Payload(raw: String): String? {
+        val compact = raw.trim().replace(Regex("\\s+"), "")
+        if (compact.length < 12) return null
+
+        val normalized = compact.replace('-', '+').replace('_', '/')
+        val padded = normalized + "=".repeat((4 - normalized.length % 4) % 4)
+        val bytes = runCatching {
+            Base64.decode(padded, Base64.DEFAULT)
+        }.getOrNull() ?: return null
+
+        val decoded = runCatching { String(bytes, Charsets.UTF_8) }.getOrNull()
+            ?: return null
+        return decoded.takeIf {
+            it.contains("iframe", true) || it.contains("src=", true) ||
+                it.contains("m3u8", true) || it.contains("http", true)
+        }
+    }
 
     private fun fixUrl(raw: String?, base: String = mainUrl): String? {
         val value = decode(raw.orEmpty()).trim().trim('"', '\'')
@@ -110,9 +134,14 @@ class SinezyTo : MainAPI() {
 
     private fun isAdultContent(document: Document, url: String): Boolean {
         if (isAdultSlug(url)) return true
-        val genres = parseGenres(document).joinToString(" ").lowercase()
-        return listOf("erotik", "erotic", "yetişkin", "yetiskin", "adult", "+18")
-            .any { genres.contains(it) }
+        // parseGenres normal katalog etiketlerinden yetişkin kategorisini ayırır;
+        // bu kontrol ise ham kategori alanını ayrıca tarayarak bu içeriğin yüklenmesini engeller.
+        val rawCategories = document.select(
+            "div.detail span a, .genres a, .genre a, .categories a, .category a, " +
+                ".cat-links a, .post-categories a, .film-kategorileri a"
+        ).joinToString(" ") { it.text() }.lowercase()
+        return listOf("erotik", "erotic", "yetişkin", "yetiskin", "adult", "+18", "18-plus")
+            .any { rawCategories.contains(it) }
     }
 
     private fun hasSeriesCategory(document: Document): Boolean {
@@ -174,13 +203,16 @@ class SinezyTo : MainAPI() {
             val poster = imageFrom(img)
             val isSeries = seriesSection || looksLikeSeries(url, title)
 
+            val cardScore = parseCardScore(link)
             val response = if (isSeries) {
                 newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
                     posterUrl = poster
+                    score = cardScore
                 }
             } else {
                 newMovieSearchResponse(title, url, TvType.Movie) {
                     posterUrl = poster
+                    score = cardScore
                 }
             }
 
@@ -203,7 +235,7 @@ class SinezyTo : MainAPI() {
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
         val encoded = URLEncoder.encode(query.trim(), "UTF-8")
-        val url = "$mainUrl/?s=$encoded"
+        val url = "$mainUrl/arama/?s=$encoded"
         val response = app.get(url, headers = requestHeaders, referer = mainUrl)
         if (!response.isSuccessful) return newSearchResponseList(emptyList(), false)
 
@@ -241,6 +273,18 @@ class SinezyTo : MainAPI() {
     }
 
     private fun parseGenres(document: Document): List<String> {
+        // Sinezy etiketleri ayrıntı kutusunda doğrudan div.detail span a altında veriyor.
+        val siteGenres = document.select("div.detail span a")
+            .map { cleanGenre(it.text()) }
+            .filter {
+                it.endsWith("filmleri", true) || it.endsWith("filmi", true) ||
+                    it.endsWith("dizileri", true) || it.equals("Yabancı Dizi", true) ||
+                    it.equals("Yabanci Dizi", true) || it.equals("Dizi", true)
+            }
+            .filter { it.isNotBlank() && !it.contains("yetişkin", true) }
+            .distinct()
+        if (siteGenres.isNotEmpty()) return siteGenres
+
         val all = document.getAllElements()
         val label = all.firstOrNull {
             it.ownText().trim().trimEnd(':').equals("Kategori", true) ||
@@ -264,6 +308,29 @@ class SinezyTo : MainAPI() {
         return fallback
     }
 
+    private fun parseCardScore(link: Element): Score? {
+        val card = link.closest("div.movie_box, article, .item, .movie, .film, .post, li")
+            ?: link.parent()?.parent()
+            ?: link.parent()
+        val scoreElement = card?.selectFirst(
+            "span.coz, span.imdb, .imdb-rating, .imdb_puan, .imdb-puan, " +
+                "[itemprop=ratingValue], [data-rating]"
+        )
+        val elementText = scoreElement?.let {
+            it.attr("content").ifBlank { it.attr("data-rating") }
+                .ifBlank { it.attr("title") }.ifBlank { it.text() }
+        }.orEmpty()
+        val titleText = link.attr("title").ifBlank { link.text() }
+        val raw = if (elementText.isNotBlank()) elementText else {
+            Regex("""^\\s*(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)\\s+""")
+                .find(titleText)?.groupValues?.getOrNull(1).orEmpty()
+        }
+        val value = Regex("""(?<!\\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\\d)""")
+            .find(raw)?.value?.replace(",", ".")?.toDoubleOrNull()
+            ?.takeIf { it in 0.0..10.0 } ?: return null
+        return runCatching { Score.from10(value) }.getOrNull()
+    }
+
     private fun parseScore(document: Document): Score? {
         fun scoreFrom(raw: String?): Double? {
             val value = raw?.trim().orEmpty()
@@ -277,6 +344,7 @@ class SinezyTo : MainAPI() {
             "meta[itemprop=ratingValue]",
             "[itemprop=ratingValue]",
             "[data-rating]",
+            ".detail span.imdb", "div.detail span.imdb", ".info span.imdb", "span.coz",
             ".imdb-rating", ".imdb_puan", ".imdb-puan", ".imdb", ".puan-imdb",
             "[class*=imdb]", "[class*=rating]"
         )
@@ -331,6 +399,20 @@ class SinezyTo : MainAPI() {
     }
 
     private fun parseActors(document: Document): List<ActorData>? {
+        // Sinezy'nin mevcut temasında oyuncular çoğu kez span.oyn p içinde virgülle ayrılır.
+        val siteActors = document.select("span.oyn p")
+            .flatMap { element ->
+                element.text()
+                    .replace(Regex("(?i)^.*?oyuncular?\\s*:?\\s*"), "")
+                    .split(",", "•", "|")
+                    .map { it.trim() }
+            }
+            .filter { it.isNotBlank() && it.length < 60 }
+            .distinct()
+            .take(30)
+            .map { ActorData(Actor(it)) }
+        if (siteActors.isNotEmpty()) return siteActors
+
         val label = document.getAllElements().firstOrNull {
             it.ownText().trim().trimEnd(':').equals("Oyuncular", true) ||
                 it.ownText().trim().trimEnd(':').equals("Oyuncu Kadrosu", true)
@@ -586,6 +668,40 @@ class SinezyTo : MainAPI() {
 
         val scripts = document.select("script").joinToString("\n") { it.data() + "\n" + it.html() }
         val decodedScripts = decode(scripts)
+
+        // Sinezy player HTML'sini Base64 ile "ilkpartkod" değişkenine gömebiliyor.
+        // Önce bu blokları çöz, ardından iframe/video kaynaklarını normal aday listesine ekle.
+        val encodedBlocks = Regex(
+            """(?is)\\b(?:ilkpartkod|ikinciPartKod|ikinci_part_kod|ikinciPartkod)\\s*=\\s*(['"])([A-Za-z0-9+/_=-]{16,})\\1"""
+        ).findAll("$html\\n$decodedHtml\\n$decodedScripts")
+        val embeddedAttrs = listOf(
+            "src", "data-src", "data-url", "data-embed", "data-iframe",
+            "data-iframe-src", "data-player", "data-video", "data-link", "data-href"
+        )
+        for (block in encodedBlocks) {
+            val payload = decodeBase64Payload(block.groupValues[2]) ?: continue
+            val payloadDocument = Jsoup.parse(payload, base)
+            for (element in payloadDocument.select(
+                "iframe[src], iframe[data-src], video[src], source[src], embed[src], " +
+                    "[data-src], [data-url], [data-embed], [data-player], [data-video]"
+            )) {
+                for (attr in embeddedAttrs) {
+                    if (element.hasAttr(attr)) {
+                        addCandidate(output, element.attr(attr), base, force = true)
+                    }
+                }
+            }
+
+            Regex("""(?i)(?:https?:)?//[^"'<>\\s]+?\\.(?:m3u8|mp4|webm|mpd)(?:\\?[^"'<>\\s]*)?""")
+                .findAll(decode(payload)).forEach {
+                    addCandidate(output, it.value, base, force = true)
+                }
+            Regex("""(?i)(?:src|file|url|iframe|embed|player|stream|video)\\s*["']?\\s*[:=]\\s*["']([^"']{5,800})["']""")
+                .findAll(decode(payload)).forEach {
+                    addCandidate(output, it.groupValues[1], base, force = true)
+                }
+        }
+
         Regex("""(?i)(?:src|file|url|iframe|embed|player|stream|video)\s*["']?\s*[:=]\s*["']([^"']{5,800})["']""")
             .findAll(decodedScripts).forEach { addCandidate(output, it.groupValues[1], base) }
         Regex("""(?i)(?:https?:)?//[^"'<>\\\s]{6,500}""")
