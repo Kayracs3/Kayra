@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "policy": {
+    "primaryDomain": "The mainUrl in each provider Kotlin file is authoritative.",
+    "aliases": "Only approvedAliases listed below are checked.",
+    "automaticSwitching": false,
+    "approval": "Never change provider mainUrl automatically just because a different hostname responds. Domain switches must be reviewed because site structure, redirects, and playback hosts may differ."
+  },
+  "providers": {}
+}
