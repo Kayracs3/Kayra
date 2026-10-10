@@ -637,24 +637,41 @@ class DdiziTel : MainAPI() {
         }
 
         val decodedHtml = decode(html)
-        val directPattern = Regex(
-            """(?i)(?:https?:)?//[^"'<>\\\s]+?\.(?:m3u8|mp4|m4v|webm|mpd)(?:\?[^"'<>\\\s]*)?"""
+        // Oyuncu adresleri normal HTML, JSON, inline JavaScript veya base64 ile
+        // dönebiliyor. Özellikle geox.php bazı bölümlerde medya adresini JSON içindeki
+        // url/link alanında veriyor; yalnızca "file/src" aramak bu bölümleri kaçırır.
+        val textVariants = LinkedHashSet<String>()
+        textVariants.add(decodedHtml)
+        val base64Pattern = Regex(
+            """(?i)(?:atob|base64_decode|base64)\\s*\\(\\s*["']([A-Za-z0-9+/]{20,}={0,2})["']\\s*\\)"""
         )
-        directPattern.findAll(decodedHtml).forEach { addCandidate(output, it.value, base) }
+        for (match in base64Pattern.findAll(decodedHtml).take(20)) {
+            val encoded = match.groupValues[1]
+            runCatching {
+                val bytes = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+                String(bytes, Charsets.UTF_8)
+            }.getOrNull()?.takeIf { it.isNotBlank() }?.let { textVariants.add(decode(it)) }
+        }
 
-        val attrPattern = Regex(
-            """(?i)(?:src|file|iframe|embed|video|source|hls|playlist)\s*["']?\s*[:=]\s*["']([^"'<>]{5,1500})["']"""
+        val directPattern = Regex(
+            """(?i)(?:https?:)?//[^"'<>\\\\\\s]+?\\.(?:m3u8|mp4|m4v|webm|mpd|m3u|txt)(?:\\?[^"'<>\\\\\\s]*)?"""
         )
-        attrPattern.findAll(decodedHtml).forEach { match ->
-            val raw = match.groupValues[1]
-            val candidate = fixUrl(raw, base) ?: return@forEach
-            val path = pathOf(candidate)
-            // Genel "url" değişkenleri analytics ve sayfa içi bağlantıları da yakalıyordu.
-            if (isDirectMedia(candidate) || isPlaylistEndpoint(candidate) ||
-                path.contains("/player/") || path.contains("/embed/") ||
-                path.contains("/hls/") || path.endsWith("/ajax.php") ||
-                path.endsWith("/geox.php") || isScriptEndpoint(candidate)
-            ) addCandidate(output, candidate, base)
+        val attrPattern = Regex(
+            """(?i)\\b(?:src|file|fileurl|file_url|iframe|embed|video|source|stream|streamurl|stream_url|url|link|hls|playlist|contenturl|content_url|master|media|m3u8|mp4)\\s*["']?\\s*[:=]\\s*["']([^"'<>]{5,2000})["']"""
+        )
+        for (textVariant in textVariants) {
+            directPattern.findAll(textVariant).forEach { addCandidate(output, it.value, base) }
+            attrPattern.findAll(textVariant).forEach { match ->
+                val raw = match.groupValues[1]
+                val candidate = fixUrl(raw, base) ?: return@forEach
+                val path = pathOf(candidate)
+                // url/link alanlarını yalnızca gerçek player/medya uç noktasıysa kabul et.
+                if (isDirectMedia(candidate) || isPlaylistEndpoint(candidate) ||
+                    path.contains("/player/") || path.contains("/embed/") ||
+                    path.contains("/hls/") || path.endsWith("/ajax.php") ||
+                    path.endsWith("/geox.php") || isScriptEndpoint(candidate)
+                ) addCandidate(output, candidate, base)
+            }
         }
 
         for (link in document.select("a[href]")) {
@@ -709,13 +726,30 @@ class DdiziTel : MainAPI() {
                     val validManifest = probe?.isSuccessful == true && startsWithM3u8(body)
                     if (!validManifest) {
                         val contentType = probe?.headers?.get("content-type").orEmpty()
-                        val preview = body.take(160).replace("\n", " ").replace("\r", " ")
+                        val preview = body.take(220).replace("\n", " ").replace("\r", " ")
                         Log.w(
                             "DDizi",
                             "Rejecting non-HLS response successful=" + probe?.isSuccessful +
                                 " contentType=" + contentType +
                                 " url=" + candidate + " body=" + preview
                         )
+
+                        // master.txt gibi endpoint'ler bazı sunucularda doğrudan manifest
+                        // yerine JSON/HTML sarmalayıcısı veya başka bir oynatıcı URL'si döndürüyor.
+                        // Bu durumda üst URL'yi oynatıcıya vermek yerine iç adresleri çöz.
+                        if (probe?.isSuccessful == true && body.isNotBlank()) {
+                            val wrappedCandidates = collectPlayerUrls(
+                                probe.document, body, candidate
+                            ).filter { it != candidate }
+                            Log.d(
+                                "DDizi",
+                                "non-HLS wrapper candidates=" + wrappedCandidates.size +
+                                    " at " + candidate
+                            )
+                            for (next in wrappedCandidates) {
+                                resolve(next, candidate, depth + 1)
+                            }
+                        }
                         return
                     }
                 }
@@ -782,10 +816,19 @@ class DdiziTel : MainAPI() {
             }.getOrNull() ?: return
             if (!nestedResponse.isSuccessful) return
 
+            val nestedBody = nestedResponse.text
             val nestedCandidates = collectPlayerUrls(
-                nestedResponse.document, nestedResponse.text, candidate
+                nestedResponse.document, nestedBody, candidate
             )
-            Log.d("DDizi", "nested candidates=" + nestedCandidates.size + " at " + candidate)
+            val nestedType = nestedResponse.headers["content-type"].orEmpty()
+            val nestedPreview = nestedBody.take(220).replace("\n", " ").replace("\r", " ")
+            Log.d(
+                "DDizi",
+                "nested response successful=" + nestedResponse.isSuccessful +
+                    " type=" + nestedType + " chars=" + nestedBody.length +
+                    " candidates=" + nestedCandidates.size + " at=" + candidate +
+                    " body=" + nestedPreview
+            )
             for (next in nestedCandidates) resolve(next, candidate, depth + 1)
         }
 
