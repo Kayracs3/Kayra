@@ -63,18 +63,52 @@ class DiziPal : MainAPI() {
     ): HomePageResponse {
         val url = buildPageUrl(request.data, page)
 
-        val document = runCatching {
+        var document = runCatching {
             app.get(
                 url,
-                headers = headers,
+                headers = headers + ("Referer" to "$mainUrl/"),
                 referer = "$mainUrl/",
                 allowRedirects = true,
+                timeout = 15000,
             ).document
-        }.getOrNull() ?: return newHomePageResponse(
-            request.name,
-            emptyList(),
-            false,
-        )
+        }.onFailure {
+            Log.d("DiziPal", "Ana sayfa ilk istek hatası: $url; ${it.message}")
+        }.getOrNull()
+
+        fun containsContentLinks(doc: Document?): Boolean {
+            if (doc == null) return false
+            return doc.select("a[href]").any { link ->
+                isListingItemUrl(normalizeUrl(link.attr("href"), url))
+            }
+        }
+
+        // If the site's anti-bot layer returns a shell/challenge page to the
+        // plugin's default User-Agent, retry once with a normal browser identity.
+        if (!containsContentLinks(document)) {
+            val browserHeaders = headers + mapOf(
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36",
+                "Referer" to "$mainUrl/",
+                "Sec-Fetch-Dest" to "document",
+                "Sec-Fetch-Mode" to "navigate",
+                "Sec-Fetch-Site" to "same-origin",
+            )
+            document = runCatching {
+                app.get(
+                    url,
+                    headers = browserHeaders,
+                    referer = "$mainUrl/",
+                    allowRedirects = true,
+                    timeout = 15000,
+                ).document
+            }.onFailure {
+                Log.d("DiziPal", "Tarayıcı başlığıyla tekrar deneme başarısız: $url; ${it.message}")
+            }.getOrNull() ?: document
+        }
+
+        if (document == null) {
+            Log.d("DiziPal", "Ana sayfa belgesi alınamadı: $url")
+            return newHomePageResponse(request.name, emptyList(), false)
+        }
 
         val baseUrl = documentBase(document, url)
         val isLatestEpisodesPage = request.data.trimEnd('/') == mainUrl.trimEnd('/')
@@ -82,6 +116,15 @@ class DiziPal : MainAPI() {
             parseCurrentEpisodeSection(document, baseUrl)
         } else {
             parseListing(document, baseUrl)
+        }
+
+        if (results.isEmpty()) {
+            Log.d(
+                "DiziPal",
+                "Birincil ayrıştırıcı boş döndü; yedek kart ayrıştırması deneniyor: " +
+                    "sayfa=$url, bağlantı=${document.select("a[href]").size}",
+            )
+            results = parseListingFallback(document, baseUrl)
         }
 
         // The homepage carousel may expose episode names but omit their posters
@@ -1374,6 +1417,64 @@ class DiziPal : MainAPI() {
         return resultsByUrl.values.toList()
     }
 
+    private fun parseListingFallback(
+        document: Document,
+        baseUrl: String,
+    ): List<SearchResponse> {
+        val results = LinkedHashMap<String, SearchResponse>()
+        val trendUrls = findTrendUrls(document, baseUrl)
+
+        document.select("a[href]").forEach { link ->
+            val href = normalizeUrl(link.attr("href"), baseUrl)
+            if (!isListingItemUrl(href)) return@forEach
+            if (trendUrls.any { sameContentUrl(it, href) }) return@forEach
+            if (isInsideHardExcludedSection(link)) return@forEach
+
+            val isEpisode = isEpisodeUrl(href)
+            val isMovie = href.contains("/movie/", true) ||
+                href.contains("/movies/", true)
+            val title = cleanCardTitle(
+                listOf(
+                    link.attr("title"),
+                    link.attr("aria-label"),
+                    link.selectFirst("img")?.attr("alt"),
+                    link.selectFirst("h1,h2,h3,h4,.title,.name")?.text(),
+                    link.text(),
+                    href.substringAfterLast('/').replace('-', ' ').replace('_', ' '),
+                ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
+            )
+            if (title.isBlank()) return@forEach
+
+            val existingKey = canonicalContentPath(href)
+            if (results.containsKey(existingKey)) return@forEach
+
+            val poster = posterFromElement(link, baseUrl)
+                ?: posterFromNearbyCard(link, href, baseUrl)
+            val response: SearchResponse = when {
+                isEpisode -> newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+                    posterUrl = poster
+                    posterHeaders = posterRequestHeaders(baseUrl)
+                }
+                isMovie -> newMovieSearchResponse(title, href, TvType.Movie) {
+                    posterUrl = poster
+                    posterHeaders = posterRequestHeaders(baseUrl)
+                }
+                else -> newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+                    posterUrl = poster
+                    posterHeaders = posterRequestHeaders(baseUrl)
+                }
+            }
+            results[existingKey] = response
+        }
+
+        Log.d(
+            "DiziPal",
+            "Yedek kart ayrıştırması: ${results.size} kayıt, " +
+                "${results.values.count { !it.posterUrl.isNullOrBlank() }} afiş",
+        )
+        return results.values.toList()
+    }
+
     private fun listingAnchors(
         document: Document,
         baseUrl: String,
@@ -2069,6 +2170,16 @@ class DiziPal : MainAPI() {
 
     private fun normalizeTitleForMatch(value: String): String =
         value.lowercase()
+            .replace('ç', 'c')
+            .replace('ğ', 'g')
+            .replace('ı', 'i')
+            .replace('ö', 'o')
+            .replace('ş', 's')
+            .replace('ü', 'u')
+            .replace('â', 'a')
+            .replace('î', 'i')
+            .replace('û', 'u')
+            .replace("İ", "i")
             .replace("&", " and ")
             .replace(Regex("(?i)\\b(izle|hd|dizi|film|poster|afis|cover|image)\\b"), " ")
             .replace(Regex("[^a-z0-9]+"), " ")
