@@ -828,7 +828,10 @@ class DiziBoxLive : MainAPI() {
             val response = element.toSearchResponse() ?: return@forEach
             val cardContext = element.hasSeriesCardContext()
             val old = entries[response.url]
-            if (old == null || (old.first.posterUrl.isNullOrBlank() && !response.posterUrl.isNullOrBlank())) {
+            if (old == null ||
+                (cardContext && !old.second) ||
+                (old.first.posterUrl.isNullOrBlank() && !response.posterUrl.isNullOrBlank())
+            ) {
                 entries[response.url] = response to cardContext
             }
         }
