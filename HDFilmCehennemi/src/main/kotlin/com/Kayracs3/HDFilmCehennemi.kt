@@ -161,24 +161,62 @@ class HDFilmCehennemi : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val response = app.get(
-            "${mainUrl}/search?q=${query}",
-            headers = mapOf("X-Requested-With" to "fetch")
-        ).parsedSafe<Results>() ?: return emptyList()
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+        val encoded = URLEncoder.encode(q, "UTF-8")
+        val candidates = listOf(
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/search?query=$encoded",
+            "$mainUrl/search?search=$encoded",
+            "$mainUrl/search?term=$encoded"
+        ).distinct()
 
-        return response.results.mapNotNull { html ->
-            val document = Jsoup.parse(html)
-            val title = document.selectFirst("h4.title")?.text()?.trim()
-                ?: return@mapNotNull null
-            val href = fixUrlNull(document.selectFirst("a")?.attr("href"))
-                ?: return@mapNotNull null
-            val poster = fixUrlNull(document.selectFirst("img")?.attr("src"))
-                ?: fixUrlNull(document.selectFirst("img")?.attr("data-src"))
+        for (url in candidates) {
+            val response = runCatching {
+                app.get(
+                    url,
+                    headers = browserHeaders + ("X-Requested-With" to "fetch"),
+                    referer = mainUrl,
+                    allowRedirects = true
+                )
+            }.onFailure {
+                Log.w(TAG, "Search request failed: $url", it)
+            }.getOrNull() ?: continue
+            if (!response.isSuccessful) continue
 
-            newMovieSearchResponse(title, href, TvType.Movie) {
-                posterUrl = poster?.replace("/thumb/", "/list/")
+            val data = response.parsedSafe<Results>()
+            if (data == null) {
+                Log.d(TAG, "Search response could not be parsed: $url")
+                continue
             }
+            val items = data.results.mapNotNull { html ->
+                val document = Jsoup.parse(html, mainUrl)
+                val title = document.selectFirst("h4.title, h3.title, .title, h4, h3")
+                    ?.text()?.trim().takeUnless { it.isNullOrBlank() }
+                    ?: document.selectFirst("a[title]")?.attr("title")?.trim()
+                        ?.takeUnless { it.isNullOrBlank() }
+                    ?: return@mapNotNull null
+                val anchor = document.selectFirst("a[href]") ?: return@mapNotNull null
+                val href = fixUrlNull(anchor.attr("href")) ?: return@mapNotNull null
+                val poster = fixUrlNull(document.selectFirst("img")?.attr("data-src"))
+                    ?: fixUrlNull(document.selectFirst("img")?.attr("src"))
+                val isSeries = href.contains("/dizi", true) || href.contains("dizi-izle", true)
+
+                if (isSeries) {
+                    newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+                        posterUrl = poster?.replace("/thumb/", "/list/")
+                    }
+                } else {
+                    newMovieSearchResponse(title, href, TvType.Movie) {
+                        posterUrl = poster?.replace("/thumb/", "/list/")
+                    }
+                }
+            }.distinctBy { it.url }
+
+            Log.d(TAG, "Search url=$url results=${items.size}")
+            if (items.isNotEmpty()) return items
         }
+        return emptyList()
     }
 
     override suspend fun load(url: String): LoadResponse? {
