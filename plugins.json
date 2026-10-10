@@ -184,10 +184,10 @@
     },
     {
         "iconUrl": "https://dizisol.com/favicon.ico",
-        "fileHash": "sha256-e630a9384e21021af372615fd4b6fd14af4629c567fc2349efe9dc3da717e8a0",
+        "fileHash": "sha256-80445919a9d5236fad6f49872e98b1262bf6ccd7bc9df5698668ad3fc36ce476",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 56400,
+        "fileSize": 56743,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -197,7 +197,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 2,
+        "version": 3,
         "internalName": "DiziSol",
         "description": "DiziSol film ve dizi sa\u011flay\u0131c\u0131s\u0131; sezon, b\u00f6l\u00fcm, metadata ve video kaynaklar\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziSol.cs3",
