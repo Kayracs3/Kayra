@@ -217,9 +217,12 @@ class DiziPal : MainAPI() {
             "$mainUrl/?s=$encoded",
             "$mainUrl/?search=$encoded",
             "$mainUrl/?q=$encoded",
+            "$mainUrl/?query=$encoded",
             "$mainUrl/arama-yap?q=$encoded",
             "$mainUrl/arama-yap?search=$encoded",
-        )
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/search/$encoded",
+        ).distinct()
 
         for (url in urls) {
             val document = runCatching {
