@@ -280,48 +280,43 @@ jobs:
       - name: Derlemeleri Yükle
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           cd "$GITHUB_WORKSPACE/builds"
 
-          git config \
-            --local \
-            user.email \
-            "actions@github.com"
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
 
-          git config \
-            --local \
-            user.name \
-            "GitHub Actions"
+          # Keep build outputs while syncing to the latest remote builds branch.
+          ARTIFACT_DIR="$(mktemp -d)"
+          cp -f ./*.cs3 "$ARTIFACT_DIR/"
+          cp -f plugins.json "$ARTIFACT_DIR/plugins.json"
 
-          echo ""
-          echo "=========================================="
-          echo "GIT STATUS"
-          echo "=========================================="
+          for attempt in 1 2 3; do
+            echo "builds gönderim denemesi: $attempt"
+            git fetch origin builds
+            git reset --hard origin/builds
 
-          git status
+            # Publish the complete set of artifacts from this build.
+            rm -f ./*.cs3
+            cp -f "$ARTIFACT_DIR"/*.cs3 .
+            cp -f "$ARTIFACT_DIR/plugins.json" .
 
-          echo ""
-          echo "=========================================="
-          echo "DOSYALAR EKLENİYOR"
-          echo "=========================================="
+            git add -A
+            if git diff --cached --quiet; then
+              echo "Yayınlanacak yeni değişiklik yok."
+            else
+              git commit -m "CloudStream eklentilerini güncelle $GITHUB_SHA"
+            fi
 
-          git add -A
+            if git push origin HEAD:builds; then
+              echo "Derlemeler builds dalına başarıyla yüklendi."
+              exit 0
+            fi
 
-          git status
+            echo "Gönderim çakışması; en güncel builds dalı tekrar alınacak."
+            sleep 2
+          done
 
-          echo ""
-          echo "=========================================="
-          echo "COMMIT"
-          echo "=========================================="
-
-          git commit \
-            -m "CloudStream eklentilerini güncelle $GITHUB_SHA" \
-            || echo "Yeni değişiklik yok."
-
-          echo ""
-          echo "=========================================="
-          echo "PUSH"
-          echo "=========================================="
-
-          git push origin builds
+          echo "HATA: Üç denemeden sonra builds dalına gönderilemedi."
+          exit 1
