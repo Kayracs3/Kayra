@@ -10,6 +10,390 @@ import org.jsoup.nodes.Element
 import org.json.JSONObject
 import java.net.URI
 import java.net.URLEncoder
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.nio.charset.StandardCharsets
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
+import okhttp3.Request
+
+/**
+ * FirePlayer manifest proxy: rewrite all HLS resources to localhost and preserve signed queries/headers.
+ */
+private object SinezyHlsProxy {
+    private data class Target(val url: String, val inheritedQuery: String?)
+    private data class Mapping(
+        val sourceUrl: String,
+        val iframeUrl: String,
+        val siteReferer: String,
+        val baseHeaders: Map<String, String>,
+        val cookie: String?,
+        val createdAt: Long,
+        val targets: MutableMap<String, Target> = ConcurrentHashMap(),
+        @Volatile var preferredHeaders: Map<String, String> = baseHeaders
+    )
+    private data class Upstream(
+        val code: Int, val bytes: ByteArray, val contentType: String, val finalUrl: String,
+        val contentRange: String?, val acceptRanges: String?
+    )
+
+    private const val MAX_MAPPING_AGE_MS = 6 * 60 * 60 * 1000L
+    private const val MAX_HEADER_BYTES = 32 * 1024
+    private val mappings = ConcurrentHashMap<String, Mapping>()
+    private val executor = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "SinezyHlsProxy").apply { isDaemon = true }
+    }
+    private val client by lazy {
+        OkHttpClient.Builder()
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+    @Volatile private var serverSocket: ServerSocket? = null
+    @Volatile private var serverPort: Int = -1
+    private val serverLock = Any()
+
+    fun createLink(
+        sourceUrl: String,
+        headers: Map<String, String>,
+        iframeUrl: String,
+        siteReferer: String,
+        cookie: String?
+    ): String? {
+        if (sourceUrl.isBlank()) return null
+        return runCatching {
+            ensureServer()
+            val now = System.currentTimeMillis()
+            mappings.entries.removeIf { now - it.value.createdAt > MAX_MAPPING_AGE_MS }
+            val id = UUID.randomUUID().toString().replace("-", "")
+            val baseHeaders = LinkedHashMap(headers).apply {
+                put("Accept", "*/*")
+                put("Referer", "https://player.filmizle.in/")
+            }
+            mappings[id] = Mapping(
+                sourceUrl = sourceUrl, iframeUrl = iframeUrl, siteReferer = siteReferer,
+                baseHeaders = baseHeaders, cookie = cookie, createdAt = now
+            )
+            "http://127.0.0.1:$serverPort/sinezy/$id/index.m3u8"
+        }.onFailure {
+            Log.e("SinezyHlsProxy", "Could not start local HLS proxy: ${it.message}", it)
+        }.getOrNull()
+    }
+
+    private fun ensureServer() {
+        if (serverSocket?.isClosed == false && serverPort > 0) return
+        synchronized(serverLock) {
+            if (serverSocket?.isClosed == false && serverPort > 0) return
+            val socket = ServerSocket(0, 32, InetAddress.getByName("127.0.0.1"))
+            socket.reuseAddress = true
+            serverSocket = socket
+            serverPort = socket.localPort
+            executor.execute {
+                while (!socket.isClosed) {
+                    try {
+                        val accepted = socket.accept()
+                        executor.execute { handleClient(accepted) }
+                    } catch (e: Exception) {
+                        if (!socket.isClosed) Log.w("SinezyHlsProxy", "Accept failed: ${e.message}")
+                    }
+                }
+            }
+            Log.d("SinezyHlsProxy", "Started on 127.0.0.1:$serverPort")
+        }
+    }
+
+    private fun handleClient(socket: Socket) {
+        socket.use { clientSocket ->
+            try {
+                clientSocket.soTimeout = 20_000
+                val input = BufferedInputStream(clientSocket.getInputStream())
+                val output = BufferedOutputStream(clientSocket.getOutputStream())
+                val lines = readRequestHeaders(input) ?: return
+                val parts = lines.firstOrNull().orEmpty().split(' ')
+                if (parts.size < 2 || !parts[0].equals("GET", true)) {
+                    writeResponse(output, 405, "text/plain; charset=utf-8", "Method Not Allowed".toByteArray())
+                    return
+                }
+                val path = parts[1].substringBefore('?')
+                val match = Regex("^/sinezy/([^/]+)/(.+)$").matchEntire(path)
+                if (match == null) {
+                    writeResponse(output, 404, "text/plain; charset=utf-8", "Not Found".toByteArray())
+                    return
+                }
+                val mappingId = match.groupValues[1]
+                val resourcePath = match.groupValues[2]
+                val mapping = mappings[mappingId]
+                if (mapping == null) {
+                    writeResponse(output, 404, "text/plain; charset=utf-8", "Stream mapping expired".toByteArray())
+                    return
+                }
+                val clientHeaders = lines.drop(1).mapNotNull { line ->
+                    val colon = line.indexOf(':')
+                    if (colon <= 0) null else {
+                        line.substring(0, colon).trim().lowercase() to line.substring(colon + 1).trim()
+                    }
+                }.toMap()
+                if (resourcePath == "index.m3u8") {
+                    serveManifest(output, mapping, mappingId, clientHeaders)
+                } else {
+                    val token = resourcePath.removePrefix("resource/")
+                    val target = mapping.targets[token]
+                    if (target == null) {
+                        writeResponse(output, 404, "text/plain; charset=utf-8", "HLS resource not found".toByteArray())
+                    } else {
+                        serveTarget(output, mapping, mappingId, target, clientHeaders)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("SinezyHlsProxy", "Local request failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun readRequestHeaders(input: BufferedInputStream): List<String>? {
+        val buffer = ByteArray(MAX_HEADER_BYTES)
+        var size = 0
+        while (size < buffer.size) {
+            val b = input.read()
+            if (b < 0) return null
+            buffer[size++] = b.toByte()
+            if (size >= 4 && buffer[size - 4] == '\r'.code.toByte() &&
+                buffer[size - 3] == '\n'.code.toByte() &&
+                buffer[size - 2] == '\r'.code.toByte() &&
+                buffer[size - 1] == '\n'.code.toByte()
+            ) {
+                return String(buffer, 0, size, StandardCharsets.ISO_8859_1)
+                    .trim().split("\r?\n".toRegex())
+            }
+        }
+        return null
+    }
+
+    private fun serveManifest(
+        output: BufferedOutputStream, mapping: Mapping, mappingId: String,
+        clientHeaders: Map<String, String>
+    ) {
+        val response = fetchTarget(mapping, Target(mapping.sourceUrl, null), clientHeaders)
+        if (response == null || response.code !in 200..299) {
+            val status = response?.code ?: 502
+            Log.w("SinezyHlsProxy", "Master playlist failed: HTTP $status")
+            writeResponse(output, status, "text/plain; charset=utf-8", "Upstream HLS manifest unavailable".toByteArray())
+            return
+        }
+        val body = String(response.bytes, StandardCharsets.UTF_8)
+        if (!body.trimStart('\uFEFF', ' ', '\t', '\r', '\n').startsWith("#EXTM3U")) {
+            Log.w("SinezyHlsProxy", "Upstream URL did not return HLS")
+            writeResponse(output, 502, "text/plain; charset=utf-8", "Invalid HLS manifest".toByteArray())
+            return
+        }
+        val rewritten = rewriteManifest(body, response.finalUrl, mapping, mappingId)
+        writeResponse(
+            output, 200, "application/vnd.apple.mpegurl", rewritten.toByteArray(StandardCharsets.UTF_8),
+            mapOf("Cache-Control" to "no-cache, no-store, must-revalidate")
+        )
+    }
+
+    private fun serveTarget(
+        output: BufferedOutputStream, mapping: Mapping, mappingId: String, target: Target,
+        clientHeaders: Map<String, String>
+    ) {
+        val response = fetchTarget(mapping, target, clientHeaders)
+        if (response == null || response.code !in 200..299) {
+            val status = response?.code ?: 502
+            Log.w(
+                "SinezyHlsProxy",
+                "Nested resource failed: HTTP $status, path=${runCatching { URI(target.url).path }.getOrNull().orEmpty()}"
+            )
+            writeResponse(output, status, "text/plain; charset=utf-8", "Upstream media resource unavailable".toByteArray())
+            return
+        }
+        val text = String(response.bytes, StandardCharsets.UTF_8)
+        if (text.trimStart('\uFEFF', ' ', '\t', '\r', '\n').startsWith("#EXTM3U")) {
+            val rewritten = rewriteManifest(text, response.finalUrl, mapping, mappingId)
+            writeResponse(
+                output, 200, "application/vnd.apple.mpegurl", rewritten.toByteArray(StandardCharsets.UTF_8),
+                mapOf("Cache-Control" to "no-cache, no-store, must-revalidate")
+            )
+            return
+        }
+        val contentType = response.contentType.ifBlank {
+            when {
+                target.url.contains(".m4s", true) -> "video/iso.segment"
+                target.url.contains(".ts", true) -> "video/mp2t"
+                target.url.contains(".aac", true) -> "audio/aac"
+                else -> "application/octet-stream"
+            }
+        }
+        val responseHeaders = mutableMapOf<String, String>()
+        response.contentRange?.let { responseHeaders["Content-Range"] = it }
+        response.acceptRanges?.let { responseHeaders["Accept-Ranges"] = it }
+        writeResponse(output, response.code, contentType, response.bytes, responseHeaders)
+    }
+
+    private fun rewriteManifest(body: String, baseUrl: String, mapping: Mapping, mappingId: String): String {
+        val baseUri = runCatching { URI(baseUrl) }.getOrNull()
+        fun register(raw: String): String {
+            val value = raw.trim().trim('"')
+            if (value.isBlank() || value.startsWith("data:", true)) return raw
+            val absolute = runCatching {
+                if (value.startsWith("http://", true) || value.startsWith("https://", true)) {
+                    value
+                } else {
+                    baseUri?.resolve(value)?.toString() ?: value
+                }
+            }.getOrDefault(value)
+            val resolvedUri = runCatching { URI(absolute) }.getOrNull()
+            val inheritedQuery = baseUri?.rawQuery?.takeIf {
+                resolvedUri != null && resolvedUri.rawQuery.isNullOrBlank() &&
+                    baseUri.host.equals(resolvedUri.host, true)
+            }
+            val token = UUID.randomUUID().toString().replace("-", "")
+            mapping.targets[token] = Target(absolute, inheritedQuery)
+            return "/sinezy/$mappingId/resource/$token"
+        }
+
+        val lines = body.lines().toMutableList()
+        val uriAttribute = Regex("URI=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
+        for (index in lines.indices) {
+            val line = lines[index]
+            if (line.isBlank()) continue
+            if (!line.startsWith("#")) {
+                lines[index] = register(line)
+            } else if (line.contains("URI=\"", true)) {
+                lines[index] = uriAttribute.replace(line) { found ->
+                    "URI=\"${register(found.groupValues[1])}\""
+                }
+            }
+        }
+        return lines.joinToString("\n")
+    }
+
+    private fun fetchTarget(mapping: Mapping, target: Target, clientHeaders: Map<String, String>): Upstream? {
+        val first = fetchWithProfiles(mapping, target.url, clientHeaders)
+        if (first != null && first.code in 200..299) return first
+        val inherited = target.inheritedQuery
+        if (!inherited.isNullOrBlank()) {
+            val uri = runCatching { URI(target.url) }.getOrNull()
+            if (uri != null && uri.rawQuery.isNullOrBlank()) {
+                val signed = target.url + "?" + inherited
+                Log.d("SinezyHlsProxy", "Retrying with inherited query: ${uri.path.orEmpty()}")
+                val second = fetchWithProfiles(mapping, signed, clientHeaders)
+                if (second != null && second.code in 200..299) return second
+                return second ?: first
+            }
+        }
+        return first
+    }
+
+    private fun fetchWithProfiles(
+        mapping: Mapping, url: String, clientHeaders: Map<String, String>
+    ): Upstream? {
+        var last: Upstream? = null
+        for ((name, headers) in headerProfiles(mapping)) {
+            val response = fetchOnce(url, headers, clientHeaders) ?: continue
+            if (response.code in 200..299) {
+                mapping.preferredHeaders = headers
+                if (name != "preferred") Log.d("SinezyHlsProxy", "Header profile selected: $name")
+                return response
+            }
+            last = response
+            if (response.code !in setOf(401, 403, 404, 405, 429)) return response
+        }
+        return last
+    }
+
+    private fun headerProfiles(mapping: Mapping): List<Pair<String, Map<String, String>>> {
+        val common = buildMap {
+            mapping.baseHeaders["User-Agent"]?.takeIf { it.isNotBlank() }?.let { put("User-Agent", it) }
+            mapping.baseHeaders["Accept-Language"]?.takeIf { it.isNotBlank() }?.let { put("Accept-Language", it) }
+            put("Accept", "*/*")
+        }
+        val root = "https://player.filmizle.in/"
+        val origin = "https://player.filmizle.in"
+        val profiles = mutableListOf<Pair<String, Map<String, String>>>()
+        profiles += "preferred" to mapping.preferredHeaders
+        fun add(name: String, referer: String, withOrigin: Boolean, withCookie: Boolean) {
+            val headers = LinkedHashMap(common)
+            headers["Referer"] = referer
+            if (withOrigin) headers["Origin"] = origin
+            if (withCookie && !mapping.cookie.isNullOrBlank()) headers["Cookie"] = mapping.cookie!!
+            profiles += name to headers
+        }
+        add("root", root, false, false)
+        add("iframe", mapping.iframeUrl, false, false)
+        add("root+origin", root, true, false)
+        add("root+session", root, true, true)
+        add("iframe+origin", mapping.iframeUrl, true, false)
+        add("iframe+session", mapping.iframeUrl, true, true)
+        add("site-referrer+session", mapping.siteReferer, true, true)
+        return profiles.distinctBy { it.second.toSortedMap().toString() }
+    }
+
+    private fun fetchOnce(url: String, headers: Map<String, String>, clientHeaders: Map<String, String>): Upstream? {
+        return runCatching {
+            val builder = Request.Builder().url(url).get()
+            headers.forEach { (key, value) ->
+                if (value.isNotBlank() && !key.equals("Host", true) && !key.equals("Content-Length", true)) {
+                    builder.header(key, value)
+                }
+            }
+            clientHeaders["range"]?.takeIf { it.isNotBlank() }?.let { builder.header("Range", it) }
+            clientHeaders["if-range"]?.takeIf { it.isNotBlank() }?.let { builder.header("If-Range", it) }
+            client.newCall(builder.build()).execute().use { response ->
+                val bytes = response.body?.bytes() ?: ByteArray(0)
+                Upstream(
+                    code = response.code, bytes = bytes,
+                    contentType = response.header("Content-Type").orEmpty(),
+                    finalUrl = response.request.url.toString(),
+                    contentRange = response.header("Content-Range"),
+                    acceptRanges = response.header("Accept-Ranges")
+                )
+            }
+        }.onFailure {
+            Log.d("SinezyHlsProxy", "Upstream request failed: ${it.javaClass.simpleName}")
+        }.getOrNull()
+    }
+
+    private fun writeResponse(
+        output: BufferedOutputStream, code: Int, contentType: String, body: ByteArray,
+        extraHeaders: Map<String, String> = emptyMap()
+    ) {
+        val reason = when (code) {
+            200 -> "OK"
+            206 -> "Partial Content"
+            400 -> "Bad Request"
+            403 -> "Forbidden"
+            404 -> "Not Found"
+            405 -> "Method Not Allowed"
+            416 -> "Range Not Satisfiable"
+            429 -> "Too Many Requests"
+            else -> "Bad Gateway"
+        }
+        val header = buildString {
+            append("HTTP/1.1 ").append(code).append(' ').append(reason).append("\r\n")
+            append("Content-Type: ").append(contentType).append("\r\n")
+            append("Content-Length: ").append(body.size).append("\r\n")
+            append("Connection: close\r\n")
+            extraHeaders.forEach { (key, value) ->
+                append(key).append(": ").append(value).append("\r\n")
+            }
+            append("\r\n")
+        }
+        output.write(header.toByteArray(StandardCharsets.ISO_8859_1))
+        output.write(body)
+        output.flush()
+    }
+}
+
 
 class SinezyTo : MainAPI() {
     override var mainUrl = "https://sinezy.si"
@@ -769,133 +1153,26 @@ class SinezyTo : MainAPI() {
         )
         if (mediaUrl.isNullOrBlank()) return false
 
-        // Bazı video kimliklerinde CDN, aynı signed URL için farklı Referer/Cookie
-        // birleşimleri istiyor. Master playlist'i küçük bir GET ile doğrula ve
-        // başarılı başlık profilini CloudStream oynatıcısına da aktar.
-        val rootReferer = "https://player.filmizle.in/"
-        val origin = "https://player.filmizle.in"
-        val cookieHeaders = if (!mediaCookie.isNullOrBlank()) {
-            mapOf("Cookie" to mediaCookie)
-        } else {
-            emptyMap()
-        }
-        val rootHeaders = requestHeaders + mapOf(
+        // HLS master açılırken sorun çıkmasa bile alt playlist/segmentler 403 verebilir.
+        // Yerel proxy tüm HLS URI'larını yeniden yazar ve alt isteklere doğru başlıkları taşır.
+        val proxyHeaders = requestHeaders + mapOf(
             "Accept" to "*/*",
-            "Referer" to rootReferer
+            "Referer" to "https://player.filmizle.in/"
         )
-        val iframeHeaders = requestHeaders + mapOf(
-            "Accept" to "*/*",
-            "Referer" to iframeUrl
+        val proxyUrl = SinezyHlsProxy.createLink(
+            sourceUrl = mediaUrl,
+            headers = proxyHeaders,
+            iframeUrl = iframeUrl,
+            siteReferer = pageReferer,
+            cookie = mediaCookie
         )
-        val profiles = listOf(
-            Triple("root", rootReferer, rootHeaders),
-            Triple("iframe", iframeUrl, iframeHeaders),
-            Triple(
-                "root+session",
-                rootReferer,
-                rootHeaders + mapOf("Origin" to origin) + cookieHeaders
-            ),
-            Triple(
-                "iframe+session",
-                iframeUrl,
-                iframeHeaders + mapOf("Origin" to origin) + cookieHeaders
-            ),
-            Triple(
-                "site-referrer",
-                pageReferer,
-                requestHeaders + mapOf(
-                    "Accept" to "*/*",
-                    "Referer" to pageReferer,
-                    "Origin" to origin
-                ) + cookieHeaders
-            )
-        )
-
-        var selectedReferer = rootReferer
-        var selectedHeaders = rootHeaders
-        var manifestVerified = false
-        for ((profileName, profileReferer, profileHeaders) in profiles) {
-            val probe = runCatching {
-                app.get(
-                    mediaUrl,
-                    headers = profileHeaders,
-                    referer = profileReferer,
-                    allowRedirects = true
-                )
-            }.onFailure {
-                Log.d("SinezyTo", "filmizle HLS probe profile=$profileName failed: ${it.javaClass.simpleName}")
-            }.getOrNull()
-
-            val status = probe?.code ?: -1
-            val hasManifest = probe?.isSuccessful == true &&
-                probe.text.trimStart().startsWith("#EXTM3U", true)
-            Log.d(
-                "SinezyTo",
-                "filmizle HLS probe profile=$profileName, HTTP=$status, manifest=$hasManifest"
-            )
-            if (hasManifest) {
-                selectedReferer = profileReferer
-                selectedHeaders = profileHeaders
-                manifestVerified = true
-                break
-            }
-        }
-
-        var playbackUrl = mediaUrl
-        if (manifestVerified) {
-            // Probe GET'i bazı signed-CDN imzalarında sonraki oynatma isteğini geçersiz
-            // kılabiliyor. Profil seçimi için kullanılan adresi tekrar kullanma:
-            // getVideo API'sinden ayrı, taze bir imzalı URL al.
-            val renewedResponse = runCatching {
-                app.post(
-                    apiUrl,
-                    headers = apiHeaders,
-                    referer = iframeUrl,
-                    data = mapOf(
-                        "hash" to videoId,
-                        "r" to pageReferer
-                    )
-                )
-            }.onFailure {
-                Log.w("SinezyTo", "filmizle API renewal failed for id=$videoId", it)
-            }.getOrNull()
-
-            if (renewedResponse?.isSuccessful == true) {
-                val renewedBody = renewedResponse.text
-                val renewedRawUrl = runCatching {
-                    JSONObject(renewedBody).optString("securedLink").takeIf {
-                        it.isNotBlank() && !it.equals("null", true)
-                    }
-                }.getOrNull() ?: Regex(
-                    """["']?(?:securedLink|videoSource)["']?\s*:\s*["']([^"']+)["']""",
-                    RegexOption.IGNORE_CASE
-                ).find(renewedBody)?.groupValues?.getOrNull(1)
-
-                val renewedUrl = fixUrl(renewedRawUrl, iframeUrl)
-                if (!renewedUrl.isNullOrBlank()) {
-                    playbackUrl = renewedUrl
-                    Log.d(
-                        "SinezyTo",
-                        "filmizle API renewal HTTP=${renewedResponse.code}, " +
-                            "urlRefreshed=${renewedUrl != mediaUrl}, signedUrlReady=true"
-                    )
-                } else {
-                    Log.w("SinezyTo", "filmizle API renewal returned no secured URL; using probed URL")
-                }
-            } else {
-                Log.w("SinezyTo", "filmizle API renewal failed; using probed URL")
-            }
-
-            Log.d("SinezyTo", "filmizle HLS probe selected referer=$selectedReferer")
+        if (proxyUrl.isNullOrBlank()) {
+            Log.w("SinezyTo", "filmizle local HLS proxy unavailable; direct fallback")
+            publishDirect(mediaUrl, "https://player.filmizle.in/", callback, proxyHeaders)
         } else {
-            Log.w(
-                "SinezyTo",
-                "filmizle HLS probe: all header profiles rejected for id=$videoId; " +
-                    "emitting default link for fallback"
-            )
+            Log.d("SinezyTo", "filmizle: emitting rewritten local HLS proxy URL")
+            publishDirect(proxyUrl, "https://player.filmizle.in/", callback)
         }
-
-        publishDirect(playbackUrl, selectedReferer, callback, selectedHeaders)
         return true
     }
 
