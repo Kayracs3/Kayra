@@ -503,37 +503,7 @@ class SinezyTo : MainAPI() {
             ?: link.parent()?.selectFirst("img")
             ?: link.parent()?.parent()?.selectFirst("img")
         return imageFrom(img)
-    }
-
-    // Yetişkin içerikli sayfalar kataloğa ve oynatıcıya alınmaz.
-    private fun isAdultSlug(url: String): Boolean {
-        val path = runCatching { URI(url).path.orEmpty().lowercase() }
-            .getOrDefault(url.lowercase())
-        val terms = listOf("erotik", "erotic", "yetiskin", "yetişkin", "adult", "18-plus", "18plus")
-        return path.split("/", "-", "_").any { segment -> terms.contains(segment) } ||
-            path.contains("18-plus") || path.contains("18plus")
-    }
-
-    private fun isAdultCard(link: Element, url: String): Boolean {
-        if (isAdultSlug(url)) return true
-        val card = link.closest("article, .item, .movie, .film, .post, li") ?: link.parent()
-        val categoryText = card?.select(
-            ".genres a, .genre a, .categories a, .category a, .cat-links a, .post-categories a, .film-kategorileri a"
-        )?.text()?.lowercase().orEmpty()
-        return listOf("erotik", "erotic", "yetişkin", "yetiskin", "adult", "+18")
-            .any { categoryText.contains(it) }
-    }
-
-    private fun isAdultContent(document: Document, url: String): Boolean {
-        if (isAdultSlug(url)) return true
-        // parseGenres normal katalog etiketlerinden yetişkin kategorisini ayırır;
-        // bu kontrol ise ham kategori alanını ayrıca tarayarak bu içeriğin yüklenmesini engeller.
-        val rawCategories = document.select(
-            "div.detail span a, .genres a, .genre a, .categories a, .category a, " +
-                ".cat-links a, .post-categories a, .film-kategorileri a"
-        ).joinToString(" ") { it.text() }.lowercase()
-        return listOf("erotik", "erotic", "yetişkin", "yetiskin", "adult", "+18", "18-plus")
-            .any { rawCategories.contains(it) }
+   
     }
 
     private fun hasSeriesCategory(document: Document): Boolean {
