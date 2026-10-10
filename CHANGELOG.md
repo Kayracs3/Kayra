@@ -2,6 +2,23 @@
 
 ## 2026-10-10
 
+<!-- kayra-commit:44c47252767a4e2213623aaaa4a7bb07716127c0 -->
+### Backfill initial domain health integration into changelog
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [44c4725](https://github.com/Kayracs3/Kayra/commit/44c47252767a4e2213623aaaa4a7bb07716127c0)
+
+## 2026-10-10
+
+<!-- kayra-commit:99591ffd4b6cdd4911b9e98d74ff18a8f3d41a79 -->
+### Add approved domain aliases to Kayra health checks
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [99591ff](https://github.com/Kayracs3/Kayra/commit/99591ffd4b6cdd4911b9e98d74ff18a8f3d41a79)
+
+
+## 2026-10-10
+
 <!-- kayra-commit:ee8ca5760d5f403eacde60013f3bbf231c960313 -->
 ### Make changelog resilient to cancelled concurrent workflow runs
 
