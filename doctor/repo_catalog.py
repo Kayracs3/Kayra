@@ -150,12 +150,20 @@ def get_commits(before: str, after: str, known: set[str]):
     if known:
         history = git("log", "--reverse", "--format=%H%x1f%s%x1f%aI")
         all_commits = parse_log_lines(history.stdout)
+        # This is the first commit of the current health/domain/catalog rollout.
+        # Use it as a backfill floor so entries missed by cancelled initial runs are recovered.
+        rollout_start = "99591ffd4b6cdd4911b9e98d74ff18a8f3d41a79"
+        rollout_index = next(
+            (index for index, item in enumerate(all_commits) if item[0] == rollout_start),
+            None,
+        )
         first_known = next(
             (index for index, item in enumerate(all_commits) if item[0] in known),
             None,
         )
-        if first_known is not None:
-            return all_commits[first_known + 1:]
+        starts = [index for index in (rollout_index, first_known) if index is not None]
+        if starts:
+            return all_commits[min(starts):]
 
     if after and before and re.fullmatch(r"[0-9a-fA-F]{40}", before) and not re.fullmatch(r"0+", before):
         result = git("log", "--reverse", "--format=%H%x1f%s%x1f%aI", f"{before}..{after}")
