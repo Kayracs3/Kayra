@@ -649,6 +649,30 @@ class SinezyTo : MainAPI() {
      * Filmizle.in player'i kaynak adresini sayfada doğrudan göstermiyor.
      * /video/{id} sayfasının kullandığı getVideo API'sine form POST atıp securedLink'i alır.
      */
+    private fun firstCookiePair(rawHeader: String?): String? {
+        val first = rawHeader.orEmpty().substringBefore(";").trim()
+        if (!first.contains("=")) return null
+        val cookieName = first.substringBefore("=").trim().lowercase()
+        if (cookieName.isBlank() || cookieName in setOf(
+                "path", "domain", "expires", "max-age", "samesite", "secure", "httponly", "priority"
+            )
+        ) return null
+        return first
+    }
+
+    private fun mergeCookieHeaders(vararg cookiePairs: String?): String? {
+        val cookies = LinkedHashMap<String, String>()
+        cookiePairs.filterNot { it.isNullOrBlank() }.forEach { pair ->
+            val name = pair!!.substringBefore("=").trim()
+            if (name.isNotBlank() && pair.contains("=")) cookies[name] = pair
+        }
+        return cookies.values.takeIf { it.isNotEmpty() }?.joinToString("; ")
+    }
+
+    /**
+     * Filmizle.in player'i kaynak adresini HTML'de doğrudan göstermiyor.
+     * Önce iframe sayfasını ziyaret edip oturum çerezlerini alır, sonra getVideo API'sine POST atar.
+     */
     private suspend fun resolveFilmIzleSource(
         playerPageUrl: String,
         pageReferer: String,
@@ -666,17 +690,43 @@ class SinezyTo : MainAPI() {
         }
 
         val iframeUrl = "https://player.filmizle.in/video/$videoId"
+
+        // Bazı CDN'ler securedLink'i aynı player oturumuna bağlar. Önce iframe'i aç.
+        val playerPage = runCatching {
+            app.get(
+                iframeUrl,
+                headers = requestHeaders + ("Referer" to pageReferer),
+                referer = pageReferer,
+                allowRedirects = true
+            )
+        }.onFailure {
+            Log.w("SinezyTo", "filmizle player-page request failed for id=$videoId", it)
+        }.getOrNull()
+
+        val playerCookie = firstCookiePair(playerPage?.headers?.get("Set-Cookie"))
+        if (playerPage != null) {
+            Log.d(
+                "SinezyTo",
+                "filmizle player page HTTP=${playerPage.code}, " +
+                    "htmlLength=${playerPage.text.length}, sessionCookie=${!playerCookie.isNullOrBlank()}"
+            )
+        }
+
         val apiUrl = "https://player.filmizle.in/player/index.php?data=$videoId&do=getVideo"
+        val apiHeaders = buildMap {
+            putAll(requestHeaders)
+            put("Accept", "application/json, text/javascript, */*; q=0.01")
+            put("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            put("X-Requested-With", "XMLHttpRequest")
+            put("Origin", "https://player.filmizle.in")
+            put("Referer", iframeUrl)
+            if (!playerCookie.isNullOrBlank()) put("Cookie", playerCookie)
+        }
+
         val apiResponse = runCatching {
             app.post(
                 apiUrl,
-                headers = requestHeaders + mapOf(
-                    "Accept" to "application/json, text/javascript, */*; q=0.01",
-                    "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
-                    "X-Requested-With" to "XMLHttpRequest",
-                    "Origin" to "https://player.filmizle.in",
-                    "Referer" to iframeUrl
-                ),
+                headers = apiHeaders,
                 referer = iframeUrl,
                 data = mapOf(
                     "hash" to videoId,
@@ -704,15 +754,18 @@ class SinezyTo : MainAPI() {
         ).find(body)?.groupValues?.getOrNull(1)
 
         val mediaUrl = fixUrl(rawUrl, iframeUrl)
+        val apiCookie = firstCookiePair(apiResponse.headers["Set-Cookie"])
+        val mediaCookie = mergeCookieHeaders(playerCookie, apiCookie)
         Log.d(
             "SinezyTo",
             "filmizle API HTTP=${apiResponse.code}, bodyLength=${body.length}, " +
-                "securedLinkFound=${!mediaUrl.isNullOrBlank()}"
+                "securedLinkFound=${!mediaUrl.isNullOrBlank()}, " +
+                "mediaCookie=${!mediaCookie.isNullOrBlank()}"
         )
         if (mediaUrl.isNullOrBlank()) return false
 
-        // API bağlantısının yetkilendirmesi player sayfasının Referer/User-Agent değerine bağlı olabilir.
-        publishDirect(mediaUrl, iframeUrl, callback)
+        val extraHeaders = if (!mediaCookie.isNullOrBlank()) mapOf("Cookie" to mediaCookie) else emptyMap()
+        publishDirect(mediaUrl, iframeUrl, callback, extraHeaders)
         return true
     }
 
@@ -930,7 +983,12 @@ class SinezyTo : MainAPI() {
         return output
     }
 
-    private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun publishDirect(
+        url: String,
+        referer: String,
+        callback: (ExtractorLink) -> Unit,
+        extraHeaders: Map<String, String> = emptyMap()
+    ) {
         val type = when {
             url.contains(".m3u8", true) -> ExtractorLinkType.M3U8
             url.contains(".mp4", true) || url.contains(".webm", true) -> ExtractorLinkType.VIDEO
@@ -947,9 +1005,9 @@ class SinezyTo : MainAPI() {
                 "Accept" to "*/*",
                 "Origin" to "https://player.filmizle.in",
                 "Referer" to mediaReferer
-            )
+            ) + extraHeaders
         } else {
-            requestHeaders + ("Referer" to mediaReferer)
+            requestHeaders + ("Referer" to mediaReferer) + extraHeaders
         }
         callback(
             newExtractorLink(source = name, name = name, url = url, type = type) {
