@@ -15,6 +15,7 @@ import org.json.JSONTokener
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
+import java.net.URLDecoder
 import java.net.URLEncoder
 
 class DiziSol : MainAPI() {
@@ -94,14 +95,39 @@ class DiziSol : MainAPI() {
     private fun isEpisodeUrl(url: String): Boolean =
         seasonEpisodeRegex.containsMatchIn(pathOf(url))
 
+    private fun querySuffix(url: String): String =
+        runCatching { URI(url).rawQuery?.let { "?$it" }.orEmpty() }.getOrDefault("")
+
+    private fun queryParameter(url: String, key: String): String? {
+        val query = runCatching { URI(url).rawQuery }.getOrNull() ?: return null
+        return query.split('&').firstNotNullOfOrNull { part ->
+            val name = part.substringBefore('=')
+            if (!name.equals(key, true)) return@firstNotNullOfOrNull null
+            runCatching {
+                URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
+            }.getOrDefault(part.substringAfter('=', ""))
+        }
+    }
+
+    private fun tmdbIdFromUrl(url: String): Int? =
+        queryParameter(url, "tmdbId")?.toIntOrNull()?.takeIf { it > 0 }
+
+    private fun addTmdbIdToUrl(url: String, parentUrl: String): String {
+        val tmdbId = tmdbIdFromUrl(parentUrl) ?: return url
+        if (tmdbIdFromUrl(url) != null) return url
+        val separator = if (url.contains('?')) "&" else "?"
+        return "$url${separator}tmdbId=$tmdbId"
+    }
+
     private fun seriesUrlOf(rawUrl: String): String {
         val fixed = fixUrl(rawUrl) ?: return rawUrl
         if (!isSeriesUrl(fixed)) return fixed
         val parts = pathOf(fixed).trim('/').split('/')
+        val query = querySuffix(fixed)
         if (parts.size >= 3 && seasonEpisodeRegex.containsMatchIn(parts.last())) {
-            return mainUrl.trimEnd('/') + "/" + parts.take(2).joinToString("/")
+            return mainUrl.trimEnd('/') + "/" + parts.take(2).joinToString("/") + query
         }
-        return mainUrl.trimEnd('/') + "/" + pathOf(fixed).trim('/')
+        return mainUrl.trimEnd('/') + "/" + pathOf(fixed).trim('/') + query
     }
 
     private fun seasonEpisode(url: String): Pair<Int, Int>? {
@@ -585,8 +611,8 @@ class DiziSol : MainAPI() {
             else -> pathParts.last()
         }.substringBefore('?')
 
-        // DiziSol kısa kodu TMDB ID'sinin 36 tabanlı gösterimidir:
-        // Pearson: 85950 -> 1ubi, The A List: 85427 -> 1twz, Power: 54650 -> 1662.
+        // The path suffix is the site's own internal record ID in base 36.
+        // The TMDB ID is carried separately as the tmdbId query parameter.
         val shortCode = Regex("""-([a-z0-9]+)$""", RegexOption.IGNORE_CASE)
             .find(slug)?.groupValues?.getOrNull(1)
         if (!shortCode.isNullOrBlank()) {
@@ -614,13 +640,18 @@ class DiziSol : MainAPI() {
             .trim('-')
     }
 
-    private fun contentUrl(mediaType: String, id: Int, title: String): String {
+    private fun contentUrl(
+        mediaType: String,
+        id: Int,
+        title: String,
+        tmdbId: Int? = null
+    ): String {
         val route = if (mediaType == "tv") "dizi" else "film"
         val slug = slugifyTitle(title).ifBlank { "icerik" }
-        // DiziSol routes encode the TMDB ID in base 36, not as a decimal number.
-        // Example: 85950 -> 1ubi and 85427 -> 1twz.
+        // DiziSol's route suffix represents its internal record ID, not TMDB's ID.
         val shortCode = id.toString(36)
-        return mainUrl.trimEnd('/') + "/" + route + "/" + slug + "-" + shortCode
+        val base = mainUrl.trimEnd('/') + "/" + route + "/" + slug + "-" + shortCode
+        return if (tmdbId != null && tmdbId > 0) "$base?tmdbId=$tmdbId" else base
     }
 
     private fun collectApiContent(
@@ -688,7 +719,8 @@ class DiziSol : MainAPI() {
         val poster = apiPosterUrl(posterRaw) ?: return null
         val date = item.optString("release_date").ifBlank { item.optString("first_air_date") }
         val year = yearRegex.find(date)?.value?.toIntOrNull()
-        val url = contentUrl(mediaType, id, title)
+        val tmdbId = item.optInt("tmdbId", 0).takeIf { it > 0 }
+        val url = contentUrl(mediaType, id, title, tmdbId)
 
         return if (mediaType == "tv") {
             newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
@@ -994,8 +1026,8 @@ class DiziSol : MainAPI() {
                 val episodeNumber = episodeData.optInt("episode_number", 0)
                 if (episodeNumber <= 0) continue
 
-                val episodeUrl = seriesUrl.trimEnd('/') + "/" + seasonNumber +
-                    "-sezon-" + episodeNumber + "-bolum"
+                val episodeUrl = seriesUrl.substringBefore('?').trimEnd('/') + "/" +
+                    seasonNumber + "-sezon-" + episodeNumber + "-bolum" + querySuffix(seriesUrl)
                 val episodeName = episodeData.optString("name").trim()
                     .takeUnless { it.isBlank() || it.equals("null", true) }
                     ?: "$seasonNumber. Sezon $episodeNumber. Bölüm"
@@ -1021,12 +1053,13 @@ class DiziSol : MainAPI() {
     }
 
     private fun parseEpisodes(doc: Document, seriesUrl: String, fallbackPoster: String?): List<Episode> {
-        val canonical = seriesUrlOf(seriesUrl).trimEnd('/')
+        val canonical = seriesUrlOf(seriesUrl).substringBefore('?').trimEnd('/')
         val found = LinkedHashMap<String, Episode>()
         for (link in doc.select("a[href]")) {
             val href = fixUrl(link.attr("href"), doc.location()) ?: continue
             if (!isSeriesUrl(href)) continue
-            if (seriesUrlOf(href).trimEnd('/') != canonical) continue
+            if (seriesUrlOf(href).substringBefore('?').trimEnd('/') != canonical) continue
+            val episodeDataUrl = addTmdbIdToUrl(href, seriesUrl)
             val coordinates = seasonEpisode(href) ?: continue
             val (season, episodeNumber) = coordinates
             val text = link.text().trim()
@@ -1036,8 +1069,8 @@ class DiziSol : MainAPI() {
                 "$season. Sezon $episodeNumber. Bölüm"
             }
             found.putIfAbsent(
-                href,
-                newEpisode(href) {
+                episodeDataUrl,
+                newEpisode(episodeDataUrl) {
                     this.name = name
                     this.season = season
                     this.episode = episodeNumber
@@ -1070,8 +1103,13 @@ class DiziSol : MainAPI() {
         }
         val doc = document(normalized) ?: return null
         val isMovie = isFilmUrl(normalized)
-        val id = contentIdFromUrl(normalized)
+        val siteId = contentIdFromUrl(normalized)
+        val id = tmdbIdFromUrl(normalized) ?: siteId
         val apiType = if (isMovie) "movie" else "tv"
+        Log.d(
+            name,
+            "Detay kimlikleri: siteId=$siteId tmdbId=${tmdbIdFromUrl(normalized)} tür=$apiType"
+        )
         val details = id?.let {
             apiJson(mainUrl + "/api/tmdb/" + apiType + "/" + it) as? JSONObject
         }
@@ -1305,6 +1343,77 @@ class DiziSol : MainAPI() {
         return true
     }
 
+    private suspend fun byTmdbRecord(
+        tmdbId: Int,
+        mediaType: String,
+        coordinates: Pair<Int, Int>?
+    ): JSONObject? {
+        val query = buildString {
+            append("?type=").append(mediaType)
+            if (mediaType == "tv" && coordinates != null) {
+                append("&season=").append(coordinates.first)
+                append("&episode=").append(coordinates.second)
+            }
+        }
+        val apiUrl = "$mainUrl/api/movies/by-tmdb/$tmdbId$query"
+        val json = apiJson(apiUrl) as? JSONObject
+        if (json == null) {
+            Log.w(name, "Video API yanıtı JSON nesnesi değil: ${safeLogUrl(apiUrl)}")
+            return null
+        }
+        val record = json.optJSONObject("data")
+            ?.takeIf { it.has("m3u8Url") }
+            ?: json
+        val stream = record.optString("m3u8Url").trim()
+        if (stream.isBlank() || stream.equals("null", true)) {
+            Log.w(
+                name,
+                "Video API kaydı bulundu ancak m3u8Url boş: tür=$mediaType tmdbId=$tmdbId koordinat=$coordinates"
+            )
+            return null
+        }
+        return record
+    }
+
+    private fun emitApiRecord(
+        record: JSONObject,
+        sourcePage: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val streamUrl = fixUrl(record.optString("m3u8Url"), mainUrl) ?: return false
+        val headers = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Referer" to "$mainUrl/",
+            "Accept" to "*/*",
+            "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8"
+        )
+        callback(
+            newExtractorLink(
+                source = name,
+                name = "DiziSol API",
+                url = streamUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                referer = "$mainUrl/"
+                this.headers = headers
+                quality = quality(streamUrl)
+            }
+        )
+
+        record.optString("subtitleTr").takeIf { it.isNotBlank() && !it.equals("null", true) }?.let {
+            fixUrl(it, mainUrl)?.let { url -> subtitleCallback(newSubtitleFile("Türkçe", url)) }
+        }
+        record.optString("subtitleEn").takeIf { it.isNotBlank() && !it.equals("null", true) }?.let {
+            fixUrl(it, mainUrl)?.let { url -> subtitleCallback(newSubtitleFile("English", url)) }
+        }
+        Log.i(
+            name,
+            "Video API bağlantısı oluşturuldu: kaynak=${safeLogUrl(streamUrl)} tür=${record.optString("mediaType")} sezon=${record.optInt("season", 0)} bölüm=${record.optInt("episode", 0)}"
+        )
+        return true
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -1316,6 +1425,23 @@ class DiziSol : MainAPI() {
             return false
         }
         Log.i(name, "Video teşhis başladı: ${safeLogUrl(pageUrl)}")
+
+        // API response has a distinct site ID and TMDB ID; never treat them as interchangeable.
+        val tmdbId = tmdbIdFromUrl(pageUrl)
+        val mediaType = if (isFilmUrl(pageUrl)) "movie" else "tv"
+        val coordinates = if (mediaType == "tv") seasonEpisode(pageUrl) else null
+        if (tmdbId != null) {
+            val record = byTmdbRecord(tmdbId, mediaType, coordinates)
+            if (record != null && emitApiRecord(record, pageUrl, subtitleCallback, callback)) {
+                Log.i(name, "Video API sonucu: bağlantı=1 tür=$mediaType tmdbId=$tmdbId")
+                return true
+            }
+            Log.w(
+                name,
+                "Video API fallback: tmdbId=$tmdbId tür=$mediaType koordinat=$coordinates; statik sayfa çözümlemesine geçiliyor"
+            )
+        }
+
         val first = document(pageUrl) ?: run {
             Log.w(name, "Video teşhis: içerik sayfası alınamadı: ${safeLogUrl(pageUrl)}")
             return false
