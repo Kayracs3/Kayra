@@ -184,10 +184,10 @@
     },
     {
         "iconUrl": "https://dizisol.com/favicon.ico",
-        "fileHash": "sha256-a5399ec5a5f7ea4c9691d1409a99702571e259d5c1f9a223bec94df941c586eb",
+        "fileHash": "sha256-255cabe70debd9016cf8d3c6134f1ae70f14f40806dadd9579bf7426dfc06e48",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 57942,
+        "fileSize": 58344,
         "status": 1,
         "language": "tr",
         "authors": [
