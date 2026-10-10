@@ -1,5 +1,9 @@
 package com.Kayracs3
 
+import android.content.Context
+import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
+import com.lagradost.cloudstream3.plugins.Plugin
+
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
@@ -711,5 +715,12 @@ class DiziSol : MainAPI() {
         inspect(first, pageUrl, 0)
         Log.d(name, "Video çözümleme tamamlandı: $pageUrl")
         return linkCount > 0
+    }
+}
+
+@CloudstreamPlugin
+class DiziSolPlugin : Plugin() {
+    override fun load(context: Context) {
+        registerMainAPI(DiziSol())
     }
 }
