@@ -769,8 +769,89 @@ class SinezyTo : MainAPI() {
         )
         if (mediaUrl.isNullOrBlank()) return false
 
-        val extraHeaders = if (!mediaCookie.isNullOrBlank()) mapOf("Cookie" to mediaCookie) else emptyMap()
-        publishDirect(mediaUrl, iframeUrl, callback, extraHeaders)
+        // Bazı video kimliklerinde CDN, aynı signed URL için farklı Referer/Cookie
+        // birleşimleri istiyor. Master playlist'i küçük bir GET ile doğrula ve
+        // başarılı başlık profilini CloudStream oynatıcısına da aktar.
+        val rootReferer = "https://player.filmizle.in/"
+        val origin = "https://player.filmizle.in"
+        val cookieHeaders = if (!mediaCookie.isNullOrBlank()) {
+            mapOf("Cookie" to mediaCookie)
+        } else {
+            emptyMap()
+        }
+        val rootHeaders = requestHeaders + mapOf(
+            "Accept" to "*/*",
+            "Referer" to rootReferer
+        )
+        val iframeHeaders = requestHeaders + mapOf(
+            "Accept" to "*/*",
+            "Referer" to iframeUrl
+        )
+        val profiles = listOf(
+            Triple("root", rootReferer, rootHeaders),
+            Triple("iframe", iframeUrl, iframeHeaders),
+            Triple(
+                "root+session",
+                rootReferer,
+                rootHeaders + mapOf("Origin" to origin) + cookieHeaders
+            ),
+            Triple(
+                "iframe+session",
+                iframeUrl,
+                iframeHeaders + mapOf("Origin" to origin) + cookieHeaders
+            ),
+            Triple(
+                "site-referrer",
+                pageReferer,
+                requestHeaders + mapOf(
+                    "Accept" to "*/*",
+                    "Referer" to pageReferer,
+                    "Origin" to origin
+                ) + cookieHeaders
+            )
+        )
+
+        var selectedReferer = rootReferer
+        var selectedHeaders = rootHeaders
+        var manifestVerified = false
+        for ((profileName, profileReferer, profileHeaders) in profiles) {
+            val probe = runCatching {
+                app.get(
+                    mediaUrl,
+                    headers = profileHeaders,
+                    referer = profileReferer,
+                    allowRedirects = true
+                )
+            }.onFailure {
+                Log.d("SinezyTo", "filmizle HLS probe profile=$profileName failed: ${it.javaClass.simpleName}")
+            }.getOrNull()
+
+            val status = probe?.code ?: -1
+            val hasManifest = probe?.isSuccessful == true &&
+                probe.text.trimStart().startsWith("#EXTM3U", true)
+            Log.d(
+                "SinezyTo",
+                "filmizle HLS probe profile=$profileName, HTTP=$status, manifest=$hasManifest"
+            )
+            if (hasManifest) {
+                selectedReferer = profileReferer
+                selectedHeaders = profileHeaders
+                manifestVerified = true
+                break
+            }
+        }
+
+        if (!manifestVerified) {
+            Log.w(
+                "SinezyTo",
+                "filmizle HLS probe: all header profiles rejected for id=$videoId; " +
+                    "emitting default link for fallback"
+            )
+        } else {
+            Log.d("SinezyTo", "filmizle HLS probe selected referer=$selectedReferer")
+        }
+
+        publishDirect(mediaUrl, selectedReferer, callback, selectedHeaders)
         return true
     }
 
@@ -1036,14 +1117,18 @@ class SinezyTo : MainAPI() {
         val host = runCatching { URI(url).host.orEmpty().lowercase() }.getOrDefault("")
         val filmIzleHls = host == "player.filmizle.in" &&
             runCatching { URI(url).path.orEmpty().startsWith("/cdn/hls/") }.getOrDefault(false)
-        // FirePlayer HLS çağrıları genellikle player kök Referer'i ve User-Agent ile yapılır.
-        // API isteğinde oturum cookie'si korunur; medya isteğine rastgele Origin/CH/Cookie eklemeyiz.
-        val mediaReferer = if (filmIzleHls) "https://player.filmizle.in/" else referer
+        // Filmizle için resolveFilmIzleSource hangi profilin manifest'i
+        // açabildiğini doğrular; aynı Referer ve ek başlıklar oynatıcıya taşınır.
+        val mediaReferer = if (filmIzleHls) {
+            extraHeaders["Referer"] ?: referer
+        } else {
+            referer
+        }
         val mediaHeaders = if (filmIzleHls) {
             requestHeaders + mapOf(
                 "Accept" to "*/*",
                 "Referer" to mediaReferer
-            )
+            ) + extraHeaders
         } else {
             requestHeaders + ("Referer" to mediaReferer) + extraHeaders
         }
