@@ -139,40 +139,76 @@ class DiziSol : MainAPI() {
             ?.document
     }
 
-    private fun imageUrl(image: Element?): String? {
+    private fun imageUrl(image: Element?, baseUrl: String = mainUrl): String? {
         if (image == null) return null
-        val keys = listOf("data-src", "data-lazy-src", "data-original", "data-lazy",
-            "data-image", "data-poster", "src", "data-srcset", "srcset")
+        val keys = listOf(
+            "data-src", "data-lazy-src", "data-original", "data-original-src",
+            "data-src-original", "data-lazy", "data-image", "data-poster",
+            "data-thumb", "data-thumbnail", "data-url", "data-echo",
+            "data-srcset", "data-lazy-srcset", "srcset", "src", "poster", "content"
+        )
         for (key in keys) {
             val raw = image.attr(key).trim()
             if (raw.isBlank() || raw.startsWith("data:", true)) continue
-            val candidate = if (key.contains("srcset")) {
+            val candidate = if (key.contains("srcset", true)) {
                 raw.split(",").maxByOrNull { part ->
-                    Regex("""(\d+)w""").find(part)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+                    Regex("""(\d+)(?:w|x)""").find(part)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
                 }?.trim()?.substringBefore(" ").orEmpty()
             } else raw
-            val resolved = fixUrl(candidate) ?: continue
-            if (Regex("""(?i)\.(?:svg|gif|ico)(?:[?#]|$)""").containsMatchIn(resolved)) continue
-            if (resolved.contains("logo", true) || resolved.contains("avatar", true) ||
-                resolved.contains("placeholder", true) || resolved.contains("blank.", true)
-            ) continue
+            val resolved = fixUrl(candidate, baseUrl) ?: continue
+            if (isRejectedPoster(resolved)) continue
             return resolved
         }
-        return null
+        return backgroundImageUrl(image, baseUrl)
+    }
+
+    private fun isRejectedPoster(url: String): Boolean =
+        Regex("""(?i)\.(?:svg|gif|ico)(?:[?#]|$)""").containsMatchIn(url) ||
+            listOf("logo", "avatar", "placeholder", "blank.", "no-image", "no_image").any {
+                url.contains(it, true)
+            }
+
+    private fun backgroundImageUrl(element: Element?, baseUrl: String = mainUrl): String? {
+        if (element == null) return null
+        val dataKeys = listOf(
+            "data-bg", "data-background", "data-background-image", "data-bg-image",
+            "data-lazy-bg", "data-thumb", "data-thumbnail", "data-poster"
+        )
+        for (key in dataKeys) {
+            val raw = element.attr(key).trim()
+            if (raw.isBlank() || raw.startsWith("data:", true)) continue
+            val resolved = fixUrl(raw, baseUrl) ?: continue
+            if (!isRejectedPoster(resolved)) return resolved
+        }
+
+        val rawStyleUrl = Regex("""(?i)url\(\s*['"]?([^'")]+)['"]?\s*\)""")
+            .find(element.attr("style"))?.groupValues?.getOrNull(1)?.trim()
+            ?: return null
+        val resolved = fixUrl(rawStyleUrl, baseUrl) ?: return null
+        return resolved.takeUnless(::isRejectedPoster)
     }
 
     /**
-     * Afiş sadece ilgili bağlantının içindeki img'den veya açıkça bir içerik kartı
-     * olan en yakın kapsayıcıdan okunur. Genel sayfadaki ilk img asla karta atanmaz.
+     * Afişi sadece eşleşen içerik kartından oku. Lazy-load ve CSS arka planlı görseller
+     * da desteklenir; sayfanın rastgele ilk görseli hiçbir zaman karta atanmaz.
      */
-    private fun posterFromCard(link: Element): String? {
-        imageUrl(link.selectFirst("img"))?.let { return it }
+    private fun posterFromCard(link: Element, baseUrl: String = mainUrl): String? {
+        val imageSelector =
+            "img, source[srcset], [style*=background], [data-bg], [data-background], " +
+                "[data-background-image], [data-poster], [data-thumb], [data-thumbnail]"
+
+        imageUrl(link.selectFirst(imageSelector), baseUrl)?.let { return it }
+        backgroundImageUrl(link, baseUrl)?.let { return it }
+
         val card = link.closest(
             "article, .movie-card, .film-card, .series-card, .content-card, " +
                 ".poster-card, .media-card, .item-card, .movie-item, .film-item, .dizi-item, " +
                 ".film-box, .dizi-box, .card, li"
         )
-        return imageUrl(card?.selectFirst("img"))
+        val cardImage = card?.selectFirst(imageSelector)
+        imageUrl(cardImage, baseUrl)?.let { return it }
+        backgroundImageUrl(cardImage, baseUrl)?.let { return it }
+        return backgroundImageUrl(card, baseUrl)
     }
 
     private fun pagePoster(doc: Document): String? {
@@ -188,7 +224,7 @@ class DiziSol : MainAPI() {
             "main article img, main .detail img, main .movie-detail img, main .series-detail img, " +
                 "article .poster img, article img[itemprop=image], .detail-poster img"
         )
-        return imageUrl(mainImage)
+        return imageUrl(mainImage, doc.location()) ?: backgroundImageUrl(mainImage, doc.location())
     }
 
     private fun cardTitle(link: Element, url: String): String {
@@ -218,7 +254,7 @@ class DiziSol : MainAPI() {
             if (title.isBlank() || title.length > 150 || title.equals("izle", true)) continue
             if (title.lowercase() in setOf("film izle", "dizi izle", "detaylar", "hemen izle")) continue
 
-            val poster = posterFromCard(link)
+            val poster = posterFromCard(link, pageUrl)
             val nearbyText = link.parent()?.text().orEmpty()
             val cardYear = yearRegex.find(nearbyText)?.value?.toIntOrNull()
             val response: SearchResponse = if (isSeriesUrl(href)) {
@@ -409,7 +445,7 @@ class DiziSol : MainAPI() {
         return clean.ifBlank { titleFromSlug(url) }
     }
 
-    private fun parseEpisodes(doc: Document, seriesUrl: String): List<Episode> {
+    private fun parseEpisodes(doc: Document, seriesUrl: String, fallbackPoster: String?): List<Episode> {
         val canonical = seriesUrlOf(seriesUrl).trimEnd('/')
         val found = LinkedHashMap<String, Episode>()
         for (link in doc.select("a[href]")) {
@@ -431,7 +467,7 @@ class DiziSol : MainAPI() {
                     this.season = season
                     this.episode = episodeNumber
                     // Bölüm afişi yalnızca aynı bölüm kartında açıkça bulunursa kullanılır.
-                    posterUrl = posterFromCard(link)
+                    posterUrl = posterFromCard(link, doc.location()) ?: fallbackPoster
                 }
             )
         }
@@ -443,7 +479,7 @@ class DiziSol : MainAPI() {
                 name = "$season. Sezon $episodeNumber. Bölüm"
                 this.season = season
                 this.episode = episodeNumber
-                posterUrl = null
+                posterUrl = fallbackPoster
             }
         }
         return found.values.sortedWith(
@@ -480,7 +516,7 @@ class DiziSol : MainAPI() {
             }
         } else {
             val canonicalSeries = seriesUrlOf(normalized)
-            val episodes = parseEpisodes(doc, canonicalSeries)
+            val episodes = parseEpisodes(doc, canonicalSeries, poster)
             newTvSeriesLoadResponse(
                 title,
                 canonicalSeries,
