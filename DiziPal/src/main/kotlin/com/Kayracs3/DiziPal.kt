@@ -84,45 +84,46 @@ class DiziPal : MainAPI() {
             parseListing(document, baseUrl)
         }
 
-        // The homepage carousel can expose only a small subset of its entries
-        // in static HTML. If fewer than 11 unique episodes were parsed, follow
-        // that section's own "Tümünü Gör" link and use the full listing too.
-        if (isLatestEpisodesPage && results.size < 11) {
+        // The homepage carousel may expose episode names but omit their posters
+        // from the anchor itself. Consult the full "Tümünü Gör" listing whenever
+        // any poster is missing, even if the homepage already returned 11+ entries.
+        if (isLatestEpisodesPage &&
+            (results.size < 11 || results.any { it.posterUrl.isNullOrBlank() })
+        ) {
             val moreUrl = findCurrentEpisodesMoreUrl(document, baseUrl)
-            if (!moreUrl.isNullOrBlank()) {
-                val moreDocument = runCatching {
-                    app.get(
-                        moreUrl,
-                        headers = headers + ("Referer" to url),
-                        referer = url,
-                        allowRedirects = true,
-                    ).document
-                }.getOrNull()
+                ?: "$mainUrl/yeni-eklenen-dizi-bolumler?page=2"
+            val moreDocument = runCatching {
+                app.get(
+                    moreUrl,
+                    headers = headers + ("Referer" to url),
+                    referer = url,
+                    allowRedirects = true,
+                    timeout = 12000,
+                ).document
+            }.onFailure {
+                Log.d("DiziPal", "Tümünü Gör istek hatası: $moreUrl; ${it.message}")
+            }.getOrNull()
 
-                if (moreDocument != null) {
-                    val moreBaseUrl = documentBase(moreDocument, moreUrl)
-                    val moreResults = parseCurrentEpisodeSection(moreDocument, moreBaseUrl)
-                    val homepageCount = results.size
-                    val homepagePosterCount = results.count { !it.posterUrl.isNullOrBlank() }
-                    if (moreResults.isNotEmpty()) {
-                        // Do not discard this response just because it has fewer
-                        // cards: a carousel and its full-list page may expose
-                        // posters for different entries.
-                        results = mergeEpisodeSearchResults(moreResults, results)
-                    }
-                    Log.d(
-                        "DiziPal",
-                        "Tümünü Gör kontrolü: adres=$moreUrl; ana=$homepageCount/" +
-                            "$homepagePosterCount afiş; tam liste=${moreResults.size}/" +
-                            "${moreResults.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
-                            "birleşik=${results.size}/" +
-                            "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
-                    )
-                } else {
-                    Log.d("DiziPal", "Tümünü Gör sayfası açılamadı: $moreUrl")
+            if (moreDocument != null) {
+                val moreBaseUrl = documentBase(moreDocument, moreUrl)
+                val moreResults = parseCurrentEpisodeSection(moreDocument, moreBaseUrl)
+                val homepageCount = results.size
+                val homepagePosterCount = results.count { !it.posterUrl.isNullOrBlank() }
+                if (moreResults.isNotEmpty()) {
+                    // Full-list posters take precedence; homepage results fill
+                    // missing posters for entries that are absent from that page.
+                    results = mergeEpisodeSearchResults(moreResults, results)
                 }
+                Log.d(
+                    "DiziPal",
+                    "Tümünü Gör kontrolü: adres=$moreUrl; ana=$homepageCount/" +
+                        "$homepagePosterCount afiş; tam liste=${moreResults.size}/" +
+                        "${moreResults.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
+                        "birleşik=${results.size}/" +
+                        "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
+                )
             } else {
-                Log.d("DiziPal", "Güncel Bölümler için Tümünü Gör bağlantısı bulunamadı")
+                Log.d("DiziPal", "Tümünü Gör sayfası açılamadı: $moreUrl")
             }
         }
 
