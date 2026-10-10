@@ -467,13 +467,18 @@ class DiziKorea : MainAPI() {
                 "UTF-8"
             )
 
+        if (query.isBlank()) return emptyList()
         val candidates = listOf(
             "$mainUrl/arama?q=$encoded",
             "$mainUrl/arama?query=$encoded",
             "$mainUrl/ara?q=$encoded",
             "$mainUrl/search?q=$encoded",
             "$mainUrl/?s=$encoded",
-        )
+            "$mainUrl/?search=$encoded",
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/ara/$encoded",
+            "$mainUrl/search/$encoded",
+        ).distinct()
 
         for (url in candidates) {
 
