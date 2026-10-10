@@ -382,11 +382,13 @@ class DiziSol : MainAPI() {
             val response: SearchResponse = if (isSeriesUrl(href)) {
                 newTvSeriesSearchResponse(title, canonical, TvType.TvSeries) {
                     posterUrl = poster
+                    posterHeaders = requestHeaders
                     year = cardYear
                 }
             } else {
                 newMovieSearchResponse(title, canonical, TvType.Movie) {
                     posterUrl = poster
+                    posterHeaders = requestHeaders
                     year = cardYear
                 }
             }
@@ -629,6 +631,7 @@ class DiziSol : MainAPI() {
                 dataUrl = normalized
             ) {
                 posterUrl = poster
+                posterHeaders = requestHeaders
                 plot = meta.plot
                 year = meta.year
                 meta.score?.let { score = Score.from10(it) }
@@ -646,6 +649,7 @@ class DiziSol : MainAPI() {
                 episodes
             ) {
                 posterUrl = poster
+                posterHeaders = requestHeaders
                 plot = meta.plot
                 year = meta.year
                 meta.score?.let { score = Score.from10(it) }
