@@ -574,6 +574,20 @@ class DdiziTel : MainAPI() {
     private fun isDdiziHost(host: String): Boolean =
         host.equals("ddizi.tel", true) || host.endsWith(".ddizi.tel", true)
 
+    private fun streamHeaders(referer: String): Map<String, String> = mapOf(
+        "User-Agent" to USER_AGENT,
+        "Accept" to "*/*",
+        "Referer" to referer,
+        "Origin" to mainUrl
+    )
+
+    private fun isTxtHlsEndpoint(url: String): Boolean =
+        Regex("""(?i)/(?:master|playlist|index)\.txt$""").containsMatchIn(pathOf(url)) ||
+            (pathOf(url).contains("/hls/") && pathOf(url).endsWith(".txt"))
+
+    private fun startsWithM3u8(text: String): Boolean =
+        text.trimStart('\uFEFF', '\u0000', ' ', '\r', '\n', '\t').startsWith("#EXTM3U")
+
     private fun isScriptEndpoint(url: String): Boolean {
         val path = pathOf(url)
         val fileName = path.substringAfterLast('/')
@@ -682,14 +696,35 @@ class DdiziTel : MainAPI() {
         suspend fun resolve(candidate: String, referer: String, depth: Int) {
             if (depth > 3 || !visited.add(candidate)) return
             if (isPlaylistEndpoint(candidate)) {
+                val hlsCandidate = candidate.contains(".m3u8", true) || isTxtHlsEndpoint(candidate)
+                val mediaHeaders = streamHeaders(referer)
+
+                if (hlsCandidate) {
+                    val probe = runCatching {
+                        app.get(candidate, headers = mediaHeaders, referer = referer)
+                    }.onFailure {
+                        Log.w("DDizi", "HLS probe failed for " + candidate, it)
+                    }.getOrNull()
+
+                    val body = probe?.text.orEmpty()
+                    val validManifest = probe?.isSuccessful == true && startsWithM3u8(body)
+                    if (!validManifest) {
+                        val contentType = probe?.headers?.entries
+                            ?.firstOrNull { it.key.equals("content-type", true) }?.value.orEmpty()
+                        val preview = body.take(160).replace("\n", " ").replace("\r", " ")
+                        Log.w(
+                            "DDizi",
+                            "Rejecting non-HLS response successful=" + probe?.isSuccessful +
+                                " contentType=" + contentType +
+                                " url=" + candidate + " body=" + preview
+                        )
+                        return
+                    }
+                }
+
                 if (emitted.add(candidate)) {
                     val type = when {
-                        isPlaylistEndpoint(candidate) &&
-                            (candidate.contains(".m3u8", true) ||
-                                Regex("""(?i)/(?:master|playlist|index)\.txt(?:[?#]|$)""")
-                                    .containsMatchIn(candidate) ||
-                                pathOf(candidate).contains("/hls/") && pathOf(candidate).endsWith(".txt")
-                            ) -> ExtractorLinkType.M3U8
+                        hlsCandidate -> ExtractorLinkType.M3U8
                         candidate.contains(".mpd", true) -> INFER_TYPE
                         else -> ExtractorLinkType.VIDEO
                     }
@@ -700,7 +735,7 @@ class DdiziTel : MainAPI() {
                         type = type
                     ) {
                         this.referer = referer
-                        this.headers = requestHeaders + ("Referer" to referer)
+                        this.headers = mediaHeaders
                         this.quality = Regex("""(?i)(2160|1440|1080|720|480|360)""")
                             .find(candidate)?.groupValues?.get(1)?.toIntOrNull()
                             ?: Qualities.Unknown.value
