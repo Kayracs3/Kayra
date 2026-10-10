@@ -577,8 +577,7 @@ class DdiziTel : MainAPI() {
     private fun streamHeaders(referer: String): Map<String, String> = mapOf(
         "User-Agent" to USER_AGENT,
         "Accept" to "*/*",
-        "Referer" to referer,
-        "Origin" to mainUrl
+        "Referer" to referer
     )
 
     private fun isTxtHlsEndpoint(url: String): Boolean =
