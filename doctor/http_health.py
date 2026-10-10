@@ -129,22 +129,67 @@ def main():
     root = Path(args.root).resolve()
     providers = find_providers(root)
 
-    config_path = root / "doctor" / "providers.json"
-    if config_path.exists():
+    # Domain registry tracks reviewed aliases, but never changes a provider's
+    # mainUrl automatically. The Kotlin source remains the primary-domain source of truth.
+    domain_registry_path = root / "doctor" / "domains.json"
+    domain_registry = {}
+    if domain_registry_path.exists():
         try:
-            config = json.loads(config_path.read_text(encoding="utf-8"))
-        except Exception:
-            config = {}
-        configured = config.get("providers", {})
-        for provider in list(providers):
-            extra = configured.get(provider["name"], {})
-            test_url = extra.get("testUrl")
-            if test_url:
-                providers.append({
-                    "name": provider["name"] + "::deep",
-                    "url": str(test_url).rstrip("/"),
-                    "source": provider["source"],
-                })
+            domain_registry = json.loads(
+                domain_registry_path.read_text(encoding="utf-8")
+            )
+        except Exception as exc:
+            print(f"WARNING: invalid doctor/domains.json: {exc}", file=sys.stderr)
+    domain_configured = domain_registry.get("providers", {})
+
+    health_config_path = root / "doctor" / "providers.json"
+    health_config = {}
+    if health_config_path.exists():
+        try:
+            health_config = json.loads(
+                health_config_path.read_text(encoding="utf-8")
+            )
+        except Exception as exc:
+            print(f"WARNING: invalid doctor/providers.json: {exc}", file=sys.stderr)
+    configured = health_config.get("providers", {})
+
+    expanded_providers = []
+    for provider in providers:
+        expanded_providers.append({**provider, "domain_role": "primary"})
+
+        domain_extra = domain_configured.get(provider["name"], {})
+        aliases = domain_extra.get("approvedAliases", [])
+        if not isinstance(aliases, list):
+            aliases = []
+        for index, alias in enumerate(aliases, start=1):
+            if isinstance(alias, dict):
+                alias_url = str(alias.get("url", "")).strip()
+                alias_note = str(alias.get("note", "")).strip()
+            else:
+                alias_url = str(alias).strip()
+                alias_note = ""
+            if not alias_url:
+                continue
+            expanded_providers.append({
+                **provider,
+                "name": f"{provider['name']}::alias-{index}",
+                "provider_name": provider["name"],
+                "url": alias_url.rstrip("/"),
+                "domain_role": "approved-alias",
+                "domain_note": alias_note,
+            })
+
+        extra = configured.get(provider["name"], {})
+        test_url = extra.get("testUrl")
+        if test_url:
+            expanded_providers.append({
+                **provider,
+                "name": provider["name"] + "::deep",
+                "url": str(test_url).rstrip("/"),
+                "domain_role": "deep-test",
+            })
+
+    providers = expanded_providers
 
     results = []
 
@@ -167,6 +212,9 @@ def main():
 
     payload = {
         "providers": len(results),
+        "primary_domains": len([x for x in results if x.get("domain_role") == "primary"]),
+        "approved_aliases": len([x for x in results if x.get("domain_role") == "approved-alias"]),
+        "deep_tests": len([x for x in results if x.get("domain_role") == "deep-test"]),
         "ok": len([x for x in results if x["status"] == "ok"]),
         "protected": len(protected),
         "failed": len(hard_failures),
