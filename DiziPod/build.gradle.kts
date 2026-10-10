@@ -1,7 +1,7 @@
-version = 5
+version = 6
 
 cloudstream {
-    authors     = listOf("keyiflerolsun")
+    authors     = listOf("Kayracs3")
     language    = "tr"
     description = "1080P yabancı film izle, Türkçe dublaj ve Türkçe altyazılı film seçenekleri ile Türkiye'nin en geniş film arşivi 720pizle Full hd film izle."
 
