@@ -584,6 +584,16 @@ class DiziSol : MainAPI() {
             "film", "dizi" -> pathParts.getOrNull(1).orEmpty()
             else -> pathParts.last()
         }.substringBefore('?')
+
+        // DiziSol kısa kodu TMDB ID'sinin 36 tabanlı gösterimidir:
+        // Pearson: 85950 -> 1ubi, The A List: 85427 -> 1twz, Power: 54650 -> 1662.
+        val shortCode = Regex("""-([a-z0-9]+)$""", RegexOption.IGNORE_CASE)
+            .find(slug)?.groupValues?.getOrNull(1)
+        if (!shortCode.isNullOrBlank()) {
+            shortCode.toIntOrNull(36)?.let { return it }
+        }
+
+        // Geriye dönük uyumluluk: eski, doğrudan sayısal kimlikli URL'ler.
         Regex("""(\d+)$""").find(slug)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
         return Regex("""\d+""").findAll(slug).mapNotNull { it.value.toIntOrNull() }.lastOrNull()
     }
@@ -603,8 +613,10 @@ class DiziSol : MainAPI() {
     private fun contentUrl(mediaType: String, id: Int, title: String): String {
         val route = if (mediaType == "tv") "dizi" else "film"
         val slug = slugifyTitle(title).ifBlank { "icerik" }
-        // DiziSol's router uses /film/{title-slug}-{tmdb-id} and /dizi/{title-slug}-{tmdb-id}.
-        return mainUrl.trimEnd('/') + "/" + route + "/" + slug + "-" + id
+        // DiziSol routes encode the TMDB ID in base 36, not as a decimal number.
+        // Example: 85950 -> 1ubi and 85427 -> 1twz.
+        val shortCode = id.toString(36)
+        return mainUrl.trimEnd('/') + "/" + route + "/" + slug + "-" + shortCode
     }
 
     private fun collectApiContent(
