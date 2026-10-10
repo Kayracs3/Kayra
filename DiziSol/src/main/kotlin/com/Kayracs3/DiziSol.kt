@@ -195,7 +195,8 @@ class DiziSol : MainAPI() {
     private fun posterFromCard(link: Element, baseUrl: String = mainUrl): String? {
         val imageSelector =
             "img, source[srcset], [style*=background], [data-bg], [data-background], " +
-                "[data-background-image], [data-poster], [data-thumb], [data-thumbnail]"
+                "[data-background-image], [data-src], [data-lazy-src], [data-original], " +
+                "[data-image], [data-url], [data-echo], [data-poster], [data-thumb], [data-thumbnail]"
 
         imageUrl(link.selectFirst(imageSelector), baseUrl)?.let { return it }
         backgroundImageUrl(link, baseUrl)?.let { return it }
@@ -203,7 +204,8 @@ class DiziSol : MainAPI() {
         val card = link.closest(
             "article, .movie-card, .film-card, .series-card, .content-card, " +
                 ".poster-card, .media-card, .item-card, .movie-item, .film-item, .dizi-item, " +
-                ".film-box, .dizi-box, .card, li"
+                ".episode-item, .post-item, .swiper-slide, .grid-item, .film-box, .dizi-box, " +
+                ".thumb, .thumbnail, .post, .item, .card, li"
         )
         val cardImage = card?.selectFirst(imageSelector)
         imageUrl(cardImage, baseUrl)?.let { return it }
