@@ -6,7 +6,7 @@ cloudstream {
     status = 1
     tvTypes = listOf("Movie", "TvSeries")
     language = "tr"
-    iconUrl = "https://sinezy.to/favicon.ico"
+    iconUrl = "https://sinezy.si/favicon.ico"
 }
 
 android {
