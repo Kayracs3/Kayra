@@ -40,7 +40,12 @@ class DiziSol : MainAPI() {
         "$mainUrl/" to "Son Eklenenler",
         "$mainUrl/filmler" to "Filmler",
         "$mainUrl/diziler" to "Diziler",
-        "$mainUrl/netflix-dizileri" to "Netflix"
+        "$mainUrl/netflix-dizileri" to "Netflix Dizileri",
+        "$mainUrl/disney-dizileri" to "Disney+ Dizileri",
+        "$mainUrl/prime-dizileri" to "Prime Video Dizileri",
+        "$mainUrl/hbomax-dizileri" to "HBO Max Dizileri",
+        "$mainUrl/tabii-dizileri-izle" to "tabii Dizileri",
+        "$mainUrl/tod-dizileri" to "TOD Dizileri"
     )
 
     private val seasonEpisodeRegex = Regex("""(?i)(\d+)-sezon-(\d+)-bolum""")
@@ -692,12 +697,26 @@ class DiziSol : MainAPI() {
 
     private fun apiPageUrl(requestData: String, page: Int): Pair<String, String?>? {
         val path = pathOf(requestData).ifBlank { "/" }
+        val browse = mainUrl + "/api/library/browse?type=tv&platform="
         return when {
             path == "/" -> (mainUrl + "/api/library/home-feed") to null
             path.startsWith("/filmler", true) ->
                 (mainUrl + "/api/library/browse?type=movie&page=" + page) to "movie"
             path.startsWith("/diziler", true) ->
                 (mainUrl + "/api/library/browse?type=tv&page=" + page) to "tv"
+            path.startsWith("/netflix-dizileri", true) ->
+                (browse + "netflix&page=" + page) to "tv"
+            path.startsWith("/disney-dizileri", true) ->
+                (browse + "disney&page=" + page) to "tv"
+            path.startsWith("/prime-dizileri", true) ->
+                (browse + "prime&page=" + page) to "tv"
+            path.startsWith("/hbomax-dizileri", true) ->
+                (browse + "hbomax&page=" + page) to "tv"
+            path.startsWith("/tabii-dizileri-izle", true) ||
+                path.startsWith("/tabii-dizileri", true) ->
+                (browse + "tabii&page=" + page) to "tv"
+            path.startsWith("/tod-dizileri", true) ->
+                (browse + "tod&page=" + page) to "tv"
             else -> null
         }
     }
