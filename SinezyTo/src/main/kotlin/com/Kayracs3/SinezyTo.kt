@@ -1,6 +1,7 @@
 package com.Kayracs3
 
 import android.util.Base64
+import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
@@ -678,9 +679,26 @@ class SinezyTo : MainAPI() {
             "src", "data-src", "data-url", "data-embed", "data-iframe",
             "data-iframe-src", "data-player", "data-video", "data-link", "data-href"
         )
-        for (block in encodedBlocks) {
+        val encodedBlockList = encodedBlocks.toList()
+        Log.d("SinezyTo", "collectCandidates: encoded player blocks=${encodedBlockList.size}, page=$base")
+        for (block in encodedBlockList) {
             val payload = decodeBase64Payload(block.groupValues[2]) ?: continue
-            val payloadDocument = Jsoup.parse(payload, base)
+            val decodedPayload = decode(payload)
+
+            // Legacy Sinezy player format sometimes stores an iframe snippet as plain text,
+            // where Jsoup won't create an iframe node. Preserve the old src= extraction too.
+            Regex("""(?is)\\bsrc\\s*=\\s*["']?([^"'<>\\s]+)""")
+                .find(decodedPayload)?.groupValues?.getOrNull(1)?.let { rawSrc ->
+                    addCandidate(output, rawSrc.trimEnd(';', ',', ')'), base, force = true)
+                }
+
+            // Also handle player config objects that store the embed URL rather than an iframe tag.
+            Regex("""(?is)["']?(?:src|file|url|iframe|embed|player|video)["']?\\s*[:=]\\s*["']([^"']{5,800})["']""")
+                .findAll(decodedPayload).forEach { match ->
+                    addCandidate(output, match.groupValues[1], base, force = true)
+                }
+
+            val payloadDocument = Jsoup.parse(decodedPayload, base)
             for (element in payloadDocument.select(
                 "iframe[src], iframe[data-src], video[src], source[src], embed[src], " +
                     "[data-src], [data-url], [data-embed], [data-player], [data-video]"
@@ -755,12 +773,19 @@ class SinezyTo : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        Log.d("SinezyTo", "loadLinks: start url=$data")
         val pageResponse = runCatching {
             app.get(data, headers = requestHeaders + ("Referer" to mainUrl), referer = mainUrl)
+        }.onFailure {
+            Log.w("SinezyTo", "loadLinks: request failed for $data", it)
         }.getOrNull() ?: return false
+        Log.d("SinezyTo", "loadLinks: HTTP success=${pageResponse.isSuccessful}, htmlLength=${pageResponse.text.length}")
         if (!pageResponse.isSuccessful) return false
         // Adult-only pages are deliberately not resolved by this provider.
-        if (isAdultContent(pageResponse.document, data)) return false
+        if (isAdultContent(pageResponse.document, data)) {
+            Log.w("SinezyTo", "loadLinks: blocked page by adult-content guard")
+            return false
+        }
 
         val visited = HashSet<String>()
         var found = false
@@ -789,14 +814,24 @@ class SinezyTo : MainAPI() {
             } else {
                 runCatching {
                     loadExtractor(candidate, referer, subtitleCallback, countingCallback)
+                }.onFailure {
+                    Log.w("SinezyTo", "loadLinks: extractor failed for candidate=$candidate", it)
                 }
             }
         }
 
         publishSubtitles(pageResponse.document, pageResponse.text, data, subtitleCallback)
         val candidates = collectCandidates(pageResponse.document, pageResponse.text, data)
-        for (candidate in candidates) resolveCandidate(candidate, data, 0)
+        Log.d(
+            "SinezyTo",
+            "loadLinks: candidates=${candidates.size}; urls=${candidates.take(15).joinToString(" | ")}"
+        )
+        for (candidate in candidates) {
+            resolveCandidate(candidate, data, 0)
+            if (found) Log.d("SinezyTo", "loadLinks: playable source emitted")
+        }
 
+        Log.d("SinezyTo", "loadLinks: finished found=$found, visited=${visited.size}")
         return found
     }
 }
