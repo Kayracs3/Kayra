@@ -6,7 +6,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
 
 class SinezyTo : MainAPI() {
-    override var mainUrl = "https://sinezy.to"
+    override var mainUrl = "https://sinezy.si"
     override var name = "Sinezy"
     override var lang = "tr"
     override val hasMainPage = true
