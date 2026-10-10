@@ -974,36 +974,36 @@ class InatBox : MainAPI() {
         val q = query.trim().lowercase(Locale.forLanguageTag("tr"))
         if (q.isBlank()) return emptyList()
 
-        if (tabCache.isEmpty()) {
-            val keyUrls = listOf(
-                "https://sprboxs.bar/CDN/001/SPR/v2/spor_v3.php",
-                "https://diziboxen.help/CDN/001/002/dizibox/v2/tv/ulusal.php",
-                "https://diziboxen.help/CDN/001/002/dizibox/v2/nf/index.php",
-                "https://diziboxen.help/CDN/001/002/dizibox/v2/yerli-dizi/index.php",
-                "https://diziboxen.help/CDN/001/002/dizibox/v2/yabanci-dizi/index.php",
-                "https://diziboxen.help/CDN/001/002/dizibox/v2/film/yerli-filmler.php"
-            )
-
-            for (url in keyUrls) {
-                try {
-                    val res = makeInatPostRequest(url) ?: continue
-                    val items = getSearchResponseList(res, url)
-                    if (items.isNotEmpty()) {
-                        tabCache[url] = Pair(System.currentTimeMillis(), items)
-                        items.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
-                    }
-                } catch (e: Exception) {
-                    Log.e("InatBox", "Search preload error: ${e.message}")
+        val keyUrls = listOf(
+            "https://sprboxs.bar/CDN/001/SPR/v2/spor_v3.php",
+            "https://diziboxen.help/CDN/001/002/dizibox/v2/tv/ulusal.php",
+            "https://diziboxen.help/CDN/001/002/dizibox/v2/nf/index.php",
+            "https://diziboxen.help/CDN/001/002/dizibox/v2/yerli-dizi/index.php",
+            "https://diziboxen.help/CDN/001/002/dizibox/v2/yabanci-dizi/index.php",
+            "https://diziboxen.help/CDN/001/002/dizibox/v2/film/yerli-filmler.php"
+        )
+        val now = System.currentTimeMillis()
+        val cacheDuration = 15 * 60 * 1000L
+        for (url in keyUrls) {
+            val cached = tabCache[url]
+            if (cached != null && now - cached.first < cacheDuration && cached.second.isNotEmpty()) {
+                cached.second.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
+                continue
+            }
+            try {
+                val res = makeInatPostRequest(url) ?: continue
+                val items = getSearchResponseList(res, url)
+                if (items.isNotEmpty()) {
+                    tabCache[url] = Pair(now, items)
+                    items.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
                 }
+            } catch (e: Exception) {
+                Log.e("InatBox", "Search preload error for $url: ${e.message}")
             }
         }
 
         val matchingResults = mutableListOf<SearchResponse>()
-        val regex = try {
-            Regex(query, RegexOption.IGNORE_CASE)
-        } catch (_: Exception) {
-            Regex(Regex.escape(query), RegexOption.IGNORE_CASE)
-        }
+        val regex = Regex(Regex.escape(query), RegexOption.IGNORE_CASE)
 
         for ((_, searchResponse) in urlToSearchResponse) {
             if (
