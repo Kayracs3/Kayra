@@ -545,7 +545,7 @@ class DiziPal : MainAPI() {
         }.distinct()
 
         metadataImages.firstOrNull { image ->
-            isLikelyPosterUrl(image)
+            isAcceptableEpisodePosterUrl(image, episodeUrl)
         }?.let {
             Log.d("DiziPal", "Afiş yedeği: bölüm meta görseli bulundu")
             return it
@@ -1581,6 +1581,8 @@ class DiziPal : MainAPI() {
             image.attr("data-src"),
             image.attr("data-lazy-src"),
             image.attr("data-lazy"),
+            image.attr("data-setbg"),
+            image.attr("data-bgset"),
             image.attr("data-lazyload"),
             image.attr("data-lazyload-src"),
             image.attr("data-src-original"),
@@ -2067,7 +2069,8 @@ class DiziPal : MainAPI() {
 
     private fun posterImageSelector(): String =
         "img, picture source, " +
-            "[data-src], [data-lazy-src], [data-lazyload], [data-lazyload-src], " +
+            "[data-src], [data-lazy-src], [data-lazy], [data-lazyload], [data-lazyload-src], " +
+            "[data-setbg], [data-bgset], " +
             "[data-original], [data-original-src], [data-original-url], " +
             "[data-image], [data-image-src], [data-image-original], " +
             "[data-img], [data-img-url], [data-thumb], [data-thumb-url], " +
@@ -2115,6 +2118,39 @@ class DiziPal : MainAPI() {
         return path.contains("/series/") ||
             path.contains("/movies/") ||
             path.contains("/movie/")
+    }
+
+    private fun isAcceptableEpisodePosterUrl(url: String, episodeUrl: String): Boolean {
+        if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
+            return false
+        }
+
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        val host = uri.host.orEmpty().lowercase()
+        val path = uri.path.orEmpty().lowercase()
+        if (host.isBlank() || path.isBlank()) return false
+
+        // Episode metadata can reference CDN images without a file extension.
+        // Reject obvious non-poster assets, then accept known image paths or
+        // external image/CDN hosts when the URL is the episode page's own meta image.
+        val combined = host + path
+        val excluded = listOf(
+            "logo", "favicon", "avatar", "placeholder", "no-image", "noimage",
+            "loading", "spinner", "sprite", "transparent", "pixel.gif", "banner",
+            "advert", "tracking",
+        )
+        if (excluded.any { combined.contains(it) }) return false
+
+        if (isLikelyPosterUrl(url)) return true
+
+        val episodeHost = runCatching { URI(episodeUrl).host.orEmpty().lowercase() }
+            .getOrDefault("")
+        val mediaPath = listOf(
+            "/image", "/img/", "/media/", "/upload", "/poster", "/cover",
+            "/thumb", "/t/p/", "/images/", "/uploads/",
+        ).any { path.contains(it) }
+
+        return host != episodeHost || mediaPath
     }
 
     private fun isLikelyPosterUrl(url: String): Boolean {
