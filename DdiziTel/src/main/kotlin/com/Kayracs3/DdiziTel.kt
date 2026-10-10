@@ -574,11 +574,26 @@ class DdiziTel : MainAPI() {
     private fun isDdiziHost(host: String): Boolean =
         host.equals("ddizi.tel", true) || host.endsWith(".ddizi.tel", true)
 
-    private fun streamHeaders(referer: String): Map<String, String> = mapOf(
-        "User-Agent" to USER_AGENT,
-        "Accept" to "*/*",
-        "Referer" to referer
-    )
+    private fun isYandexDownloader(url: String): Boolean {
+        val host = runCatching { URI(url).host.orEmpty().lowercase() }.getOrDefault("")
+        return host == "downloader.disk.yandex.com.tr" ||
+            host == "downloader.disk.yandex.ru" ||
+            host.endsWith(".disk.yandex.com.tr") ||
+            host.endsWith(".disk.yandex.ru")
+    }
+
+    private fun streamHeaders(referer: String, mediaUrl: String? = null): Map<String, String> {
+        val headers = linkedMapOf(
+            "User-Agent" to USER_AGENT,
+            "Accept" to "*/*"
+        )
+        // Yandex'in bazı doğrudan indirme uç noktaları üçüncü taraf Referer başlığıyla
+        // 403 döndürüyor. İmzalı indirme URL'sine Referer eklemeyerek isteği dene.
+        if (mediaUrl.isNullOrBlank() || !isYandexDownloader(mediaUrl)) {
+            headers["Referer"] = referer
+        }
+        return headers
+    }
 
     private fun isTxtHlsEndpoint(url: String): Boolean =
         Regex("""(?i)/(?:master|playlist|index)\.txt$""").containsMatchIn(pathOf(url)) ||
@@ -729,7 +744,7 @@ class DdiziTel : MainAPI() {
             if (depth > 3 || !visited.add(candidate)) return
             if (isPlaylistEndpoint(candidate)) {
                 val hlsCandidate = candidate.contains(".m3u8", true) || isTxtHlsEndpoint(candidate)
-                val mediaHeaders = streamHeaders(referer)
+                val mediaHeaders = streamHeaders(referer, candidate)
 
                 if (hlsCandidate) {
                     val probe = runCatching {
@@ -782,7 +797,7 @@ class DdiziTel : MainAPI() {
                         url = candidate,
                         type = type
                     ) {
-                        this.referer = referer
+                        this.referer = if (isYandexDownloader(candidate)) "" else referer
                         this.headers = mediaHeaders
                         this.quality = Regex("""(?i)(2160|1440|1080|720|480|360)""")
                             .find(candidate)?.groupValues?.get(1)?.toIntOrNull()
@@ -821,7 +836,14 @@ class DdiziTel : MainAPI() {
             }.onFailure {
                 Log.d("DDizi", "extractor did not resolve candidate=$candidate", it)
             }
-            if (emitted.size > linksBefore) return
+            // DDizi player sayfası bir kaynak çıkarsa bile HTML içinde alternatif
+            // kaynaklar barındırabiliyor. Kaynak linkini ekle ama bu sayfayı taramayı bırakma.
+            val candidateHost = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
+            val shouldInspectPlayerPage = isDdiziHost(candidateHost) &&
+                (pathOf(candidate).startsWith("/player/") ||
+                    pathOf(candidate).contains("/embed/") ||
+                    pathOf(candidate).startsWith("/video/"))
+            if (emitted.size > linksBefore && !shouldInspectPlayerPage) return
 
             val nestedResponse = runCatching {
                 app.get(
@@ -835,7 +857,7 @@ class DdiziTel : MainAPI() {
             val nestedBody = nestedResponse.text
             val nestedCandidates = collectPlayerUrls(
                 nestedResponse.document, nestedBody, candidate
-            )
+            ).filter { !isYandexDownloader(it) || emitted.none { emittedUrl -> emittedUrl == it } }
             val nestedType = nestedResponse.headers["content-type"].orEmpty()
             val nestedPreview = nestedBody.take(220).replace("\n", " ").replace("\r", " ")
             Log.d(
