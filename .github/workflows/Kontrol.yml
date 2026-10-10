@@ -77,6 +77,10 @@ jobs:
           import json
           data = json.load(open("domain-health/http-health.json", encoding="utf-8"))
           print(f"- Sağlayıcı: {data.get('providers', 0)}")
+          print(f"- Kontrol hedefi: {data.get('targets', data.get('providers', 0))}")
+          print(f"- Birincil domain: {data.get('primary_domains', data.get('providers', 0))}")
+          print(f"- Onaylı alternatif domain: {data.get('approved_aliases', 0)}")
+          print(f"- Derin bağlantı testi: {data.get('deep_tests', 0)}")
           print(f"- OK: {data.get('ok', 0)}")
           print(f"- Protected: {data.get('protected', 0)}")
           print(f"- Hard failure: {data.get('failed', 0)}")
