@@ -23,6 +23,15 @@ PAGES = [
     "/?s=Breaking%20Bad",
     "/?s=Avatar",
 ]
+API_PROBE_PATHS = [
+    "/api/tmdb/search/multi?query=Breaking%20Bad&page=1",
+    "/api/tmdb/search/tv?query=Breaking%20Bad&page=1",
+    "/api/tmdb/search/movie?query=Avatar&page=1",
+    "/api/tmdb/movie/popular?page=1",
+    "/api/tmdb/tv/popular?page=1",
+    "/api/movies/search?q=Breaking%20Bad",
+    "/api/library/tmdb-ids",
+]
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
@@ -283,6 +292,62 @@ def analyze_page(page):
     }
 
 
+def summarize_api_endpoint(path):
+    url = urljoin(BASE, path)
+    response = fetch(url)
+    body = response["body"]
+    result = {
+        "path": path,
+        "url": response["final_url"],
+        "status": response["status"],
+        "content_type": response["content_type"],
+        "bytes": len(body.encode("utf-8")),
+        "error": response["error"],
+        "json_valid": False,
+        "json_type": None,
+        "top_level_keys": [],
+        "result_count": None,
+        "sample_results": [],
+        "body_start": body[:1800],
+    }
+    try:
+        data = json.loads(body)
+    except Exception:
+        return result
+
+    result["json_valid"] = True
+    result["json_type"] = type(data).__name__
+    rows = []
+    if isinstance(data, list):
+        rows = data
+        result["top_level_keys"] = []
+    elif isinstance(data, dict):
+        result["top_level_keys"] = list(data.keys())[:80]
+        for key in ("results", "data", "items", "movies", "series", "list", "content"):
+            if isinstance(data.get(key), list):
+                rows = data[key]
+                result["result_array_key"] = key
+                break
+        if not rows:
+            rows = [data]
+    result["result_count"] = len(rows)
+    selected = []
+    allowed = {
+        "id", "tmdbId", "tmdb_id", "media_type", "type", "title", "name",
+        "slug", "url", "href", "path", "route", "poster_path", "posterPath",
+        "poster", "posterUrl", "image", "imageUrl", "backdrop_path",
+        "release_date", "first_air_date", "vote_average", "overview",
+        "season_number", "episode_number", "episodes", "seasons",
+    }
+    for row in rows[:5]:
+        if isinstance(row, dict):
+            selected.append({k: row[k] for k in row.keys() if k in allowed})
+        else:
+            selected.append(row)
+    result["sample_results"] = selected
+    return result
+
+
 def inspect_js_bundle(url):
     page = fetch(url)
     body = page["body"]
@@ -321,6 +386,25 @@ def inspect_js_bundle(url):
         re.findall(r"""(?i)(?:https?:)?//[A-Za-z0-9._-]+(?:/[A-Za-z0-9._~%/?#=&+-]*)?""", body)
         + re.findall(r"""["'](\/(?:api|v1|v2|graphql|trpc|search|movies|movie|series|dizi|film|episodes|episode|season)[A-Za-z0-9._~%/?#=&+-]*)["']""", body)
     ))
+    source_contexts = []
+    for needle in (
+        "/api/tmdb", "/api/img", "/api/movies/search", "/api/library/tmdb-ids",
+        "/search/multi", "/search/movie", "/search/tv", "/film/", "/dizi/",
+        "const ZK=", "poster_path", "function Fo", "Fo("
+    ):
+        count = 0
+        seen = set()
+        for match in re.finditer(re.escape(needle), body, re.IGNORECASE):
+            start = max(0, match.start() - 320)
+            end = min(len(body), match.end() + 480)
+            snippet = re.sub(r"\s+", " ", body[start:end]).strip()
+            if snippet in seen:
+                continue
+            seen.add(snippet)
+            source_contexts.append({"needle": needle, "context": snippet[:900]})
+            count += 1
+            if count >= 4:
+                break
     return {
         "url": url,
         "status": page["status"],
@@ -331,6 +415,7 @@ def inspect_js_bundle(url):
         "poster_paths": list(dict.fromkeys(POSTER_PATH_RE.findall(body)))[:100],
         "endpoint_strings": endpoint_strings[:100],
         "indicators": indicators[:100],
+        "source_contexts": source_contexts[:80],
         "first_1000_chars": body[:1000],
     }
 
@@ -341,6 +426,7 @@ def main():
     args = parser.parse_args()
 
     pages = [analyze_page(fetch(urljoin(BASE, path))) for path in PAGES]
+    api_reports = [summarize_api_endpoint(path) for path in API_PROBE_PATHS]
     script_urls = list(dict.fromkeys(
         script_url
         for page in pages
@@ -354,6 +440,7 @@ def main():
         "diagnostic_only": True,
         "base_url": BASE,
         "pages": pages,
+        "api_endpoint_probes": api_reports,
         "javascript_asset_count": len(script_urls),
         "javascript_assets_inspected": js_reports,
     }
@@ -374,6 +461,16 @@ def main():
     } for p in pages]
     print(json.dumps({
         "pages": summary,
+        "api_endpoint_probes": [
+            {
+                "path": item["path"], "status": item["status"], "bytes": item["bytes"],
+                "json_valid": item["json_valid"], "json_type": item["json_type"],
+                "top_level_keys": item["top_level_keys"][:20],
+                "result_count": item["result_count"],
+                "result_array_key": item.get("result_array_key"),
+            }
+            for item in api_reports
+        ],
         "javascript_asset_count": len(script_urls),
         "javascript_assets": [
             {
