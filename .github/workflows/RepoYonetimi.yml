@@ -1,0 +1,61 @@
+name: Kayra Repo Yönetimi
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "README.md"
+      - "CHANGELOG.md"
+      - ".github/workflows/RepoYonetimi.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kayra-repo-yonetimi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  catalog-and-notes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Python hazırla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scriptleri kontrol et
+        run: python -m py_compile doctor/repo_catalog.py doctor/http_health.py
+
+      - name: Eklenti kataloğu ve güncelleme notlarını üret
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          python doctor/repo_catalog.py \
+            --root . \
+            --before "$BEFORE_SHA" \
+            --after "$AFTER_SHA"
+
+      - name: README ve CHANGELOG değişikliklerini gönder
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Kayra Repo Manager"
+          git config user.email "actions@github.com"
+          git add README.md CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "Generated docs are already up to date."
+            exit 0
+          fi
+          git commit -m "Docs: update plugin catalog and release notes [skip ci]"
+          git push origin HEAD:master
