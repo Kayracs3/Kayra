@@ -2,6 +2,15 @@
 
 ## 2026-10-10
 
+<!-- kayra-commit:b8ec97d66419c1ee10eaf7b201f2009192ea731a -->
+### Fix Sinezy series season and episode discovery
+
+- Etkilenen alanlar: SinezyTo
+- Commit: [b8ec97d](https://github.com/Kayracs3/Kayra/commit/b8ec97d66419c1ee10eaf7b201f2009192ea731a)
+
+
+## 2026-10-10
+
 <!-- kayra-commit:44c47252767a4e2213623aaaa4a7bb07716127c0 -->
 ### Backfill initial domain health integration into changelog
 
