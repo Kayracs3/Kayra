@@ -708,8 +708,7 @@ class DdiziTel : MainAPI() {
                     val body = probe?.text.orEmpty()
                     val validManifest = probe?.isSuccessful == true && startsWithM3u8(body)
                     if (!validManifest) {
-                        val contentType = probe?.headers?.entries
-                            ?.firstOrNull { it.key.equals("content-type", true) }?.value.orEmpty()
+                        val contentType = probe?.headers?.get("content-type").orEmpty()
                         val preview = body.take(160).replace("\n", " ").replace("\r", " ")
                         Log.w(
                             "DDizi",
