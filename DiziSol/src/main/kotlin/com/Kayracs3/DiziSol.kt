@@ -35,7 +35,8 @@ class DiziSol : MainAPI() {
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Son Eklenenler",
         "$mainUrl/filmler" to "Filmler",
-        "$mainUrl/diziler" to "Diziler"
+        "$mainUrl/diziler" to "Diziler",
+        "$mainUrl/netflix-dizileri" to "Netflix"
     )
 
     private val seasonEpisodeRegex = Regex("""(?i)(\d+)-sezon-(\d+)-bolum""")
