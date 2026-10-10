@@ -192,6 +192,28 @@ class DiziSol : MainAPI() {
      * Afişi sadece eşleşen içerik kartından oku. Lazy-load ve CSS arka planlı görseller
      * da desteklenir; sayfanın rastgele ilk görseli hiçbir zaman karta atanmaz.
      */
+    private fun structuredImageUrl(value: Any?, baseUrl: String): String? {
+        when (value) {
+            is String -> {
+                val url = fixUrl(value, baseUrl) ?: return null
+                return url.takeUnless(::isRejectedPoster)
+            }
+            is JSONObject -> {
+                for (key in listOf("url", "contentUrl", "thumbnailUrl")) {
+                    val result = structuredImageUrl(value.opt(key), baseUrl)
+                    if (result != null) return result
+                }
+            }
+            is JSONArray -> {
+                for (index in 0 until value.length()) {
+                    val result = structuredImageUrl(value.opt(index), baseUrl)
+                    if (result != null) return result
+                }
+            }
+        }
+        return null
+    }
+
     private fun posterFromCard(link: Element, baseUrl: String = mainUrl): String? {
         val imageSelector =
             "img, source[srcset], [style*=background], [data-bg], [data-background], " +
@@ -210,23 +232,118 @@ class DiziSol : MainAPI() {
         val cardImage = card?.selectFirst(imageSelector)
         imageUrl(cardImage, baseUrl)?.let { return it }
         backgroundImageUrl(cardImage, baseUrl)?.let { return it }
-        return backgroundImageUrl(card, baseUrl)
+        backgroundImageUrl(card, baseUrl)?.let { return it }
+
+        // Bazı temalarda başlık bağlantısı ile afiş bağlantısı aynı kartta ayrı <a>
+        // öğeleridir ve kartın CSS sınıfı standart değildir. Yalnızca yakın bir üst
+        // kapsayıcıda tek bir farklı içerik URL'si ve tek bir aday görsel varsa kullan.
+        val linkUrl = fixUrl(link.attr("href"), baseUrl)?.let(::canonicalResultUrl)
+        var parent = link.parent()
+        repeat(5) {
+            if (parent == null) return@repeat
+
+            val contentTargets = LinkedHashSet<String>()
+            if (parent.tagName().equals("a", true)) {
+                fixUrl(parent.attr("href"), baseUrl)?.let { href ->
+                    if (isFilmUrl(href) || isSeriesUrl(href)) contentTargets += canonicalResultUrl(href)
+                }
+            }
+            parent.select("a[href]").forEach { a ->
+                val href = fixUrl(a.attr("href"), baseUrl) ?: return@forEach
+                if (isFilmUrl(href) || isSeriesUrl(href)) contentTargets += canonicalResultUrl(href)
+            }
+
+            if (linkUrl != null && contentTargets.size == 1 && contentTargets.first() == linkUrl) {
+                val urls = LinkedHashSet<String>()
+                parent.select("img, [style*=background], [data-bg], [data-background], " +
+                    "[data-background-image], [data-poster], [data-thumb], [data-thumbnail]").forEach { element ->
+                    val url = imageUrl(element, baseUrl) ?: backgroundImageUrl(element, baseUrl)
+                    if (url != null) urls += url
+                }
+                if (urls.size == 1) return urls.first()
+            }
+            parent = parent.parent()
+        }
+        return null
     }
 
     private fun pagePoster(doc: Document): String? {
-        val og = doc.selectFirst("meta[property=og:image], meta[name=twitter:image]")
-            ?.attr("content")?.trim()
-        val image = fixUrl(og, doc.location())
-        if (image != null && !image.contains("logo", true) && !image.contains("placeholder", true)) {
-            return image
+        val baseUrl = doc.location().ifBlank { mainUrl }
+
+        // Önce sayfanın kendi paylaşım görseli metadata alanları.
+        for (meta in doc.select(
+            "meta[property=og:image], meta[property=og:image:url], " +
+                "meta[property=og:image:secure_url], meta[name=twitter:image], " +
+                "meta[name=twitter:image:src], link[rel=image_src]"
+        )) {
+            val raw = meta.attr("content").ifBlank { meta.attr("href") }.trim()
+            val candidate = fixUrl(raw, baseUrl) ?: continue
+            if (!isRejectedPoster(candidate)) return candidate
         }
 
-        // Detay gövdesi ile sınırlı kal; yan taraftaki öneri kartlarının afişini kullanma.
-        val mainImage = doc.selectFirst(
-            "main article img, main .detail img, main .movie-detail img, main .series-detail img, " +
-                "article .poster img, article img[itemprop=image], .detail-poster img"
+        // JSON-LD içindeki dizi/film görseli, HTML sınıfları değişse bile güvenilir bir kaynaktır.
+        val schemaNodes = jsonLdObjects(doc)
+        val preferredNodes = schemaNodes.filter { node ->
+            val type = node.opt("@type")?.toString().orEmpty()
+            type.contains("TVSeries", true) || type.contains("Movie", true) ||
+                type.contains("CreativeWork", true) || type.contains("Series", true)
+        }
+        for (node in preferredNodes) {
+            for (key in listOf("image", "thumbnailUrl", "thumbnail", "poster", "posterUrl", "cover")) {
+                structuredImageUrl(node.opt(key), baseUrl)?.let { return it }
+            }
+        }
+
+        val imageSelector =
+            "img, [style*=background], [data-bg], [data-background], [data-background-image], " +
+                "[data-poster], [data-thumb], [data-thumbnail]"
+        val explicitSelectors = listOf(
+            "main [itemprop=image]", "article [itemprop=image]", "[itemprop=image]",
+            "main .detail-poster img", ".detail-poster img",
+            "main [class*=poster] img", "main [class*=cover] img",
+            "article [class*=poster] img", "article [class*=cover] img",
+            "main .movie-detail img", "main .series-detail img",
+            "article .poster img", "article img[itemprop=image]"
         )
-        return imageUrl(mainImage, doc.location()) ?: backgroundImageUrl(mainImage, doc.location())
+        for (selector in explicitSelectors) {
+            val element = doc.selectFirst(selector) ?: continue
+            val candidate = if (element.tagName().equals("img", true) ||
+                element.tagName().equals("source", true)
+            ) {
+                imageUrl(element, baseUrl)
+            } else {
+                imageUrl(element.selectFirst("img, source[srcset]"), baseUrl)
+                    ?: backgroundImageUrl(element, baseUrl)
+            }
+            if (candidate != null && !isRejectedPoster(candidate)) return candidate
+        }
+
+        // Bazı sayfalarda afiş, h1 başlığı ile aynı detay kapsayıcısındadır.
+        val heading = doc.selectFirst("main h1, article h1, h1")
+        var ancestor = heading?.parent()
+        repeat(5) {
+            if (ancestor == null) return@repeat
+            val candidates = LinkedHashSet<String>()
+            ancestor.select(imageSelector).forEach { element ->
+                val url = imageUrl(element, baseUrl) ?: backgroundImageUrl(element, baseUrl)
+                if (url != null) candidates += url
+            }
+            if (candidates.size == 1) return candidates.first()
+            ancestor = ancestor.parent()
+        }
+
+        // Genel fallback yalnızca ana içerikteki tekil görsel için uygulanır.
+        // Önerilen içerik kartları çok sayıda görsel içeriyorsa rastgele afiş seçilmez.
+        val mainImages = LinkedHashSet<String>()
+        doc.select("main img, main [style*=background], main [data-bg], " +
+            "article img, article [style*=background], article [data-bg]").forEach { element ->
+            val url = imageUrl(element, baseUrl) ?: backgroundImageUrl(element, baseUrl)
+            if (url != null) mainImages += url
+        }
+        if (mainImages.size == 1) return mainImages.first()
+
+        Log.w(name, "Sayfada güvenilir afiş URL'si bulunamadı: $baseUrl")
+        return null
     }
 
     private fun cardTitle(link: Element, url: String): String {
