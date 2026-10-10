@@ -20,8 +20,8 @@ class DdiziTel : MainAPI() {
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Son Eklenen Bölümler",
         "$mainUrl/yeni-eklenenler8" to "Yeni Eklenenler",
-        "$mainUrl/yabanci-dizi-izle" to "Yabancı Diziler",
-        "$mainUrl/eski.diziler" to "Eski Diziler"
+        "$mainUrl/yabanci-dizi-izle" to "Yabancı Diziler"
+        
     )
 
     private val requestHeaders = mapOf(
