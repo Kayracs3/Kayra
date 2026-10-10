@@ -191,21 +191,36 @@ class WebDramaTurkey : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val q = query.trim()
         if (q.isBlank()) return emptyList()
+        val encoded = URLEncoder.encode(q, "UTF-8")
+        val urls = listOf(
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/arama?q=$encoded",
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/?s=$encoded",
+            "$mainUrl/?search=$encoded",
+        ).distinct()
 
-        val url = "$mainUrl/arama/${URLEncoder.encode(q, "UTF-8")}"
-        val document = runCatching {
-            app.get(
-                url,
-                headers = pageHeaders,
-                referer = "$mainUrl/",
-                allowRedirects = true,
-            ).document
-        }.getOrNull() ?: return emptyList()
+        val merged = LinkedHashMap<String, SearchResponse>()
+        for (url in urls) {
+            val document = runCatching {
+                app.get(
+                    url,
+                    headers = pageHeaders,
+                    referer = "$mainUrl/",
+                    allowRedirects = true,
+                ).document
+            }.onFailure {
+                Log.w(WDT_TAG, "Arama isteği başarısız: $url", it)
+            }.getOrNull() ?: continue
 
-        return document
-            .select("div.tab-pane:not(#actors) div.col, div.col")
-            .mapNotNull { it.toSearchResult() }
-            .distinctBy { it.url }
+            val items = document.select("div.tab-pane:not(#actors) div.col, div.col")
+                .mapNotNull { it.toSearchResult() }
+                .distinctBy { it.url }
+            Log.d(WDT_TAG, "Arama: $url -> ${items.size} sonuç")
+            items.forEach { merged.putIfAbsent(it.url, it) }
+            if (merged.isNotEmpty()) break
+        }
+        return merged.values.toList()
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
