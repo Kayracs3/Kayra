@@ -650,7 +650,8 @@ class SinezyTo : MainAPI() {
         val candidate = fixUrl(value, base) ?: return
         val parsed = runCatching { URI(candidate) }.getOrNull() ?: return
         val host = parsed.host?.lowercase() ?: return
-        if (parsed.scheme?.lowercase() !in listOf("http", "https")) return
+        val scheme = parsed.scheme?.lowercase() ?: return
+        if (scheme != "http" && scheme != "https") return
         if (!host.matches(Regex("""[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?"""))) return
 
         val low = candidate.lowercase()
