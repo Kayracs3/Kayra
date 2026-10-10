@@ -24,13 +24,18 @@ PAGES = [
     "/?s=Avatar",
 ]
 API_PROBE_PATHS = [
-    "/api/tmdb/search/multi?query=Breaking%20Bad&page=1",
-    "/api/tmdb/search/tv?query=Breaking%20Bad&page=1",
-    "/api/tmdb/search/movie?query=Avatar&page=1",
-    "/api/tmdb/movie/popular?page=1",
-    "/api/tmdb/tv/popular?page=1",
+    "/api/library/home-feed",
+    "/api/library/browse?type=movie&page=1",
+    "/api/library/browse?type=tv&page=1",
     "/api/movies/search?q=Breaking%20Bad",
     "/api/library/tmdb-ids",
+    "/api/tmdb/search/multi?query=Breaking%20Bad&page=1",
+    "/api/tmdb/search/movie?query=Avatar&page=1",
+    "/api/tmdb/search/tv?query=Breaking%20Bad&page=1",
+    "/api/tmdb/movie/popular",
+    "/api/tmdb/trending/all/week",
+    "/api/tmdb/movie/550",
+    "/api/tmdb/tv/1399",
 ]
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -127,7 +132,7 @@ def fetch(url):
     })
     try:
         with urlopen(request, timeout=18) as response:
-            body = response.read(1_500_000).decode("utf-8", "replace")
+            body = response.read(8_000_000).decode("utf-8", "replace")
             return {
                 "requested_url": url,
                 "final_url": response.geturl(),
@@ -431,9 +436,11 @@ def main():
         script_url
         for page in pages
         for script_url in page.get("script_urls", [])
+        if urlparse(script_url).netloc.lower() == "dizisol.com"
+        and "/assets/" in urlparse(script_url).path
     ))
     js_reports = []
-    for script_url in script_urls[:20]:
+    for script_url in script_urls[:8]:
         js_reports.append(inspect_js_bundle(script_url))
 
     payload = {
