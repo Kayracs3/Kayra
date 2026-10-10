@@ -545,7 +545,7 @@ class SinezyTo : MainAPI() {
         for (link in document.select("a[href]")) {
             val href = link.attr("href").trim()
             val url = fixUrl(href) ?: continue
-            if (isListingUrl(url) || isAdultCard(link, url)) continue
+            if (isListingUrl(url)) continue
 
             val img = link.selectFirst("img")
                 ?: link.parent()?.selectFirst("img")
@@ -870,7 +870,7 @@ class SinezyTo : MainAPI() {
                 .ifBlank { onclickUrl }
             if (rawHref.isBlank() || rawHref.matches(Regex("""\d+"""))) continue
             val href = fixUrl(rawHref, currentUrl) ?: continue
-            if (!sameSite(href) || isAdultSlug(href) || isAdultCard(link, href)) continue
+            if (!sameSite(href)) continue
             if (href.trimEnd('/') == currentUrl.trimEnd('/')) continue
 
             val text = link.attr("aria-label")
@@ -993,8 +993,7 @@ class SinezyTo : MainAPI() {
                 val discovered = parseEpisodes(result.document, currentUrl, seriesContext)
                 discovered.forEach { episode ->
                     if (sameSite(episode.data) &&
-                        episode.data.trimEnd('/') != currentUrl.trimEnd('/') &&
-                        !isAdultSlug(episode.data)
+                        episode.data.trimEnd('/') != currentUrl.trimEnd('/')
                     ) {
                         found.putIfAbsent(episode.data.trimEnd('/'), episode)
                     }
@@ -1044,7 +1043,6 @@ class SinezyTo : MainAPI() {
         if (!response.isSuccessful) return null
 
         val document = response.document
-        if (isAdultContent(document, url)) return null
         val title = cleanTitle(
             document.selectFirst("h1")?.text()
                 ?: document.selectFirst("meta[property=og:title]")?.attr("content")
@@ -1565,12 +1563,6 @@ class SinezyTo : MainAPI() {
         }.getOrNull() ?: return false
         Log.d("SinezyTo", "loadLinks: HTTP success=${pageResponse.isSuccessful}, htmlLength=${pageResponse.text.length}")
         if (!pageResponse.isSuccessful) return false
-        // Adult-only pages are deliberately not resolved by this provider.
-        if (isAdultContent(pageResponse.document, data)) {
-            Log.w("SinezyTo", "loadLinks: blocked page by adult-content guard")
-            return false
-        }
-
         val visited = HashSet<String>()
         val scannedScriptUrls = HashSet<String>()
         var found = false
