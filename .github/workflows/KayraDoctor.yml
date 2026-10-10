@@ -63,6 +63,11 @@ jobs:
           mkdir -p doctor-results
           printf 'commit=%s\nrun=%s\ndate=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(date -u +%FT%TZ)" > doctor-results/run-info.txt
 
+      - name: DiziSol afiş kaynağını incele
+        continue-on-error: true
+        run: |
+          python3 doctor/dizisol_poster_probe.py --output doctor-results/dizisol-poster-probe.json
+
       - name: Build ve otomatik düzeltme
         id: doctor
         shell: bash
