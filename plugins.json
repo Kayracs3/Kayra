@@ -42,10 +42,10 @@
     },
     {
         "iconUrl": "https://www.dizibox.live/favicon.ico",
-        "fileHash": "sha256-bedcba6ad9509d171e0b21e765417c8f2493088c2f5ead35d3c091ccb09083d2",
+        "fileHash": "sha256-4c54d12eab1fdbb3522389f86dc438a09d0b3c62bc0d533d4476914312acde65",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 30200,
+        "fileSize": 44322,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -374,10 +374,10 @@
     },
     {
         "iconUrl": "https://sinezy.si/favicon.ico",
-        "fileHash": "sha256-68446ec81dad7698bc50659e6cffb19cb7500e8b9f90fbb03ded82747d8aff6c",
+        "fileHash": "sha256-69b2301834517e5235a66f1285e50b23fd273c0ede2389414f8f4eb2ca3a81f0",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 13574,
+        "fileSize": 32414,
         "status": 1,
         "language": "tr",
         "authors": [
