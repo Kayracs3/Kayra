@@ -407,13 +407,19 @@ class FilmMakinesi : MainAPI() {
         val urls = listOf(
             "$mainUrl/?s=$encoded",
             "$mainUrl/?search=$encoded",
-        )
+            "$mainUrl/?q=$encoded",
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/arama/?s=$encoded",
+        ).distinct()
 
         for (url in urls) {
             val results = runCatching {
                 app.get(
                     url,
                     headers = requestHeaders,
+                    referer = "$mainUrl/",
+                    allowRedirects = true,
                 ).document
             }
                 .getOrNull()
