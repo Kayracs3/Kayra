@@ -1,7 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
-
-version = 1
-
+version = 2
 cloudstream {
     description = "DiziSol film ve dizi sağlayıcısı; sezon, bölüm, metadata ve video kaynakları"
     authors = listOf("Kayracs3")
