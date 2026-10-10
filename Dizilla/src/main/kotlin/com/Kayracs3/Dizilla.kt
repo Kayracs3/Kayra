@@ -972,9 +972,11 @@ class Dizilla : MainAPI() {
         query: String
     ): List<SearchResponse> {
 
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return emptyList()
         val encoded =
             URLEncoder.encode(
-                query,
+                cleanQuery,
                 "UTF-8"
             )
 
@@ -997,6 +999,11 @@ class Dizilla : MainAPI() {
                 )
                 return emptyList()
             }
+
+        if (!response.isSuccessful) {
+            Log.w("Dizilla", "Search HTTP status=${response.code}")
+            return emptyList()
+        }
 
         val outer =
             try {
