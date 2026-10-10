@@ -721,18 +721,21 @@ class DiziSol : MainAPI() {
         val year = yearRegex.find(date)?.value?.toIntOrNull()
         val tmdbId = item.optInt("tmdbId", 0).takeIf { it > 0 }
         val url = contentUrl(mediaType, id, title, tmdbId)
+        val rating = apiScoreFromJson(item)
 
         return if (mediaType == "tv") {
             newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
                 posterUrl = poster
                 posterHeaders = requestHeaders
                 this.year = year
+                rating?.let { this.score = Score.from10(it) }
             }
         } else {
             newMovieSearchResponse(title, url, TvType.Movie) {
                 posterUrl = poster
                 posterHeaders = requestHeaders
                 this.year = year
+                rating?.let { this.score = Score.from10(it) }
             }
         }
     }
@@ -780,19 +783,25 @@ class DiziSol : MainAPI() {
             if (title.lowercase() in setOf("film izle", "dizi izle", "detaylar", "hemen izle")) continue
 
             val poster = posterFromCard(link, pageUrl, doc, allowCanonicalFallback = true)
+            val cardHtml = link.closest(
+                "article, .movie-card, .film-card, .series-card, .content-card, .poster-card, .media-card, .item-card, .card, li"
+            )?.outerHtml().orEmpty() + " " + link.outerHtml()
             val nearbyText = link.parent()?.text().orEmpty()
             val cardYear = yearRegex.find(nearbyText)?.value?.toIntOrNull()
+            val cardScore = extractImdbScore(cardHtml + " " + nearbyText)
             val response: SearchResponse = if (isSeriesUrl(href)) {
                 newTvSeriesSearchResponse(title, canonical, TvType.TvSeries) {
                     posterUrl = poster
                     posterHeaders = requestHeaders
                     year = cardYear
+                    cardScore?.let { score = Score.from10(it) }
                 }
             } else {
                 newMovieSearchResponse(title, canonical, TvType.Movie) {
                     posterUrl = poster
                     posterHeaders = requestHeaders
                     year = cardYear
+                    cardScore?.let { score = Score.from10(it) }
                 }
             }
             found.putIfAbsent(canonical, response)
@@ -886,6 +895,124 @@ class DiziSol : MainAPI() {
     // ---------------------------------------------------------------------
     // Detay ve metadata
     // ---------------------------------------------------------------------
+
+    private fun ratingValue(raw: Any?): Double? {
+        val value = when (raw) {
+            null -> return null
+            is Number -> raw.toString()
+            is JSONObject -> {
+                val nested = raw.opt("ratingValue") ?: raw.opt("value") ?: raw.opt("score")
+                return ratingValue(nested)
+            }
+            else -> raw.toString()
+        }
+        val parsed = Regex("""(?<!\d)(10(?:[.,]\d)?|[0-9](?:[.,]\d)?)(?!\d)""")
+            .find(value)?.value?.replace(',', '.')?.toDoubleOrNull()
+        return parsed?.takeIf { it in 0.0..10.0 }
+    }
+
+    private fun imdbScoreFromJson(item: JSONObject?): Double? {
+        if (item == null) return null
+        val keys = listOf(
+            "imdbRating", "imdb_rating", "imdbScore", "imdb_score",
+            "imdbRate", "imdb_rate", "imdbVoteAverage", "imdb_vote_average"
+        )
+        for (key in keys) {
+            ratingValue(item.opt(key))?.let { return it }
+        }
+        item.optJSONObject("ratings")?.let { ratings ->
+            for (key in keys) ratingValue(ratings.opt(key))?.let { return it }
+        }
+        item.optJSONObject("data")?.let { data ->
+            if (data !== item) imdbScoreFromJson(data)?.let { return it }
+        }
+        return null
+    }
+
+    private fun apiScoreFromJson(item: JSONObject?): Double? {
+        if (item == null) return null
+        imdbScoreFromJson(item)?.let { return it }
+        for (key in listOf("vote_average", "voteAverage", "tmdbRating", "tmdb_rating", "score", "rating")) {
+            ratingValue(item.opt(key))?.let { return it }
+        }
+        return null
+    }
+
+    private fun extractImdbScore(text: String): Double? =
+        Regex("""(?i)(?:IMDb|IMDB)\s*(?:puanı|rating)?\s*[:★]?\s*([0-9]+(?:[.,][0-9]+)?)""")
+            .find(decode(text))?.groupValues?.getOrNull(1)
+            ?.replace(',', '.')?.toDoubleOrNull()
+            ?.takeIf { it in 0.0..10.0 }
+
+    private fun apiActors(details: JSONObject?): List<ActorData> {
+        val cast = details?.optJSONObject("credits")?.optJSONArray("cast")
+            ?: details?.optJSONObject("aggregate_credits")?.optJSONArray("cast")
+            ?: return emptyList()
+        val seen = LinkedHashSet<String>()
+        return (0 until cast.length()).mapNotNull { index ->
+            val item = cast.optJSONObject(index) ?: return@mapNotNull null
+            val actorName = item.optString("name").trim()
+                .takeUnless { it.isBlank() || it.equals("null", true) }
+                ?: return@mapNotNull null
+            if (!seen.add(actorName.lowercase())) return@mapNotNull null
+            val profile = apiPosterUrl(item.optString("profile_path"), "w185")
+            ActorData(Actor(actorName, profile))
+        }.take(20)
+    }
+
+    private fun apiTrailer(details: JSONObject?): String? {
+        val videos = details?.optJSONObject("videos")?.optJSONArray("results") ?: return null
+        val candidates = (0 until videos.length())
+            .mapNotNull { videos.optJSONObject(it) }
+            .filter {
+                it.optString("site").equals("YouTube", true) &&
+                    it.optString("key").matches(Regex("""[A-Za-z0-9_-]{6,}"""))
+            }
+            .sortedWith(
+                compareBy<JSONObject> {
+                    if (it.optString("type").equals("Trailer", true)) 0 else 1
+                }.thenBy {
+                    if (it.optBoolean("official")) 0 else 1
+                }.thenBy {
+                    if (it.optString("iso_639_1").equals("tr", true)) 0 else 1
+                }
+            )
+        val video = candidates.firstOrNull() ?: return null
+        return "https://www.youtube.com/watch?v=" + video.optString("key")
+    }
+
+    private suspend fun fetchImdbScore(details: JSONObject?): Double? {
+        imdbScoreFromJson(details)?.let { return it }
+        val imdbId = details?.optJSONObject("external_ids")?.optString("imdb_id")
+            ?.takeIf { it.matches(Regex("""tt\d{5,}""")) }
+            ?: details?.optString("imdb_id")?.takeIf { it.matches(Regex("""tt\d{5,}""")) }
+            ?: return null
+        val imdbUrl = "https://www.imdb.com/title/$imdbId/"
+        return try {
+            val response = app.get(
+                imdbUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+                    "Accept-Language" to "en-US,en;q=0.9"
+                ),
+                allowRedirects = true,
+                timeout = 6500
+            )
+            val imdbDoc = org.jsoup.Jsoup.parse(response.text, imdbUrl)
+            val ldScore = jsonLdObjects(imdbDoc).firstNotNullOfOrNull { item ->
+                ratingValue(item.optJSONObject("aggregateRating")?.opt("ratingValue"))
+            }
+            ldScore ?: ratingValue(
+                imdbDoc.selectFirst("[itemprop=ratingValue], meta[property=og:rating]")?.let { el ->
+                    el.attr("content").ifBlank { el.attr("data-rating") }.ifBlank { el.text() }
+                }
+            ) ?: extractImdbScore(imdbDoc.text())
+        } catch (e: Exception) {
+            Log.d(name, "IMDb puanı alınamadı (" + imdbId + "): " + e.javaClass.simpleName)
+            null
+        }
+    }
 
     private data class Meta(
         val year: Int?,
@@ -1111,7 +1238,10 @@ class DiziSol : MainAPI() {
             "Detay kimlikleri: siteId=$siteId tmdbId=${tmdbIdFromUrl(normalized)} tür=$apiType"
         )
         val details = id?.let {
-            apiJson(mainUrl + "/api/tmdb/" + apiType + "/" + it) as? JSONObject
+            apiJson(
+                mainUrl + "/api/tmdb/" + apiType + "/" + it +
+                    "?language=tr-TR&append_to_response=credits,videos,external_ids"
+            ) as? JSONObject
         }
 
         val apiName = details?.let {
@@ -1138,7 +1268,14 @@ class DiziSol : MainAPI() {
         val finalPlot = apiPlot ?: meta.plot
         val finalYear = apiYear ?: meta.year
         val finalGenres = apiGenres.ifEmpty { meta.genres }
-        val finalScore = apiScore ?: meta.score
+        val finalScore = fetchImdbScore(details) ?: meta.score ?: apiScore
+        val cast = apiActors(details).ifEmpty { meta.actors.map { ActorData(Actor(it)) } }
+        val trailer = apiTrailer(details) ?: meta.trailer
+
+        Log.d(
+            name,
+            "Metadata: oyuncu=" + cast.size + ", fragman=" + (trailer != null) + ", puan=" + (finalScore ?: "yok")
+        )
 
         return if (isMovie) {
             newMovieLoadResponse(
@@ -1153,8 +1290,8 @@ class DiziSol : MainAPI() {
                 year = finalYear
                 finalScore?.let { score = Score.from10(it) }
                 tags = finalGenres
-                actors = meta.actors.map { ActorData(Actor(it)) }
-                addTrailer(meta.trailer)
+                actors = cast
+                addTrailer(trailer)
             }
         } else {
             val canonicalSeries = seriesUrlOf(normalized)
@@ -1172,8 +1309,8 @@ class DiziSol : MainAPI() {
                 year = finalYear
                 finalScore?.let { score = Score.from10(it) }
                 tags = finalGenres
-                actors = meta.actors.map { ActorData(Actor(it)) }
-                addTrailer(meta.trailer)
+                actors = cast
+                addTrailer(trailer)
             }
         }
     }
