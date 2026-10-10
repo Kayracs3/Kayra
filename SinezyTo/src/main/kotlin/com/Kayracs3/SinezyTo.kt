@@ -692,10 +692,14 @@ class SinezyTo : MainAPI() {
         val iframeUrl = "https://player.filmizle.in/video/$videoId"
 
         // Bazı CDN'ler securedLink'i aynı player oturumuna bağlar. Önce iframe'i aç.
+        val browserHintHeaders = mapOf(
+            "Sec-CH-UA-Mobile" to "?0",
+            "Sec-CH-UA-Platform" to "`Windows`".replace("`", "\"")
+        )
         val playerPage = runCatching {
             app.get(
                 iframeUrl,
-                headers = requestHeaders + ("Referer" to pageReferer),
+                headers = requestHeaders + browserHintHeaders + ("Referer" to pageReferer),
                 referer = pageReferer,
                 allowRedirects = true
             )
@@ -715,6 +719,7 @@ class SinezyTo : MainAPI() {
         val apiUrl = "https://player.filmizle.in/player/index.php?data=$videoId&do=getVideo"
         val apiHeaders = buildMap {
             putAll(requestHeaders)
+            putAll(browserHintHeaders)
             put("Accept", "application/json, text/javascript, */*; q=0.01")
             put("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             put("X-Requested-With", "XMLHttpRequest")
@@ -997,14 +1002,17 @@ class SinezyTo : MainAPI() {
         val host = runCatching { URI(url).host.orEmpty().lowercase() }.getOrDefault("")
         val filmIzleHls = host == "player.filmizle.in" &&
             runCatching { URI(url).path.orEmpty().startsWith("/cdn/hls/") }.getOrDefault(false)
-        // Filmizle CDN, iframe URL'si yerine player kökünü Referer olarak bekleyebilir.
-        // API isteğinin referer'i iframe olarak kalır; yalnız medya/HLS isteği bu başlıkları kullanır.
-        val mediaReferer = if (filmIzleHls) "https://player.filmizle.in/" else referer
+        // İmzalı CDN URL'si, URL'yi üreten player sayfasının tam Referer değeriyle istenmeli.
+        // HLS için kök domaine düşürmek 403'e neden olabiliyor.
+        val mediaReferer = referer
         val mediaHeaders = if (filmIzleHls) {
             requestHeaders + mapOf(
                 "Accept" to "*/*",
                 "Origin" to "https://player.filmizle.in",
                 "Referer" to mediaReferer
+            ) + mapOf(
+                "Sec-CH-UA-Mobile" to "?0",
+                "Sec-CH-UA-Platform" to "\"Windows\""
             ) + extraHeaders
         } else {
             requestHeaders + ("Referer" to mediaReferer) + extraHeaders
