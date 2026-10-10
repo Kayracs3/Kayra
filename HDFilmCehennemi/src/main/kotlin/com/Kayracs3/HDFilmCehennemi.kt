@@ -39,6 +39,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.net.URLDecoder
+import java.net.URLEncoder
 import java.util.Locale
 
 class HDFilmCehennemi : MainAPI() {
