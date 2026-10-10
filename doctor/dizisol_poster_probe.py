@@ -28,6 +28,7 @@ API_PROBE_PATHS = [
     "/api/library/browse?type=movie&page=1",
     "/api/library/browse?type=tv&page=1",
     "/api/library/browse?type=tv&platform=netflix&page=1",
+    "/api/library/browse?type=tv&platform=disney&page=1",
     "/api/library/browse?type=tv&platform=disney-plus&page=1",
     "/api/library/browse?type=tv&platform=disneyplus&page=1",
     "/api/library/browse?type=tv&platform=prime-video&page=1",
