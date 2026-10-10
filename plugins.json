@@ -42,10 +42,10 @@
     },
     {
         "iconUrl": "https://www.ddizi.tel/favicon.ico",
-        "fileHash": "sha256-fa2f03227af05ff4e748733a7e9192cb9cad6e6ddf6af2a6a70b9f169c938573",
+        "fileHash": "sha256-c38fc2defe6d94aa72a286f3aa3ac0249813d5e11ac44441aeb2a4a6614983da",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 41089,
+        "fileSize": 41163,
         "status": 3,
         "language": "tr",
         "authors": [
