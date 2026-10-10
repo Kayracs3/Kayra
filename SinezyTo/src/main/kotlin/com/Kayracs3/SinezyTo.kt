@@ -885,18 +885,32 @@ class SinezyTo : MainAPI() {
         val pageSeason = Regex("""(?i)(?:^|[-/ ])(\d{1,2})\s*\.?\s*(?:sezon|season)(?:[-/ ]|$)""")
             .find("$currentUrl $title")?.groupValues?.getOrNull(1)?.toIntOrNull()
 
-        for (link in document.select("a[href], [data-episode-url], [data-episode-number]")) {
+        for (link in document.select(
+            "a[href], area[href], option[value], [data-episode-url], [data-episode-number], " +
+                "[data-episode], [data-url], [data-href], [data-link], [onclick]"
+        )) {
+            val onclickUrl = Regex("""(?i)(?:location(?:\.href)?\s*=|window\.open\s*\(|(?:url|href|src)\s*[:=])\s*['"]([^'"]+)['"]""")
+                .find(link.attr("onclick"))?.groupValues?.getOrNull(1).orEmpty()
             val rawHref = link.attr("href")
                 .ifBlank { link.attr("data-episode-url") }
                 .ifBlank { link.attr("data-url") }
+                .ifBlank { link.attr("data-href") }
+                .ifBlank { link.attr("data-link") }
+                .ifBlank { link.attr("value") }
+                .ifBlank { onclickUrl }
+            if (rawHref.isBlank() || rawHref.matches(Regex("""\d+"""))) continue
             val href = fixUrl(rawHref, currentUrl) ?: continue
+            if (!sameSite(href) || isAdultSlug(href) || isAdultCard(link, href)) continue
             if (href.trimEnd('/') == currentUrl.trimEnd('/')) continue
 
             val text = link.attr("aria-label")
+                .ifBlank { link.attr("data-title") }
+                .ifBlank { link.attr("data-name") }
                 .ifBlank { link.attr("title") }
                 .ifBlank { link.text() }
                 .trim()
-            val combined = "$href $text"
+            val combined = href + " " + text + " " + link.attr("data-season") +
+                " " + link.attr("data-episode-number") + " " + link.attr("data-episode")
             var season: Int? = null
             var episodeNumber: Int? = null
 
@@ -919,7 +933,7 @@ class SinezyTo : MainAPI() {
             }
 
             if (episodeNumber == null) {
-                val label = episodeOnly.find(text)
+                val label = episodeOnly.find(combined)
                 val parsedEpisode = label?.groupValues?.getOrNull(2)?.toIntOrNull()
                 if (parsedEpisode != null) {
                     episodeNumber = parsedEpisode
@@ -932,7 +946,11 @@ class SinezyTo : MainAPI() {
                 text.contains("fragman", true) || text.contains("trailer", true)
             ) continue
 
-            val episodeName = cleanTitle(text).ifBlank { "$episodeNumber. Bölüm" }
+            val textHasEpisodeNumber = episodeOnly.containsMatchIn(text) ||
+                patterns.any { pattern -> pattern.containsMatchIn(text) }
+            val episodeName = cleanTitle(text)
+                .takeIf { it.isNotBlank() && textHasEpisodeNumber }
+                ?: "$episodeNumber. Bölüm"
             episodes.putIfAbsent(href, newEpisode(href) {
                 this.name = episodeName
                 this.season = season
@@ -942,6 +960,86 @@ class SinezyTo : MainAPI() {
 
         // Gerçek bölüm bağlantısı yoksa sahte bir "1. Bölüm" oluşturma.
         return episodes.values.sortedWith(
+            compareBy<Episode> { it.season ?: Int.MAX_VALUE }
+                .thenBy { it.episode ?: Int.MAX_VALUE }
+                .thenBy { it.name }
+        )
+    }
+
+    /**
+     * Bazı Sinezy sezon sayfalarında bölüm listesi doğrudan DOM'a eklenmiyor.
+     * Önce sayfanın kendisini tarar; bölüm bulunmazsa site aramasındaki gerçek
+     * bölüm sayfalarını bulmayı dener. Doğrulanmış URL yoksa sahte bölüm üretmez.
+     */
+    private suspend fun discoverEpisodes(
+        document: Document,
+        currentUrl: String,
+        title: String
+    ): List<Episode> {
+        val direct = parseEpisodes(document, currentUrl, title)
+        if (direct.isNotEmpty()) {
+            Log.d("SinezyTo", "Bölüm taraması: mevcut sayfada " + direct.size + " bölüm bulundu")
+            return direct
+        }
+
+        val season = Regex("""(?i)(?:^|[-/ .])(\d{1,2})\s*\.?\s*(?:sezon|season)(?:[-/ .]|$)""")
+            .find("$currentUrl $title")?.groupValues?.getOrNull(1)?.toIntOrNull()
+        val baseTitle = cleanTitle(
+            title.replace(Regex("""(?i)\s+\d{1,2}\s*\.?\s*(?:sezon|season)\b.*$"""), "")
+        ).ifBlank { title }
+        val queries = linkedSetOf(baseTitle)
+        if (season != null) {
+            queries += "$baseTitle $season. sezon bölüm"
+            queries += "$baseTitle $season. sezon"
+        } else {
+            queries += "$baseTitle bölüm"
+        }
+
+        val found = LinkedHashMap<String, Episode>()
+        val visitedPages = HashSet<String>()
+        val seriesContext = if (season != null) "$baseTitle $season. Sezon" else title
+
+        for (query in queries) {
+            val encoded = URLEncoder.encode(query, "UTF-8")
+            val searchUrls = listOf(
+                "$mainUrl/?s=$encoded",
+                "$mainUrl/arama/?s=$encoded",
+                "$mainUrl/arama/?search=$encoded"
+            )
+            for (searchUrl in searchUrls) {
+                if (!visitedPages.add(searchUrl)) continue
+                val result = runCatching {
+                    app.get(
+                        searchUrl,
+                        headers = requestHeaders,
+                        referer = mainUrl,
+                        allowRedirects = true
+                    )
+                }.onFailure {
+                    Log.d("SinezyTo", "Bölüm araması başarısız: " + searchUrl)
+                }.getOrNull() ?: continue
+                if (!result.isSuccessful) continue
+
+                val discovered = parseEpisodes(result.document, currentUrl, seriesContext)
+                discovered.forEach { episode ->
+                    if (sameSite(episode.data) &&
+                        episode.data.trimEnd('/') != currentUrl.trimEnd('/') &&
+                        !isAdultSlug(episode.data)
+                    ) {
+                        found.putIfAbsent(episode.data.trimEnd('/'), episode)
+                    }
+                }
+                Log.d(
+                    "SinezyTo",
+                    "Bölüm araması: query=" + query + ", HTTP=" + result.code +
+                        ", bulunan=" + discovered.size
+                )
+                if (found.isNotEmpty()) break
+            }
+            if (found.isNotEmpty()) break
+        }
+
+        return found.values.sortedWith(
             compareBy<Episode> { it.season ?: Int.MAX_VALUE }
                 .thenBy { it.episode ?: Int.MAX_VALUE }
                 .thenBy { it.name }
@@ -992,7 +1090,7 @@ class SinezyTo : MainAPI() {
             ?: document.selectFirst(".description, .plot, .movie-description, .entry-content")?.text()?.trim()
         val year = parseYear(document)
         val genres = parseGenres(document)
-        val episodes = parseEpisodes(document, url, title)
+        val episodes = discoverEpisodes(document, url, title)
         val isSeries = hasSeriesCategory(document) ||
             looksLikeSeries(url, title, genres) ||
             document.select("a[href], [data-episode-url], [data-episode-number]").any { link ->
