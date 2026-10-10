@@ -512,7 +512,7 @@ class SinezyTo : MainAPI() {
         return output
     }
 
-    private fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         val type = when {
             url.contains(".m3u8", true) -> ExtractorLinkType.M3U8
             url.contains(".mp4", true) || url.contains(".webm", true) -> ExtractorLinkType.VIDEO
@@ -529,7 +529,7 @@ class SinezyTo : MainAPI() {
         )
     }
 
-    private fun publishSubtitles(document: Document, html: String, base: String, callback: (SubtitleFile) -> Unit) {
+    private suspend fun publishSubtitles(document: Document, html: String, base: String, callback: (SubtitleFile) -> Unit) {
         val seen = HashSet<String>()
         for (track in document.select("track[src], track[data-src]")) {
             val raw = track.attr("src").ifBlank { track.attr("data-src") }
