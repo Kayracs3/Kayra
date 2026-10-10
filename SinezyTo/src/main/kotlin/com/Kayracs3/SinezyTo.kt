@@ -89,6 +89,44 @@ class SinezyTo : MainAPI() {
         return imageFrom(img)
     }
 
+    // Yetişkin içerikli sayfalar kataloğa ve oynatıcıya alınmaz.
+    private fun isAdultSlug(url: String): Boolean {
+        val path = runCatching { URI(url).path.orEmpty().lowercase() }
+            .getOrDefault(url.lowercase())
+        val terms = listOf("erotik", "erotic", "yetiskin", "yetişkin", "adult", "18-plus", "18plus")
+        return path.split("/", "-", "_").any { segment -> terms.contains(segment) } ||
+            path.contains("18-plus") || path.contains("18plus")
+    }
+
+    private fun isAdultCard(link: Element, url: String): Boolean {
+        if (isAdultSlug(url)) return true
+        val card = link.closest("article, .item, .movie, .film, .post, li") ?: link.parent()
+        val categoryText = card?.select(
+            ".genres a, .genre a, .categories a, .category a, .cat-links a, .post-categories a, .film-kategorileri a"
+        )?.text()?.lowercase().orEmpty()
+        return listOf("erotik", "erotic", "yetişkin", "yetiskin", "adult", "+18")
+            .any { categoryText.contains(it) }
+    }
+
+    private fun isAdultContent(document: Document, url: String): Boolean {
+        if (isAdultSlug(url)) return true
+        val genres = parseGenres(document).joinToString(" ").lowercase()
+        return listOf("erotik", "erotic", "yetişkin", "yetiskin", "adult", "+18")
+            .any { genres.contains(it) }
+    }
+
+    private fun hasSeriesCategory(document: Document): Boolean {
+        return document.select("a[href]").any { link ->
+            val label = link.text().trim()
+            if (!label.equals("Yabancı Dizi", true) && !label.equals("Yabanci Dizi", true)) {
+                return@any false
+            }
+            val context = (link.parent()?.text().orEmpty() + " " +
+                link.parent()?.parent()?.text().orEmpty()).take(700)
+            context.contains("Kategori", true) && !context.contains("Film Türleri", true)
+        }
+    }
+
     private fun isListingUrl(url: String): Boolean {
         val path = runCatching { URI(url).path.orEmpty().lowercase() }
             .getOrDefault(url.lowercase())
@@ -116,7 +154,7 @@ class SinezyTo : MainAPI() {
         for (link in document.select("a[href]")) {
             val href = link.attr("href").trim()
             val url = fixUrl(href) ?: continue
-            if (isListingUrl(url)) continue
+            if (isListingUrl(url) || isAdultCard(link, url)) continue
 
             val img = link.selectFirst("img")
                 ?: link.parent()?.selectFirst("img")
@@ -338,37 +376,79 @@ class SinezyTo : MainAPI() {
 
     private fun parseEpisodes(document: Document, currentUrl: String, title: String): List<Episode> {
         val episodes = LinkedHashMap<String, Episode>()
-        val episodeRx = Regex("""(?i)(\d+)[\s.-]*sezon[\s-]*(\d+)[\s.-]*bölüm""")
-        val urlRx = Regex("""(?i)-(\d+)-sezon-(\d+)-bolum""")
+        val patterns = listOf(
+            Regex("""(?i)-(\d+)-sezon-(\d+)-bolum(?:-|/|$)"""),
+            Regex("""(?i)(?:season|sezon)[-_/ ]?(\d{1,2})[-_/ .]*(?:episode|episod|ep|bolum|bölüm)[-_/ .]*(\d{1,3})"""),
+            Regex("""(?i)(?:^|[/_. -])s(\d{1,2})e(\d{1,3})(?:[/_. -]|$)"""),
+            Regex("""(?i)(\d{1,2})\s*\.?\s*sezon\s*(\d{1,3})\s*\.?\s*bölüm""")
+        )
+        val episodeOnly = Regex(
+            """(?i)(?:(\d{1,2})\s*\.?\s*sezon\s*)?(\d{1,3})\s*\.?\s*(?:bölüm|bolum|episode|ep)\b"""
+        )
+        val pageSeason = Regex("""(?i)(?:^|[-/ ])(\d{1,2})\s*\.?\s*(?:sezon|season)(?:[-/ ]|$)""")
+            .find("$currentUrl $title")?.groupValues?.getOrNull(1)?.toIntOrNull()
 
-        for (link in document.select("a[href]")) {
-            val href = fixUrl(link.attr("href"), currentUrl) ?: continue
-            val text = link.text().trim()
-            val match = urlRx.find(href) ?: episodeRx.find(text) ?: continue
-            val season = match.groupValues.getOrNull(1)?.toIntOrNull() ?: continue
-            val number = match.groupValues.getOrNull(2)?.toIntOrNull() ?: continue
+        for (link in document.select("a[href], [data-episode-url], [data-episode-number]")) {
+            val rawHref = link.attr("href")
+                .ifBlank { link.attr("data-episode-url") }
+                .ifBlank { link.attr("data-url") }
+            val href = fixUrl(rawHref, currentUrl) ?: continue
             if (href.trimEnd('/') == currentUrl.trimEnd('/')) continue
 
-            val episodeName = cleanTitle(text).ifBlank { "$number. Bölüm" }
+            val text = link.attr("aria-label")
+                .ifBlank { link.attr("title") }
+                .ifBlank { link.text() }
+                .trim()
+            val combined = "$href $text"
+            var season: Int? = null
+            var episodeNumber: Int? = null
+
+            for (pattern in patterns) {
+                val match = pattern.find(combined) ?: continue
+                season = match.groupValues.getOrNull(1)?.toIntOrNull()
+                episodeNumber = match.groupValues.getOrNull(2)?.toIntOrNull()
+                if (season != null && episodeNumber != null) break
+            }
+
+            if (episodeNumber == null) {
+                val dataSeason = link.attr("data-season").toIntOrNull()
+                val dataEpisode = link.attr("data-episode-number")
+                    .ifBlank { link.attr("data-episode") }
+                    .toIntOrNull()
+                if (dataEpisode != null) {
+                    season = dataSeason ?: pageSeason
+                    episodeNumber = dataEpisode
+                }
+            }
+
+            if (episodeNumber == null) {
+                val label = episodeOnly.find(text)
+                val parsedEpisode = label?.groupValues?.getOrNull(2)?.toIntOrNull()
+                if (parsedEpisode != null) {
+                    episodeNumber = parsedEpisode
+                    season = label.groupValues.getOrNull(1)?.toIntOrNull() ?: pageSeason
+                }
+            }
+
+            if (season == null || episodeNumber == null || season < 1 || episodeNumber < 1) continue
+            if (text.equals("DUAL", true) || text.equals("FID", true) ||
+                text.contains("fragman", true) || text.contains("trailer", true)
+            ) continue
+
+            val episodeName = cleanTitle(text).ifBlank { "$episodeNumber. Bölüm" }
             episodes.putIfAbsent(href, newEpisode(href) {
                 this.name = episodeName
                 this.season = season
-                this.episode = number
+                this.episode = episodeNumber
             })
         }
 
-        if (episodes.isNotEmpty()) return episodes.values.toList()
-
-        val season = Regex("""(?i)(\d+)\s*\.?\s*sezon""")
-            .find("$currentUrl $title")?.groupValues?.get(1)?.toIntOrNull()
-
-        // Sinezy bazı dizi sayfalarını doğrudan sezon/oynatıcı sayfası olarak sunuyor.
-        // Bölüm listesi yoksa sayfanın kendisini oynatılabilir bir bölüm olarak göster.
-        return listOf(newEpisode(currentUrl) {
-            this.name = if (season != null) "$season. Sezon - $title" else title
-            this.season = season ?: 1
-            this.episode = 1
-        })
+        // Gerçek bölüm bağlantısı yoksa sahte bir "1. Bölüm" oluşturma.
+        return episodes.values.sortedWith(
+            compareBy<Episode> { it.season ?: Int.MAX_VALUE }
+                .thenBy { it.episode ?: Int.MAX_VALUE }
+                .thenBy { it.name }
+        )
     }
 
     private fun applyMetadata(response: LoadResponse, document: Document) {
@@ -399,6 +479,7 @@ class SinezyTo : MainAPI() {
         if (!response.isSuccessful) return null
 
         val document = response.document
+        if (isAdultContent(document, url)) return null
         val title = cleanTitle(
             document.selectFirst("h1")?.text()
                 ?: document.selectFirst("meta[property=og:title]")?.attr("content")
@@ -415,9 +496,13 @@ class SinezyTo : MainAPI() {
         val year = parseYear(document)
         val genres = parseGenres(document)
         val episodes = parseEpisodes(document, url, title)
-        val isSeries = looksLikeSeries(url, title, genres) ||
-            document.select("a[href]").any { link ->
-                Regex("""(?i)\d+[\s.-]*sezon[\s-]*\d+[\s.-]*bölüm""").containsMatchIn(link.text())
+        val isSeries = hasSeriesCategory(document) ||
+            looksLikeSeries(url, title, genres) ||
+            document.select("a[href], [data-episode-url], [data-episode-number]").any { link ->
+                Regex("""(?i)\d+[\s.-]*sezon[\s-]*\d+[\s.-]*bölüm""")
+                    .containsMatchIn(link.attr("href") + " " + link.text()) ||
+                    Regex("""(?i)(?:^|[/_. -])s\d{1,2}e\d{1,3}(?:[/_. -]|$)""")
+                        .containsMatchIn(link.attr("href"))
             }
 
         if (isSeries) {
@@ -558,6 +643,8 @@ class SinezyTo : MainAPI() {
             app.get(data, headers = requestHeaders + ("Referer" to mainUrl), referer = mainUrl)
         }.getOrNull() ?: return false
         if (!pageResponse.isSuccessful) return false
+        // Adult-only pages are deliberately not resolved by this provider.
+        if (isAdultContent(pageResponse.document, data)) return false
 
         val visited = HashSet<String>()
         var found = false
