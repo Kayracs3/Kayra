@@ -621,6 +621,14 @@ class SinezyTo : MainAPI() {
         return Regex("""(?i)\.(m3u8|mp4|webm|mpd)(?:[?#].*)?$""").containsMatchIn(url)
     }
 
+    private fun isScriptEndpoint(url: String): Boolean {
+        val path = runCatching { URI(url).path.orEmpty().lowercase() }
+            .getOrDefault(url.substringBefore('?').lowercase())
+        val fileName = path.substringAfterLast('/')
+        return path.endsWith(".js") ||
+            (path.endsWith(".php") && fileName.startsWith("scripts"))
+    }
+
     private fun looksLikePlayerUrl(url: String): Boolean {
         val low = url.lowercase()
         return isDirectMedia(url) ||
@@ -893,6 +901,35 @@ class SinezyTo : MainAPI() {
 
             if (isDirectMedia(candidate)) {
                 publishDirect(candidate, referer, countingCallback)
+                return
+            }
+
+            // Betik dosyaları video iframe'i değildir; extractor'lara verilirse
+            // JavaScript metni hatalı bir URL olarak yorumlanabilir.
+            if (isScriptEndpoint(candidate)) {
+                if (depth >= 2) return
+                val scriptResponse = runCatching {
+                    app.get(
+                        candidate,
+                        headers = requestHeaders + ("Referer" to referer),
+                        referer = referer
+                    )
+                }.getOrNull() ?: return
+                if (!scriptResponse.isSuccessful) return
+
+                val scriptCandidates = collectCandidates(
+                    Jsoup.parse("", candidate), scriptResponse.text, candidate
+                )
+                scriptCandidates.addAll(
+                    collectExternalScriptCandidates(
+                        scriptResponse.document, candidate, candidate, scannedScriptUrls
+                    )
+                )
+                Log.d(
+                    "SinezyTo",
+                    "loadLinks: script endpoint candidates=" + scriptCandidates.size
+                )
+                for (next in scriptCandidates) resolveCandidate(next, candidate, depth + 1)
                 return
             }
 
