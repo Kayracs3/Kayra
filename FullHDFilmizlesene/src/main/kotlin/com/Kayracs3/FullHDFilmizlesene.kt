@@ -550,12 +550,16 @@ class FullHDFilmizlesene : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+        if (query.isBlank()) return emptyList()
         val searchUrls = listOf(
             "$mainUrl/arama/$encoded",
             "$mainUrl/search/?q=$encoded",
             "$mainUrl/search?q=$encoded",
-            "$mainUrl/?s=$encoded"
-        )
+            "$mainUrl/?s=$encoded",
+            "$mainUrl/?search=$encoded",
+            "$mainUrl/arama?q=$encoded",
+            "$mainUrl/ara/$encoded"
+        ).distinct()
 
         for (searchUrl in searchUrls) {
             try {
