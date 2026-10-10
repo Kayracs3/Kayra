@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.json.JSONObject
 import java.net.URI
 import java.net.URLEncoder
 
@@ -644,6 +645,77 @@ class SinezyTo : MainAPI() {
         return Regex("""(?i)\.(m3u8|mp4|webm|mpd)(?:[?#].*)?$""").containsMatchIn(url)
     }
 
+    /**
+     * Filmizle.in player'i kaynak adresini sayfada doğrudan göstermiyor.
+     * /video/{id} sayfasının kullandığı getVideo API'sine form POST atıp securedLink'i alır.
+     */
+    private suspend fun resolveFilmIzleSource(
+        playerPageUrl: String,
+        pageReferer: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val parsed = runCatching { URI(playerPageUrl) }.getOrNull() ?: return false
+        val host = parsed.host.orEmpty().lowercase()
+        val path = parsed.path.orEmpty().trimEnd('/')
+        if (host != "player.filmizle.in" || !path.startsWith("/video/")) return false
+
+        val videoId = path.substringAfterLast('/').trim()
+        if (!videoId.matches(Regex("""[A-Za-z0-9_-]{8,80}"""))) {
+            Log.d("SinezyTo", "filmizle API: invalid video id")
+            return false
+        }
+
+        val iframeUrl = "https://player.filmizle.in/video/$videoId"
+        val apiUrl = "https://player.filmizle.in/player/index.php?data=$videoId&do=getVideo"
+        val apiResponse = runCatching {
+            app.post(
+                apiUrl,
+                headers = requestHeaders + mapOf(
+                    "Accept" to "application/json, text/javascript, */*; q=0.01",
+                    "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "Origin" to "https://player.filmizle.in",
+                    "Referer" to iframeUrl
+                ),
+                referer = iframeUrl,
+                data = mapOf(
+                    "hash" to videoId,
+                    "r" to pageReferer
+                )
+            )
+        }.onFailure {
+            Log.w("SinezyTo", "filmizle API request failed for id=$videoId", it)
+        }.getOrNull() ?: return false
+
+        if (!apiResponse.isSuccessful) {
+            Log.w("SinezyTo", "filmizle API HTTP=${apiResponse.code} for id=$videoId")
+            return false
+        }
+
+        val body = apiResponse.text
+        val jsonUrl = runCatching {
+            JSONObject(body).optString("securedLink").takeIf {
+                it.isNotBlank() && !it.equals("null", true)
+            }
+        }.getOrNull()
+        val rawUrl = jsonUrl ?: Regex(
+            """["']?(?:securedLink|videoSource)["']?\s*:\s*["']([^"']+)["']""",
+            RegexOption.IGNORE_CASE
+        ).find(body)?.groupValues?.getOrNull(1)
+
+        val mediaUrl = fixUrl(rawUrl, iframeUrl)
+        Log.d(
+            "SinezyTo",
+            "filmizle API HTTP=${apiResponse.code}, bodyLength=${body.length}, " +
+                "securedLinkFound=${!mediaUrl.isNullOrBlank()}"
+        )
+        if (mediaUrl.isNullOrBlank()) return false
+
+        // API bağlantısının yetkilendirmesi player sayfasının Referer/User-Agent değerine bağlı olabilir.
+        publishDirect(mediaUrl, iframeUrl, callback)
+        return true
+    }
+
     private fun isScriptEndpoint(url: String): Boolean {
         val path = runCatching { URI(url).path.orEmpty().lowercase() }
             .getOrDefault(url.substringBefore('?').lowercase())
@@ -927,6 +999,10 @@ class SinezyTo : MainAPI() {
                 publishDirect(candidate, referer, countingCallback)
                 return
             }
+
+            // Filmizle.in kaynağı HTML'de doğrudan yer almadığından getVideo POST API'sini dene.
+            // API başarısız olursa genel embed/extractor akışı yedek olarak devam eder.
+            if (resolveFilmIzleSource(candidate, referer, countingCallback)) return
 
             // Betik dosyaları video iframe'i değildir; extractor'lara verilirse
             // JavaScript metni hatalı bir URL olarak yorumlanabilir.
