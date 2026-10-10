@@ -1,12 +1,17 @@
 package com.Kayracs3
 
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.getAndUnpack
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import org.json.JSONArray
+import org.json.JSONObject
+import org.json.JSONTokener
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
@@ -33,6 +38,10 @@ class DiziBoxLive : MainAPI() {
         "$mainUrl/efsane-diziler/" to "Evsane Diziler",
         "$mainUrl/arsiv/" to "Arşiv",
     )
+
+    // =========================================================================
+    //  Ana sayfa / arama
+    // =========================================================================
 
     override suspend fun getMainPage(
         page: Int,
@@ -84,6 +93,10 @@ class DiziBoxLive : MainAPI() {
         return emptyList()
     }
 
+    // =========================================================================
+    //  Detay sayfası
+    // =========================================================================
+
     override suspend fun load(url: String): LoadResponse? {
         val normalized = fixUrl(url)
         val document = requestDocument(normalized) ?: return null
@@ -92,46 +105,48 @@ class DiziBoxLive : MainAPI() {
 
         val poster = posterOf(document)
         val plot = pagePlot(document)
-        val releaseYear = pageYear(document)
-        val rating = pageRating(document)
-        val genres = pageGenres(document)
-        val actorData = pageActors(document)
+        val meta = pageMeta(document)
 
-        if (episodes.isEmpty()) {
-            return newTvSeriesLoadResponse(
-                title,
-                normalized,
-                TvType.TvSeries,
-                listOf(
-                    newEpisode(normalized) {
-                        name = title
-                        season = episodeSeason(normalized)
-                        episode = episodeNumber(normalized)
-                        posterUrl = poster
-                    }
-                ),
-            ) {
-                posterUrl = poster
-                this.plot = plot
-                year = releaseYear
-                rating?.let { score = Score.from10(it) }
-                if (genres.isNotEmpty()) tags = genres
-                if (actorData.isNotEmpty()) actors = actorData
-            }
+        val episodeList = episodes.ifEmpty {
+            listOf(
+                newEpisode(normalized) {
+                    name = title
+                    season = episodeSeason(normalized)
+                    episode = episodeNumber(normalized)
+                    posterUrl = poster
+                }
+            )
         }
 
         return newTvSeriesLoadResponse(
             title,
             normalized,
             TvType.TvSeries,
-            episodes,
+            episodeList,
         ) {
             posterUrl = poster
             this.plot = plot
-            year = releaseYear
-            rating?.let { score = Score.from10(it) }
-            if (genres.isNotEmpty()) tags = genres
-            if (actorData.isNotEmpty()) actors = actorData
+            year = meta.year
+            meta.rating?.let { score = Score.from10(it) }
+            if (meta.genres.isNotEmpty()) tags = meta.genres
+            if (meta.actors.isNotEmpty()) {
+                actors = meta.actors.map { ActorData(Actor(it)) }
+            }
+            addTrailer(meta.trailer)
+        }
+    }
+
+    // =========================================================================
+    //  Video bağlantıları
+    // =========================================================================
+
+    /** Gönderilen link sayısını ve WebView denemelerini sayar. */
+    private class Sink(private val target: (ExtractorLink) -> Unit) {
+        var count = 0
+        var webViewTries = 0
+        val send: (ExtractorLink) -> Unit = {
+            count++
+            target(it)
         }
     }
 
@@ -151,73 +166,118 @@ class DiziBoxLive : MainAPI() {
         }.getOrNull() ?: return false
 
         val document = response.document
-        collectSubtitles(document, subtitleCallback)
+        val sink = Sink(callback)
+        val seen = HashSet<String>()
 
-        var found = false
-        var emitted = 0
+        // Bölüm sayfası + "alternatif kaynak" sayfaları
+        val pages = LinkedHashMap<String, Document>()
+        pages[episodeUrl] = document
 
-        val report: (ExtractorLink) -> Unit = { link ->
-            emitted++
-            found = true
-            callback(link)
+        for (alt in alternativePages(document, episodeUrl).take(6)) {
+            val altDoc = runCatching {
+                app.get(alt, headers = headers, referer = episodeUrl).document
+            }.getOrNull() ?: continue
+            pages[alt] = altDoc
         }
 
-        val candidates = LinkedHashSet<String>()
-
-        document.select(
-            "iframe[src], iframe[data-src], video[src], video source[src], source[src], " +
-                "a[href], [data-src], [data-url], [data-href], [data-embed], [data-player]"
-        ).forEach { element ->
-            extractUrl(element)?.let(candidates::add)
+        for ((pageUrl, doc) in pages) {
+            resolvePage(doc, pageUrl, 0, seen, subtitleCallback, sink)
         }
 
-        candidates.removeIf {
-            it.contains("youtube.com", ignoreCase = true) ||
-                it.contains("youtu.be", ignoreCase = true) ||
-                it.contains("facebook.com", ignoreCase = true)
+        // Hiçbir şey bulunamadıysa son çare: sayfayı WebView ile aç
+        if (sink.count == 0) {
+            interceptProvider(episodeUrl, "$mainUrl/", subtitleCallback, sink)
         }
 
-        for (candidate in candidates) {
+        return sink.count > 0
+    }
+
+    /**
+     * Bir sayfadaki video kaynaklarını çözer:
+     *  1) sayfaya gömülü doğrudan m3u8/mp4 adresleri (paketli JS dahil)
+     *  2) iframe / data-* adayları -> loadExtractor
+     *  3) extractor bulamazsa iç içe iframe'e inip aynısını tekrarlar
+     *  4) olmazsa WebView ile ağ trafiğini dinler
+     */
+    private suspend fun resolvePage(
+        doc: Document,
+        pageUrl: String,
+        depth: Int,
+        seen: MutableSet<String>,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        sink: Sink,
+    ) {
+        collectSubtitles(doc, subtitleCallback)
+
+        // 1) gömülü doğrudan medya adresleri
+        for (media in scanMedia(doc.html())) {
+            if (seen.add(media)) emitMedia(media, pageUrl, sink.send)
+        }
+
+        doc.select("script")
+            .map { it.data() }
+            .filter { it.contains("eval(function(p,a,c,k") }
+            .forEach { packed ->
+                val unpacked = runCatching { getAndUnpack(packed) }.getOrNull()
+                    ?: return@forEach
+                for (media in scanMedia(unpacked)) {
+                    if (seen.add(media)) emitMedia(media, pageUrl, sink.send)
+                }
+            }
+
+        // 2) embed adayları
+        for (candidate in embedCandidates(doc)) {
             val clean = candidate.decodeEmbedded()
-            if (clean.isBlank()) continue
+            if (clean.isBlank() || isBlocked(clean) || isStaticAsset(clean)) continue
+            if (!seen.add(clean)) continue
 
             if (isMediaUrl(clean)) {
-                emitMedia(clean, episodeUrl, report)
+                emitMedia(clean, pageUrl, sink.send)
                 continue
             }
 
-            val before = emitted
+            val before = sink.count
 
             runCatching {
-                loadExtractor(
-                    clean,
-                    episodeUrl,
-                    subtitleCallback,
-                    report,
-                )
+                loadExtractor(clean, pageUrl, subtitleCallback, sink.send)
             }
+            if (sink.count > before) continue
 
-            if (emitted == before && isPlayerUrl(clean)) {
-                if (interceptProvider(clean, episodeUrl, subtitleCallback, report)) {
-                    found = true
+            // 3) iç içe iframe / oynatıcı sayfası
+            if (depth < 2) {
+                val nested = runCatching {
+                    app.get(
+                        clean,
+                        headers = headers + mapOf("Referer" to pageUrl),
+                        referer = pageUrl,
+                    )
+                }.getOrNull()
+
+                if (nested != null && nested.isSuccessful) {
+                    resolvePage(
+                        nested.document,
+                        clean,
+                        depth + 1,
+                        seen,
+                        subtitleCallback,
+                        sink,
+                    )
                 }
             }
-        }
 
-        if (!found) {
-            if (interceptProvider(episodeUrl, "$mainUrl/", subtitleCallback, report)) {
-                found = true
+            // 4) WebView (en fazla 2 kez, her biri yavaştır)
+            if (sink.count == before && isPlayerUrl(clean) && sink.webViewTries < 2) {
+                sink.webViewTries++
+                interceptProvider(clean, pageUrl, subtitleCallback, sink)
             }
         }
-
-        return found
     }
 
     private suspend fun interceptProvider(
         providerUrl: String,
         referer: String,
         subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit,
+        sink: Sink,
     ): Boolean {
         val resolver = runCatching {
             WebViewResolver(
@@ -248,7 +308,7 @@ class DiziBoxLive : MainAPI() {
         val intercepted = response.url.orEmpty()
         if (!isMediaUrl(intercepted)) return false
 
-        emitMedia(intercepted, providerUrl, callback)
+        emitMedia(intercepted, providerUrl, sink.send)
         return true
     }
 
@@ -291,6 +351,79 @@ class DiziBoxLive : MainAPI() {
         )
     }
 
+    /** HTML/JS metni içindeki doğrudan video adreslerini bulur. */
+    private fun scanMedia(raw: String): List<String> {
+        val text = raw.decodeEmbedded()
+        val out = LinkedHashSet<String>()
+
+        Regex(
+            """https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""",
+            RegexOption.IGNORE_CASE
+        ).findAll(text).forEach { out += it.value.trimEnd(')', ']', '}', ';', ',') }
+
+        Regex(
+            """(?<![:\w])//[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""",
+            RegexOption.IGNORE_CASE
+        ).findAll(text).forEach { out += "https:" + it.value.trimEnd(')', ']', '}', ';', ',') }
+
+        return out.filter { !it.contains("/thumb", true) && !it.contains("preview", true) }
+    }
+
+    /** Sayfadaki oynatıcı adayları: iframe'ler önce, sonra data-* ve dış oynatıcı linkleri. */
+    private fun embedCandidates(document: Document): LinkedHashSet<String> {
+        val out = LinkedHashSet<String>()
+
+        document.select("iframe[src], iframe[data-src], iframe[data-lazy-src]").forEach { el ->
+            val raw = el.attr("src")
+                .ifBlank { el.attr("data-src") }
+                .ifBlank { el.attr("data-lazy-src") }
+            normalizeUrl(raw)?.let(out::add)
+        }
+
+        document.select("video[src], video source[src], source[src]").forEach { el ->
+            extractUrl(el)?.let(out::add)
+        }
+
+        document.select("[data-embed], [data-player], [data-url], [data-href], [data-src]")
+            .filterNot { it.tagName() == "iframe" || it.tagName() == "img" }
+            .forEach { el -> extractUrl(el)?.let(out::add) }
+
+        document.select("a[href]").forEach { el ->
+            val u = extractUrl(el) ?: return@forEach
+            if (isMediaUrl(u) || (!isSameSite(u) && isPlayerUrl(u))) out += u
+        }
+
+        return out
+    }
+
+    /** "Alternatif kaynak" sekmelerinin açtığı sayfaları bulur. */
+    private fun alternativePages(document: Document, pageUrl: String): List<String> {
+        val stem = pageUrl.trimEnd('/').substringAfterLast('/').substringBefore('?')
+
+        val strong = document
+            .select("#alternatif, .alternatif, [id*=alternat], [class*=alternat]")
+            .flatMap { it.select("a[href]") }
+
+        val weak = document
+            .select("[class*=kaynak], [id*=kaynak], [class*=woca]")
+            .flatMap { it.select("a[href]") }
+            .filter { stem.isNotBlank() && it.attr("href").contains(stem, ignoreCase = true) }
+
+        return (strong + weak)
+            .mapNotNull { fixUrlNull(it.attr("href")) }
+            .filter { href ->
+                href != pageUrl &&
+                    !href.contains("#") &&
+                    !href.startsWith("javascript", ignoreCase = true) &&
+                    isSameSite(href)
+            }
+            .distinct()
+    }
+
+    // =========================================================================
+    //  Sayfa bilgileri (başlık, özet, puan, tür, oyuncu, fragman)
+    // =========================================================================
+
     private suspend fun requestDocument(url: String): Document? {
         return runCatching {
             app.get(
@@ -325,92 +458,286 @@ class DiziBoxLive : MainAPI() {
                 ?.takeIf { it.isNotBlank() }
     }
 
-    private fun metadataLine(document: Document): String? {
-        val yearRegex = Regex("(?<!\\d)(?:19|20)\\d{2}(?!\\d)")
+    private data class PageMeta(
+        val year: Int?,
+        val rating: Double?,
+        val genres: List<String>,
+        val actors: List<String>,
+        val trailer: String?,
+    )
 
-        return document
-            .getAllElements()
-            .asSequence()
-            .map { it.ownText().trim().replace(Regex("\\s+"), " ") }
-            .filter { value ->
-                value.contains("|") && yearRegex.containsMatchIn(value)
-            }
-            .minByOrNull { it.length }
+    private val yearRegex = Regex("(?<!\\d)(?:19|20)\\d{2}(?!\\d)")
+    private val pipeSplit = Regex("\\s*[|│•·]\\s*")
+
+    /** "2019" ya da "2019 Yapımı" gibi kısa, yıl içeren parça. */
+    private fun isYearPart(s: String) = s.length <= 14 && yearRegex.containsMatchIn(s)
+
+    private fun pageMeta(document: Document): PageMeta {
+        val ld = jsonLdNodes(document)
+        val ldMain = ld.firstOrNull { node ->
+            val type = node.opt("@type").toString()
+            type.contains("TVSeries", true) || type.contains("Series", true) ||
+                type.contains("Movie", true) || type.contains("CreativeWork", true)
+        }
+
+        // Başlığa en yakın bloklar (kenar çubuğundaki diğer dizileri karıştırmamak için)
+        val scopes = infoScopes(document)
+        val pipeParts = pipeLine(scopes)
+
+        return PageMeta(
+            year = pageYear(document, ldMain, pipeParts, scopes),
+            rating = pageRating(document, ldMain, scopes),
+            genres = pageGenres(ldMain, pipeParts, scopes),
+            actors = pageActors(ldMain, pipeParts, scopes),
+            trailer = pageTrailer(document, ldMain),
+        )
     }
 
-    private fun pageYear(document: Document): Int? {
-        val line = metadataLine(document) ?: return null
-        val parts = line.split("|").map { it.trim() }
+    /** h1'den yukarı doğru en fazla 5 kapsayıcı (en yakından en uzağa). */
+    private fun infoScopes(document: Document): List<Element> {
+        val out = ArrayList<Element>()
+        var current: Element? = document.selectFirst("h1")?.parent()
+        var guard = 0
+        while (current != null && guard < 5 && current.tagName() != "body") {
+            out += current
+            current = current.parent()
+            guard++
+        }
+        return out
+    }
 
-        parts.getOrNull(1)
-            ?.let {
-                Regex("(?<!\\d)(?:19|20)\\d{2}(?!\\d)")
-                    .find(it)
-                    ?.value
-                    ?.toIntOrNull()
+    // ----------------------------------------------------------- JSON-LD
+
+    private fun jsonLdNodes(document: Document): List<JSONObject> {
+        val out = ArrayList<JSONObject>()
+
+        fun walk(any: Any?) {
+            when (any) {
+                is JSONObject -> {
+                    out += any
+                    walk(any.opt("@graph"))
+                }
+                is JSONArray -> for (i in 0 until any.length()) walk(any.opt(i))
             }
+        }
+
+        document.select("script[type=application/ld+json]").forEach { script ->
+            runCatching { walk(JSONTokener(script.data().trim()).nextValue()) }
+        }
+        return out
+    }
+
+    private fun jsonNames(any: Any?): List<String> = when (any) {
+        is String -> any.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        is JSONObject -> listOfNotNull(any.optString("name").trim().takeIf { it.isNotBlank() })
+        is JSONArray -> (0 until any.length()).flatMap { jsonNames(any.opt(it)) }
+        else -> emptyList()
+    }
+
+    // ------------------------------------------------------- metadata satırı
+
+    /**
+     * "Ülke | 2019 | Dram, Gerilim | Oyuncu, Oyuncu" biçimli satırı bulur.
+     * Eski sürüm sadece ownText'e bakıyordu; metin alt etiketlere bölünmüşse
+     * (ör. <span>2019</span>) satırı hiç bulamıyordu. Burada text() kullanılır.
+     */
+    private fun pipeLine(scopes: List<Element>): List<String> {
+        for (scope in scopes) {
+            val best = scope.getAllElements()
+                .asSequence()
+                .map { it.text().trim().replace(Regex("\\s+"), " ") }
+                .filter { it.length in 8..500 && yearRegex.containsMatchIn(it) }
+                .map { line -> line to line.split(pipeSplit).map { it.trim() } }
+                .filter { (_, parts) -> parts.size >= 3 }
+                .filter { (_, parts) -> parts.any { isYearPart(it) } }
+                .minByOrNull { (line, _) -> line.length }
+            if (best != null) return best.second
+        }
+        return emptyList()
+    }
+
+    /** "Tür: Dram, Aksiyon" gibi etiketli satırları okur. */
+    private fun labelValue(scopes: List<Element>, labels: String): String? {
+        val rx = Regex("^(?:$labels)\\s*[:：]\\s*(.+)$", RegexOption.IGNORE_CASE)
+        for (scope in scopes) {
+            for (el in scope.select("li, p, div, span, td, dd, tr")) {
+                val t = el.text().trim()
+                if (t.length > 300) continue
+                val v = rx.find(t)?.groupValues?.get(1)?.trim()
+                if (!v.isNullOrBlank()) return v
+            }
+        }
+        return null
+    }
+
+    private fun splitList(value: String?): List<String> =
+        value.orEmpty()
+            .split(Regex("[,/]"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() && it.length <= 60 }
+            .distinct()
+
+    // ------------------------------------------------------------------ yıl
+
+    private fun pageYear(
+        document: Document,
+        ld: JSONObject?,
+        pipe: List<String>,
+        scopes: List<Element>,
+    ): Int? {
+        ld?.let {
+            listOf("datePublished", "dateCreated", "startDate").forEach { key ->
+                yearRegex.find(it.optString(key))?.value?.toIntOrNull()?.let { y -> return y }
+            }
+        }
+
+        pipe.firstOrNull { isYearPart(it) }
+            ?.let { yearRegex.find(it)?.value?.toIntOrNull() }
             ?.let { return it }
 
-        return Regex("(?<!\\d)(?:19|20)\\d{2}(?!\\d)")
-            .find(line)
-            ?.value
-            ?.toIntOrNull()
+        labelValue(scopes, "Yıl|Yapım Yılı|Çıkış Yılı|Yayın Yılı")
+            ?.let { yearRegex.find(it)?.value?.toIntOrNull() }
+            ?.let { return it }
+
+        return document.selectFirst("h1")?.text()
+            ?.let { yearRegex.find(it)?.value?.toIntOrNull() }
     }
 
-    private fun pageGenres(document: Document): List<String> {
-        val line = metadataLine(document) ?: return emptyList()
-        val parts = line.split("|").map { it.trim() }
+    // ---------------------------------------------------------------- puan
 
-        return parts
-            .getOrNull(2)
-            ?.split(",")
-            ?.map { it.trim() }
-            ?.filter { it.isNotBlank() }
-            ?.distinct()
-            ?.take(12)
-            ?: emptyList()
+    private fun numberIn(text: String): Double? =
+        Regex("(\\d{1,2}(?:[.,]\\d{1,2})?)").findAll(text)
+            .mapNotNull { it.value.replace(',', '.').toDoubleOrNull() }
+            .firstOrNull { it in 1.0..10.0 }
+
+    /**
+     * IMDb puanı. Önce başlığa yakın bloklarda "IMDb" etiketli değer aranır
+     * (eski sürüm tüm sayfadaki İLK "imdb" metnini alıyordu; o da genelde
+     * kenar çubuğundaki başka bir dizinin puanı oluyordu).
+     */
+    private fun pageRating(document: Document, ld: JSONObject?, scopes: List<Element>): Double? {
+        val labelled = Regex("(?i)imdb[^0-9]{0,15}(\\d{1,2}(?:[.,]\\d{1,2})?)")
+
+        for (scope in scopes) {
+            // class/id içinde "imdb" geçen öğeler
+            scope.getAllElements()
+                .filter { it.className().contains("imdb", true) || it.id().contains("imdb", true) }
+                .forEach { el ->
+                    numberIn(el.text())?.let { return it }
+                }
+
+            // "IMDb: 8.1" biçimli metin
+            labelled.findAll(scope.text())
+                .mapNotNull { it.groupValues[1].replace(',', '.').toDoubleOrNull() }
+                .firstOrNull { it in 1.0..10.0 }
+                ?.let { return it }
+        }
+
+        // schema.org
+        document.selectFirst("[itemprop=ratingValue]")?.let { el ->
+            numberIn(el.attr("content").ifBlank { el.text() })?.let { return it }
+        }
+        ld?.optJSONObject("aggregateRating")?.let { agg ->
+            numberIn(agg.optString("ratingValue"))?.let { return it }
+        }
+        return null
     }
 
-    private fun pageActors(document: Document): List<ActorData> {
-        val line = metadataLine(document) ?: return emptyList()
-        val parts = line.split("|").map { it.trim() }
+    // ----------------------------------------------------------------- tür
 
-        if (parts.size < 4) return emptyList()
+    private fun pageGenres(ld: JSONObject?, pipe: List<String>, scopes: List<Element>): List<String> {
+        ld?.opt("genre")?.let { jsonNames(it) }?.takeIf { it.isNotEmpty() }
+            ?.let { return it.take(12) }
 
-        return parts
-            .drop(3)
-            .joinToString(" | ")
-            .split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .take(20)
-            .map { ActorData(Actor(it)) }
+        splitList(labelValue(scopes, "Tür|Türü|Türler|Kategori|Kategoriler|Janr"))
+            .takeIf { it.isNotEmpty() }
+            ?.let { return it.take(12) }
+
+        // "Ülke | Yıl | Türler | Oyuncular": yıldan sonraki ilk parça
+        val yearIdx = pipe.indexOfFirst { isYearPart(it) }
+        if (yearIdx >= 0) {
+            splitList(pipe.getOrNull(yearIdx + 1)).takeIf { it.isNotEmpty() }
+                ?.let { return it.take(12) }
+        }
+
+        for (scope in scopes) {
+            val links = scope.select(
+                "a[href*=/tur/], a[href*=/turler/], a[href*=/kategori/], a[href*=/category/], a[rel~=tag]"
+            ).map { it.text().trim() }.filter { it.isNotBlank() && it.length <= 30 }.distinct()
+            if (links.isNotEmpty()) return links.take(12)
+        }
+        return emptyList()
     }
 
-    private fun pageRating(document: Document): Double? {
-        val pattern = Regex(
-            "(?i)\\bimdb\\s*[:/]?\\s*([0-9]+(?:[.,][0-9]+)?)\\b"
-        )
+    // -------------------------------------------------------------- oyuncu
 
-        return document
-            .getAllElements()
-            .asSequence()
-            .map { it.ownText().trim() }
-            .mapNotNull { pattern.find(it) }
-            .mapNotNull {
-                it.groupValues
-                    .getOrNull(1)
-                    ?.replace(',', '.')
-                    ?.toDoubleOrNull()
+    private fun pageActors(ld: JSONObject?, pipe: List<String>, scopes: List<Element>): List<String> {
+        ld?.opt("actor")?.let { jsonNames(it) }?.takeIf { it.isNotEmpty() }
+            ?.let { return it.take(20) }
+
+        splitList(labelValue(scopes, "Oyuncular|Oyuncu|Yıldızlar|Cast"))
+            .takeIf { it.isNotEmpty() }
+            ?.let { return it.take(20) }
+
+        val yearIdx = pipe.indexOfFirst { isYearPart(it) }
+        if (yearIdx >= 0 && pipe.size > yearIdx + 2) {
+            splitList(pipe.drop(yearIdx + 2).joinToString(","))
+                .takeIf { it.isNotEmpty() }
+                ?.let { return it.take(20) }
+        }
+
+        for (scope in scopes) {
+            val links = scope.select(
+                "a[href*=/oyuncu/], a[href*=/oyuncular/], a[href*=/actor/], a[href*=/cast/]"
+            ).map { it.text().trim() }.filter { it.isNotBlank() && it.length <= 40 }.distinct()
+            if (links.isNotEmpty()) return links.take(20)
+        }
+        return emptyList()
+    }
+
+    // -------------------------------------------------------------- fragman
+
+    private fun youtubeUrl(raw: String?): String? {
+        val v = raw?.trim().orEmpty()
+        if (v.isBlank()) return null
+        val id = Regex("(?:v=|/embed/|youtu\\.be/)([A-Za-z0-9_-]{11})").find(v)?.groupValues?.get(1)
+        if (id != null) return "https://www.youtube.com/watch?v=$id"
+        return if (v.contains("youtube", true)) normalizeUrl(v) else null
+    }
+
+    private fun pageTrailer(document: Document, ld: JSONObject?): String? {
+        ld?.optJSONObject("trailer")?.let { t ->
+            listOf("embedUrl", "contentUrl", "url").forEach { key ->
+                youtubeUrl(t.optString(key))?.let { return it }
             }
-            .firstOrNull()
+        }
+
+        document.select("[data-trailer], [data-youtube], [data-yt], [data-fragman]").forEach { el ->
+            listOf("data-trailer", "data-youtube", "data-yt", "data-fragman").forEach { key ->
+                youtubeUrl(el.attr(key).decodeEmbedded())?.let { return it }
+            }
+        }
+
+        document.select(
+            "iframe[src*=youtube], iframe[data-src*=youtube], " +
+                "a[href*=youtube.com/watch], a[href*=youtu.be], a[href*=youtube.com/embed]"
+        ).forEach { el ->
+            val raw = el.attr("src").ifBlank { el.attr("data-src") }.ifBlank { el.attr("href") }
+            youtubeUrl(raw.decodeEmbedded())?.let { return it }
+        }
+
+        return youtubeUrl(document.selectFirst("meta[property='og:video']")?.attr("content"))
     }
+
+    // =========================================================================
+    //  Bölümler
+    // =========================================================================
 
     private fun parseEpisodes(document: Document): List<Episode> {
         val pattern = Regex(
             "(?i)(\\d+)\\.?\\s*Sezon\\s*(\\d+)\\.?\\s*Bölüm"
         )
+        val showPoster = posterOf(document)
 
         return document
             .select("a[href]")
@@ -428,7 +755,7 @@ class DiziBoxLive : MainAPI() {
                     name = text
                     this.season = season
                     this.episode = episode
-                    posterUrl = posterOf(document)
+                    posterUrl = showPoster
                 }
             }
             .distinctBy { it.data }
@@ -464,6 +791,10 @@ class DiziBoxLive : MainAPI() {
             posterUrl = posterFromElement(this@toSearchResponse)
         }
     }
+
+    // =========================================================================
+    //  Afiş
+    // =========================================================================
 
     private fun posterOf(document: Document): String? {
         return document.selectFirst("meta[property='og:image']")
@@ -507,7 +838,8 @@ class DiziBoxLive : MainAPI() {
             element.attr("src"),
             element.attr("data-srcset"),
             element.attr("srcset"),
-        ).firstOrNull { it.isNotBlank() } ?: return null
+        ).firstOrNull { it.isNotBlank() && !it.startsWith("data:", ignoreCase = true) }
+            ?: return null
 
         return raw
             .split(",")
@@ -516,6 +848,21 @@ class DiziBoxLive : MainAPI() {
             ?.substringBefore(" ")
             ?.takeIf { it.isNotBlank() }
             ?.let(::fixUrl)
+    }
+
+    // =========================================================================
+    //  URL yardımcıları
+    // =========================================================================
+
+    private fun normalizeUrl(raw: String?): String? {
+        val value = raw?.trim()?.decodeEmbedded().orEmpty()
+        if (value.isBlank() || value.startsWith("about:") || value.startsWith("javascript")) return null
+        return when {
+            value.startsWith("http://", true) || value.startsWith("https://", true) -> value
+            value.startsWith("//") -> "https:$value"
+            value.startsWith("/") -> fixUrl(value)
+            else -> null
+        }
     }
 
     private fun extractUrl(element: Element): String? {
@@ -554,6 +901,25 @@ class DiziBoxLive : MainAPI() {
         }
 
         return null
+    }
+
+    private fun isSameSite(url: String): Boolean {
+        fun host(u: String) = runCatching { URI(u).host }.getOrNull()?.removePrefix("www.")
+        val a = host(url) ?: return false
+        return a.equals(host(mainUrl), ignoreCase = true)
+    }
+
+    private fun isBlocked(url: String): Boolean {
+        val v = url.lowercase()
+        return v.contains("youtube.com") || v.contains("youtu.be") ||
+            v.contains("facebook.com") || v.contains("twitter.com") ||
+            v.contains("instagram.com") || v.contains("t.me/") || v.contains("telegram")
+    }
+
+    private fun isStaticAsset(url: String): Boolean {
+        return Regex(
+            "(?i)\\.(?:jpe?g|png|gif|webp|svg|ico|css|js|woff2?|ttf)(?:$|[?#])"
+        ).containsMatchIn(url)
     }
 
     private suspend fun collectSubtitles(
@@ -631,7 +997,7 @@ class DiziBoxLive : MainAPI() {
 
     private fun pageUrl(base: String, page: Int): String {
         if (page <= 1) return base
-        return "$base/page/$page/"
+        return "${base.trimEnd('/')}/page/$page/"
     }
 
     private fun hasNextPage(document: Document, page: Int): Boolean {
@@ -667,13 +1033,17 @@ class DiziBoxLive : MainAPI() {
             .firstOrNull()
     }
 
+    /**
+     * Önceki sürümde "\\\\/" yazılmıştı: bu, düz metindeki "\\/" (iki ters bölü)
+     * dizisini arar, JSON'daki "\/" kaçışını DEĞİL. Burada tek ters bölü aranır.
+     */
     private fun String.decodeEmbedded(): String {
         return this
-            .replace("\\\\/", "/")
-            .replace("\\\\u002F", "/", ignoreCase = true)
-            .replace("\\\\u003A", ":", ignoreCase = true)
-            .replace("\\\\u0026", "&", ignoreCase = true)
-            .replace("\\\\\"", "\"")
+            .replace("\\/", "/")
+            .replace("\\u002F", "/", ignoreCase = true)
+            .replace("\\u003A", ":", ignoreCase = true)
+            .replace("\\u0026", "&", ignoreCase = true)
+            .replace("\\\"", "\"")
             .replace("&amp;", "&", ignoreCase = true)
             .replace("&quot;", "\"", ignoreCase = true)
     }
