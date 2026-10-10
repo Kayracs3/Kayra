@@ -221,8 +221,12 @@ class AsyaFilmIzle : MainAPI() {
             "$mainUrl/?s=$encoded",
             "$mainUrl/arama/?q=$encoded",
             "$mainUrl/ara/?q=$encoded",
-            "$mainUrl/?q=$encoded"
-        )
+            "$mainUrl/?q=$encoded",
+            "$mainUrl/?search=$encoded",
+            "$mainUrl/search?q=$encoded",
+            "$mainUrl/arama/$encoded",
+            "$mainUrl/ara/$encoded"
+        ).distinct()
 
         val seen = HashSet<String>()
         val merged = ArrayList<SearchResponse>()
