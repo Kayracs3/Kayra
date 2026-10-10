@@ -1884,8 +1884,10 @@ class DiziPal : MainAPI() {
                 .distinctBy { canonicalContentPath(it) }
 
             val oneEpisodeCard = targetIsEpisode &&
-                episodeTargets.size == 1 &&
-                canonicalContentPath(episodeTargets.first()) == targetPath &&
+                episodeTargets.any { canonicalContentPath(it) == targetPath } &&
+                // Some DiziPal cards repeat the episode link in title, image,
+                // and play controls. That is still one card if it points to
+                // the target episode and at most one distinct series/movie.
                 catalogueTargets.size <= 1
             val oneCatalogueCard = !targetIsEpisode &&
                 contentTargets.size == 1 &&
@@ -2287,23 +2289,41 @@ class DiziPal : MainAPI() {
     }
 
     private fun isLikelyPosterUrl(url: String): Boolean {
-        val path = runCatching { URI(url).path.orEmpty().lowercase() }
-            .getOrDefault("")
-        if (path.isBlank()) return false
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        val path = uri.path.orEmpty().lowercase()
+        val host = uri.host.orEmpty().lowercase()
+        if (path.isBlank() || host.isBlank()) return false
+
         if (path.startsWith("/series/") ||
             path.startsWith("/movies/") ||
             path.startsWith("/movie/") ||
             path.startsWith("/bolum/")
         ) return false
 
+        val combined = "$host$path"
+        if (listOf(
+                "favicon", "placeholder", "no-image", "noimage", "loading.gif",
+                "transparent.gif", "pixel.gif", "spinner", "sprite", "avatar",
+                "/logo", "logo-", "banner-ad", "advert", "tracking",
+            ).any { combined.contains(it) }
+        ) return false
+
         val extension = path.substringAfterLast('.', "")
-        return extension in setOf("jpg", "jpeg", "png", "webp", "avif", "gif") ||
-            path.contains("image") ||
+        val hasImageExtension = extension in setOf("jpg", "jpeg", "png", "webp", "avif", "gif")
+        val imagePathHint = path.contains("image") ||
             path.contains("poster") ||
             path.contains("thumb") ||
             path.contains("cover") ||
             path.contains("upload") ||
             path.contains("cdn")
+
+        // DiziPal serves genuine cover art from file.cdnhipter.xyz. Keep that
+        // host eligible even when a CDN revision omits a conventional image
+        // extension or uses an opaque filename.
+        val knownPosterCdn = host == "cdnhipter.xyz" ||
+            host.endsWith(".cdnhipter.xyz")
+
+        return hasImageExtension || imagePathHint || knownPosterCdn
     }
 
     private fun pageTitle(
