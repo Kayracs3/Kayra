@@ -408,7 +408,7 @@ class SinezyTo : MainAPI() {
         "$mainUrl/izle/en-yeni-filmler/" to "Yeni Filmler",
         "$mainUrl/izle/yabanci-dizi/" to "Yabancı Diziler",
         "$mainUrl/izle/bilim-kurgu-filmleri/" to "Bilim Kurgu",
-        "$mainUrl/film-arsivi/" to "Film Arşivi"
+        "$mainUrl/izle/fantastik-filmler/" to "Fantastik"
     )
 
     private val requestHeaders = mapOf(
