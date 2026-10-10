@@ -322,10 +322,10 @@ class SinezyTo : MainAPI() {
         }.orEmpty()
         val titleText = link.attr("title").ifBlank { link.text() }
         val raw = if (elementText.isNotBlank()) elementText else {
-            Regex("""^\\s*(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)\\s+""")
+            Regex("""^\s*(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)\s+""")
                 .find(titleText)?.groupValues?.getOrNull(1).orEmpty()
         }
-        val value = Regex("""(?<!\\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\\d)""")
+        val value = Regex("""(?<!\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\d)""")
             .find(raw)?.value?.replace(",", ".")?.toDoubleOrNull()
             ?.takeIf { it in 0.0..10.0 } ?: return null
         return runCatching { Score.from10(value) }.getOrNull()
@@ -672,8 +672,8 @@ class SinezyTo : MainAPI() {
         // Sinezy player HTML'sini Base64 ile "ilkpartkod" değişkenine gömebiliyor.
         // Önce bu blokları çöz, ardından iframe/video kaynaklarını normal aday listesine ekle.
         val encodedBlocks = Regex(
-            """(?is)\\b(?:ilkpartkod|ikinciPartKod|ikinci_part_kod|ikinciPartkod)\\s*=\\s*(['"])([A-Za-z0-9+/_=-]{16,})\\1"""
-        ).findAll("$html\\n$decodedHtml\\n$decodedScripts")
+            """(?is)\b(?:ilkpartkod|ikinciPartKod|ikinci_part_kod|ikinciPartkod)\s*=\s*(['"])([A-Za-z0-9+/_=-]{16,})\1"""
+        ).findAll("$html\n$decodedHtml\n$decodedScripts")
         val embeddedAttrs = listOf(
             "src", "data-src", "data-url", "data-embed", "data-iframe",
             "data-iframe-src", "data-player", "data-video", "data-link", "data-href"
@@ -692,11 +692,11 @@ class SinezyTo : MainAPI() {
                 }
             }
 
-            Regex("""(?i)(?:https?:)?//[^"'<>\\s]+?\\.(?:m3u8|mp4|webm|mpd)(?:\\?[^"'<>\\s]*)?""")
+            Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+?\.(?:m3u8|mp4|webm|mpd)(?:\?[^"'<>\\\s]*)?""")
                 .findAll(decode(payload)).forEach {
                     addCandidate(output, it.value, base, force = true)
                 }
-            Regex("""(?i)(?:src|file|url|iframe|embed|player|stream|video)\\s*["']?\\s*[:=]\\s*["']([^"']{5,800})["']""")
+            Regex("""(?i)(?:src|file|url|iframe|embed|player|stream|video)\s*["']?\s*[:=]\s*["']([^"']{5,800})["']""")
                 .findAll(decode(payload)).forEach {
                     addCandidate(output, it.groupValues[1], base, force = true)
                 }
