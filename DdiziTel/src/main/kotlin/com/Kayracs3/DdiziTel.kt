@@ -73,6 +73,12 @@ class DdiziTel : MainAPI() {
     private fun isContentUrl(url: String): Boolean = isEpisodeUrl(url) || isSeriesUrl(url)
 
     private fun cleanTitle(raw: String?): String = raw.orEmpty()
+        // Bazı DDizi bağlantıları "Berlin izle 1.Sezon 1.Bölüm" biçiminde.
+        // Sezon/bölüm bilgisinden önceki "izle" kelimesini silip numaraları koru.
+        .replace(
+            Regex("""(?i)\s+izle(?=\s+(?:s\d{1,2}\s*e\d{1,3}|\d{1,2}\s*\.?\s*(?:sezon|season)))"""),
+            ""
+        )
         .replace(Regex("(?i)^poster\\s*"), "")
         .replace(Regex("(?i)\\s+izle\\s*$"), "")
         .replace(Regex("(?i)\\s+izle\\s+.*$"), "")
@@ -272,8 +278,10 @@ class DdiziTel : MainAPI() {
 
     private fun seasonNumber(title: String, url: String): Int {
         val combined = title + " " + url
-        return Regex("""(?i)(\d{1,2})\s*\.?\s*(?:sezon|season)""")
+        return Regex("""(?i)\bs(\d{1,2})\s*e\d{1,3}\b""")
             .find(combined)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?: Regex("""(?i)(\d{1,2})\s*\.?\s*(?:sezon|season)""")
+                .find(combined)?.groupValues?.getOrNull(1)?.toIntOrNull()
             ?: Regex("""(?i)(?:sezon|season)[-_/ ]*(\d{1,2})""")
                 .find(combined)?.groupValues?.getOrNull(1)?.toIntOrNull()
             ?: 1
@@ -322,6 +330,68 @@ class DdiziTel : MainAPI() {
                 .thenBy { it.episode ?: Int.MAX_VALUE }
                 .thenBy { it.name }
         )
+    }
+
+    // DDizi bir dizinin eski bölümlerini /sayfa-1, /sayfa-2 ... adreslerine
+    // bölüyor. Yalnızca ilk HTML sayfasını okumak, dizinin bölümlerinin çoğunu kaybettirir.
+    private fun paginationRoot(url: String): String =
+        pathOf(url).replace(Regex("""/sayfa-\d+/?$"""), "").trimEnd('/')
+
+    private fun isSeriesPagination(url: String, seriesUrl: String): Boolean {
+        val urlUri = runCatching { URI(url) }.getOrNull() ?: return false
+        val baseUri = runCatching { URI(seriesUrl) }.getOrNull() ?: return false
+        if (!urlUri.host.equals(baseUri.host, ignoreCase = true)) return false
+        if (!Regex("""/sayfa-\d+/?$""").containsMatchIn(pathOf(url))) return false
+        return paginationRoot(url) == paginationRoot(seriesUrl)
+    }
+
+    private suspend fun collectPaginatedEpisodes(
+        firstDocument: Document,
+        seriesUrl: String,
+        expectedSeriesTitle: String
+    ): List<Episode> {
+        val queue = mutableListOf(seriesUrl)
+        val queued = linkedSetOf(seriesUrl.trimEnd('/'))
+        val documents = LinkedHashMap<String, Document>()
+        var index = 0
+
+        // Her sayfadaki sayfalama bağlantılarını takip et. Üst sınır, bozuk
+        // sayfa bağlantılarının aşırı istek veya döngü oluşturmasını engeller.
+        while (index < queue.size && documents.size < 40) {
+            val pageUrl = queue[index++]
+            val normalizedPageUrl = pageUrl.trimEnd('/')
+            if (documents.containsKey(normalizedPageUrl)) continue
+
+            val document = if (normalizedPageUrl == seriesUrl.trimEnd('/')) {
+                firstDocument
+            } else {
+                getDocument(pageUrl) ?: continue
+            }
+            documents[normalizedPageUrl] = document
+
+            for (link in document.select("a[href]")) {
+                val nextUrl = fixUrl(link.attr("href"), pageUrl) ?: continue
+                if (!isSeriesPagination(nextUrl, seriesUrl)) continue
+                val key = nextUrl.trimEnd('/')
+                if (queued.add(key) && queue.size < 40) queue.add(nextUrl)
+            }
+        }
+
+        val allEpisodes = LinkedHashMap<String, Episode>()
+        for (document in documents.values) {
+            parseEpisodes(document, seriesUrl, expectedSeriesTitle).forEach { episode ->
+                val episodeUrl = episode.data.trimEnd('/')
+                allEpisodes.putIfAbsent(episodeUrl, episode)
+            }
+        }
+
+        val result = allEpisodes.values.sortedWith(
+            compareBy<Episode> { it.season ?: Int.MAX_VALUE }
+                .thenBy { it.episode ?: Int.MAX_VALUE }
+                .thenBy { it.name }
+        )
+        Log.d("DDizi", "series pages=" + documents.size + ", episodes=" + result.size + ", series=" + seriesUrl)
+        return result
     }
 
     private fun metadataTitle(document: Document, url: String): String {
@@ -413,18 +483,21 @@ class DdiziTel : MainAPI() {
         val poster = posterOf(metadataDocument, seriesUrl ?: url)
             ?: posterOf(document, url)
         val plot = plotFrom(metadataDocument) ?: plotFrom(document)
-        val episodes = parseEpisodes(metadataDocument, seriesUrl ?: url, title)
-            .ifEmpty { parseEpisodes(document, url, title) }
-            .ifEmpty {
-                if (isEpisodePage) {
-                    val n = episodeNumber(pageTitle, url) ?: 1
-                    listOf(newEpisode(url) {
-                        name = pageTitle
-                        season = seasonNumber(pageTitle, url)
-                        episode = n
-                    })
-                } else emptyList()
-            }
+        val episodes = if (seriesUrl != null) {
+            collectPaginatedEpisodes(metadataDocument, seriesUrl, title)
+                .ifEmpty { parseEpisodes(document, url, title) }
+        } else {
+            parseEpisodes(metadataDocument, url, title)
+        }.ifEmpty {
+            if (isEpisodePage) {
+                val n = episodeNumber(pageTitle, url) ?: 1
+                listOf(newEpisode(url) {
+                    name = pageTitle
+                    season = seasonNumber(pageTitle, url)
+                    episode = n
+                })
+            } else emptyList()
+        }
 
         if (isEpisodePage || isSeriesUrl(url) || episodes.isNotEmpty()) {
             val loadUrl = if (isEpisodePage) seriesUrl ?: url else url
