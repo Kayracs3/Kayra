@@ -183,6 +183,27 @@
         "name": "DiziPod"
     },
     {
+        "iconUrl": "https://dizisol.com/favicon.ico",
+        "fileHash": "sha256-7296efd7840f97a87a78be2060849c8b09860311b2ecf8c7aad3af8b3e2384a9",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 38948,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "DiziSol",
+        "description": "DiziSol film ve dizi sa\u011flay\u0131c\u0131s\u0131; sezon, b\u00f6l\u00fcm, metadata ve video kaynaklar\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziSol.cs3",
+        "name": "DiziSol"
+    },
+    {
         "iconUrl": "https://www.diziyou.one/favicon.ico",
         "fileHash": "sha256-afedf66aeb926d357d03d34f1b8ff7e57cc3b990a5341de4880302a4d1752111",
         "apiVersion": 1,
