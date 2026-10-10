@@ -394,7 +394,12 @@ def inspect_js_bundle(url):
     source_contexts = []
     for needle in (
         "/api/tmdb", "/api/img", "/api/movies/search", "/api/library/tmdb-ids",
+        "/api/library/browse?type=", "/api/categories/config",
         "/search/multi", "/search/movie", "/search/tv", "/film/", "/dizi/",
+        "/netflix-dizileri", "/disney-dizileri", "/prime-dizileri",
+        "/hbomax-dizileri", "/tabii-dizileri-izle", "/tod-dizileri",
+        "Netflix", "Disney+", "Prime Video", "HBO Max", "tabii", "TOD",
+        "provider", "with_networks", "watch_provider", "network_ids",
         "const ZK=", "poster_path", "function Fo", "Fo("
     ):
         count = 0
