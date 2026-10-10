@@ -2,6 +2,31 @@
 
 ## 2026-10-10
 
+<!-- kayra-commit:973c109c4c2937920cbbd0785f4a2430f9c313f0 -->
+### Ignore doctor catalog documentation in health workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [973c109](https://github.com/Kayracs3/Kayra/commit/973c109c4c2937920cbbd0785f4a2430f9c313f0)
+
+## 2026-10-10
+
+<!-- kayra-commit:9f435da31b2c0c7015db8deae0a797f91b41c382 -->
+### Generate plugin catalog under doctor and remove root README
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [9f435da](https://github.com/Kayracs3/Kayra/commit/9f435da31b2c0c7015db8deae0a797f91b41c382)
+
+## 2026-10-10
+
+<!-- kayra-commit:55d7690b7fc660594819bee8a15c59a322bc293d -->
+### Move generated plugin catalog into doctor
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [55d7690](https://github.com/Kayracs3/Kayra/commit/55d7690b7fc660594819bee8a15c59a322bc293d)
+
+
+## 2026-10-10
+
 <!-- kayra-commit:b8ec97d66419c1ee10eaf7b201f2009192ea731a -->
 ### Fix Sinezy series season and episode discovery
 
