@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
 
-MAIN_URL_RE = re.compile(r'(?m)\bmainUrl\s*=\s*"([^"]+)"')
+MAIN_URL_RE = re.compile(r'(?m)\bmainUrl\b[^=\n]*=\s*"([^"]+)"')
 
 
 def find_providers(root: Path):
@@ -211,7 +211,8 @@ def main():
     ]
 
     payload = {
-        "providers": len(results),
+        "providers": len([x for x in results if x.get("domain_role") == "primary"]),
+        "targets": len(results),
         "primary_domains": len([x for x in results if x.get("domain_role") == "primary"]),
         "approved_aliases": len([x for x in results if x.get("domain_role") == "approved-alias"]),
         "deep_tests": len([x for x in results if x.get("domain_role") == "deep-test"]),
