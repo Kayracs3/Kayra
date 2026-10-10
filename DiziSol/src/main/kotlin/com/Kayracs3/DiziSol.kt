@@ -1203,6 +1203,11 @@ class DiziSol : MainAPI() {
     private fun host(url: String): String =
         runCatching { URI(url).host }.getOrNull()?.removePrefix("www.") ?: "DiziSol"
 
+    // Günlüklerde sorgu parametrelerini (olası imzalı bağlantıları) göstermeden URL'yi tanımlar.
+    private fun safeLogUrl(url: String): String = runCatching {
+        URI(url).let { "${it.host.orEmpty()}${it.path.orEmpty()}" }
+    }.getOrDefault("<geçersiz-url>")
+
     private suspend fun emitMedia(
         url: String,
         sourcePage: String,
@@ -1290,8 +1295,15 @@ class DiziSol : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val pageUrl = fixUrl(data) ?: return false
-        val first = document(pageUrl) ?: return false
+        val pageUrl = fixUrl(data) ?: run {
+            Log.w(name, "Video teşhis: gelen içerik URL'si geçersiz.")
+            return false
+        }
+        Log.i(name, "Video teşhis başladı: ${safeLogUrl(pageUrl)}")
+        val first = document(pageUrl) ?: run {
+            Log.w(name, "Video teşhis: içerik sayfası alınamadı: ${safeLogUrl(pageUrl)}")
+            return false
+        }
         val visitedPages = HashSet<String>()
         val seenMedia = HashSet<String>()
         var linkCount = 0
@@ -1309,11 +1321,18 @@ class DiziSol : MainAPI() {
                 append(currentDoc.html()).append('\n')
                 currentDoc.select("script").forEach { append(it.data()).append('\n') }
             }
-            for (media in directMediaUrls(scriptsAndHtml)) {
+            val directCandidates = directMediaUrls(scriptsAndHtml)
+            val players = playerCandidates(currentDoc, currentUrl)
+            Log.d(
+                name,
+                "Video teşhis: sayfa=${safeLogUrl(currentUrl)} derinlik=$depth htmlKarakter=${currentDoc.html().length} direktMedya=${directCandidates.size} oynatıcıAdayı=${players.size}"
+            )
+            for (media in directCandidates) {
                 if (seenMedia.add(media)) emitMedia(media, currentUrl, countedCallback)
             }
 
-            for (candidate in playerCandidates(currentDoc, currentUrl).take(12)) {
+            for (candidate in players.take(12)) {
+                Log.d(name, "Video teşhis oynatıcı adayı: ${safeLogUrl(candidate)}")
                 if (candidate in visitedPages) continue
                 if (isMediaUrl(candidate)) {
                     if (seenMedia.add(candidate)) emitMedia(candidate, currentUrl, countedCallback)
@@ -1327,20 +1346,31 @@ class DiziSol : MainAPI() {
                 // Embed sayfalarının içine yalnızca sınırlı derinlikte gir.
                 if (depth < 2) {
                     val child = document(candidate)
-                    if (child != null) inspect(child, candidate, depth + 1)
+                    if (child != null) {
+                        inspect(child, candidate, depth + 1)
+                    } else {
+                        Log.d(name, "Video teşhis: aday sayfa okunamadı: ${safeLogUrl(candidate)}")
+                    }
                 }
                 if (linkCount == before && webViewCount < 2 &&
                     (candidate.contains("player", true) || candidate.contains("embed", true) ||
                         candidate != pageUrl)
                 ) {
                     webViewCount++
-                    resolveWebView(candidate, currentUrl, countedCallback)
+                    val resolved = resolveWebView(candidate, currentUrl, countedCallback)
+                    Log.d(
+                        name,
+                        "Video teşhis WebView: aday=${safeLogUrl(candidate)} sonuç=$resolved bulunanBağlantı=$linkCount"
+                    )
                 }
             }
         }
 
         inspect(first, pageUrl, 0)
-        Log.d(name, "Video çözümleme tamamlandı: $pageUrl")
+        Log.i(
+            name,
+            "Video çözümleme sonucu: sayfa=${safeLogUrl(pageUrl)} ziyaretEdilenSayfa=${visitedPages.size} adayMedya=${seenMedia.size} bağlantı=$linkCount webViewDenemesi=$webViewCount"
+        )
         return linkCount > 0
     }
 }
