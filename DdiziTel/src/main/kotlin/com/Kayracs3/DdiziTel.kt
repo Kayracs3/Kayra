@@ -159,13 +159,56 @@ class DdiziTel : MainAPI() {
         return cleanTitle(raw).ifBlank { titleFromUrl(url) }
     }
 
+    private fun isSidebarOrMenuLink(link: Element): Boolean {
+        var current: Element? = link
+        repeat(9) {
+            val element = current ?: return false
+            val tag = element.tagName().lowercase()
+            if (tag == "aside" || tag == "nav" || tag == "header" || tag == "footer") {
+                return true
+            }
+
+            val marker = (element.id() + " " + element.className()).lowercase()
+            if (Regex(
+                    """(^|[\s_-])(sidebar|side-bar|side_bar|left-sidebar|leftsidebar|left-bar|leftbar|left-menu|leftmenu|sol-menu|solmenu|sol_menu|sidemenu|side-menu|menu|menu-item|navigation|navbar|nav|widget|header|footer)([\s_-]|$)"""
+                ).containsMatchIn(marker)
+            ) return true
+
+            current = element.parent()
+        }
+        return false
+    }
+
+    private fun hasSeriesCardContext(link: Element): Boolean {
+        // Seri listelerinde poster/kapak görseli veya kart kapsayıcısı aranır.
+        // Bu işaretler olmayan yalın metin bağlantıları genellikle sol menü linkleridir.
+        if (posterFrom(link) != null) return true
+
+        var current: Element? = link
+        repeat(5) {
+            val element = current ?: return false
+            val marker = (element.id() + " " + element.className()).lowercase()
+            if (Regex(
+                    """(?i)(film|dizi|series|poster|card|item|entry|archive|result|grid|list)"""
+                ).containsMatchIn(marker)
+            ) return true
+            current = element.parent()
+        }
+        return false
+    }
+
     private fun parseCards(document: Document, mode: String? = null): List<SearchResponse> {
         val found = LinkedHashMap<String, SearchResponse>()
         for (link in document.select("a[href]")) {
+            // Site menüsündeki dizi bağlantılarını katalog sonucu olarak ekleme.
+            if (isSidebarOrMenuLink(link)) continue
+
             val url = fixUrl(link.attr("href")) ?: continue
             if (!isContentUrl(url)) continue
             if (mode == "episodes" && !isEpisodeUrl(url)) continue
             if (mode == "series" && !isSeriesUrl(url)) continue
+            if (mode == "series" && !hasSeriesCardContext(link)) continue
+
             val title = cardTitle(link, url)
             if (title.length < 2 || title.length > 180) continue
             if (title.equals("izle", true) || title.equals("dizi izle", true)) continue
