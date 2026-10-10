@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
+
 version = 1
 
 cloudstream {
@@ -15,7 +17,6 @@ android {
     }
 }
 
-import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 // Kotlin 2.4 metadata is newer than the D8 version bundled by the repo's AGP 8.7.3.
 // Keep this module's emitted metadata readable by that D8 version.
