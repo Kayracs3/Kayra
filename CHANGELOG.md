@@ -2,6 +2,15 @@
 
 ## 2026-10-10
 
+<!-- kayra-commit:ee8ca5760d5f403eacde60013f3bbf231c960313 -->
+### Make changelog resilient to cancelled concurrent workflow runs
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [ee8ca57](https://github.com/Kayracs3/Kayra/commit/ee8ca5760d5f403eacde60013f3bbf231c960313)
+
+
+## 2026-10-10
+
 <!-- kayra-commit:30f115941bef60c290b892107d8dcda17b769eac -->
 ### Handle typed mainUrl properties in plugin catalog
 
