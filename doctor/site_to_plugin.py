@@ -1,3 +1,3 @@
 #!/usr/bin/env python3
-import re
-P = re.compile(r"\s+")
+import argparse
+print("URL plugin builder")
