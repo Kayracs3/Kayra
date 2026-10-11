@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:0ac82a567f4614edd7b30beed342bda61760f522 -->
+### Log Playturka source-selection JavaScript hints
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [0ac82a5](https://github.com/Kayracs3/Kayra/commit/0ac82a567f4614edd7b30beed342bda61760f522)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:9bf3bcf69824088e47702a21a9aa2a5614ed492a -->
 ### Extract Playturka video IDs from URL fragments
 
