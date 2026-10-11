@@ -770,9 +770,9 @@ class FilmizleHell : MainAPI() {
         embedUrl: String,
         document: Document,
         html: String,
-        callback: (ExtractorLink) -> Unit
         seenSubtitles: MutableSet<String>,
-        subtitleCallback: (SubtitleFile) -> Unit
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
     ): Int {
         val host = runCatching { URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host != "p.playturka.space" && !html.contains("p.playturka.space", true)) return 0
@@ -931,6 +931,7 @@ class FilmizleHell : MainAPI() {
         document: Document,
         base: String,
         referer: String,
+        visitedScripts: MutableSet<String>,
         seenSubtitles: MutableSet<String>,
         subtitleCallback: (SubtitleFile) -> Unit
     ): Pair<Set<String>, Set<String>> {
