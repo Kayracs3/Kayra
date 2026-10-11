@@ -53,6 +53,43 @@ jobs:
         with:
           packages: "platforms;android-35 build-tools;35.0.0 platform-tools emulator"
 
+      - name: Android 35 sistem imajını indir ve doğrula (3 deneme)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          PACKAGE="system-images;android-35;google_apis;x86_64"
+          IMAGE_DIR="$ANDROID_SDK_ROOT/system-images/android-35/google_apis/x86_64"
+          test -x "$SDKMANAGER"
+
+          for attempt in 1 2 3; do
+            echo "::group::Android system image install attempt $attempt/3"
+            if [ -s "$IMAGE_DIR/system.img" ] && [ -f "$IMAGE_DIR/source.properties" ]; then
+              echo "Android 35 system image is already installed."
+              echo "::endgroup::"
+              exit 0
+            fi
+
+            "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --uninstall "$PACKAGE" >/dev/null 2>&1 || true
+            rm -rf "$IMAGE_DIR" "$HOME/.android/cache"
+
+            if "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --install "$PACKAGE" --channel=0; then
+              if [ -s "$IMAGE_DIR/system.img" ] && [ -f "$IMAGE_DIR/source.properties" ]; then
+                echo "Android 35 system image download verified."
+                echo "::endgroup::"
+                exit 0
+              fi
+              echo "SDK manager returned success but the image files are missing." >&2
+            else
+              echo "Android image installation attempt $attempt failed." >&2
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then sleep 5; fi
+          done
+
+          echo "::error::Android 35 system image unavailable after three attempts."
+          exit 1
+
       - name: CloudStream Gradle plugin hazırla
         shell: bash
         run: |
