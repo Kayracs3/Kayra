@@ -94,6 +94,7 @@ jobs:
         run: |
           set -uo pipefail
           MODULE_NAME="${{ steps.generate.outputs.module_name }}"
+          chmod +x ./gradlew
           BUILD_OK=0
           mkdir -p doctor-results/cs3
           for attempt in 1 2 3; do
@@ -154,7 +155,6 @@ jobs:
             set +e
             bash doctor/run_android_smoke.sh
             smoke_rc=$?
-            set -e
             python3 - <<'PY'
             import json, pathlib, sys
             p=pathlib.Path("doctor-results/android/playback-smoke.json")
@@ -165,6 +165,7 @@ jobs:
             sys.exit(0 if ok else 1)
             PY
             smoke_rc=$?
+            set -e
             if [ "$smoke_rc" -ne 0 ] && [ -s doctor-results/android/playback-smoke.json ]; then
               echo "İlk oynatma testi başarısız; AI düzeltmesi deneniyor."
               python3 doctor/site_to_plugin.py --mode repair --repo-root . \
