@@ -1119,10 +1119,14 @@ class FilmizleHell : MainAPI() {
                 timeout = 10000
             )
         }.onFailure {
-            Log.d(name, "Harici altyazı için film sayfası alınamadı")
+            Log.d(name, "Harici altyazı için film sayfası alınamadı: " + it.javaClass.simpleName)
         }.getOrNull() ?: return 0
 
-        if (!movieResponse.isSuccessful) return 0
+        if (!movieResponse.isSuccessful) {
+            Log.d(name, "Harici altyazı film sayfası HTTP=" + movieResponse.code)
+            return 0
+        }
+
         val document = movieResponse.document
         val context = detailContext(document)
         val title = cleanTitle(
@@ -1137,85 +1141,99 @@ class FilmizleHell : MainAPI() {
 
         val imdbId = findImdbId(document)
         val year = parseYear(document, context)
-        val searchBase = "https://subtitles.website/strapi/api/search/subtitles"
-        val query = if (!imdbId.isNullOrBlank()) {
-            "imdb=" + URLEncoder.encode(imdbId, "UTF-8")
-        } else {
-            "title=" + URLEncoder.encode(title, "UTF-8")
-        }
-        val searchUrl = "$searchBase?$query&language=tr&format=srt"
-        val response = runCatching {
-            app.get(
-                searchUrl,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Accept" to "application/json",
-                    "Referer" to "https://subtitles.website/"
-                ),
-                referer = "https://subtitles.website/",
-                allowRedirects = true,
-                timeout = 10000
-            )
-        }.onFailure {
-            Log.d(name, "Harici Türkçe altyazı araması başarısız: " + it.javaClass.simpleName)
-        }.getOrNull() ?: return 0
+        var added = 0
 
-        if (!response.isSuccessful) {
-            Log.d(name, "Harici altyazı API HTTP=" + response.code)
-            return 0
-        }
+        fun publishSubtitleUrl(rawUrl: String, language: String, formatHint: String, sourceTitle: String): Boolean {
+            val lang = language.trim().lowercase(Locale.ROOT)
+            val isTurkish = lang == "tr" || lang == "tur" || lang == "turkish" ||
+                lang == "turkce" || lang.contains("turkish") || lang.contains("türkçe")
+            if (!isTurkish) return false
 
-        val data = runCatching {
-            JSONObject(response.text).optJSONArray("data")
-        }.getOrNull()
-        if (data == null || data.length() == 0) {
+            val fixed = fixUrl(rawUrl, "https://subtitles.website/") ?: return false
+            val url = when {
+                fixed.startsWith("https://", true) || fixed.startsWith("http://", true) -> fixed
+                fixed.startsWith("/") -> "https://subtitles.website/strapi" + fixed
+                else -> "https://subtitles.website/strapi/" + fixed
+            }
+            val format = formatHint.trim().lowercase(Locale.ROOT)
+            val urlHasFormat = Regex("""(?i)\\.(?:srt|vtt|ass)(?:[?#].*)?$""").containsMatchIn(url)
+            if (format.isNotBlank() && format !in setOf("srt", "vtt", "ass")) return false
+            if (!urlHasFormat && format !in setOf("srt", "vtt", "ass")) {
+                Log.d(name, "Harici altyazı biçimi belirsiz: " + url.substringBefore('?').take(140))
+                return false
+            }
+            if (!seenSubtitles.add(url)) return false
+
+            callback(newSubtitleFile("Turkish", url))
+            added++
             Log.d(
                 name,
-                "Harici Türkçe altyazı bulunamadı: title=" + title.take(70) +
-                    ", imdb=" + (imdbId ?: "yok") + ", year=" + (year ?: 0)
+                "Harici Türkçe altyazı eklendi: source=" + sourceTitle.take(55) +
+                    ", year=" + (year ?: 0) + ", url=" + url.substringBefore('?').take(140)
             )
-            return 0
+            return true
         }
 
-        val before = seenSubtitles.size
-        var fallbackAdded = 0
-        dataArray@ for (index in 0 until data.length()) {
-            if (fallbackAdded >= 3) break
-            val item = data.optJSONObject(index) ?: continue
-            val resultTitle = item.optString("film_title").ifBlank {
-                item.optString("title")
-            }.ifBlank {
-                item.optString("release")
+        // The public Stremio-compatible endpoint returns direct subtitle URLs and
+        // avoids depending on the separate guest search/download API quota.
+        if (!imdbId.isNullOrBlank()) {
+            val stremioUrl = "https://subtitles.website/stremio/subtitles/movie/" + imdbId + ".json"
+            val stremioResponse = runCatching {
+                app.get(
+                    stremioUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Accept" to "application/json",
+                        "Referer" to "https://subtitles.website/"
+                    ),
+                    referer = "https://subtitles.website/",
+                    allowRedirects = true,
+                    timeout = 9000
+                )
+            }.onFailure {
+                Log.d(name, "Stremio altyazı uç noktası erişilemedi: " + it.javaClass.simpleName)
+            }.getOrNull()
+
+            if (stremioResponse != null && stremioResponse.isSuccessful) {
+                val subtitles = runCatching {
+                    JSONObject(stremioResponse.text).optJSONArray("subtitles")
+                }.getOrNull()
+                if (subtitles != null) {
+                    for (index in 0 until subtitles.length()) {
+                        val item = subtitles.optJSONObject(index) ?: continue
+                        val lang = item.optString("lang").ifBlank {
+                            item.optString("language")
+                        }
+                        val url = item.optString("url")
+                        val subtitleName = item.optString("name").ifBlank { title }
+                        publishSubtitleUrl(url, lang, "", subtitleName)
+                        if (added >= 3) break
+                    }
+                }
+                Log.d(name, "Stremio altyazı sonucu: HTTP=" + stremioResponse.code + ", Türkçe=" + added)
+            } else if (stremioResponse != null) {
+                Log.d(name, "Stremio altyazı HTTP=" + stremioResponse.code)
             }
-            if (imdbId.isNullOrBlank() && !subtitleTitleMatches(title, resultTitle)) {
-                Log.d(name, "Harici altyazı başlık eşleşmedi: " + resultTitle.take(70))
-                continue@dataArray
+        }
+
+        // If that endpoint has no Turkish entry, search by IMDb first and then
+        // by the actual title shown on FilmizleHell. The title search is important
+        // for regional titles that are not indexed under their IMDb title.
+        if (added < 3) {
+            val searchBase = "https://subtitles.website/strapi/api/search/subtitles"
+            val attempts = if (imdbId.isNullOrBlank()) {
+                listOf("title" to title)
+            } else {
+                listOf("imdb" to imdbId, "title" to title)
             }
 
-            val listedYear = item.optInt("year", 0)
-            if (imdbId.isNullOrBlank() && year != null && listedYear > 0 && listedYear != year) {
-                continue@dataArray
-            }
-
-            val itemLanguage = item.optJSONObject("language")
-            val languageCode = itemLanguage?.optString("code").orEmpty()
-            val languageName = itemLanguage?.optString("name").orEmpty()
-            if (languageCode.isNotBlank() &&
-                !languageCode.equals("tr", true) &&
-                !languageCode.equals("tur", true) &&
-                !languageName.contains("turk", true)
-            ) continue@dataArray
-
-            val format = item.optString("format").lowercase(Locale.ROOT)
-            if (format.isNotBlank() && format !in setOf("srt", "vtt", "ass")) continue@dataArray
-
-            val id = item.optString("id")
-            var rawDownloadUrl = item.optString("download_url")
-            if (rawDownloadUrl.isBlank() && id.isNotBlank()) {
-                val downloadResponse = runCatching {
+            for ((queryType, queryValue) in attempts) {
+                if (added >= 3) break
+                val query = URLEncoder.encode(queryValue, "UTF-8")
+                val searchUrl = searchBase + "?" + queryType + "=" + query + "&language=tr"
+                val response = runCatching {
                     app.get(
-                        "https://subtitles.website/strapi/api/search/download/" +
-                            URLEncoder.encode(id, "UTF-8"),
+                        searchUrl,
                         headers = mapOf(
                             "User-Agent" to USER_AGENT,
                             "Accept" to "application/json",
@@ -1223,43 +1241,96 @@ class FilmizleHell : MainAPI() {
                         ),
                         referer = "https://subtitles.website/",
                         allowRedirects = true,
-                        timeout = 8000
+                        timeout = 10000
                     )
-                }.getOrNull()
-                if (downloadResponse != null && downloadResponse.isSuccessful) {
-                    rawDownloadUrl = runCatching {
-                        JSONObject(downloadResponse.text).optString("download_url")
-                    }.getOrDefault("")
+                }.onFailure {
+                    Log.d(name, "Harici altyazı araması başarısız (" + queryType + "): " + it.javaClass.simpleName)
+                }.getOrNull() ?: continue
+
+                if (!response.isSuccessful) {
+                    Log.d(name, "Harici altyazı API HTTP=" + response.code + " query=" + queryType)
+                    continue
                 }
-            }
 
-            if (rawDownloadUrl.isBlank()) continue@dataArray
-            val downloadUrl = when {
-                rawDownloadUrl.startsWith("https://", true) ||
-                    rawDownloadUrl.startsWith("http://", true) -> rawDownloadUrl
-                rawDownloadUrl.startsWith("/") ->
-                    "https://subtitles.website/strapi" + rawDownloadUrl
-                else -> "https://subtitles.website/strapi/" + rawDownloadUrl
-            }
-            if (!Regex("""(?i)\.(?:srt|vtt|ass)(?:[?#].*)?$""").containsMatchIn(downloadUrl)) {
-                Log.d(name, "Harici altyazı uzantısı desteklenmiyor: " + downloadUrl.substringBefore('?').take(160))
-                continue@dataArray
-            }
-            if (!seenSubtitles.add(downloadUrl)) continue@dataArray
+                val data = runCatching {
+                    JSONObject(response.text).optJSONArray("data")
+                }.getOrNull()
+                if (data == null || data.length() == 0) {
+                    Log.d(name, "Harici altyazı sonucu boş: query=" + queryType + ", title=" + title.take(50))
+                    continue
+                }
 
-            val release = cleanText(item.optString("release")).take(65)
-            // Use a canonical language name that CloudStream can recognize.
-            callback(newSubtitleFile("Turkish", downloadUrl))
-            fallbackAdded++
-            Log.d(
-                name,
-                "Harici Türkçe altyazı eklendi: title=" + resultTitle.take(60) +
-                    ", release=" + release + ", year=" + (year ?: 0) +
-                    ", url=" + downloadUrl.substringBefore('?').take(160)
-            )
+                for (index in 0 until data.length()) {
+                    if (added >= 3) break
+                    val item = data.optJSONObject(index) ?: continue
+                    val resultTitle = item.optString("film_title").ifBlank {
+                        item.optString("title")
+                    }.ifBlank {
+                        item.optString("release")
+                    }
+
+                    if (queryType == "title" && !subtitleTitleMatches(title, resultTitle)) {
+                        Log.d(name, "Harici altyazı başlık eşleşmedi: " + resultTitle.take(60))
+                        continue
+                    }
+
+                    val listedYear = item.optInt("year", 0)
+                    if (queryType == "title" && year != null && listedYear > 0 && listedYear != year) {
+                        continue
+                    }
+
+                    val languageObject = item.optJSONObject("language")
+                    val languageCode = languageObject?.optString("code").orEmpty()
+                    val languageName = languageObject?.optString("name").orEmpty()
+                    val language = listOf(languageCode, languageName).filter { it.isNotBlank() }.joinToString(" ")
+                    if (language.isBlank()) continue
+
+                    val format = item.optString("format").lowercase(Locale.ROOT)
+                    if (format.isNotBlank() && format !in setOf("srt", "vtt", "ass")) continue
+
+                    val id = item.optString("id")
+                    var rawDownloadUrl = item.optString("download_url")
+                    if (rawDownloadUrl.isBlank() && id.isNotBlank()) {
+                        val downloadResponse = runCatching {
+                            app.get(
+                                "https://subtitles.website/strapi/api/search/download/" +
+                                    URLEncoder.encode(id, "UTF-8"),
+                                headers = mapOf(
+                                    "User-Agent" to USER_AGENT,
+                                    "Accept" to "application/json",
+                                    "Referer" to "https://subtitles.website/"
+                                ),
+                                referer = "https://subtitles.website/",
+                                allowRedirects = true,
+                                timeout = 8000
+                            )
+                        }.getOrNull()
+                        if (downloadResponse != null && downloadResponse.isSuccessful) {
+                            rawDownloadUrl = runCatching {
+                                JSONObject(downloadResponse.text).optString("download_url")
+                            }.getOrDefault("")
+                        }
+                    }
+                    if (rawDownloadUrl.isBlank()) continue
+
+                    val fullUrl = when {
+                        rawDownloadUrl.startsWith("https://", true) ||
+                            rawDownloadUrl.startsWith("http://", true) -> rawDownloadUrl
+                        rawDownloadUrl.startsWith("/") ->
+                            "https://subtitles.website/strapi" + rawDownloadUrl
+                        else -> "https://subtitles.website/strapi/" + rawDownloadUrl
+                    }
+                    publishSubtitleUrl(fullUrl, language, format, resultTitle.ifBlank { title })
+                }
+                Log.d(name, "Harici altyazı API sonucu: query=" + queryType + ", sonuç=" + data.length() + ", Türkçe=" + added)
+            }
         }
 
-        return (seenSubtitles.size - before).coerceAtLeast(0)
+        if (added == 0) {
+            Log.d(name, "Harici Türkçe altyazı bulunamadı: title=" + title.take(65) +
+                ", imdb=" + (imdbId ?: "yok") + ", year=" + (year ?: 0))
+        }
+        return added
     }
 
     private suspend fun publishPlayturkaApiSubtitles(
@@ -1763,14 +1834,11 @@ class FilmizleHell : MainAPI() {
 
         for (candidate in allCandidates.take(20)) resolve(candidate, page.url, 0)
 
-        // This source's HLS master often has no subtitle rendition. If neither
-        // the page/JS/extractors nor the HLS manifest provided any subtitles,
-        // offer matching Turkish sidecar subtitles from a separate subtitle catalogue.
-        if (emittedSubtitleCount == 0) {
-            val fallbackCount = publishFallbackTurkishSubtitles(data, seenSubtitles, emitSubtitle)
-            Log.d(name, "Harici Türkçe altyazı yedeği: count=" + fallbackCount +
-                ", emitted=" + emittedSubtitleCount)
-        }
+        // Always try the Turkish sidecar catalogue as well. A player/extractor can
+        // emit a track that is unusable or not Turkish; that must not suppress this fallback.
+        val fallbackCount = publishFallbackTurkishSubtitles(data, seenSubtitles, emitSubtitle)
+        Log.d(name, "Harici Türkçe altyazı yedeği: count=" + fallbackCount +
+            ", embeddedEmitted=" + emittedSubtitleCount)
 
         Log.d(name, "loadLinks: found=" + found + ", visited=" + visited.size + ", candidates=" + allCandidates.size)
         return found
