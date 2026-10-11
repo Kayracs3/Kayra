@@ -813,6 +813,11 @@ class FilmizleHell : MainAPI() {
     }
 
     private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+        val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+        if (host.isBlank() || !isDirectMedia(url) || isRejectedPlayerCandidate(url, url) || isStaticAsset(url)) {
+            Log.d(name, "Geçersiz/fragman medya bağlantısı atlandı: " + safeLogUrl(url))
+            return
+        }
         val type = when {
             url.contains(".m3u8", true) -> ExtractorLinkType.M3U8
             url.contains(".mp4", true) || url.contains(".webm", true) -> ExtractorLinkType.VIDEO
