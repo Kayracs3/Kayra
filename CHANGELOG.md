@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:786d1fad169089eeb05540b8eb042886a9157165 -->
+### Fix Gradle wrapper permissions and playback repair flow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [786d1fa](https://github.com/Kayracs3/Kayra/commit/786d1fad169089eeb05540b8eb042886a9157165)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:b80777cdccf52c737d213519e72159ea65d745f8 -->
 ### Normalize generated provider class and retry contract failures
 
