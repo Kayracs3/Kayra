@@ -1062,20 +1062,35 @@ class FilmizleHell : MainAPI() {
     }
 
     private fun findImdbId(document: Document): String? {
+        val imdbPattern = Regex("""(?i)imdb\.com/title/(tt\d{7,10})""")
+
+        // Prefer the movie detail container so a related-film card cannot win first.
         val context = detailContext(document)
-        val candidates = context.select("a[href*=imdb.com/title/], a[href*=imdb.com/title]")
-        for (anchor in candidates) {
-            val url = anchor.attr("href")
-            val label = normalizeSectionText(anchor.text() + " " + anchor.attr("title") + " " + anchor.className())
-            if (label.contains("imdb") || anchor.parents().any {
-                    normalizeSectionText(it.id() + " " + it.className()).contains("imdb")
-                }
-            ) {
-                Regex("""(?i)imdb\.com/title/(tt\d{7,10})""")
-                    .find(url)?.groupValues?.getOrNull(1)?.let { return it }
+        for (anchor in context.select("a[href*=imdb.com/title/], a[href*=imdb.com/title]")) {
+            imdbPattern.find(decode(anchor.attr("href")))?.groupValues?.getOrNull(1)?.let { return it }
+        }
+
+        // Some templates keep the IMDb link outside the detail container or only
+        // expose it in JSON-LD / page metadata, without a visible "IMDb" label.
+        for (anchor in document.select("a[href*=imdb.com/title/], a[href*=imdb.com/title]")) {
+            imdbPattern.find(decode(anchor.attr("href")))?.groupValues?.getOrNull(1)?.let { id ->
+                val label = normalizeSectionText(anchor.text() + " " + anchor.attr("title") + " " + anchor.className())
+                if (label.contains("imdb") || anchor.parents().any {
+                        normalizeSectionText(it.id() + " " + it.className()).contains("imdb")
+                    }
+                ) return id
             }
         }
-        return null
+
+        val metadata = buildString {
+            append(document.select("meta[property=og:url], meta[name=twitter:url], link[rel=canonical]")
+                .joinToString(" ") { it.attr("content").ifBlank { it.attr("href") } })
+            append(" ")
+            document.select("script[type=application/ld+json]").forEach { append(it.data()).append(" ") }
+            append(" ")
+            append(document.html().take(500_000))
+        }
+        return imdbPattern.find(decode(metadata))?.groupValues?.getOrNull(1)
     }
 
     private fun subtitleTitleMatches(expected: String, candidate: String): Boolean {
@@ -1144,9 +1159,11 @@ class FilmizleHell : MainAPI() {
         var added = 0
 
         suspend fun publishSubtitleUrl(rawUrl: String, language: String, formatHint: String, sourceTitle: String): Boolean {
+            if (added >= 3) return false
             val lang = language.trim().lowercase(Locale.ROOT)
-            val isTurkish = lang == "tr" || lang == "tur" || lang == "turkish" ||
-                lang == "turkce" || lang.contains("turkish") || lang.contains("türkçe")
+            val isTurkish = lang == "tr" || lang == "tur" || lang.startsWith("tr-") ||
+                lang.startsWith("tr_") || lang == "turkish" || lang == "turkce" ||
+                lang.contains("turkish") || lang.contains("türkçe") || lang.contains("turkce")
             if (!isTurkish) return false
 
             val fixed = fixUrl(rawUrl, "https://subtitles.website/") ?: return false
@@ -1172,6 +1189,50 @@ class FilmizleHell : MainAPI() {
                     ", year=" + (year ?: 0) + ", url=" + url.substringBefore('?').take(140)
             )
             return true
+        }
+
+        // The catalogue provides a language-specific Stremio-style API too.
+        // Query it first so Turkish subtitle URLs are returned directly.
+        if (!imdbId.isNullOrBlank()) {
+            val languageEndpoint = "https://subtitles.website/strapi/api/search/stremio/" +
+                imdbId + "/tr"
+            val languageResponse = runCatching {
+                app.get(
+                    languageEndpoint,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Accept" to "application/json",
+                        "Referer" to "https://subtitles.website/"
+                    ),
+                    referer = "https://subtitles.website/",
+                    allowRedirects = true,
+                    timeout = 9000
+                )
+            }.onFailure {
+                Log.d(name, "Türkçe Stremio altyazı uç noktası erişilemedi: " + it.javaClass.simpleName)
+            }.getOrNull()
+
+            if (languageResponse != null && languageResponse.isSuccessful) {
+                val results = runCatching {
+                    JSONObject(languageResponse.text).optJSONArray("subtitles")
+                }.getOrNull()
+                if (results != null) {
+                    for (index in 0 until results.length()) {
+                        if (added >= 3) break
+                        val item = results.optJSONObject(index) ?: continue
+                        publishSubtitleUrl(
+                            item.optString("url"),
+                            item.optString("lang").ifBlank { item.optString("language") },
+                            "",
+                            item.optString("name").ifBlank { title }
+                        )
+                    }
+                }
+                Log.d(name, "Türkçe Stremio kataloğu: HTTP=" + languageResponse.code +
+                    ", sonuç=" + (results?.length() ?: 0) + ", eklenen=" + added)
+            } else if (languageResponse != null) {
+                Log.d(name, "Türkçe Stremio kataloğu HTTP=" + languageResponse.code)
+            }
         }
 
         // The public Stremio-compatible endpoint returns direct subtitle URLs and
@@ -1735,6 +1796,12 @@ class FilmizleHell : MainAPI() {
             }
         }
         publishSubtitles(page.document, page.text, page.url, seenSubtitles, emitSubtitle)
+
+        // Fetch catalogue subtitles before spending time resolving player embeds.
+        val fallbackCount = publishFallbackTurkishSubtitles(data, seenSubtitles, emitSubtitle)
+        Log.d(name, "Erken harici Türkçe altyazı yedeği: count=" + fallbackCount +
+            ", embeddedEmitted=" + emittedSubtitleCount)
+
         val visited = HashSet<String>()
         val visitedScripts = HashSet<String>()
         val (pageDirect, pageEmbeds) = collectPlayerCandidates(page.document, page.text, page.url)
@@ -1833,12 +1900,6 @@ class FilmizleHell : MainAPI() {
         }
 
         for (candidate in allCandidates.take(20)) resolve(candidate, page.url, 0)
-
-        // Always try the Turkish sidecar catalogue as well. A player/extractor can
-        // emit a track that is unusable or not Turkish; that must not suppress this fallback.
-        val fallbackCount = publishFallbackTurkishSubtitles(data, seenSubtitles, emitSubtitle)
-        Log.d(name, "Harici Türkçe altyazı yedeği: count=" + fallbackCount +
-            ", embeddedEmitted=" + emittedSubtitleCount)
 
         Log.d(name, "loadLinks: found=" + found + ", visited=" + visited.size + ", candidates=" + allCandidates.size)
         return found
