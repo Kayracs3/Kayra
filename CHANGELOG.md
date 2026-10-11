@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:10bf473c904c709ba828a406604624d9d4bf738c -->
+### Remove duplicate subtitle callback declaration
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [10bf473](https://github.com/Kayracs3/Kayra/commit/10bf473c904c709ba828a406604624d9d4bf738c)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:d34b1694a56b5260e4fccf35ede26b41b4aa7f1f -->
 ### Fix subtitle parser function signatures
 
