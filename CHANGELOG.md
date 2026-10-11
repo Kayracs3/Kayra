@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:c2682e5a1fab509e7e4f324e3f5ef45159bc89b3 -->
+### Bump FilmizleHell after subtitle lookup correction
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [c2682e5](https://github.com/Kayracs3/Kayra/commit/c2682e5a1fab509e7e4f324e3f5ef45159bc89b3)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:0d03b2de1f05b566e923c5d96dea74dd6bae5328 -->
 ### Avoid unrelated IMDb IDs in subtitle search
 
