@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:d236ccd9470f596f80e5fa26ebd9e24829274dcd -->
+### Bump FilmizleHell plugin version after subtitle API cache update
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [d236ccd](https://github.com/Kayracs3/Kayra/commit/d236ccd9470f596f80e5fa26ebd9e24829274dcd)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:8f4bbe16a1e4d641c980ecd3acb5af06484863fd -->
 ### Reduce subtitle API calls and cache catalog results
 
