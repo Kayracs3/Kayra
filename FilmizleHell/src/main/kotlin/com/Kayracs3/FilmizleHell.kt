@@ -602,6 +602,12 @@ class FilmizleHell : MainAPI() {
 
         val decoded = decode(html)
         mediaRegex.findAll(decoded).forEach { addPlayerCandidate(it.value, base, direct, embeds) }
+        val baseHost = runCatching { URI(base).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+        if (baseHost == "p.playturka.space" || decoded.contains("p.playturka.space", true)) {
+            Regex("""(?i)(/videos/[A-Za-z0-9_-]{1,64}/(?:master|index)\.m3u8(?:\?[^"'<>\\\s]*)?)""")
+                .findAll(decoded)
+                .forEach { addPlayerCandidate(it.groupValues[1], base, direct, embeds) }
+        }
         Regex("""(?is)(?:src|file|url|hls|dash|embed|iframe|player|video|source|stream)\s*["']?\s*[:=]\s*["']([^"'<>]{5,1200})["']""")
             .findAll(decoded).forEach { match ->
                 addPlayerCandidate(match.groupValues[1], base, direct, embeds)
@@ -699,8 +705,70 @@ class FilmizleHell : MainAPI() {
         val host = runCatching { URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host != "p.playturka.space" && !html.contains("p.playturka.space", true)) return 0
 
-        val ids = extractPlayturkaIds(embedUrl, document, html)
+        val ids = LinkedHashSet(extractPlayturkaIds(embedUrl, document, html))
         if (ids.isEmpty()) {
+            val scriptUrls = document.select("script[src]")
+                .mapNotNull { fixUrl(it.attr("src"), embedUrl) }
+                .distinct()
+                .filter { pathOf(it).substringBefore('?').endsWith(".js", true) }
+                .filterNot {
+                    listOf("google-analytics", "googletagmanager", "doubleclick", "adsystem",
+                        "cloudflareinsights", "fonts.", "cdnjs", "jsdelivr", "unpkg")
+                        .any { term -> it.contains(term, true) }
+                }
+                .sortedByDescending {
+                    listOf("player", "video", "source", "main", "app").any { term ->
+                        pathOf(it).contains(term, true)
+                    }
+                }
+                .take(8)
+
+            for (scriptUrl in scriptUrls) {
+                val scriptResponse = runCatching {
+                    app.get(
+                        scriptUrl,
+                        headers = requestHeaders + ("Referer" to embedUrl),
+                        referer = embedUrl,
+                        allowRedirects = true,
+                        timeout = 8000
+                    )
+                }.getOrNull() ?: continue
+                if (!scriptResponse.isSuccessful || scriptResponse.text.isBlank() ||
+                    scriptResponse.text.length > 2_000_000
+                ) continue
+                ids.addAll(
+                    extractPlayturkaIds(
+                        embedUrl,
+                        Jsoup.parse("", scriptResponse.url),
+                        scriptResponse.text
+                    )
+                )
+                if (ids.isNotEmpty()) {
+                    Log.d(name, "Playturka ID JS dosyasından bulundu: " + safeLogUrl(scriptUrl))
+                    break
+                }
+            }
+        }
+        if (ids.isEmpty()) {
+            val decodedHints = decode(html)
+            val apiHints = Regex(
+                """(?is).{0,70}(?:fetch\\s*\\(|XMLHttpRequest|axios|/api/|api/|master\\.m3u8|/videos/|video[_-]?id|source[_-]?id|playlist).{0,100}"""
+            ).findAll(decodedHints)
+                .take(8)
+                .map {
+                    it.value.replace(Regex("""\\s+"""), " ").trim()
+                        .replace(Regex("""([?&][\\w-]{1,40}=)[^&\\s"'<>]+""")) { match ->
+                            match.groupValues[1] + "*"
+                        }
+                }
+                .joinToString(" | ")
+                .take(1200)
+            val scriptHint = document.select("script[src]")
+                .take(12)
+                .mapNotNull { fixUrl(it.attr("src"), embedUrl) }
+                .distinct()
+                .joinToString(" | ") { safeLogUrl(it) }
+            Log.d(name, "Playturka JS/API izleri: scripts=" + scriptHint + "; hints=" + apiHints)
             val sourceHints = document.select(
                 "button, [onclick], [data-source], [data-source-id], [data-video-id], [data-embed]"
             ).take(12).mapNotNull { node ->
