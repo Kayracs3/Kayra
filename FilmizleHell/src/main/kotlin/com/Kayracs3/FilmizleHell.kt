@@ -1173,7 +1173,7 @@ class FilmizleHell : MainAPI() {
                 else -> "https://subtitles.website/strapi/" + fixed
             }
             val format = formatHint.trim().lowercase(Locale.ROOT)
-            val urlHasFormat = Regex("""(?i)\\.(?:srt|vtt|ass)(?:[?#].*)?$""").containsMatchIn(url)
+            val urlHasFormat = Regex("""(?i)\.(?:srt|vtt|ass)(?:[?#].*)?$""").containsMatchIn(url)
             if (format.isNotBlank() && format !in setOf("srt", "vtt", "ass")) return false
             if (!urlHasFormat && format !in setOf("srt", "vtt", "ass")) {
                 Log.d(name, "Harici altyazı biçimi belirsiz: " + url.substringBefore('?').take(140))
