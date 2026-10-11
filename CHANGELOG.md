@@ -2,6 +2,31 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:3d83030f5c8241ab691d5b0177e1e2f80e750eb3 -->
+### Replace unbounded emulator action polling with bounded ADB startup
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [3d83030](https://github.com/Kayracs3/Kayra/commit/3d83030f5c8241ab691d5b0177e1e2f80e750eb3)
+
+## 2026-10-11
+
+<!-- kayra-commit:188ae823b78317335013b9b95fb8cf460fc728a4 -->
+### Bound emulator startup and stop endless ADB polling
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [188ae82](https://github.com/Kayracs3/Kayra/commit/188ae823b78317335013b9b95fb8cf460fc728a4)
+
+## 2026-10-11
+
+<!-- kayra-commit:ef6c2189b8661336fb55c1454e1cbca8aefd511c -->
+### Move URL plugin Android smoke and repair logic into a script
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [ef6c218](https://github.com/Kayracs3/Kayra/commit/ef6c2189b8661336fb55c1454e1cbca8aefd511c)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:7f6e2b2e093298a6e0a74423ea7ca86f93e6710a -->
 ### Add bounded Android emulator startup with ADB diagnostics
 
