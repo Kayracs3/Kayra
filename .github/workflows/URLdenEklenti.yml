@@ -176,68 +176,16 @@ jobs:
 
       - name: Android oynatma testi ve başarısızsa otomatik düzeltme
         if: steps.build.outputs.build_ok == 'true'
-        uses: reactivecircus/android-emulator-runner@v2
+        shell: bash
+        timeout-minutes: 30
         env:
           GH_TOKEN: ${{ github.token }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_5
-          cores: 2
-          ram-size: 2048M
-          disk-size: 4G
-          force-avd-creation: true
-          emulator-boot-timeout: 900
-          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          disable-animations: true
-          disable-linux-hw-accel: false
-          script: |
-            set -euo pipefail
-            cp doctor-results/providers.json doctor/providers.json
-            set +e
-            bash doctor/run_android_smoke.sh
-            smoke_rc=$?
-            python3 - <<'PY'
-            import json, pathlib, sys
-            p=pathlib.Path("doctor-results/android/playback-smoke.json")
-            ok=False
-            if p.exists():
-                d=json.loads(p.read_text(encoding="utf-8"))
-                ok=d.get("passed",0)>0 and d.get("failed",0)==0 and any(x.get("status")=="ok" for x in d.get("results",[]))
-            sys.exit(0 if ok else 1)
-            PY
-            smoke_rc=$?
-            set -e
-            if [ "$smoke_rc" -ne 0 ] && [ -s doctor-results/android/playback-smoke.json ]; then
-              echo "İlk oynatma testi başarısız; AI düzeltmesi deneniyor."
-              python3 doctor/site_to_plugin.py --mode repair --repo-root . \
-                --report doctor-results/site-analysis.json \
-                --metadata doctor-results/generated-provider.json \
-                --playback-report doctor-results/android/playback-smoke.json
-              ./gradlew clean make makePluginsJson --no-daemon --stacktrace > doctor-results/build-after-playback-repair.log 2>&1
-              MODULE_NAME="$(python3 -c 'import json; print(json.load(open("doctor-results/generated-provider.json"))["module_name"])')"
-              CS3="$(find "$MODULE_NAME/build" -type f -name '*.cs3' -print -quit)"
-              test -n "$CS3"
-              cp "$CS3" "doctor-results/cs3/$MODULE_NAME.cs3"
-              python3 doctor/cs3_health.py --directory doctor-results/cs3 --output doctor-results/cs3-health-after-repair.json
-              cp doctor-results/providers.json doctor/providers.json
-              set +e
-              bash doctor/run_android_smoke.sh
-              set -e
-              python3 - <<'PY'
-            import json, pathlib, sys
-            p=pathlib.Path("doctor-results/android/playback-smoke.json")
-            ok=False
-            if p.exists():
-                d=json.loads(p.read_text(encoding="utf-8"))
-                ok=d.get("passed",0)>0 and d.get("failed",0)==0 and any(x.get("status")=="ok" for x in d.get("results",[]))
-            sys.exit(0 if ok else 1)
-            PY
-            fi
+        run: |
+          set -euo pipefail
+          bash doctor/android_emulator_bootstrap.sh -- bash doctor/run_url_plugin_smoke_and_repair.sh
 
       - name: Sonuçları ve .cs3 dosyasını yükle
         if: always()
