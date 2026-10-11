@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:e353447a2006c52fa5b48e81343c59394c74dac1 -->
+### Ignore FilmKutusu static webm icon as video source
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [e353447](https://github.com/Kayracs3/Kayra/commit/e353447a2006c52fa5b48e81343c59394c74dac1)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:44c69ff92bd39ef128a81b591cbdf63726f2321f -->
 ### Fix FilmKutusu compiler errors in trailer parsing and extractor callback
 
