@@ -103,7 +103,12 @@ jobs:
             rc=$?
             set -e
             if [ "$rc" -eq 0 ]; then BUILD_OK=1; break; fi
-            tail -n 1000 "doctor-results/build-$attempt.log" > doctor-results/build-error.txt
+            {
+              echo "=== KOTLIN/GRADLE DIAGNOSTICS ==="
+              grep -n -E '(^e: |error:|What went wrong|Execution failed|Unresolved reference|Type mismatch|No value passed|overrides nothing|deprecated\. Use|Could not|cannot find symbol|Compilation error)' "doctor-results/build-$attempt.log" | tail -n 160 || true
+              echo "=== BUILD LOG END ==="
+              tail -n 35 "doctor-results/build-$attempt.log"
+            } > doctor-results/build-error.txt
             if [ "$attempt" -lt 3 ]; then
               python3 doctor/site_to_plugin.py --mode repair --repo-root . \
                 --report doctor-results/site-analysis.json \
