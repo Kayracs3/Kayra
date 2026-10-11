@@ -202,17 +202,17 @@ def main():
         except Exception as first_error:
             repair_prompt=('The previous generated Kotlin file failed provider validation: '+str(first_error)+'. Return a corrected COMPLETE Kotlin source file in strict JSON with provider_source and summary. It MUST contain package com.Kayracs3, class '+cls+' : MainAPI(), search/load/loadLinks overrides, and mainUrl exactly '+r['origin']+'. No dependencies, secrets, telemetry, reflection or subprocesses. Never invent URLs.\nPREVIOUS SOURCE:\n'+str(src)[:22000]+'\nSITE REPORT:\n'+json.dumps(r,ensure_ascii=False)[:12000])
             out=ai(repair_prompt); src=out.get('provider_source'); src=check(src,cls,r['origin'])
-        folder=root/cls; sd=folder/'src/main/kotlin/com/Kayracs3'; sd.mkdir(parents=True,exist_ok=False); (sd/(cls+'.kt')).write_text(src.rstrip()+'\\n',encoding='utf-8')
-        plugin_src=('package com.Kayracs3\\n\\n'
-            'import com.lagradost.cloudstream3.plugins.CloudstreamPlugin\\n'
-            'import com.lagradost.cloudstream3.plugins.Plugin\\n'
-            'import android.content.Context\\n\\n'
-            '@CloudstreamPlugin\\n'
-            'class '+cls+'Plugin : Plugin() {\\n'
-            '    override fun load(context: Context) {\\n'
-            '        registerMainAPI('+cls+'())\\n'
-            '    }\\n'
-            '}\\n')
+        folder=root/cls; sd=folder/'src/main/kotlin/com/Kayracs3'; sd.mkdir(parents=True,exist_ok=False); (sd/(cls+'.kt')).write_text(src.rstrip()+'\n',encoding='utf-8')
+        plugin_src=('package com.Kayracs3\n\n'
+            'import com.lagradost.cloudstream3.plugins.CloudstreamPlugin\n'
+            'import com.lagradost.cloudstream3.plugins.Plugin\n'
+            'import android.content.Context\n\n'
+            '@CloudstreamPlugin\n'
+            'class '+cls+'Plugin : Plugin() {\n'
+            '    override fun load(context: Context) {\n'
+            '        registerMainAPI('+cls+'())\n'
+            '    }\n'
+            '}\n')
         (sd/(cls+'Plugin.kt')).write_text(plugin_src,encoding='utf-8')
         label=display.replace('"',"'")[:80]; gradle='version = 1\n\ncloudstream {\n    description = "'+label+' otomatik sağlayıcısı"\n    authors = listOf("Kayracs3")\n    status = 1\n    tvTypes = listOf("Movie", "TvSeries")\n    language = "tr"\n    iconUrl = "'+r['origin']+'/favicon.ico"\n}\n\nandroid {\n    buildFeatures {\n        buildConfig = true\n    }\n}\n'; (folder/'build.gradle.kts').write_text(gradle,encoding='utf-8')
         meta={'module_name':cls,'display_name':display,'origin':r['origin'],'source_path':str((sd/(cls+'.kt')).relative_to(root)).replace('\\','/'),'search_query':next((z['title'] for z in r['links'] if len(z['title'])>2),display),'summary':str(out.get('summary',''))[:600]}; save(mp,meta); print(json.dumps(meta,ensure_ascii=False))
