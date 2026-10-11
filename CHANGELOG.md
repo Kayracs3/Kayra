@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:d92d5a2a3566d029da425e2dc7740ad796d61454 -->
+### Fix external subtitle URL extension matching
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [d92d5a2](https://github.com/Kayracs3/Kayra/commit/d92d5a2a3566d029da425e2dc7740ad796d61454)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:d491009e25032002e06d9ea35e927568228e29de -->
 ### Use Turkish subtitle endpoint and resolve IMDb metadata
 
