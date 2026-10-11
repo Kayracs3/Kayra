@@ -1,0 +1,205 @@
+name: URL'den Eklenti Üret ve Test Et
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: "Eklenti yapılacak sitenin tam adresi (https://...)"
+        required: true
+        type: string
+      provider_name:
+        description: "İsteğe bağlı eklenti adı"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: url-plugin-builder-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate-test:
+    name: URL'den üret, derle, cihazda test et ve düzelt
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Python hazırla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: JDK 17 ayarla
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK ayarla
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
+
+      - name: CloudStream Gradle eklentisini hazırla
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/cloudstream-gradle
+          git clone https://github.com/recloudstream/gradle.git /tmp/cloudstream-gradle
+          cd /tmp/cloudstream-gradle
+          git checkout 81b1d424d236a447d9f2e95a229faef79002f761
+          chmod +x gradlew
+          ./gradlew publishToMavenLocal --no-daemon --stacktrace
+          test -f "$HOME/.m2/repository/com/lagradost/cloudstream3/gradle/local-SNAPSHOT/gradle-local-SNAPSHOT.pom"
+
+      - name: Siteyi analiz et ve Kotlin eklentisi üret
+        id: generate
+        shell: bash
+        env:
+          SITE_URL: ${{ inputs.site_url }}
+          PROVIDER_NAME: ${{ inputs.provider_name }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p doctor-results
+          python3 -m py_compile doctor/site_to_plugin.py
+          python3 doctor/site_to_plugin.py \
+            --mode generate \
+            --url "$SITE_URL" \
+            --provider-name "$PROVIDER_NAME" \
+            --run-id "$GITHUB_RUN_ID" \
+            --repo-root . \
+            --report doctor-results/site-analysis.json \
+            --metadata doctor-results/generated-provider.json
+          MODULE_NAME="$(python3 -c 'import json; print(json.load(open("doctor-results/generated-provider.json"))["module_name"])')"
+          echo "module_name=$MODULE_NAME" >> "$GITHUB_OUTPUT"
+          echo "module_name=$MODULE_NAME"
+
+      - name: Derle ve derleme hatalarını otomatik düzelt
+        id: build
+        if: steps.generate.outputs.module_name != ''
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+        run: |
+          set -uo pipefail
+          MODULE_NAME="${{ steps.generate.outputs.module_name }}"
+          BUILD_OK=0
+          mkdir -p doctor-results/cs3
+          for attempt in 1 2 3; do
+            set +e
+            ./gradlew clean make makePluginsJson --no-daemon --stacktrace > "doctor-results/build-$attempt.log" 2>&1
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ]; then BUILD_OK=1; break; fi
+            tail -n 1000 "doctor-results/build-$attempt.log" > doctor-results/build-error.txt
+            if [ "$attempt" -lt 3 ]; then
+              python3 doctor/site_to_plugin.py --mode repair --repo-root . \
+                --report doctor-results/site-analysis.json \
+                --metadata doctor-results/generated-provider.json \
+                --build-log doctor-results/build-error.txt || true
+            fi
+          done
+          if [ "$BUILD_OK" -ne 1 ]; then
+            echo "build_ok=false" >> "$GITHUB_OUTPUT"
+            echo "Üç denemeden sonra derleme başarısız." 
+            exit 1
+          fi
+          CS3="$(find "$MODULE_NAME/build" -type f -name '*.cs3' -print -quit)"
+          test -n "$CS3"
+          cp "$CS3" "doctor-results/cs3/$MODULE_NAME.cs3"
+          python3 doctor/cs3_health.py --directory doctor-results/cs3 --output doctor-results/cs3-health.json
+          python3 - <<'PY'
+          import json, pathlib
+          m=json.loads(pathlib.Path("doctor-results/generated-provider.json").read_text(encoding="utf-8"))
+          data={"version":1,"providers":{m["module_name"]:{"searchQuery":m.get("search_query",m.get("display_name",m["module_name"]))}}}
+          pathlib.Path("doctor-results/providers.json").write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
+          PY
+          echo "build_ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Android oynatma testi ve başarısızsa otomatik düzeltme
+        if: steps.build.outputs.build_ok == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          cores: 2
+          ram-size: 2048M
+          disk-size: 4G
+          force-avd-creation: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          disable-linux-hw-accel: false
+          script: |
+            set -euo pipefail
+            cp doctor-results/providers.json doctor/providers.json
+            set +e
+            bash doctor/run_android_smoke.sh
+            smoke_rc=$?
+            set -e
+            python3 - <<'PY'
+            import json, pathlib, sys
+            p=pathlib.Path("doctor-results/android/playback-smoke.json")
+            ok=False
+            if p.exists():
+                d=json.loads(p.read_text(encoding="utf-8"))
+                ok=d.get("passed",0)>0 and d.get("failed",0)==0 and any(x.get("status")=="ok" for x in d.get("results",[]))
+            sys.exit(0 if ok else 1)
+            PY
+            smoke_rc=$?
+            if [ "$smoke_rc" -ne 0 ] && [ -s doctor-results/android/playback-smoke.json ]; then
+              echo "İlk oynatma testi başarısız; AI düzeltmesi deneniyor."
+              python3 doctor/site_to_plugin.py --mode repair --repo-root . \
+                --report doctor-results/site-analysis.json \
+                --metadata doctor-results/generated-provider.json \
+                --playback-report doctor-results/android/playback-smoke.json
+              ./gradlew clean make makePluginsJson --no-daemon --stacktrace > doctor-results/build-after-playback-repair.log 2>&1
+              MODULE_NAME="$(python3 -c 'import json; print(json.load(open("doctor-results/generated-provider.json"))["module_name"])')"
+              CS3="$(find "$MODULE_NAME/build" -type f -name '*.cs3' -print -quit)"
+              test -n "$CS3"
+              cp "$CS3" "doctor-results/cs3/$MODULE_NAME.cs3"
+              python3 doctor/cs3_health.py --directory doctor-results/cs3 --output doctor-results/cs3-health-after-repair.json
+              cp doctor-results/providers.json doctor/providers.json
+              set +e
+              bash doctor/run_android_smoke.sh
+              set -e
+              python3 - <<'PY'
+            import json, pathlib, sys
+            p=pathlib.Path("doctor-results/android/playback-smoke.json")
+            ok=False
+            if p.exists():
+                d=json.loads(p.read_text(encoding="utf-8"))
+                ok=d.get("passed",0)>0 and d.get("failed",0)==0 and any(x.get("status")=="ok" for x in d.get("results",[]))
+            sys.exit(0 if ok else 1)
+            PY
+            fi
+
+      - name: Sonuçları ve .cs3 dosyasını yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: url-plugin-builder-${{ github.run_id }}
+          path: |
+            doctor-results/
+            */src/main/kotlin/com/Kayracs3/*.kt
+            */build.gradle.kts
+          if-no-files-found: ignore
+          retention-days: 14
