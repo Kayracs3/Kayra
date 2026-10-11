@@ -521,7 +521,7 @@ class FilmizleHell : MainAPI() {
         if (original.isBlank() || original.startsWith("javascript:") ||
             original.contains("getembedurl") || original.contains("activesource") ||
             original.contains("[object") || original.contains("undefined") ||
-            original.contains("null") || original.contains("${") ||
+            original.contains("null") || original.contains("\${") ||
             original.contains("function(") || original.contains("function (")
         ) return true
 
