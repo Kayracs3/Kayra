@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:8f4bbe16a1e4d641c980ecd3acb5af06484863fd -->
+### Reduce subtitle API calls and cache catalog results
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [8f4bbe1](https://github.com/Kayracs3/Kayra/commit/8f4bbe16a1e4d641c980ecd3acb5af06484863fd)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:c2682e5a1fab509e7e4f324e3f5ef45159bc89b3 -->
 ### Bump FilmizleHell after subtitle lookup correction
 
