@@ -245,10 +245,10 @@
     },
     {
         "iconUrl": "https://filmizlehell.net/favicon.ico",
-        "fileHash": "sha256-182df5fdff4a8262ef615b654255a1e2e5cfa627a4d44bba06a7a21ff66da2f5",
+        "fileHash": "sha256-ddbfd14e1ebc7aa3fcf76e544ebf8d7818079cdaf01e8055f844ae52c21b53e5",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 91510,
+        "fileSize": 94132,
         "status": 1,
         "language": "tr",
         "authors": [
