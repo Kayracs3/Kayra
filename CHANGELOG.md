@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:48bd6d380d44c3a7da9d67a9e145fce45feb0ffb -->
+### Add FilmKutusu CloudStream provider without AI API generation
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [48bd6d3](https://github.com/Kayracs3/Kayra/commit/48bd6d380d44c3a7da9d67a9e145fce45feb0ffb)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:89885ca27d77d37fb6ff5d6c33879e95ac13e7d8 -->
 ### Correct cooldown regex for long AI rate-limit windows
 
