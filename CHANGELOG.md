@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:8e1dc78c31fc23dbfeca0a7404f9f1f0f00544f6 -->
+### Keep FilmizleHell poster and title images within their own card
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [8e1dc78](https://github.com/Kayracs3/Kayra/commit/8e1dc78c31fc23dbfeca0a7404f9f1f0f00544f6)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:2044532107d0a1331cd9277bc74911b6bbfe80c0 -->
 ### Exclude comments from FilmizleHell listing and honor full-list link
 
