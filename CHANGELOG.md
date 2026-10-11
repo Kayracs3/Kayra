@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:f13ee89bffc8ae1e5652bdc5a5a1ff8f46fdc994 -->
+### Improve FilmizleHell Playturka HLS ID discovery
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [f13ee89](https://github.com/Kayracs3/Kayra/commit/f13ee89bffc8ae1e5652bdc5a5a1ff8f46fdc994)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:627d56deb470704d33d12ade2111d6925b88687f -->
 ### Validate media links before publishing from FilmizleHell
 
