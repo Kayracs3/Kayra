@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:cb18b5b4a81594d5c35762f1c6d7cf889558de63 -->
+### Temporarily inspect Playturka player source flow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [cb18b5b](https://github.com/Kayracs3/Kayra/commit/cb18b5b4a81594d5c35762f1c6d7cf889558de63)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:c15929262a6af7ab87644d5ef0f8e2e81187f7db -->
 ### Fix Playturka diagnostic regex escaping
 
