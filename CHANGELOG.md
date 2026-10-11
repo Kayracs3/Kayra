@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:84c411a426c944df7de482b7c3463f777dbd07f3 -->
+### Revert unintended DiziPal changes from FilmizleHell request
+
+- Etkilenen alanlar: DiziPal
+- Commit: [84c411a](https://github.com/Kayracs3/Kayra/commit/84c411a426c944df7de482b7c3463f777dbd07f3)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:42b60a717c4700f4c5d6e05d2bf7e80d486c10e0 -->
 ### Scope FilmizleHell cards and follow all-items section link
 
