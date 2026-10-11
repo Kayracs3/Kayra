@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:6aab3189f93f8a68cee0dbf4a69b7756ebe497b2 -->
+### Retry AI output when generated provider contract fails
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [6aab318](https://github.com/Kayracs3/Kayra/commit/6aab3189f93f8a68cee0dbf4a69b7756ebe497b2)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:bc3eda19aa973ea4e6b8f762c09c6fe022d2d6f7 -->
 ### Add URL-driven provider generation and playback validation workflow
 
