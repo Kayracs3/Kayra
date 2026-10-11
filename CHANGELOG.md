@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:4e7aba3ba354b85b36408aa845648254736e02d7 -->
+### Bump FilmizleHell plugin version for subtitle fix
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [4e7aba3](https://github.com/Kayracs3/Kayra/commit/4e7aba3ba354b85b36408aa845648254736e02d7)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:d92d5a2a3566d029da425e2dc7740ad796d61454 -->
 ### Fix external subtitle URL extension matching
 
