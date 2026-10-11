@@ -244,6 +244,26 @@
         "name": "Dramadizilerim"
     },
     {
+        "iconUrl": "https://filmizlehell.net/favicon.ico",
+        "fileHash": "sha256-73b30e60b7547b4375a5db6a3c7a29cdbc91c657d94c227aa51c909a548eee07",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 36790,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "FilmizleHell",
+        "description": "FilmizleHell film ar\u015fivi; arama, afi\u015f, IMDb, oyuncu bilgileri ve video kaynaklar\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmizleHell.cs3",
+        "name": "FilmizleHell"
+    },
+    {
         "iconUrl": "https://filmkutusu.com/favicon.ico",
         "fileHash": "sha256-d1c4259d00ea88d1763cfdf782e0905da91b0091038b26ac7d3b5432b6521a95",
         "apiVersion": 1,
