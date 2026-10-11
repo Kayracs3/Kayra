@@ -1335,7 +1335,7 @@ class FilmizleHell : MainAPI() {
         }
     }
 
-    private fun publishHlsSubtitleTracks(
+    private suspend fun publishHlsSubtitleTracks(
         playlistUrl: String,
         playlist: String,
         seen: MutableSet<String>,
