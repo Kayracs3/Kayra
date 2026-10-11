@@ -53,6 +53,9 @@ class FilmizleHell : MainAPI() {
         .replace("\\u0026", "&", ignoreCase = true)
         .replace("\\u003D", "=", ignoreCase = true)
         .replace("\\u003F", "?", ignoreCase = true)
+        .replace("\\u0023", "#", ignoreCase = true)
+        .replace("\\x23", "#", ignoreCase = true)
+        .replace("%23", "#")
         .replace("\\u003D", "=", ignoreCase = true)
         .replace("\\\"", "\"")
         .replace("&amp;", "&")
@@ -648,6 +651,12 @@ class FilmizleHell : MainAPI() {
 
         val ids = LinkedHashSet<String>()
         val acceptedId = Regex("""^[A-Za-z0-9_-]{1,64}$""")
+        val rawFragment = runCatching { URI(embedUrl).rawFragment.orEmpty() }.getOrDefault("").trim()
+        val decodedFragment = runCatching { java.net.URLDecoder.decode(rawFragment, "UTF-8") }
+            .getOrDefault(rawFragment).trim().removePrefix("#")
+        if (acceptedId.matches(decodedFragment)) ids.add(decodedFragment)
+        Regex("""(?i)(?:video[_-]?id|source[_-]?id|stream[_-]?id)=([A-Za-z0-9_-]{5,64})""")
+            .find(decodedFragment)?.groupValues?.getOrNull(1)?.let { if (acceptedId.matches(it)) ids.add(it) }
         val longId = Regex("""^[A-Za-z0-9_-]{5,24}$""")
         val queryNames = setOf(
             "id", "v", "vid", "video", "video_id", "videoid", "source", "source_id",
@@ -667,14 +676,16 @@ class FilmizleHell : MainAPI() {
 
         val idAttributes = listOf(
             "data-video-id", "data-source-id", "data-stream-id", "data-media-id",
-            "data-file-id", "data-id", "value"
+            "data-file-id", "data-id", "value",
+            "data-video", "data-source", "data-stream", "data-file"
         )
         val sourceIdAttributes = setOf(
-            "data-video-id", "data-source-id", "data-stream-id", "data-media-id", "data-file-id"
+            "data-video-id", "data-source-id", "data-stream-id", "data-media-id", "data-file-id",
+            "data-video", "data-source", "data-stream", "data-file"
         )
         for (element in document.select(
-            "[data-video-id], [data-source-id], [data-stream-id], [data-media-id], " +
-                "[data-file-id], [data-id], input[name*=video], input[name*=source]"
+            "[data-video-id], [data-source-id], [data-stream-id], [data-media-id], [data-file-id], " +
+                "[data-id], [data-video], [data-source], [data-stream], [data-file], input[name*=video], input[name*=source]"
         )) {
             for (attr in idAttributes) {
                 val raw = element.attr(attr).trim()
@@ -685,6 +696,8 @@ class FilmizleHell : MainAPI() {
         }
 
         val patterns = listOf(
+            Regex("""(?i)(?:https?:)?//p\.playturka\.space/[^\s#]*#([A-Za-z0-9_-]{5,64})"""),
+            Regex("""(?i)p\.playturka\.space[^\s]{0,180}?#([A-Za-z0-9_-]{5,64})"""),
             Regex("""(?i)(?:video[_-]?id|source[_-]?id|stream[_-]?id|media[_-]?id|file[_-]?id|activeSource)\s*["']?\s*[:=]\s*["']([A-Za-z0-9_-]{1,64})["']"""),
             Regex("""(?i)/videos/([A-Za-z0-9_-]{1,64})/(?:master\.m3u8|index\.m3u8)""")
         )
