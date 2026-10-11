@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:b80777cdccf52c737d213519e72159ea65d745f8 -->
+### Normalize generated provider class and retry contract failures
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [b80777c](https://github.com/Kayracs3/Kayra/commit/b80777cdccf52c737d213519e72159ea65d745f8)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:6aab3189f93f8a68cee0dbf4a69b7756ebe497b2 -->
 ### Retry AI output when generated provider contract fails
 
