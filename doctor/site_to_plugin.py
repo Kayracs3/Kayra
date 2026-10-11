@@ -79,7 +79,7 @@ def ai(prompt):
                 error_obj={}
             if not isinstance(error_obj,dict): error_obj={}
             error_code=str(error_obj.get('code') or '').lower()
-            detail=str(error_obj.get('message') or raw or str(e)).replace('\\n',' ')[:900]
+            detail=str(error_obj.get('message') or raw or str(e)).replace('\n',' ')[:900]
             low_detail=detail.lower()
             # Quota/billing limits will not be fixed by waiting, so fail clearly.
             if e.code==429 and ('quota' in error_code or 'billing' in error_code or 'insufficient_quota' in low_detail or 'billing hard limit' in low_detail):
@@ -103,7 +103,7 @@ def ai(prompt):
             if text: break
     if not text: raise RuntimeError('AI yanıtı boş.')
     fence=chr(96)*3
-    if text.startswith(fence): text=text.split('\\n',1)[1].rsplit(fence,1)[0]
+    if text.startswith(fence): text=text.split('\n',1)[1].rsplit(fence,1)[0]
     return json.loads(text)
 
 def _split_kotlin_args(text):
