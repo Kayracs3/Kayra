@@ -43,6 +43,31 @@ if [[ ! -s doctor-results/android/playback-smoke.json ]]; then
   exit 1
 fi
 
+# ADB/ActivityManager timeouts are test-environment failures, not evidence of a
+# broken provider. Never let a flaky emulator launch trigger arbitrary source edits.
+if python3 - <<'PY'
+import json, pathlib, sys
+p = pathlib.Path("doctor-results/android/playback-smoke.json")
+try:
+    d = json.loads(p.read_text(encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+infra = [
+    x for x in d.get("results", [])
+    if x.get("category") == "infrastructure"
+    or "ADB/command timeout (test infrastructure" in str(x.get("detail", ""))
+]
+if infra:
+    print("Playback smoke failed in the Android/ADB test layer; provider repair skipped.")
+    for item in infra:
+        print(f"- {item.get('provider', 'unknown')}: {item.get('detail', '')}")
+    sys.exit(0)
+sys.exit(1)
+PY
+then
+  exit 1
+fi
+
 echo "First playback check failed; attempting provider repair from the actual playback report."
 python3 doctor/site_to_plugin.py --mode repair --repo-root . \
   --report doctor-results/site-analysis.json \
