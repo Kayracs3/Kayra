@@ -749,6 +749,22 @@ class FilmizleHell : MainAPI() {
                 if (!scriptResponse.isSuccessful || scriptResponse.text.isBlank() ||
                     scriptResponse.text.length > 2_000_000
                 ) continue
+                val scriptText = decode(scriptResponse.text)
+                val scriptHints = Regex(
+                    """(?is).{0,100}(?:p\.playturka\.space|playturka|666film\.net|videoId|video_id|sourceId|source_id|embed.?url|playerUrl|sourceUrl|iframe|master\.m3u8|/videos/).{0,140}"""
+                ).findAll(scriptText)
+                    .take(7)
+                    .map {
+                        it.value.replace(Regex("""\s+"""), " ").trim()
+                            .replace(Regex("""([?&][\w-]{1,40}=)[^&\s"'<>]+""")) { match ->
+                                match.groupValues[1] + "*"
+                            }
+                    }
+                    .joinToString(" | ")
+                    .take(1500)
+                if (scriptHints.isNotBlank()) {
+                    Log.d(name, "Playturka kaynak JS: " + safeLogUrl(scriptUrl) + "; hints=" + scriptHints)
+                }
                 ids.addAll(
                     extractPlayturkaIds(
                         embedUrl,
@@ -765,7 +781,7 @@ class FilmizleHell : MainAPI() {
         if (ids.isEmpty()) {
             val decodedHints = decode(html)
             val apiHints = Regex(
-                """(?is).{0,70}(?:fetch\s*\(|XMLHttpRequest|axios|/api/|api/|master\.m3u8|/videos/|video[_-]?id|source[_-]?id|playlist).{0,100}"""
+                """(?is).{0,70}(?:fetch\s*\(|XMLHttpRequest|axios|/api/|api/|master\.m3u8|/videos/|video[_-]?id|source[_-]?id|playlist|p\.playturka\.space|playturka|embed.?url|playerUrl|sourceUrl).{0,100}"""
             ).findAll(decodedHints)
                 .take(8)
                 .map {
@@ -783,15 +799,26 @@ class FilmizleHell : MainAPI() {
                 .joinToString(" | ") { safeLogUrl(it) }
             Log.d(name, "Playturka JS/API izleri: scripts=" + scriptHint + "; hints=" + apiHints)
             val sourceHints = document.select(
-                "button, [onclick], [data-source], [data-source-id], [data-video-id], [data-embed]"
-            ).take(12).mapNotNull { node ->
+                "button, [onclick], [data-source], [data-source-id], [data-video-id], [data-embed], iframe[src], a[href]"
+            ).filter { node ->
+                val sample = (node.text() + " " + node.outerHtml()).lowercase(Locale.ROOT)
+                listOf("playturka", "kaynak", "dublaj", "altyaz", "filmi başlat", "video", "source", "player", "server", "embed")
+                    .any { sample.contains(it) }
+            }.take(20).mapNotNull { node ->
                 val label = cleanText(node.text()).take(36)
                 val attrs = listOf(
                     "data-source-id", "data-video-id", "data-stream-id", "data-media-id",
-                    "data-file-id", "data-source", "data-embed", "data-id", "onclick"
+                    "data-file-id", "data-source", "data-source-url", "data-embed", "data-player",
+                    "data-id", "data-video", "data-src", "data-url", "src", "href", "onclick"
                 ).mapNotNull { key ->
                     val value = node.attr(key).trim()
-                    if (value.isBlank()) null else key + "=" + value.take(70)
+                    if (value.isBlank()) null
+                    else {
+                        val safeValue = if (key in setOf("data-src", "data-url", "src", "href", "data-source-url", "data-embed", "data-player")) {
+                            safeLogUrl(fixUrl(value, embedUrl) ?: value)
+                        } else value.take(70)
+                        key + "=" + safeValue
+                    }
                 }.joinToString(",")
                 if (label.isBlank() && attrs.isBlank()) null
                 else listOf(label, attrs).filter { it.isNotBlank() }.joinToString(" [", postfix = if (attrs.isBlank()) "" else "]")
