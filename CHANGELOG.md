@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:44c69ff92bd39ef128a81b591cbdf63726f2321f -->
+### Fix FilmKutusu compiler errors in trailer parsing and extractor callback
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [44c69ff](https://github.com/Kayracs3/Kayra/commit/44c69ff92bd39ef128a81b591cbdf63726f2321f)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:48bd6d380d44c3a7da9d67a9e145fce45feb0ffb -->
 ### Add FilmKutusu CloudStream provider without AI API generation
 
