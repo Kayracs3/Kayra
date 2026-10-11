@@ -2,6 +2,23 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:263939ed3c171cee49f5e26863c4364a2697c6a5 -->
+### Bump FilmizleHell after direct VTT support
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [263939e](https://github.com/Kayracs3/Kayra/commit/263939ed3c171cee49f5e26863c4364a2697c6a5)
+
+## 2026-10-11
+
+<!-- kayra-commit:8336558108b166ee95fd81a17ddfe8c4ad714a56 -->
+### Add direct Playturka Turkish VTT subtitle discovery
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [8336558](https://github.com/Kayracs3/Kayra/commit/8336558108b166ee95fd81a17ddfe8c4ad714a56)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:d236ccd9470f596f80e5fa26ebd9e24829274dcd -->
 ### Bump FilmizleHell plugin version after subtitle API cache update
 
