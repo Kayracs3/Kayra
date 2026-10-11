@@ -5,6 +5,9 @@ mkdir -p doctor-results/android
 
 APK_DIR="${RUNNER_TEMP}/cloudstream"
 mkdir -p "$APK_DIR"
+# The URL-plugin workflow may run the smoke test twice in one job after repair.
+# Remove previous release APKs so gh release download cannot fail on existing files.
+find "$APK_DIR" -maxdepth 1 -type f -name "*.apk" -delete
 
 echo "CloudStream prerelease APK aranıyor..."
 TAG="$(gh release list --repo recloudstream/cloudstream --limit 20 --json tagName,isPrerelease,publishedAt --jq '[.[] | select(.isPrerelease == true)] | sort_by(.publishedAt) | reverse | .[0].tagName')"
