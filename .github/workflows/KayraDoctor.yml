@@ -191,23 +191,13 @@ jobs:
 
       - name: Android CloudStream smoke
         if: steps.doctor.outputs.build_ok == 'true' && steps.doctor.outputs.cs3_ok == 'true'
-        uses: reactivecircus/android-emulator-runner@v2
+        shell: bash
+        timeout-minutes: 30
         env:
           GH_TOKEN: ${{ github.token }}
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_5
-          cores: 2
-          ram-size: 2048M
-          disk-size: 4G
-          force-avd-creation: true
-          emulator-boot-timeout: 900
-          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          disable-animations: true
-          disable-linux-hw-accel: false
-          script: bash doctor/run_android_smoke.sh
+        run: |
+          set -euo pipefail
+          bash doctor/android_emulator_bootstrap.sh -- bash doctor/run_android_smoke.sh
 
       - name: Sonuçları yükle
         if: always()
