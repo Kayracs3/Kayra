@@ -1061,35 +1061,59 @@ class FilmizleHell : MainAPI() {
         return ids
     }
 
-    private fun findImdbId(document: Document): String? {
+    private fun findImdbId(document: Document, expectedTitle: String): String? {
         val imdbPattern = Regex("""(?i)imdb\.com/title/(tt\d{7,10})""")
-
-        // Prefer the movie detail container so a related-film card cannot win first.
+        val expected = normalizeSectionText(expectedTitle)
         val context = detailContext(document)
+
+        // First choice: IMDb links belonging to the current movie detail block.
+        // Do not scan the whole HTML with a loose regex: recommended film cards
+        // can contain unrelated IMDb IDs and poison every subtitle search.
         for (anchor in context.select("a[href*=imdb.com/title/], a[href*=imdb.com/title]")) {
             imdbPattern.find(decode(anchor.attr("href")))?.groupValues?.getOrNull(1)?.let { return it }
         }
 
-        // Some templates keep the IMDb link outside the detail container or only
-        // expose it in JSON-LD / page metadata, without a visible "IMDb" label.
-        for (anchor in document.select("a[href*=imdb.com/title/], a[href*=imdb.com/title]")) {
-            imdbPattern.find(decode(anchor.attr("href")))?.groupValues?.getOrNull(1)?.let { id ->
-                val label = normalizeSectionText(anchor.text() + " " + anchor.attr("title") + " " + anchor.className())
-                if (label.contains("imdb") || anchor.parents().any {
-                        normalizeSectionText(it.id() + " " + it.className()).contains("imdb")
-                    }
-                ) return id
-            }
+        fun titleMatches(candidate: String): Boolean {
+            val normalized = normalizeSectionText(candidate)
+            return normalized.length >= 3 && expected.length >= 3 &&
+                (normalized == expected || normalized.contains(expected) || expected.contains(normalized))
         }
 
-        val metadata = buildString {
-            append(document.select("meta[property=og:url], meta[name=twitter:url], link[rel=canonical]")
-                .joinToString(" ") { it.attr("content").ifBlank { it.attr("href") } })
-            append(" ")
-            document.select("script[type=application/ld+json]").forEach { append(it.data()).append(" ") }
-            append(" ")
-            append(document.html().take(500_000))
+        fun idFromStructuredData(value: Any?): String? {
+            when (value) {
+                is JSONObject -> {
+                    val objectName = value.optString("name")
+                    if (titleMatches(objectName)) {
+                        val references = value.optString("url") + " " + value.optString("sameAs")
+                        imdbPattern.find(decode(references))?.groupValues?.getOrNull(1)?.let { return it }
+                    }
+                    val iterator = value.keys()
+                    while (iterator.hasNext()) {
+                        val key = iterator.next()
+                        idFromStructuredData(value.opt(key))?.let { return it }
+                    }
+                }
+                is org.json.JSONArray -> {
+                    for (index in 0 until value.length()) {
+                        idFromStructuredData(value.opt(index))?.let { return it }
+                    }
+                }
+            }
+            return null
         }
+
+        // JSON-LD is only accepted when its name belongs to the current movie.
+        for (script in document.select("script[type=application/ld+json]")) {
+            val json = runCatching { JSONObject(script.data()) }.getOrNull()
+            idFromStructuredData(json)?.let { return it }
+            val array = runCatching { org.json.JSONArray(script.data()) }.getOrNull()
+            idFromStructuredData(array)?.let { return it }
+        }
+
+        // Keep page metadata as a final safe fallback, but never scrape arbitrary
+        // unrelated page HTML for an IMDb ID.
+        val metadata = document.select("meta[property=og:url], meta[name=twitter:url], link[rel=canonical]")
+            .joinToString(" ") { it.attr("content").ifBlank { it.attr("href") } }
         return imdbPattern.find(decode(metadata))?.groupValues?.getOrNull(1)
     }
 
@@ -1154,8 +1178,10 @@ class FilmizleHell : MainAPI() {
             return 0
         }
 
-        val imdbId = findImdbId(document)
+        val imdbId = findImdbId(document, title)
         val year = parseYear(document, context)
+        Log.d(name, "Harici altyazı araması: title=" + title.take(70) +
+            ", imdb=" + (imdbId ?: "yok") + ", year=" + (year ?: 0))
         var added = 0
 
         suspend fun publishSubtitleUrl(rawUrl: String, language: String, formatHint: String, sourceTitle: String): Boolean {
@@ -1342,9 +1368,17 @@ class FilmizleHell : MainAPI() {
 
                     val languageObject = item.optJSONObject("language")
                     val languageCode = languageObject?.optString("code").orEmpty()
+                        .ifBlank { item.optString("language_code") }
+                        .ifBlank { item.optString("languageCode") }
+                        .ifBlank { item.optString("lang") }
                     val languageName = languageObject?.optString("name").orEmpty()
+                        .ifBlank { item.optString("language_name") }
+                        .ifBlank { item.optString("languageName") }
                     val language = listOf(languageCode, languageName).filter { it.isNotBlank() }.joinToString(" ")
-                    if (language.isBlank()) continue
+                    if (language.isBlank()) {
+                        Log.d(name, "Harici altyazı dili eksik: " + resultTitle.take(60))
+                        continue
+                    }
 
                     val format = item.optString("format").lowercase(Locale.ROOT)
                     if (format.isNotBlank() && format !in setOf("srt", "vtt", "ass")) continue
