@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:94344da6dd4cee0804d316ba8b6f4f70b6a7e2d8 -->
+### Prevent FilmizleHell trailer embeds from being used as movie links
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [94344da](https://github.com/Kayracs3/Kayra/commit/94344da6dd4cee0804d316ba8b6f4f70b6a7e2d8)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:24aed3ebf8c969ef425c9e5de67f8ab05eb3c5ae -->
 ### Probe FilmizleHell source IDs from movie page and log source hints
 
