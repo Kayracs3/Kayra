@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:bc3eda19aa973ea4e6b8f762c09c6fe022d2d6f7 -->
+### Add URL-driven provider generation and playback validation workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [bc3eda1](https://github.com/Kayracs3/Kayra/commit/bc3eda19aa973ea4e6b8f762c09c6fe022d2d6f7)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:ac1028dd199363df1d778d1febfee1aa4e675081 -->
 ### Implement URL-based CloudStream provider generator and repair agent
 
