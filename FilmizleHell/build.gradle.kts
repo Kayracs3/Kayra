@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 cloudstream {
     description = "FilmizleHell film arşivi; arama, afiş, IMDb, oyuncu bilgileri ve video kaynakları"
