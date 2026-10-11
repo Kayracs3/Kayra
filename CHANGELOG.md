@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:f122d21fb561c5d2f0e4d7eca0378aacb3bd794a -->
+### Expose subtitle files declared by page and HLS sources
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [f122d21](https://github.com/Kayracs3/Kayra/commit/f122d21fb561c5d2f0e4d7eca0378aacb3bd794a)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:da9f123210ab28d2c44cd19acd0e36fc25d61e6a -->
 ### Populate poster cards with IMDb scores
 
