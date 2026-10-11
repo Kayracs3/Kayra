@@ -1625,6 +1625,58 @@ class FilmizleHell : MainAPI() {
         var found = 0
         val playerReferer = if (host == "p.playturka.space") embedUrl else "https://p.playturka.space/"
         for (id in ids.take(3)) {
+            // Playturka uses a direct VTT sidecar next to the HLS files:
+            // /videos/{videoId}/subtitles/tr.vtt (sometimes cache-busted with ?v=...).
+            // Validate the response before exposing it to CloudStream so HTML/404 pages
+            // are not incorrectly listed as subtitles.
+            val subtitleBase = "https://p.playturka.space/videos/" + id + "/subtitles/tr.vtt"
+            val subtitleCandidates = listOf(
+                subtitleBase,
+                subtitleBase + "?v=" + (System.currentTimeMillis() / 1000L)
+            )
+            var directSubtitleAdded = false
+            for (subtitleUrl in subtitleCandidates) {
+                val subtitleResponse = runCatching {
+                    app.get(
+                        subtitleUrl,
+                        headers = requestHeaders + mapOf(
+                            "Accept" to "text/vtt,text/plain,*/*",
+                            "Referer" to playerReferer
+                        ),
+                        referer = playerReferer,
+                        allowRedirects = true,
+                        timeout = 9000
+                    )
+                }.onFailure {
+                    Log.d(name, "Playturka Türkçe VTT isteği başarısız: " +
+                        safeLogUrl(subtitleUrl) + " (" + it.javaClass.simpleName + ")")
+                }.getOrNull() ?: continue
+
+                val body = subtitleResponse.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+                val contentType = subtitleResponse.headers["content-type"].orEmpty()
+                val looksLikeVtt = body.startsWith("WEBVTT", true) ||
+                    (contentType.contains("text/vtt", true) && body.contains("-->"))
+                if (subtitleResponse.isSuccessful && looksLikeVtt) {
+                    val resolvedSubtitleUrl = subtitleResponse.url.ifBlank { subtitleUrl }
+                    if (seenSubtitles.add(resolvedSubtitleUrl)) {
+                        subtitleCallback(newSubtitleFile("Turkish", resolvedSubtitleUrl))
+                        Log.d(name, "Playturka Türkçe VTT bulundu: id=" + id +
+                            ", url=" + safeLogUrl(resolvedSubtitleUrl) +
+                            ", type=" + contentType.take(70))
+                    }
+                    directSubtitleAdded = true
+                    break
+                } else {
+                    Log.d(name, "Playturka Türkçe VTT doğrulanmadı: id=" + id +
+                        ", HTTP=" + subtitleResponse.code +
+                        ", type=" + contentType.take(70) +
+                        ", WEBVTT=" + body.startsWith("WEBVTT", true))
+                }
+            }
+            if (!directSubtitleAdded) {
+                Log.d(name, "Playturka doğrudan Türkçe VTT bulunamadı: id=" + id)
+            }
+
             publishPlayturkaApiSubtitles(id, playerReferer, seenSubtitles, subtitleCallback)
             for (fileName in listOf("master.m3u8", "index.m3u8")) {
                 val manifest = "https://p.playturka.space/videos/" + id + "/" + fileName
