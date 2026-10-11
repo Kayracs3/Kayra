@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:68c8f713432a707933600935463afea7909d4378 -->
+### Preserve compiler diagnostics for automatic provider repair
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [68c8f71](https://github.com/Kayracs3/Kayra/commit/68c8f713432a707933600935463afea7909d4378)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:09650722d6499b0a7bc00eef0cdfa447a59b4cd5 -->
 ### Normalize generated providers against current CloudStream API
 
