@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:7f6e2b2e093298a6e0a74423ea7ca86f93e6710a -->
+### Add bounded Android emulator startup with ADB diagnostics
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7f6e2b2](https://github.com/Kayracs3/Kayra/commit/7f6e2b2e093298a6e0a74423ea7ca86f93e6710a)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:01e8776089dfb0e2112c0d5a0b7abef86080e974 -->
 ### Retry and verify Android emulator image installation
 
