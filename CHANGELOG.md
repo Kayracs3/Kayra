@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:bb2fef4d50f09133637a066e21a4e0f4f838cfcc -->
+### Scan Playturka player HTML and scripts for subtitle tracks
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [bb2fef4](https://github.com/Kayracs3/Kayra/commit/bb2fef4d50f09133637a066e21a4e0f4f838cfcc)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:cea5308db112d9f2e144d3cefb4478c3783aac70 -->
 ### Fix suspend HLS subtitle file publishing in FilmizleHell
 
