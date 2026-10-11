@@ -210,6 +210,15 @@ class FilmizleHell : MainAPI() {
         return false
     }
 
+    private fun isCommentSectionHeading(text: String): Boolean {
+        val normalized = normalizeSectionText(text)
+        return normalized.contains("son yorum") ||
+            normalized == "yorumlar" ||
+            normalized == "comments" ||
+            normalized == "recent comments" ||
+            normalized == "latest comments"
+    }
+
     private fun isNewContentHeading(text: String): Boolean {
         val normalized = normalizeSectionText(text)
         return normalized.contains("yeni eklenen bolum") ||
@@ -395,8 +404,22 @@ class FilmizleHell : MainAPI() {
         val detailLookupLimit = if (query != null) 12 else 8
         var detailLookups = 0
 
+        // Even if the website's theme gives its comments widget no useful CSS
+        // class, anything after the "Son Yorumlar" heading is not a content card.
+        val allElements = document.getAllElements()
+        val commentHeadingIndex = allElements.indexOfFirst { element ->
+            element.tagName().lowercase(Locale.ROOT) in setOf("h1", "h2", "h3", "h4", "h5", "h6") &&
+                isCommentSectionHeading(element.ownText().ifBlank { element.text() })
+        }
+        val afterCommentHeading = if (commentHeadingIndex >= 0) {
+            allElements.drop(commentHeadingIndex + 1).toHashSet()
+        } else {
+            emptySet()
+        }
+
         for (anchor in candidateAnchors ?: document.select("a[href]")) {
             if (isCommentOrChrome(anchor)) continue
+            if (candidateAnchors == null && anchor in afterCommentHeading) continue
             val url = fixUrl(anchor.attr("href"), base) ?: continue
             if (!sameSite(url) || !isFilmUrl(url)) continue
             val key = url.trimEnd('/')
