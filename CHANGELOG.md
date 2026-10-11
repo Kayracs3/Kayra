@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:beb5c90d7a50aab61b5d3d86a138fe844dcf7975 -->
+### Probe Playturka subtitle response fields
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [beb5c90](https://github.com/Kayracs3/Kayra/commit/beb5c90d7a50aab61b5d3d86a138fe844dcf7975)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:35932450ace34fce2d6406e499119e3095aba42a -->
 ### Inspect Playturka subtitle data request
 
