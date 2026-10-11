@@ -62,10 +62,10 @@
     },
     {
         "iconUrl": "https://www.dizibox.live/favicon.ico",
-        "fileHash": "sha256-87a8919eb4e178703f5c4169342ce4e4dc6ca559758fa15c3b498276e826863d",
+        "fileHash": "sha256-c89c6577b1241668d9f82a557a5d732c5b058495dca19cf260d0de614da90edb",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 48146,
+        "fileSize": 50903,
         "status": 1,
         "language": "tr",
         "authors": [
