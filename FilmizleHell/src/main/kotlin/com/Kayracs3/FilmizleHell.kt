@@ -161,14 +161,175 @@ class FilmizleHell : MainAPI() {
     }
 
     private fun imageFor(link: Element, base: String): String? {
-        val candidates = listOf(
-            link.selectFirst("img"),
-            link.parent()?.selectFirst("img"),
-            link.parent()?.parent()?.selectFirst("img")
+        imageUrl(link.selectFirst("img"), base)?.let { return it }
+
+        // A parent image is safe only when that small wrapper points to one
+        // content page. The old broad parent/parent lookup could borrow a poster
+        // from a neighbouring section or from the "Son Yorumlar" widget.
+        var parent: Element? = link.parent()
+        repeat(3) {
+            val container = parent ?: return null
+            val filmTargets = container.select("a[href]").mapNotNull { anchor ->
+                val url = fixUrl(anchor.attr("href"), base) ?: return@mapNotNull null
+                url.takeIf { sameSite(it) && isFilmUrl(it) && !isCommentOrChrome(anchor) }
+            }.map { it.trimEnd('/') }.distinct()
+
+            if (filmTargets.size == 1) {
+                val image = container.select("img").firstOrNull()
+                imageUrl(image, base)?.let { return it }
+            }
+            parent = container.parent()
+        }
+        return null
+    }
+
+    private fun normalizeSectionText(value: String?): String =
+        cleanText(value).lowercase(Locale("tr", "TR"))
+            .replace('ı', 'i')
+            .replace('ş', 's')
+            .replace('ğ', 'g')
+            .replace('ü', 'u')
+            .replace('ö', 'o')
+            .replace('ç', 'c')
+            .replace(Regex("""[^\p{L}\p{N}\s]"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+    private fun isCommentOrChrome(anchor: Element): Boolean {
+        val blockedMarker = Regex(
+            """(?i)(comment|comments|yorum|yorumlar|review|reviews|feedback|disqus|recent-comments|latest-comments)"""
         )
-        for (image in candidates) {
-            val result = imageUrl(image, base)
-            if (result != null) return result
+        var current: Element? = anchor
+        repeat(9) {
+            val node = current ?: return false
+            val marker = node.id() + " " + node.className()
+            if (blockedMarker.containsMatchIn(marker)) return true
+            if (node.tagName().lowercase(Locale.ROOT) in setOf("footer", "aside", "nav")) return true
+            current = node.parent()
+        }
+        return false
+    }
+
+    private fun isNewContentHeading(text: String): Boolean {
+        val normalized = normalizeSectionText(text)
+        return normalized.contains("yeni eklenen bolum") ||
+            normalized.contains("son eklenen bolum") ||
+            normalized.contains("yeni bolumler") ||
+            normalized.contains("yeni eklenen film") ||
+            normalized == "yeni eklenenler"
+    }
+
+    private fun isSectionBoundaryHeading(text: String): Boolean {
+        val normalized = normalizeSectionText(text)
+        if (isNewContentHeading(normalized)) return true
+        return listOf(
+            "son yorum", "yorumlar", "comments", "recent comments", "latest comments",
+            "en cok izlenen", "trend filmler", "trend diziler", "yakinda gelecek",
+            "2026 yili", "2025 yili", "kesfet", "film robotu", "kategoriler",
+            "film turleri", "tum filmler", "seriler", "platformlar", "haftanin secme"
+        ).any { normalized.contains(it) }
+    }
+
+    private fun newContentHeading(document: Document): Element? {
+        val headings = document.select("h1,h2,h3,h4,h5,h6")
+        // Episode-specific heading wins when the site exposes one; otherwise use
+        // the site's new-film/new-content section.
+        return headings.firstOrNull {
+            val title = normalizeSectionText(it.text())
+            title.contains("yeni eklenen bolum") ||
+                title.contains("son eklenen bolum") ||
+                title.contains("yeni bolumler")
+        } ?: headings.firstOrNull { isNewContentHeading(it.text()) }
+    }
+
+    private fun linksAfterHeading(
+        document: Document,
+        heading: Element,
+        base: String
+    ): List<Element> {
+        val elements = document.getAllElements()
+        val headingIndex = elements.indexOfFirst { it === heading }
+        if (headingIndex < 0) return emptyList()
+
+        val links = ArrayList<Element>()
+        for (index in (headingIndex + 1) until elements.size) {
+            val element = elements[index]
+            val tag = element.tagName().lowercase(Locale.ROOT)
+            if (tag in setOf("h1", "h2", "h3", "h4", "h5", "h6")) {
+                val headingText = normalizeSectionText(element.ownText().ifBlank { element.text() })
+                if (isSectionBoundaryHeading(headingText)) break
+            }
+            if (tag != "a" || !element.hasAttr("href") || isCommentOrChrome(element)) continue
+            val absolute = fixUrl(element.attr("href"), base) ?: continue
+            if (!sameSite(absolute)) continue
+            links.add(element)
+        }
+        return links
+    }
+
+    private fun findNewContentMoreUrl(document: Document, base: String): String? {
+        val heading = newContentHeading(document)
+        if (heading != null) {
+            val scopedLinks = linksAfterHeading(document, heading, base)
+            val more = scopedLinks.firstOrNull { anchor ->
+                val label = normalizeSectionText(
+                    anchor.text() + " " + anchor.attr("aria-label") + " " + anchor.attr("title")
+                )
+                label.contains("tumunu gor") ||
+                    label.contains("tum bolumleri gor") ||
+                    label.contains("hepsini gor") ||
+                    label.contains("tum bolumler")
+            }
+            if (more != null) {
+                val url = fixUrl(more.attr("href"), base) ?: return null
+                if (sameSite(url) && url.trimEnd('/') != base.trimEnd('/')) return url
+            }
+
+            // On templates where the "Tümünü Gör" control sits just outside the
+            // heading's sibling range, inspect ancestors containing this section.
+            var parent: Element? = heading.parent()
+            repeat(6) {
+                val container = parent ?: return@repeat
+                val hasContentCards = container.select("a[href]").any { anchor ->
+                    val url = fixUrl(anchor.attr("href"), base) ?: return@any false
+                    sameSite(url) && isFilmUrl(url) && !isCommentOrChrome(anchor)
+                }
+                if (hasContentCards) {
+                    val button = container.select("a[href]").firstOrNull { anchor ->
+                        if (isCommentOrChrome(anchor)) return@firstOrNull false
+                        val label = normalizeSectionText(
+                            anchor.text() + " " + anchor.attr("aria-label") + " " + anchor.attr("title")
+                        )
+                        label.contains("tumunu gor") ||
+                            label.contains("tum bolumleri gor") ||
+                            label.contains("hepsini gor") ||
+                            label.contains("tum bolumler")
+                    }
+                    val url = button?.let { fixUrl(it.attr("href"), base) }
+                    if (url != null && sameSite(url) && url.trimEnd('/') != base.trimEnd('/')) return url
+                }
+                parent = container.parent()
+            }
+        }
+
+        // Fallback: only accept a "Tümünü Gör" control near actual content cards.
+        for (anchor in document.select("a[href]")) {
+            if (isCommentOrChrome(anchor)) continue
+            val label = normalizeSectionText(
+                anchor.text() + " " + anchor.attr("aria-label") + " " + anchor.attr("title")
+            )
+            if (!(label.contains("tumunu gor") || label.contains("tum bolumleri gor") ||
+                    label.contains("hepsini gor") || label.contains("tum bolumler"))
+            ) continue
+            val url = fixUrl(anchor.attr("href"), base) ?: continue
+            if (!sameSite(url) || url.trimEnd('/') == base.trimEnd('/')) continue
+            val nearContent = anchor.parents().take(6).any { ancestor ->
+                ancestor.select("a[href]").count { sibling ->
+                    val siblingUrl = fixUrl(sibling.attr("href"), base) ?: return@count false
+                    isFilmUrl(siblingUrl) && !isCommentOrChrome(sibling)
+                } >= 3
+            }
+            if (nearContent) return url
         }
         return null
     }
@@ -224,12 +385,18 @@ class FilmizleHell : MainAPI() {
         }
         return null
     }
-    private suspend fun parseCards(document: Document, base: String, query: String? = null): List<SearchResponse> {
+    private suspend fun parseCards(
+        document: Document,
+        base: String,
+        query: String? = null,
+        candidateAnchors: List<Element>? = null
+    ): List<SearchResponse> {
         val output = LinkedHashMap<String, SearchResponse>()
         val detailLookupLimit = if (query != null) 12 else 8
         var detailLookups = 0
 
-        for (anchor in document.select("a[href]")) {
+        for (anchor in candidateAnchors ?: document.select("a[href]")) {
+            if (isCommentOrChrome(anchor)) continue
             val url = fixUrl(anchor.attr("href"), base) ?: continue
             if (!sameSite(url) || !isFilmUrl(url)) continue
             val key = url.trimEnd('/')
@@ -269,6 +436,31 @@ class FilmizleHell : MainAPI() {
         return output.values.toList()
     }
 
+    private fun mergeCardResults(
+        preferred: List<SearchResponse>,
+        additional: List<SearchResponse>
+    ): List<SearchResponse> {
+        val merged = LinkedHashMap<String, SearchResponse>()
+        for (item in preferred + additional) {
+            val key = item.url.trimEnd('/')
+            val existing = merged[key]
+            if (existing == null) {
+                merged[key] = item
+            } else {
+                if (existing.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank()) {
+                    existing.posterUrl = item.posterUrl
+                }
+                if (existing.posterHeaders == null && item.posterHeaders != null) {
+                    existing.posterHeaders = item.posterHeaders
+                }
+                if (existing.score == null && item.score != null) {
+                    existing.score = item.score
+                }
+            }
+        }
+        return merged.values.toList()
+    }
+
     private fun matchesQuery(title: String, query: String): Boolean {
         fun normalize(input: String): String = input.lowercase(Locale("tr", "TR"))
             .replace('ı', 'i')
@@ -295,11 +487,89 @@ class FilmizleHell : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
-        for (url in pageCandidates(request.data, page)) {
+        val homeRequest = pathOf(request.data).trimEnd('/').isBlank() ||
+            request.data.trimEnd('/') == mainUrl.trimEnd('/')
+        var contentListingUrl: String? = null
+
+        // The "Tümünü Gör" target is the canonical source for older entries.
+        // Rediscover it for page 2+ because HomePageRequest keeps the original homepage URL.
+        if (homeRequest && page > 1) {
+            val homeDocument = fetchDocument(mainUrl) ?: fetchDocument(mainUrl + "/")
+            if (homeDocument != null) {
+                contentListingUrl = findNewContentMoreUrl(homeDocument, mainUrl + "/")
+            }
+        }
+
+        val pageBase = if (homeRequest && page > 1 && !contentListingUrl.isNullOrBlank()) {
+            contentListingUrl!!
+        } else {
+            request.data
+        }
+        val urls = pageCandidates(pageBase, page)
+
+        for (url in urls) {
             val doc = fetchDocument(url) ?: continue
-            val items = parseCards(doc, url)
+            val baseSection = newContentHeading(doc)
+            val scopedAnchors = if (homeRequest && page == 1 && baseSection != null) {
+                linksAfterHeading(doc, baseSection, url).filter { anchor ->
+                    val target = fixUrl(anchor.attr("href"), url)
+                    target != null && sameSite(target) && isFilmUrl(target) && !isCommentOrChrome(anchor)
+                }
+            } else {
+                null
+            }
+
+            var items = parseCards(
+                doc,
+                url,
+                candidateAnchors = scopedAnchors?.takeIf { it.isNotEmpty() }
+            )
+
+            if (homeRequest && page == 1) {
+                val moreUrl = findNewContentMoreUrl(doc, url)
+                if (!moreUrl.isNullOrBlank() && moreUrl.trimEnd('/') != url.trimEnd('/')) {
+                    val moreDocument = fetchDocument(moreUrl, url)
+                    if (moreDocument != null) {
+                        val moreHeading = newContentHeading(moreDocument)
+                        val moreAnchors = if (moreHeading != null) {
+                            linksAfterHeading(moreDocument, moreHeading, moreUrl).filter { anchor ->
+                                val target = fixUrl(anchor.attr("href"), moreUrl)
+                                target != null && sameSite(target) && isFilmUrl(target) &&
+                                    !isCommentOrChrome(anchor)
+                            }
+                        } else {
+                            null
+                        }
+                        val moreItems = parseCards(
+                            moreDocument,
+                            moreUrl,
+                            candidateAnchors = moreAnchors?.takeIf { it.isNotEmpty() }
+                        )
+                        if (moreItems.isNotEmpty()) {
+                            Log.d(
+                                name,
+                                "Tümünü Gör listesi: url=" + safeLogUrl(moreUrl) +
+                                    ", section=" + (moreHeading?.text().orEmpty()) +
+                                    ", count=" + moreItems.size
+                            )
+                            items = mergeCardResults(items, moreItems)
+                        } else {
+                            Log.d(name, "Tümünü Gör sayfasında içerik bulunamadı: " + safeLogUrl(moreUrl))
+                        }
+                    }
+                }
+            }
+
+            Log.d(
+                name,
+                "Ana sayfa bölümü: request=" + request.name +
+                    ", page=" + page +
+                    ", section=" + baseSection?.text().orEmpty() +
+                    ", items=" + items.size
+            )
             if (items.isNotEmpty() || page == 1) {
-                return newHomePageResponse(request.name, items, hasNext = page < 30 && items.isNotEmpty())
+                val hasMore = page < 30 && (items.isNotEmpty() || contentListingUrl != null)
+                return newHomePageResponse(request.name, items, hasNext = hasMore)
             }
         }
         return null
