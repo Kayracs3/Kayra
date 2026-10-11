@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:d4885303876f2e79458f3ffe4f7be76c67ebf6ac -->
+### Fail fast on long AI token-rate-limit cooldowns
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [d488530](https://github.com/Kayracs3/Kayra/commit/d4885303876f2e79458f3ffe4f7be76c67ebf6ac)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:251bed78da1b317fb08ecfa05d5b8c34bf30c66c -->
 ### Fix newline handling in AI response parsing
 
