@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:01eb6fa1d2ae58ed30cff326fd00855a0b35a7af -->
+### Generate required CloudStream plugin entrypoint class
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [01eb6fa](https://github.com/Kayracs3/Kayra/commit/01eb6fa1d2ae58ed30cff326fd00855a0b35a7af)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:68c8f713432a707933600935463afea7909d4378 -->
 ### Preserve compiler diagnostics for automatic provider repair
 
