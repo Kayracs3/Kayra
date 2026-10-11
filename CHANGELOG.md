@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:9bf3bcf69824088e47702a21a9aa2a5614ed492a -->
+### Extract Playturka video IDs from URL fragments
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [9bf3bcf](https://github.com/Kayracs3/Kayra/commit/9bf3bcf69824088e47702a21a9aa2a5614ed492a)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:1e7f37eac8bfce10e86ca2cbdaa094c29522473c -->
 ### Remove temporary Playturka source inspection workflow
 
