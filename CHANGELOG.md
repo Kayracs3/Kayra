@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:2e2768b82fa902f2a5b8e500906f06da38153d05 -->
+### Temporarily inspect Playturka subtitle API
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [2e2768b](https://github.com/Kayracs3/Kayra/commit/2e2768b82fa902f2a5b8e500906f06da38153d05)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:0ac82a567f4614edd7b30beed342bda61760f522 -->
 ### Log Playturka source-selection JavaScript hints
 
