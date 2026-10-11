@@ -43,6 +43,27 @@ if [[ ! -s doctor-results/android/playback-smoke.json ]]; then
   exit 1
 fi
 
+# A search that cannot be verified is not a confirmed provider failure. Do not
+# mutate generated Kotlin based only on missing search results or onboarding UI.
+if python3 - <<'PY'
+import json, pathlib, sys
+p = pathlib.Path("doctor-results/android/playback-smoke.json")
+try:
+    d = json.loads(p.read_text(encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+if d.get("failed", 0) == 0 and d.get("unverified", 0) > 0 and d.get("passed", 0) == 0:
+    print("CloudStream arama sonucu doğrulanamadı. Eklenti kodu otomatik değiştirilmedi; playback testi kesin sonuç vermedi.")
+    for item in d.get("results", []):
+        if item.get("status") == "unverified":
+            print(f"- {item.get('provider', 'unknown')}: {item.get('detail', '')}")
+    sys.exit(0)
+sys.exit(1)
+PY
+then
+  exit 1
+fi
+
 # ADB/ActivityManager timeouts are test-environment failures, not evidence of a
 # broken provider. Never let a flaky emulator launch trigger arbitrary source edits.
 if python3 - <<'PY'
