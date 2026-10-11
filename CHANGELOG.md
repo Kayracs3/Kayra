@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:1e7f37eac8bfce10e86ca2cbdaa094c29522473c -->
+### Remove temporary Playturka source inspection workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [1e7f37e](https://github.com/Kayracs3/Kayra/commit/1e7f37eac8bfce10e86ca2cbdaa094c29522473c)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:da89426ef4610915315c593629e2cda78e745277 -->
 ### Refine temporary Playturka source diagnostics
 
