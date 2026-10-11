@@ -752,12 +752,12 @@ class FilmizleHell : MainAPI() {
         if (ids.isEmpty()) {
             val decodedHints = decode(html)
             val apiHints = Regex(
-                """(?is).{0,70}(?:fetch\\s*\\(|XMLHttpRequest|axios|/api/|api/|master\\.m3u8|/videos/|video[_-]?id|source[_-]?id|playlist).{0,100}"""
+                """(?is).{0,70}(?:fetch\s*\(|XMLHttpRequest|axios|/api/|api/|master\.m3u8|/videos/|video[_-]?id|source[_-]?id|playlist).{0,100}"""
             ).findAll(decodedHints)
                 .take(8)
                 .map {
-                    it.value.replace(Regex("""\\s+"""), " ").trim()
-                        .replace(Regex("""([?&][\\w-]{1,40}=)[^&\\s"'<>]+""")) { match ->
+                    it.value.replace(Regex("""\s+"""), " ").trim()
+                        .replace(Regex("""([?&][\w-]{1,40}=)[^&\s"'<>]+""")) { match ->
                             match.groupValues[1] + "*"
                         }
                 }
