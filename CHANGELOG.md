@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:81503af821d2348a8f4b764a742fdc46440d40f5 -->
+### Filter FilmizleHell player noise and probe validated Playturka manifests
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [81503af](https://github.com/Kayracs3/Kayra/commit/81503af821d2348a8f4b764a742fdc46440d40f5)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:5743740e6143059673cc327a46d74b5374ae43a1 -->
 ### Improve FilmizleHell player extraction and genre parsing
 
