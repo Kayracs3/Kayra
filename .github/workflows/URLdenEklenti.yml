@@ -133,6 +133,47 @@ jobs:
           PY
           echo "build_ok=true" >> "$GITHUB_OUTPUT"
 
+      - name: Android 35 sistem imajını indir ve doğrula (3 deneme)
+        if: steps.build.outputs.build_ok == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          test -x "$SDKMANAGER"
+          PACKAGE="system-images;android-35;google_apis;x86_64"
+          IMAGE_DIR="$ANDROID_SDK_ROOT/system-images/android-35/google_apis/x86_64"
+
+          for attempt in 1 2 3; do
+            echo "::group::Android 35 system image download attempt $attempt/3"
+            if [ -s "$IMAGE_DIR/system.img" ] && [ -f "$IMAGE_DIR/source.properties" ]; then
+              echo "Android emulator system image is already installed and verified."
+              echo "::endgroup::"
+              exit 0
+            fi
+
+            "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --uninstall "$PACKAGE" >/dev/null 2>&1 || true
+            rm -rf "$IMAGE_DIR" "$HOME/.android/cache"
+
+            if "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --install "$PACKAGE" --channel=0; then
+              if [ -s "$IMAGE_DIR/system.img" ] && [ -f "$IMAGE_DIR/source.properties" ]; then
+                echo "Android emulator system image download verified."
+                echo "::endgroup::"
+                exit 0
+              fi
+              echo "SDK manager reported success, but required image files are missing." >&2
+            else
+              echo "Android system image install failed on attempt $attempt." >&2
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then sleep 5; fi
+          done
+
+          echo "::error::Android 35 system image could not be installed after three attempts."
+          exit 1
+
       - name: Android oynatma testi ve başarısızsa otomatik düzeltme
         if: steps.build.outputs.build_ok == 'true'
         uses: reactivecircus/android-emulator-runner@v2
