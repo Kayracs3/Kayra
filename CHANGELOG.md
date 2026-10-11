@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:4e05d7155240c022448055899024b727b8a91904 -->
+### Remove temporary Playturka subtitle inspection workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [4e05d71](https://github.com/Kayracs3/Kayra/commit/4e05d7155240c022448055899024b727b8a91904)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:beb5c90d7a50aab61b5d3d86a138fe844dcf7975 -->
 ### Probe Playturka subtitle response fields
 
