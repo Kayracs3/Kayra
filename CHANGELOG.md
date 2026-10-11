@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:09650722d6499b0a7bc00eef0cdfa447a59b4cd5 -->
+### Normalize generated providers against current CloudStream API
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [0965072](https://github.com/Kayracs3/Kayra/commit/09650722d6499b0a7bc00eef0cdfa447a59b4cd5)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:0b4e3ba998feaed2a5483a765579e4de4fb2be02 -->
 ### Normalize generated providers for current CloudStream API
 
