@@ -7,7 +7,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-FILE_RE = re.compile(r"file:///.*?/src/([^:\\n]+\\.kt):(\\d+)")
+FILE_RE = re.compile(r"file:///.*?/src/([^:\n]+\.kt):(\d+)")
 
 def main():
     parser = argparse.ArgumentParser()

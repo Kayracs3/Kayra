@@ -963,9 +963,7 @@ class DiziBoxLive : MainAPI() {
             app.get(posterUrl, headers = headers, referer = "$mainUrl/")
         }.getOrNull() ?: return null
 
-        val contentType = response.headers.entries
-            .firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }
-            ?.value.orEmpty()
+        val contentType = response.headers["content-type"].orEmpty()
 
         return posterUrl.takeIf {
             response.isSuccessful && contentType.contains("image/", ignoreCase = true)
