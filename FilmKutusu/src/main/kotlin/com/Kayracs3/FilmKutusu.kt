@@ -387,6 +387,21 @@ class FilmKutusu : MainAPI() {
     private fun isDirectMedia(url: String): Boolean =
         Regex("""(?i)\.(m3u8|mp4|webm|mpd)(?:[?#].*)?$""").containsMatchIn(url)
 
+    // Static site assets can also end in .webm; they must never be offered as films.
+    private fun isLikelyMediaUrl(url: String): Boolean {
+        if (!isDirectMedia(url)) return false
+        val path = runCatching { URI(url).path.orEmpty().lowercase(Locale.ROOT) }
+            .getOrDefault("")
+        val staticPathMarkers = listOf(
+            "/public/assets/", "/assets/", "/icons/", "/images/",
+            "/img/", "/static/", "/favicon"
+        )
+        if (staticPathMarkers.any { path.contains(it) }) return false
+        val fileName = path.substringAfterLast('/')
+        if (fileName in setOf("site.webm", "logo.webm", "favicon.webm")) return false
+        return true
+    }
+
     private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         val type = when {
             url.contains(".m3u8", true) -> ExtractorLinkType.M3U8
@@ -406,7 +421,7 @@ class FilmKutusu : MainAPI() {
         val embeds = LinkedHashSet<String>()
         fun addDirect(raw: String?) {
             val fixed = fixUrl(raw, base) ?: return
-            if (isDirectMedia(fixed)) direct += fixed
+            if (isLikelyMediaUrl(fixed)) direct += fixed
         }
 
         document.select("video[src], video source[src], video source[data-src], source[src], source[data-src], a[href]").forEach { element ->
@@ -422,7 +437,7 @@ class FilmKutusu : MainAPI() {
         }
         mediaRegex.findAll(html).forEach { match ->
             val fixed = fixUrl(match.value, base) ?: return@forEach
-            if (isDirectMedia(fixed)) direct += fixed
+            if (isLikelyMediaUrl(fixed)) direct += fixed
         }
         return direct to embeds
     }
@@ -451,6 +466,14 @@ class FilmKutusu : MainAPI() {
             if (seenSubs.add(subtitle)) subtitleCallback(newSubtitleFile("Altyazı", subtitle))
         }
 
+        val pageText = response.document.text()
+        if (Regex("""(?i)video\s+kalite\s+dosyaları\s+bulunamadı|video\s+dosyaları\s+bulunamadı""")
+                .containsMatchIn(pageText)
+        ) {
+            Log.w(name, "Bu film sayfası video dosyalarının sunucuya yüklenmediğini bildiriyor; oynatılabilir kaynak yok.")
+            return false
+        }
+
         val (direct, embeds) = collectMedia(response.document, response.text, response.url)
         var found = false
         direct.forEach { stream ->
@@ -459,7 +482,7 @@ class FilmKutusu : MainAPI() {
         }
 
         for (embed in embeds.take(12)) {
-            if (isDirectMedia(embed)) {
+            if (isLikelyMediaUrl(embed)) {
                 publishDirect(embed, response.url, callback)
                 found = true
                 continue
