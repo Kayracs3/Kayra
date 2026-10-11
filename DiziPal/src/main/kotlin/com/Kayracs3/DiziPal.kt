@@ -127,18 +127,21 @@ class DiziPal : MainAPI() {
             results = parseListingFallback(document, baseUrl)
         }
 
-        // Home cards are only a preview. Always read the first page of the full
-        // episode listing and also follow the real "Tümünü Gör" link (often page 2).
-        // Never stop after the first page merely because it already contains posters.
-        if (isLatestEpisodesPage) {
+        // The homepage carousel may expose episode names but omit their posters
+        // from the anchor itself. Consult page 1 of the full listing first: the
+        // homepage's "Tümünü Gör" link points to page 2, which contains older episodes.
+        if (isLatestEpisodesPage &&
+            (results.size < 11 || results.any { it.posterUrl.isNullOrBlank() })
+        ) {
             val linkedMoreUrl = findCurrentEpisodesMoreUrl(document, baseUrl)
             val candidateUrls = listOf(
                 "$mainUrl/yeni-eklenen-dizi-bolumler?page=1",
                 linkedMoreUrl.orEmpty(),
             ).filter { it.isNotBlank() }.distinct()
 
-            val moreResultsByUrl = LinkedHashMap<String, SearchResponse>()
-            val usedUrls = ArrayList<String>()
+            var usedUrl = ""
+            var moreResults: List<SearchResponse> = emptyList()
+            var bestPosterCount = -1
 
             for (candidateUrl in candidateUrls) {
                 val moreDocument = runCatching {
@@ -150,46 +153,39 @@ class DiziPal : MainAPI() {
                         timeout = 12000,
                     ).document
                 }.onFailure {
-                    Log.d("DiziPal", "Bölüm liste isteği hatası: " + candidateUrl + "; " + it.message)
+                    Log.d("DiziPal", "Bölüm liste isteği hatası: $candidateUrl; ${it.message}")
                 }.getOrNull() ?: continue
 
                 val candidateBase = documentBase(moreDocument, candidateUrl)
                 val candidateResults = parseCurrentEpisodeSection(moreDocument, candidateBase)
-                if (candidateResults.isEmpty()) {
-                    Log.d("DiziPal", "Bölüm liste ayrıştırması boş: " + candidateUrl)
-                    continue
+                val candidatePosterCount = candidateResults.count { !it.posterUrl.isNullOrBlank() }
+
+                if (candidateResults.isNotEmpty() && candidatePosterCount > bestPosterCount) {
+                    moreResults = candidateResults
+                    usedUrl = candidateUrl
+                    bestPosterCount = candidatePosterCount
                 }
 
-                usedUrls.add(candidateUrl)
-                for (item in candidateResults) {
-                    val key = canonicalContentPath(normalizeUrl(item.url, candidateBase))
-                    val previous = moreResultsByUrl[key]
-                    if (previous == null) {
-                        moreResultsByUrl[key] = item
-                    } else if (previous.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank()) {
-                        previous.posterUrl = item.posterUrl
-                        previous.posterHeaders = item.posterHeaders
-                    }
-                }
+                // The first page is preferred, but if it contains no posters,
+                // inspect the site's linked page-2 listing as a fallback.
+                if (candidatePosterCount > 0) break
             }
 
-            val moreResults = moreResultsByUrl.values.toList()
             val homepageCount = results.size
             val homepagePosterCount = results.count { !it.posterUrl.isNullOrBlank() }
             if (moreResults.isNotEmpty()) {
-                // Preserve the homepage's newest entries first. The two full-list
-                // pages fill missing posters and append older, previously unseen episodes.
+                // Keep the newest homepage entries first. The listing only fills
+                // missing posters for matching episode URLs and appends other entries.
                 results = mergeEpisodeSearchResults(results, moreResults)
             }
 
             Log.d(
                 "DiziPal",
-                "Tam bölüm listesi kontrolü: adres=" + usedUrls.joinToString(" | ") +
-                    "; ana=" + homepageCount + "/" + homepagePosterCount + " afiş" +
-                    "; tam liste=" + moreResults.size + "/" +
-                    moreResults.count { !it.posterUrl.isNullOrBlank() } + " afiş" +
-                    "; birleşik=" + results.size + "/" +
-                    results.count { !it.posterUrl.isNullOrBlank() } + " afiş",
+                "Tam bölüm listesi kontrolü: adres=$usedUrl; ana=$homepageCount/" +
+                    "$homepagePosterCount afiş; liste=${moreResults.size}/" +
+                    "${moreResults.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
+                    "birleşik=${results.size}/" +
+                    "${results.count { !it.posterUrl.isNullOrBlank() }} afiş",
             )
         }
 
@@ -1073,69 +1069,58 @@ class DiziPal : MainAPI() {
         baseUrl: String,
     ): String? {
         val heading = document.select("h1,h2,h3,h4,h5,h6").firstOrNull {
-            isEpisodeSectionHeading(normalizeTitleForMatch(it.text()))
-        }
-        val elements = document.getAllElements()
+            val title = normalizeTitleForMatch(it.text())
+            title.contains("guncel bolum") ||
+                title.contains("son eklenen bolum") ||
+                title.contains("yeni bolumler")
+        } ?: return null
 
-        if (heading != null) {
-            val headingIndex = elements.indexOfFirst { it === heading }
-            if (headingIndex >= 0) {
-                // Find the "Tümünü Gör" control before the next top-level section.
-                for (index in (headingIndex + 1) until elements.size) {
-                    val element = elements[index]
-                    val tag = element.tagName().lowercase()
-                    if (tag in setOf("h1", "h2", "h3", "h4", "h5", "h6")) {
-                        val headingText = normalizeTitleForMatch(
-                            element.ownText().ifBlank { element.text() }
-                        )
-                        if (isMajorEpisodeSectionBoundary(headingText)) break
-                    }
-                    if (tag != "a" || !element.hasAttr("href") || isInsideHardExcludedSection(element)) {
-                        continue
-                    }
-
+        var current: Element? = heading.parent()
+        repeat(10) {
+            val container = current ?: return null
+            val hasEpisodeLinks = container.select("a[href]").any { link ->
+                isEpisodeUrl(normalizeUrl(link.attr("href"), baseUrl))
+            }
+            if (hasEpisodeLinks) {
+                val more = container.select("a[href]").firstOrNull { link ->
                     val label = normalizeTitleForMatch(
-                        element.text() + " " + element.attr("aria-label") + " " + element.attr("title")
+                        link.text() + " " +
+                            link.attr("aria-label") + " " +
+                            link.attr("title")
                     )
-                    val isMore = label.contains("tumunu gor") ||
+                    label.contains("tumunu gor") ||
                         label.contains("tum bolumleri gor") ||
-                        label.contains("hepsini gor") ||
-                        label.contains("hepsini goster")
-                    if (!isMore) continue
+                        label.contains("hepsini gor")
+                }
 
-                    val href = normalizeUrl(element.attr("href"), baseUrl)
-                    val samePage = canonicalContentPath(href) == canonicalContentPath(baseUrl)
-                    if (href.startsWith("http", true) &&
-                        originOf(href) == originOf(baseUrl) &&
-                        !samePage
-                    ) {
+                if (more != null) {
+                    val href = normalizeUrl(more.attr("href"), baseUrl)
+                    val samePage = canonicalContentPath(href) ==
+                        canonicalContentPath(baseUrl)
+                    val sameSite = originOf(href) == originOf(baseUrl)
+                    if (href.startsWith("http", true) && !samePage && sameSite) {
                         return href
                     }
                 }
             }
+            current = container.parent()
         }
 
-        // Fallback for templates where the control is outside the heading's DOM
-        // section. The link still needs to sit beside genuine episode links.
+        // Some templates place the control just outside the heading container.
         for (link in document.select("a[href]")) {
             val label = normalizeTitleForMatch(
                 link.text() + " " + link.attr("aria-label") + " " + link.attr("title")
             )
-            if (!(label.contains("tumunu gor") || label.contains("hepsini gor") ||
-                    label.contains("hepsini goster"))
-            ) continue
-            if (isInsideHardExcludedSection(link) || isInsideExcludedEpisodeSection(document, link)) continue
-
+            if (!label.contains("tumunu gor")) continue
             val href = normalizeUrl(link.attr("href"), baseUrl)
             if (!href.startsWith("http", true) ||
                 originOf(href) != originOf(baseUrl) ||
                 canonicalContentPath(href) == canonicalContentPath(baseUrl)
             ) continue
 
-            val surroundingHasEpisodes = link.parents().take(6).any { ancestor ->
+            val surroundingHasEpisodes = link.parents().take(5).any { ancestor ->
                 ancestor.select("a[href]").count { item ->
-                    isEpisodeUrl(normalizeUrl(item.attr("href"), baseUrl)) &&
-                        !isInsideHardExcludedSection(item)
+                    isEpisodeUrl(normalizeUrl(item.attr("href"), baseUrl))
                 } >= 3
             }
             if (surroundingHasEpisodes) return href
@@ -1164,113 +1149,116 @@ class DiziPal : MainAPI() {
         return merged.values.toList()
     }
 
-    private fun isEpisodeSectionHeading(title: String): Boolean {
-        return listOf(
-            "guncel bolum",
-            "son eklenen bolum",
-            "yeni eklenen bolum",
-            "yeni bolum",
-            "dizi bolumleri",
-            "tum bolumler",
-        ).any { title.contains(it) }
-    }
-
-    private fun isMajorEpisodeSectionBoundary(title: String): Boolean {
-        if (isEpisodeSectionHeading(title)) return false
-        return listOf(
-            "son yorum",
-            "yorumlar",
-            "comments",
-            "recent comments",
-            "latest comments",
-            "trend filmler",
-            "trend diziler",
-            "son eklenen filmler",
-            "en cok izlenen diziler",
-            "en cok izlenen filmler",
-            "yabanci dizi izle",
-            "hd film izle",
-            "tum filmler",
-            "dizi arsivi",
-            "son eklenen diziler",
-            "diziler",
-            "filmler",
-        ).any { title.contains(it) }
-    }
-
-    private fun isInsideExcludedEpisodeSection(document: Document, link: Element): Boolean {
-        if (isInsideHardExcludedSection(link)) return true
-
-        val elements = document.getAllElements()
-        val linkIndex = elements.indexOfFirst { it === link }
-        if (linkIndex <= 0) return false
-
-        // Use the latest meaningful section heading before this link. A comment
-        // link can look like an episode URL, but it must not inherit the episode
-        // section just because both are somewhere inside the page's main wrapper.
-        for (index in (linkIndex - 1) downTo 0) {
-            val prior = elements[index]
-            if (prior.tagName().lowercase() !in setOf("h1", "h2", "h3", "h4", "h5", "h6")) {
-                continue
-            }
-            val heading = normalizeTitleForMatch(prior.ownText().ifBlank { prior.text() })
-            if (heading.isBlank()) continue
-            if (isEpisodeSectionHeading(heading)) return false
-            if (isMajorEpisodeSectionBoundary(heading)) return true
-        }
-        return false
-    }
-
     private fun parseCurrentEpisodeSection(
         document: Document,
         baseUrl: String,
     ): List<SearchResponse> {
-        val heading = document.select("h1,h2,h3,h4,h5,h6").firstOrNull {
-            isEpisodeSectionHeading(normalizeTitleForMatch(it.text()))
+        val headings = document.select("h1,h2,h3,h4,h5,h6")
+        val currentHeading = headings.firstOrNull {
+            val title = normalizeTitleForMatch(it.text())
+            title.contains("guncel bolum") ||
+                title.contains("son eklenen bolum") ||
+                title.contains("yeni bolumler")
         }
-        val allElements = document.getAllElements()
-        val scopedLinks = ArrayList<Element>()
 
-        if (heading != null) {
-            val headingIndex = allElements.indexOfFirst { it === heading }
-            if (headingIndex >= 0) {
-                // Stay inside the section after its heading. Stop at the next
-                // major section (especially "Son Yorumlar"), instead of scanning
-                // the page-wide wrapper and borrowing unrelated comment links/posters.
-                for (index in (headingIndex + 1) until allElements.size) {
-                    val element = allElements[index]
-                    val tag = element.tagName().lowercase()
-                    if (tag in setOf("h1", "h2", "h3", "h4", "h5", "h6")) {
-                        val headingText = normalizeTitleForMatch(
-                            element.ownText().ifBlank { element.text() }
-                        )
-                        if (isMajorEpisodeSectionBoundary(headingText)) break
+        var bestLinks: List<Element> = emptyList()
+        var bestCount = 0
+
+        if (currentHeading != null) {
+            // Look at each ancestor, including containers that also contain
+            // h2/h3 card titles. Card headings are not section boundaries.
+            // The real episode strip typically contains 11-25 unique links;
+            // a 3-card nested carousel must not win over its larger parent.
+            for (ancestor in currentHeading.parents()) {
+                val candidates = ancestor.select("a[href]").filter { link ->
+                    val href = normalizeUrl(link.attr("href"), baseUrl)
+                    // This heading already scopes us to "Güncel Bölümler".
+                    // Do not discard its links based on generic CSS names like
+                    // "popular" or "related"; themes reuse those on current episodes.
+                    isEpisodeUrl(href)
+                }
+                val count = candidates
+                    .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
+                    .distinct()
+                    .size
+
+                if (count in 11..40 && count > bestCount) {
+                    bestLinks = candidates
+                    bestCount = count
+                }
+            }
+
+            // Some site revisions wrap the heading separately from the list.
+            // Scan forward until a known major homepage section starts. Do not
+            // stop at generic h2 tags because those may be episode-card titles.
+            if (bestCount < 11) {
+                val allElements = document.getAllElements()
+                val headingIndex = allElements.indexOfFirst { it === currentHeading }
+                if (headingIndex >= 0) {
+                    val sectionLinks = ArrayList<Element>()
+                    for (index in (headingIndex + 1) until allElements.size) {
+                        val element = allElements[index]
+                        val tag = element.tagName().lowercase()
+
+                        if (tag in setOf("h1", "h2", "h3", "h4")) {
+                            val headingText = normalizeTitleForMatch(element.text())
+                            val isMajorBoundary = listOf(
+                                "trend filmler",
+                                "son eklenen filmler",
+                                "en cok izlenen diziler",
+                                "en cok izlenen filmler",
+                                "yabanci dizi izle",
+                                "hd film izle",
+                                "tum filmler",
+                                "dizi arsivi",
+                            ).any { headingText.contains(it) }
+
+                            if (isMajorBoundary) break
+                        }
+
+                        if (tag != "a" || !element.hasAttr("href")) continue
+                        val href = normalizeUrl(element.attr("href"), baseUrl)
+                        if (isEpisodeUrl(href)) {
+                            sectionLinks.add(element)
+                        }
                     }
 
-                    if (tag != "a" || !element.hasAttr("href")) continue
-                    val href = normalizeUrl(element.attr("href"), baseUrl)
-                    if (!isEpisodeUrl(href) || isInsideHardExcludedSection(element)) continue
-                    scopedLinks.add(element)
+                    val count = sectionLinks
+                        .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
+                        .distinct()
+                        .size
+
+                    if (count > bestCount) {
+                        bestLinks = sectionLinks
+                        bestCount = count
+                    }
                 }
             }
         }
 
-        // Prefer the heading-scoped section. Only use page-wide discovery if this
-        // page has no recognizable section heading; in that fallback, reject links
-        // that appear under comment/review headings or excluded sidebar/footer blocks.
-        val sourceLinks = when {
-            scopedLinks.isNotEmpty() -> scopedLinks
-            heading == null -> document.select("a[href]").filter { link ->
+        // Last-resort fallback: retain all real episode links from the page
+        // instead of returning just a small nested carousel. Duplicate URLs are
+        // removed below, and links in Trend/sidebar/footer sections are rejected.
+        if (bestCount < 11 || bestLinks.isEmpty()) {
+            val allEpisodeLinks = document.select("a[href]").filter { link ->
                 val href = normalizeUrl(link.attr("href"), baseUrl)
-                isEpisodeUrl(href) && !isInsideExcludedEpisodeSection(document, link)
+                isEpisodeUrl(href)
             }
-            else -> emptyList()
+            val allCount = allEpisodeLinks
+                .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
+                .distinct()
+                .size
+
+            if (allCount > bestCount) {
+                bestLinks = allEpisodeLinks
+                bestCount = allCount
+            }
         }
 
         val grouped = LinkedHashMap<String, MutableList<Element>>()
-        for (link in sourceLinks) {
+        bestLinks.forEach { link ->
             val href = normalizeUrl(link.attr("href"), baseUrl)
-            if (!isEpisodeUrl(href) || isInsideHardExcludedSection(link)) continue
+            if (!isEpisodeUrl(href)) return@forEach
             grouped.getOrPut(canonicalContentPath(href)) { ArrayList() }.add(link)
         }
 
@@ -1290,7 +1278,7 @@ class DiziPal : MainAPI() {
             val title = links.asSequence()
                 .map { link -> episodeListingTitle(link, href, baseUrl, null) }
                 .firstOrNull { it.isNotBlank() }
-                ?: "Bölüm " + (index + 1)
+                ?: "Bölüm ${index + 1}"
 
             results += newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
                 posterUrl = poster
@@ -1298,15 +1286,14 @@ class DiziPal : MainAPI() {
             }
         }
 
-        val pageEpisodeCount = sourceLinks
-            .map { canonicalContentPath(normalizeUrl(it.attr("href"), baseUrl)) }
-            .distinct()
-            .size
+        val pageEpisodeCount = document.select("a[href]")
+            .count { isEpisodeUrl(normalizeUrl(it.attr("href"), baseUrl)) }
         Log.d(
             "DiziPal",
-            "Güncel Bölümler: " + results.size + " kayıt, " +
-                results.count { !it.posterUrl.isNullOrBlank() } + " afiş; " +
-                "kaynak bağlantı=" + pageEpisodeCount + "; başlık=" + heading?.text().orEmpty(),
+            "Güncel Bölümler: ${results.size} kayıt, " +
+                "${results.count { !it.posterUrl.isNullOrBlank() }} afiş; " +
+                "seçilen bağlantı: $bestCount; başlık=${currentHeading?.text().orEmpty()}; " +
+                "sayfadaki bölüm bağlantısı=$pageEpisodeCount",
         )
         return results
     }
@@ -2250,8 +2237,7 @@ class DiziPal : MainAPI() {
     private fun isInsideHardExcludedSection(element: Element): Boolean {
         val excluded = Regex(
             "(?i)(trend|trending|popular|populer|sidebar|footer|recommend|related|" +
-                "breadcrumb|navbar|navigation|menu|comment|yorum|review|feedback|" +
-                "discussion|activity|recent-comment|latest-comment)"
+                "breadcrumb|navbar|navigation|menu)"
         )
         var current: Element? = element
         repeat(10) {
