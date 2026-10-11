@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:5163295090d462af21784577ad75d109ca16ba93 -->
+### Preserve FilmKutusu genre links in film details
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [5163295](https://github.com/Kayracs3/Kayra/commit/5163295090d462af21784577ad75d109ca16ba93)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:e353447a2006c52fa5b48e81343c59394c74dac1 -->
 ### Ignore FilmKutusu static webm icon as video source
 
