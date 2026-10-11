@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:a518716fed9e3e1bac7bde8ac9b407536edf1713 -->
+### Fix generated plugin source newline escaping
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [a518716](https://github.com/Kayracs3/Kayra/commit/a518716fed9e3e1bac7bde8ac9b407536edf1713)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:01eb6fa1d2ae58ed30cff326fd00855a0b35a7af -->
 ### Generate required CloudStream plugin entrypoint class
 
