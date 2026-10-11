@@ -513,7 +513,7 @@ class FilmizleHell : MainAPI() {
             "/storage/posters/", "/storage/backgrounds/", "/assets/", "/images/",
             "/icons/", "/avatars/", "/css/", "/js/", "/fonts/", "/favicon"
         ).any { path.contains(it) } ||
-            Regex("""\.(?:jpe?g|png|gif|webp|svg|ico|css|js|woff2?|ttf)(?:$|\?)""").containsMatchIn(url.lowercase(Locale.ROOT))
+            Regex("""\.(?:jpe?g|png|gif|webp|svg|ico|css|js|json|map|xml|txt|woff2?|ttf)(?:$|\?)""").containsMatchIn(url.lowercase(Locale.ROOT))
     }
 
     private fun isRejectedPlayerCandidate(raw: String, fixed: String): Boolean {
@@ -527,13 +527,17 @@ class FilmizleHell : MainAPI() {
 
         val host = runCatching { URI(fixed).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         val path = pathOf(fixed).lowercase(Locale.ROOT)
+        // Trailer embeds must never become the movie playback source.
+        // This site places its trailer YouTube iframe alongside the player source buttons.
         val blockedHosts = listOf(
             "googletagmanager.com", "google-analytics.com", "accounts.google.com",
             "static.cloudflareinsights.com", "github.com", "githubusercontent.com",
             "fonts.googleapis.com", "fonts.gstatic.com", "doubleclick.net",
             "googlesyndication.com", "googleadservices.com", "facebook.com",
             "connect.facebook.net", "t.me", "telegram.org", "twitter.com",
-            "cdnjs.cloudflare.com", "cdn.jsdelivr.net", "unpkg.com"
+            "cdnjs.cloudflare.com", "cdn.jsdelivr.net", "unpkg.com",
+            "youtube.com", "youtube-nocookie.com", "youtu.be", "youtube.googleapis.com",
+            "googlevideo.com", "ytimg.com", "gstatic.com"
         )
         if (blockedHosts.any { host == it || host.endsWith(".$it") }) return true
         if (host == "filmizlehell.net" || host == "www.filmizlehell.net") {
