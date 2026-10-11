@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:2044532107d0a1331cd9277bc74911b6bbfe80c0 -->
+### Exclude comments from FilmizleHell listing and honor full-list link
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [2044532](https://github.com/Kayracs3/Kayra/commit/2044532107d0a1331cd9277bc74911b6bbfe80c0)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:84c411a426c944df7de482b7c3463f777dbd07f3 -->
 ### Revert unintended DiziPal changes from FilmizleHell request
 
