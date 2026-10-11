@@ -81,6 +81,11 @@ def ai(prompt):
             error_code=str(error_obj.get('code') or '').lower()
             detail=str(error_obj.get('message') or raw or str(e)).replace('\n',' ')[:900]
             low_detail=detail.lower()
+            # Long token-limit cooldowns cannot be solved with short retries.
+            # Exit immediately instead of wasting several minutes on a reset measured in hours.
+            cooldown=re.search(r'try again in\\s+([^.;]+)',detail,re.I)
+            if e.code==429 and 'tokens per min' in low_detail and cooldown and re.search(r'\\d+\\s*h',cooldown.group(1),re.I):
+                raise RuntimeError('AI API token-rate limit (HTTP 429); reset window is long, retries skipped. Use a model with available rate capacity or rerun after the API reset. Details: '+detail) from e
             # Quota/billing limits will not be fixed by waiting, so fail clearly.
             if e.code==429 and ('quota' in error_code or 'billing' in error_code or 'insufficient_quota' in low_detail or 'billing hard limit' in low_detail):
                 raise RuntimeError('AI API kota/bakiye sınırı (HTTP 429): '+detail) from e
