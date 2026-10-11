@@ -107,14 +107,17 @@ def stop_app(package):
 
 def open_search(package, query):
     uri = "cloudstreamsearch://" + urllib.parse.quote(query, safe="")
+    # Do not pass -W here: ActivityManager can wait for the whole activity
+    # launch on a cold CloudStream install and hang even while ADB is online.
+    # Dispatch the deep link only, then let wait_for_node observe the UI.
     return run(
         [
-            "adb", "shell", "am", "start", "-W",
+            "adb", "shell", "am", "start",
             "-a", "android.intent.action.VIEW",
             "-d", uri, "-p", package,
         ],
         check=False,
-        timeout=30,
+        timeout=15,
     )
 
 
@@ -401,7 +404,7 @@ def test_case(package, plugins_dir, item, timeout_seconds):
         result["lastAmStart"] = start_output[-1200:]
 
         search_node, last_ui = wait_for_node(
-            resource="search_result_root", timeout=6
+            resource="search_result_root", timeout=25
         )
         plugin_log = logcat()
 
@@ -585,7 +588,8 @@ def main():
             results.append({
                 "provider": provider,
                 "status": "fail",
-                "detail": f"ADB/command timeout: {exc}",
+                "category": "infrastructure",
+                "detail": f"ADB/command timeout (test infrastructure; not a confirmed provider failure): {exc}",
                 "traceback": traceback.format_exc(),
             })
             try:
