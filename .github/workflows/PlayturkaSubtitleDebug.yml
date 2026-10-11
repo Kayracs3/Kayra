@@ -14,53 +14,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect player data endpoint and subtitle fields
+      - name: Inspect Playturka video API and HLS subtitles
         run: |
           python3 - <<'PY'
           import re
           import urllib.request
+          from urllib.error import HTTPError
 
           UA = "Mozilla/5.0 (Linux; Android 15; SM-A536E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
+          base = "https://p.playturka.space"
+          video_id = "eFhIAsu"
           urls = [
-              "https://p.playturka.space/assets/js/fm.js",
-              "https://p.playturka.space/assets/js/bundle.js",
-          ]
-          targets = [
-              "s.masterUrl", "masterUrl", "r.files", "rawVideoId",
-              "subtitles&&Object.keys", "async function", "fetch(",
-              "video_id", "api/v1", "getVideo", "files:"
+              base + "/api/video-url?id=" + video_id,
+              base + "/api/player?id=" + video_id,
+              base + "/videos/" + video_id + "/master.m3u8",
+              base + "/videos/" + video_id + "/index.m3u8",
           ]
           for url in urls:
+              request = urllib.request.Request(url, headers={
+                  "User-Agent": UA,
+                  "Accept": "*/*",
+                  "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+                  "Referer": base + "/",
+                  "Origin": base,
+                  "Cache-Control": "no-cache",
+              })
               try:
-                  req = urllib.request.Request(url, headers={
-                      "User-Agent": UA, "Accept": "*/*", "Referer": "https://p.playturka.space/"
-                  })
-                  with urllib.request.urlopen(req, timeout=12) as resp:
-                      body = resp.read().decode("utf-8", "replace")
-                      print("\\nSCRIPT", resp.status, resp.geturl(), "length", len(body))
-                  seen = set()
-                  count = 0
-                  for target in targets:
-                      pos = 0
-                      matches = 0
-                      while True:
-                          pos = body.lower().find(target.lower(), pos)
-                          if pos < 0 or matches >= 7:
-                              break
-                          start, end = max(0, pos-500), min(len(body), pos+1100)
-                          sample = re.sub(r"\\s+", " ", body[start:end]).strip()
-                          if sample not in seen:
-                              seen.add(sample)
-                              print("\\nCTX", target, sample[:1600])
-                              count += 1
-                          pos += max(1, len(target))
-                          matches += 1
-                          if count >= 35:
-                              break
-                      if count >= 35:
-                          break
-                  urls_found = list(dict.fromkeys(re.findall(r"""https?://[^"'`\\s<>]+""", body)))
-                  print("URL_STRINGS", urls_found[:30])
-              except Exception as e:
-                  print("FETCH_ERROR", url, repr(e))
+                  with urllib.request.urlopen(request, timeout=12) as response:
+                      body = response.read().decode("utf-8", "replace")
+                      print("\\nURL", url, "STATUS", response.status, "FINAL", response.geturl(),
+                            "TYPE", response.headers.get("Content-Type"), "LENGTH", len(body))
+                      if ".m3u8" in url:
+                          print("PLAYLIST", body[:8000])
+                          print("SUBTITLE_LINES", [x for x in body.splitlines()
+                                if "SUBTITLE" in x.upper() or "CLOSED-CAPTIONS" in x.upper()])
+                      else:
+                          print("BODY", body[:5000])
+              except HTTPError as error:
+                  print("\\nURL", url, "HTTP_ERROR", error.code, error.read(1500).decode("utf-8", "replace"))
+              except Exception as error:
+                  print("\\nURL", url, "ERROR", repr(error))
           PY
