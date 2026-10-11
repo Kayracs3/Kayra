@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:9a4f58a69d8893b1c725b3a4cf11b65aff411c6f -->
+### Escape template marker in player candidate filter
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [9a4f58a](https://github.com/Kayracs3/Kayra/commit/9a4f58a69d8893b1c725b3a4cf11b65aff411c6f)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:81503af821d2348a8f4b764a742fdc46440d40f5 -->
 ### Filter FilmizleHell player noise and probe validated Playturka manifests
 
