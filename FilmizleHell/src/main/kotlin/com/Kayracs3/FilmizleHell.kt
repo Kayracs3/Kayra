@@ -935,7 +935,6 @@ class FilmizleHell : MainAPI() {
         seenSubtitles: MutableSet<String>,
         subtitleCallback: (SubtitleFile) -> Unit
     ): Pair<Set<String>, Set<String>> {
-        subtitleCallback: (SubtitleFile) -> Unit
         val direct = LinkedHashSet<String>()
         val embeds = LinkedHashSet<String>()
         val blocked = listOf(
