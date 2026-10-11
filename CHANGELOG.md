@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:627d56deb470704d33d12ade2111d6925b88687f -->
+### Validate media links before publishing from FilmizleHell
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [627d56d](https://github.com/Kayracs3/Kayra/commit/627d56deb470704d33d12ade2111d6925b88687f)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:94344da6dd4cee0804d316ba8b6f4f70b6a7e2d8 -->
 ### Prevent FilmizleHell trailer embeds from being used as movie links
 
