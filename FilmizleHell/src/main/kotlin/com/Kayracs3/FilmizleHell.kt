@@ -117,6 +117,23 @@ class FilmizleHell : MainAPI() {
             ?.takeIf { it.isSuccessful }
             ?.document
 
+    private suspend fun fetchImdbScore(url: String, referer: String): Score? =
+        runCatching {
+            app.get(
+                url,
+                headers = requestHeaders + ("Referer" to referer),
+                referer = referer,
+                allowRedirects = true,
+                timeout = 4500
+            )
+        }.onFailure {
+            Log.d(name, "IMDb puanı alınamadı: " + safeLogUrl(url))
+        }.getOrNull()
+            ?.takeIf { it.isSuccessful }
+            ?.document
+            ?.let { parseScore(it) }
+
+
     private fun imageUrl(element: Element?, base: String): String? {
         if (element == null) return null
         val attrs = listOf(
@@ -165,26 +182,57 @@ class FilmizleHell : MainAPI() {
     }
 
     private fun scoreFromCard(element: Element): Score? {
-        val candidates = listOf(
-            element.selectFirst("[data-imdb]")?.attr("data-imdb"),
+        var current: Element? = element
+        repeat(4) {
+            val node = current ?: return@repeat
+            val explicit = node.selectFirst(
+                "[data-imdb], [itemprop=ratingValue], .imdb-rating, .imdb-score, [aria-label*=IMDb], [title*=IMDb]"
+            )?.let { selected ->
+                selected.attr("data-imdb")
+                    .ifBlank { selected.attr("content") }
+                    .ifBlank { selected.attr("aria-label") }
+                    .ifBlank { selected.attr("title") }
+                    .ifBlank { selected.text() }
+            }
+            if (!explicit.isNullOrBlank()) {
+                val imdb = Regex("""(?is)\bIMDb\b[^\d]{0,50}(10(?:[.,]\d)?|[0-9](?:[.,]\d)?)""")
+                    .find(explicit)?.groupValues?.getOrNull(1)
+                val numeric = (imdb ?: explicit).let {
+                    Regex("""(?<!\d)(10(?:[.,]\d)?|[0-9](?:[.,]\d)?)(?!\d)""")
+                        .find(it)?.value
+                }?.replace(',', '.')?.toDoubleOrNull()
+                if (numeric != null && numeric in 0.0..10.0) {
+                    return runCatching { Score.from10(numeric) }.getOrNull()
+                }
+            }
+            extractScore(node.text())?.let { return it }
+            current = node.parent()
+        }
+
+        // Fallback to the site's visible rating if the card has no explicit IMDb value.
+        val generic = listOf(
             element.selectFirst("[data-rating]")?.attr("data-rating"),
-            element.selectFirst(".imdb, .imdb-rating, .rating, .score, .film-puan")?.text(),
+            element.selectFirst(".rating, .score, .film-puan")?.text(),
             element.attr("aria-label"),
             element.attr("title")
         )
-        for (raw in candidates) {
+        for (raw in generic) {
             val number = Regex("""(?<!\d)(10(?:[.,]\d)?|[0-9](?:[.,]\d)?)(?!\d)""")
                 .find(raw.orEmpty())?.value?.replace(',', '.')?.toDoubleOrNull() ?: continue
             if (number in 0.0..10.0) return runCatching { Score.from10(number) }.getOrNull()
         }
-        return extractScore(element.text())
+        return null
     }
-
-    private fun parseCards(document: Document, base: String, query: String? = null): List<SearchResponse> {
+    private suspend fun parseCards(document: Document, base: String, query: String? = null): List<SearchResponse> {
         val output = LinkedHashMap<String, SearchResponse>()
+        val detailLookupLimit = if (query != null) 12 else 8
+        var detailLookups = 0
+
         for (anchor in document.select("a[href]")) {
             val url = fixUrl(anchor.attr("href"), base) ?: continue
             if (!sameSite(url) || !isFilmUrl(url)) continue
+            val key = url.trimEnd('/')
+            if (output.containsKey(key)) continue
 
             val image = anchor.selectFirst("img")
                 ?: anchor.parent()?.selectFirst("img")
@@ -200,14 +248,22 @@ class FilmizleHell : MainAPI() {
 
             val poster = imageFor(anchor, base)
             val cardContext = anchor.parent()?.parent() ?: anchor.parent() ?: anchor
-            val score = scoreFromCard(cardContext)
-            output.putIfAbsent(
-                url.trimEnd('/'),
-                newMovieSearchResponse(title, url, TvType.Movie) {
-                    posterUrl = poster
-                    this.score = score
-                }
+            val cardScore = scoreFromCard(cardContext)
+            val detailScore = if (detailLookups < detailLookupLimit) {
+                detailLookups++
+                fetchImdbScore(url, base)
+            } else null
+            val score = detailScore ?: cardScore
+            Log.d(
+                name,
+                "Kart puanı: title=" + title.take(60) +
+                    ", imdb=" + (detailScore != null) +
+                    ", score=" + (score != null)
             )
+            output[key] = newMovieSearchResponse(title, url, TvType.Movie) {
+                posterUrl = poster
+                this.score = score
+            }
         }
         return output.values.toList()
     }
