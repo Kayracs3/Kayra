@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:da9f123210ab28d2c44cd19acd0e36fc25d61e6a -->
+### Populate poster cards with IMDb scores
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [da9f123](https://github.com/Kayracs3/Kayra/commit/da9f123210ab28d2c44cd19acd0e36fc25d61e6a)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:4e05d7155240c022448055899024b727b8a91904 -->
 ### Remove temporary Playturka subtitle inspection workflow
 
