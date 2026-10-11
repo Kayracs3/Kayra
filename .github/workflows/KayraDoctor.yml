@@ -51,7 +51,7 @@ jobs:
       - name: Android SDK Ayarla
         uses: android-actions/setup-android@v3
         with:
-          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools emulator"
 
       - name: CloudStream Gradle plugin hazırla
         shell: bash
