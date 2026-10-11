@@ -374,20 +374,44 @@ class FilmizleHell : MainAPI() {
 
     private fun parseGenres(document: Document, context: Element): List<String> {
         val result = LinkedHashSet<String>()
-        val anchors = context.select("a[href*=/tur/], a[href*=/kategori/], [itemprop=genre]") +
-            document.select("main .genres a, article .genres a, .film-genres a, .movie-genres a")
-        for (anchor in anchors) {
-            val text = cleanText(anchor.attr("content").ifBlank { anchor.text() })
+        val genreSelectors =
+            "a[href*=/tur/], a[href*=/kategori/], a[href*=/genre/], a[href*=/tag/], [itemprop=genre]"
+        val detailSelectors =
+            ".genres a, .genre a, .film-genres a, .movie-genres a, .film-meta a, " +
+                ".movie-meta a, .detail-meta a, .movie-details a, .film-details a, " +
+                ".film-info a, .movie-info a, .meta-info a, .tags a"
+        val anchors = context.select(genreSelectors + ", " + detailSelectors) +
+            document.select("main " + detailSelectors + ", article " + detailSelectors)
+        fun addGenre(raw: String?) {
+            val text = cleanText(raw)
                 .replace(Regex("""(?i)\s+filmleri?$"""), "")
                 .replace(Regex("""(?i)\s+filmi$"""), "")
-                .trim()
-            if (text.length !in 2..35 || text.equals("Filmler", true)) continue
+                .trim(' ', ',', '|', '-', ':')
+            if (text.length !in 2..35 || text.equals("Filmler", true) ||
+                text.contains("tüm tür", true) || text.contains("kategori", true)
+            ) return
+            result += text
+        }
+        for (anchor in anchors) {
+            val text = anchor.attr("content").ifBlank { anchor.attr("title") }.ifBlank { anchor.text() }
             if (anchor.parents().any {
                     it.tagName() in setOf("nav", "header", "footer") ||
                         it.className().contains("site-menu", true) ||
-                        it.className().contains("footer-menu", true)
+                        it.className().contains("footer-menu", true) ||
+                        it.className().contains("main-menu", true)
                 }) continue
-            result += text
+            addGenre(text)
+        }
+
+        // Bazı tema sürümleri türleri görünür bağlantı yerine JSON-LD içinde tutuyor.
+        for (script in document.select("script[type=application/ld+json]")) {
+            val json = runCatching { JSONObject(script.data()) }.getOrNull() ?: continue
+            when (val genre = json.opt("genre")) {
+                is String -> genre.split(",", "|", "•").forEach(::addGenre)
+                is org.json.JSONArray -> for (i in 0 until genre.length()) {
+                    addGenre(genre.optString(i))
+                }
+            }
         }
         return result.take(15)
     }
@@ -557,6 +581,65 @@ class FilmizleHell : MainAPI() {
         return direct to embeds
     }
 
+    private fun safeLogUrl(raw: String): String =
+        runCatching {
+            val uri = URI(raw)
+            (uri.host.orEmpty() + uri.path.orEmpty()).take(240)
+        }.getOrDefault(raw.substringBefore('?').take(240))
+
+    private suspend fun collectExternalScriptCandidates(
+        document: Document,
+        base: String,
+        referer: String,
+        visitedScripts: MutableSet<String>
+    ): Pair<Set<String>, Set<String>> {
+        val direct = LinkedHashSet<String>()
+        val embeds = LinkedHashSet<String>()
+        val blocked = listOf(
+            "google-analytics", "googletagmanager", "doubleclick", "adsystem",
+            "advert", "hotjar", "clarity", "facebook", "cookie", "share"
+        )
+        val scriptUrls = document.select("script[src]")
+            .mapNotNull { fixUrl(it.attr("src"), base) }
+            .distinct()
+            .filter { pathOf(it).substringBefore('?').endsWith(".js", true) }
+            .filterNot { blocked.any { term -> it.contains(term, true) } }
+            .sortedByDescending {
+                listOf("player", "video", "source", "film", "main", "app").any { hint ->
+                    pathOf(it).contains(hint, true)
+                }
+            }
+            .take(8)
+
+        var fetched = 0
+        for (scriptUrl in scriptUrls) {
+            if (!visitedScripts.add(scriptUrl)) continue
+            val response = runCatching {
+                app.get(
+                    scriptUrl,
+                    headers = requestHeaders + ("Referer" to referer),
+                    referer = referer,
+                    allowRedirects = true,
+                    timeout = 10000
+                )
+            }.onFailure {
+                Log.d(name, "JS isteği başarısız: " + safeLogUrl(scriptUrl) + " (" + it.javaClass.simpleName + ")")
+            }.getOrNull() ?: continue
+            if (!response.isSuccessful || response.text.isBlank() || response.text.length > 2_000_000) {
+                Log.d(name, "JS atlandı: " + safeLogUrl(scriptUrl) + " HTTP=" + response.code)
+                continue
+            }
+            fetched++
+            val (scriptDirect, scriptEmbeds) =
+                collectPlayerCandidates(Jsoup.parse("", response.url), response.text, response.url)
+            direct.addAll(scriptDirect)
+            embeds.addAll(scriptEmbeds)
+        }
+        Log.d(name, "JS taraması: fetched=" + fetched + ", direct=" + direct.size +
+            ", embeds=" + embeds.size + ", page=" + safeLogUrl(base))
+        return direct to embeds
+    }
+
     private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         val type = when {
             url.contains(".m3u8", true) -> ExtractorLinkType.M3U8
@@ -601,16 +684,32 @@ class FilmizleHell : MainAPI() {
         if (!page.isSuccessful) return false
 
         publishSubtitles(page.document, page.text, page.url, subtitleCallback)
-        val (direct, embeds) = collectPlayerCandidates(page.document, page.text, page.url)
-        var found = false
         val visited = HashSet<String>()
+        val visitedScripts = HashSet<String>()
+        val (pageDirect, pageEmbeds) = collectPlayerCandidates(page.document, page.text, page.url)
+        val (scriptDirect, scriptEmbeds) =
+            collectExternalScriptCandidates(page.document, page.url, page.url, visitedScripts)
+        val direct = LinkedHashSet<String>().apply {
+            addAll(pageDirect)
+            addAll(scriptDirect)
+        }
+        val embeds = LinkedHashSet<String>().apply {
+            addAll(pageEmbeds)
+            addAll(scriptEmbeds)
+        }
+        var found = false
         val allCandidates = LinkedHashSet<String>().apply {
             addAll(direct)
             addAll(embeds)
         }
 
+        Log.d(name, "loadLinks: page=" + safeLogUrl(page.url) + ", direct=" + direct.size +
+            ", embeds=" + embeds.size + ", candidates=" +
+            allCandidates.take(20).joinToString(" | ") { safeLogUrl(it) })
+
         suspend fun resolve(candidate: String, referer: String, depth: Int) {
             if (depth > 2 || !visited.add(candidate)) return
+            Log.d(name, "resolve[$depth]: " + safeLogUrl(candidate))
             if (isDirectMedia(candidate)) {
                 publishDirect(candidate, referer, callback)
                 found = true
@@ -622,35 +721,52 @@ class FilmizleHell : MainAPI() {
                     found = true
                     callback(it)
                 }
-            }.onFailure { Log.w(name, "Extractor başarısız: " + candidate, it) }
+            }.onFailure {
+                Log.d(name, "Extractor başarısız: " + safeLogUrl(candidate) + " (" + it.javaClass.simpleName + ")")
+            }
 
             if (depth >= 2) return
             val nested = runCatching {
-                app.get(candidate, headers = requestHeaders + ("Referer" to referer), referer = referer, allowRedirects = true, timeout = 12000)
-            }.onFailure { Log.d(name, "Embed HTML alınamadı: " + candidate) }.getOrNull() ?: return
+                app.get(
+                    candidate,
+                    headers = requestHeaders + ("Referer" to referer),
+                    referer = referer,
+                    allowRedirects = true,
+                    timeout = 12000
+                )
+            }.onFailure {
+                Log.d(name, "Embed isteği başarısız: " + safeLogUrl(candidate) + " (" + it.javaClass.simpleName + ")")
+            }.getOrNull() ?: return
+            Log.d(name, "embed response: " + safeLogUrl(nested.url) + " HTTP=" + nested.code +
+                ", length=" + nested.text.length + ", type=" + nested.headers["content-type"].orEmpty())
             if (!nested.isSuccessful || nested.text.isBlank() || nested.text.length > 4_000_000) return
             publishSubtitles(nested.document, nested.text, nested.url, subtitleCallback)
             val (nextDirect, nextEmbeds) = collectPlayerCandidates(nested.document, nested.text, nested.url)
-            nextDirect.forEach { url ->
-                if (visited.add(url)) {
+            val (jsDirect, jsEmbeds) =
+                collectExternalScriptCandidates(nested.document, nested.url, nested.url, visitedScripts)
+            val nestedDirect = LinkedHashSet<String>().apply {
+                addAll(nextDirect)
+                addAll(jsDirect)
+            }
+            val nestedEmbeds = LinkedHashSet<String>().apply {
+                addAll(nextEmbeds)
+                addAll(jsEmbeds)
+            }
+            Log.d(name, "nested candidates: direct=" + nestedDirect.size + ", embeds=" +
+                nestedEmbeds.size + ", page=" + safeLogUrl(nested.url))
+            nestedDirect.forEach { url ->
+                if (!visited.contains(url)) {
                     publishDirect(url, nested.url, callback)
                     found = true
                 }
             }
-            for (next in nextEmbeds.take(10)) {
-                if (sameSite(next) || depth == 0) resolve(next, nested.url, depth + 1)
-                else runCatching {
-                    loadExtractor(next, nested.url, subtitleCallback) {
-                        found = true
-                        callback(it)
-                    }
-                }.onFailure { Log.d(name, "Nested extractor başarısız: " + next) }
+            for (next in nestedEmbeds.take(12)) {
+                resolve(next, nested.url, depth + 1)
             }
         }
 
-        Log.d(name, "loadLinks: direct=" + direct.size + ", embeds=" + embeds.size)
         for (candidate in allCandidates.take(20)) resolve(candidate, page.url, 0)
-        Log.d(name, "loadLinks: found=" + found + ", candidates=" + allCandidates.size)
+        Log.d(name, "loadLinks: found=" + found + ", visited=" + visited.size + ", candidates=" + allCandidates.size)
         return found
     }
 }
