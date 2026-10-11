@@ -1178,14 +1178,22 @@ class FilmizleHell : MainAPI() {
         }
 
         val before = seenSubtitles.size
+        var fallbackAdded = 0
         dataArray@ for (index in 0 until data.length()) {
-            if (seenSubtitles.size >= 12) break
+            if (fallbackAdded >= 3) break
             val item = data.optJSONObject(index) ?: continue
             val resultTitle = item.optString("film_title").ifBlank {
                 item.optString("title")
+            }.ifBlank {
+                item.optString("release")
             }
             if (imdbId.isNullOrBlank() && !subtitleTitleMatches(title, resultTitle)) {
                 Log.d(name, "Harici altyazı başlık eşleşmedi: " + resultTitle.take(70))
+                continue@dataArray
+            }
+
+            val listedYear = item.optInt("year", 0)
+            if (imdbId.isNullOrBlank() && year != null && listedYear > 0 && listedYear != year) {
                 continue@dataArray
             }
 
@@ -1240,8 +1248,9 @@ class FilmizleHell : MainAPI() {
             if (!seenSubtitles.add(downloadUrl)) continue@dataArray
 
             val release = cleanText(item.optString("release")).take(65)
-            val label = if (release.isBlank()) "Türkçe (Harici altyazı)" else "Türkçe - $release"
-            callback(newSubtitleFile(label, downloadUrl))
+            // Use a canonical language name that CloudStream can recognize.
+            callback(newSubtitleFile("Turkish", downloadUrl))
+            fallbackAdded++
             Log.d(
                 name,
                 "Harici Türkçe altyazı eklendi: title=" + resultTitle.take(60) +
