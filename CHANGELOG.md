@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:0d03b2de1f05b566e923c5d96dea74dd6bae5328 -->
+### Avoid unrelated IMDb IDs in subtitle search
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [0d03b2d](https://github.com/Kayracs3/Kayra/commit/0d03b2de1f05b566e923c5d96dea74dd6bae5328)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:4e7aba3ba354b85b36408aa845648254736e02d7 -->
 ### Bump FilmizleHell plugin version for subtitle fix
 
