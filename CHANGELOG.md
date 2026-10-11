@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:24aed3ebf8c969ef425c9e5de67f8ab05eb3c5ae -->
+### Probe FilmizleHell source IDs from movie page and log source hints
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [24aed3e](https://github.com/Kayracs3/Kayra/commit/24aed3ebf8c969ef425c9e5de67f8ab05eb3c5ae)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:9a4f58a69d8893b1c725b3a4cf11b65aff411c6f -->
 ### Escape template marker in player candidate filter
 
