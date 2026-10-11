@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:d491009e25032002e06d9ea35e927568228e29de -->
+### Use Turkish subtitle endpoint and resolve IMDb metadata
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [d491009](https://github.com/Kayracs3/Kayra/commit/d491009e25032002e06d9ea35e927568228e29de)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:8fb0402c0909a241feb7068697827e90c23a2f09 -->
 ### Fix suspend subtitle callback helper
 
