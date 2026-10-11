@@ -160,8 +160,10 @@ class FilmizleHell : MainAPI() {
         return fixUrl(rawBackground, base)
     }
 
-    private fun imageFor(link: Element, base: String): String? {
-        imageUrl(link.selectFirst("img"), base)?.let { return it }
+    private fun imageElementFor(link: Element, base: String): Element? {
+        link.selectFirst("img")?.let { image ->
+            if (imageUrl(image, base) != null) return image
+        }
 
         // A parent image is safe only when that small wrapper points to one
         // content page. The old broad parent/parent lookup could borrow a poster
@@ -175,13 +177,15 @@ class FilmizleHell : MainAPI() {
             }.map { it.trimEnd('/') }.distinct()
 
             if (filmTargets.size == 1) {
-                val image = container.select("img").firstOrNull()
-                imageUrl(image, base)?.let { return it }
+                container.select("img").firstOrNull { imageUrl(it, base) != null }?.let { return it }
             }
             parent = container.parent()
         }
         return null
     }
+
+    private fun imageFor(link: Element, base: String): String? =
+        imageUrl(imageElementFor(link, base), base)
 
     private fun normalizeSectionText(value: String?): String =
         cleanText(value).lowercase(Locale("tr", "TR"))
@@ -425,9 +429,7 @@ class FilmizleHell : MainAPI() {
             val key = url.trimEnd('/')
             if (output.containsKey(key)) continue
 
-            val image = anchor.selectFirst("img")
-                ?: anchor.parent()?.selectFirst("img")
-                ?: anchor.parent()?.parent()?.selectFirst("img")
+            val image = imageElementFor(anchor, base)
             val titleText = anchor.attr("title").takeIf { it.isNotBlank() }
                 ?: image?.attr("alt")?.takeIf { it.isNotBlank() }
                 ?: anchor.selectFirst("h2,h3,h4,.title,.film-title,.movie-title")?.text()
