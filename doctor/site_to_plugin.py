@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate/repair a CloudStream provider from a public site URL."""
-import argparse, ipaddress, json, os, re, socket, sys, urllib.parse, urllib.request
+import argparse, ipaddress, json, os, re, socket, sys, time, urllib.error, urllib.parse, urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -65,7 +65,36 @@ def ai(prompt):
     base=(os.environ.get('OPENAI_BASE_URL') or 'https://api.openai.com/v1').rstrip('/')
     body=json.dumps({'model':os.environ.get('OPENAI_MODEL') or 'gpt-6-luna','input':prompt}).encode()
     req=urllib.request.Request(base+'/responses',data=body,headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'},method='POST')
-    with urllib.request.urlopen(req,timeout=240) as r: data=json.loads(r.read().decode())
+    data=None
+    for attempt in range(5):
+        try:
+            with urllib.request.urlopen(req,timeout=240) as r:
+                data=json.loads(r.read().decode())
+            break
+        except urllib.error.HTTPError as e:
+            raw=e.read(5000).decode('utf-8','replace')
+            try:
+                error_obj=json.loads(raw).get('error',{})
+            except Exception:
+                error_obj={}
+            if not isinstance(error_obj,dict): error_obj={}
+            error_code=str(error_obj.get('code') or '').lower()
+            detail=str(error_obj.get('message') or raw or str(e)).replace('\\n',' ')[:900]
+            low_detail=detail.lower()
+            # Quota/billing limits will not be fixed by waiting, so fail clearly.
+            if e.code==429 and ('quota' in error_code or 'billing' in error_code or 'insufficient_quota' in low_detail or 'billing hard limit' in low_detail):
+                raise RuntimeError('AI API kota/bakiye sınırı (HTTP 429): '+detail) from e
+            retryable=(e.code==429 or 500 <= e.code < 600)
+            if not retryable or attempt==4:
+                raise RuntimeError(f'AI API HTTP {e.code} (deneme {attempt+1}/5): {detail}') from e
+            retry_after=(e.headers.get('Retry-After') or '').strip() if e.headers else ''
+            try:
+                delay=max(1,min(60,int(float(retry_after))))
+            except (TypeError,ValueError):
+                delay=min(30,2 ** (attempt+1))
+            print(f'AI API HTTP {e.code}; {attempt+1}/5. {delay} saniye bekleyip tekrar deneniyor.',file=sys.stderr,flush=True)
+            time.sleep(delay)
+    if data is None: raise RuntimeError('AI API yanıt alınamadı.')
     text=data.get('output_text','')
     if not text:
         for item in data.get('output',[]):
@@ -74,7 +103,7 @@ def ai(prompt):
             if text: break
     if not text: raise RuntimeError('AI yanıtı boş.')
     fence=chr(96)*3
-    if text.startswith(fence): text=text.split('\n',1)[1].rsplit(fence,1)[0]
+    if text.startswith(fence): text=text.split('\\n',1)[1].rsplit(fence,1)[0]
     return json.loads(text)
 
 def _split_kotlin_args(text):
