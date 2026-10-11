@@ -2,6 +2,23 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:4ab8d86533458a3c2f7f328fa0f510f9b0cf9c1c -->
+### Ensure Android emulator package is installed
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [4ab8d86](https://github.com/Kayracs3/Kayra/commit/4ab8d86533458a3c2f7f328fa0f510f9b0cf9c1c)
+
+## 2026-10-11
+
+<!-- kayra-commit:af479f5f8081976c7c9f2c8501456bfc7e20793c -->
+### Ensure Android emulator package is installed
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [af479f5](https://github.com/Kayracs3/Kayra/commit/af479f5f8081976c7c9f2c8501456bfc7e20793c)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:3d83030f5c8241ab691d5b0177e1e2f80e750eb3 -->
 ### Replace unbounded emulator action polling with bounded ADB startup
 
