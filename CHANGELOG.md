@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:8fb0402c0909a241feb7068697827e90c23a2f09 -->
+### Fix suspend subtitle callback helper
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [8fb0402](https://github.com/Kayracs3/Kayra/commit/8fb0402c0909a241feb7068697827e90c23a2f09)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:37863100be734580ee25dd1a61377179a9691c70 -->
 ### Improve FilmizleHell Turkish subtitle fallback
 
