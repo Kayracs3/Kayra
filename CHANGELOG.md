@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:251bed78da1b317fb08ecfa05d5b8c34bf30c66c -->
+### Fix newline handling in AI response parsing
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [251bed7](https://github.com/Kayracs3/Kayra/commit/251bed78da1b317fb08ecfa05d5b8c34bf30c66c)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:8e461022ea8dee3934d12a1f4552e13ba00c0693 -->
 ### Retry transient AI API rate limits during plugin generation
 
