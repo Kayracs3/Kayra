@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:89885ca27d77d37fb6ff5d6c33879e95ac13e7d8 -->
+### Correct cooldown regex for long AI rate-limit windows
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [89885ca](https://github.com/Kayracs3/Kayra/commit/89885ca27d77d37fb6ff5d6c33879e95ac13e7d8)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:d4885303876f2e79458f3ffe4f7be76c67ebf6ac -->
 ### Fail fast on long AI token-rate-limit cooldowns
 
