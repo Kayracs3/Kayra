@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:8c93e029355641b84bc42f20b506bdc5a9fe896e -->
+### Use canonical Turkish subtitle labels and filter fallback matches
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [8c93e02](https://github.com/Kayracs3/Kayra/commit/8c93e029355641b84bc42f20b506bdc5a9fe896e)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:cc512aa24f814ea405dea1777944e0f4e3e6c927 -->
 ### Add Turkish external subtitle fallback when stream has no tracks
 
