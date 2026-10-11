@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:8e461022ea8dee3934d12a1f4552e13ba00c0693 -->
+### Retry transient AI API rate limits during plugin generation
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [8e46102](https://github.com/Kayracs3/Kayra/commit/8e461022ea8dee3934d12a1f4552e13ba00c0693)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:2751f210e82890918bd67db2e9affc83675385af -->
 ### Launch CloudStream setup without blocking ActivityManager wait
 
