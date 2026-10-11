@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:42b60a717c4700f4c5d6e05d2bf7e80d486c10e0 -->
+### Scope FilmizleHell cards and follow all-items section link
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [42b60a7](https://github.com/Kayracs3/Kayra/commit/42b60a717c4700f4c5d6e05d2bf7e80d486c10e0)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:01e4b286060ba5b963a9744c40e7b408c55eabf4 -->
 ### Separate DiziPal episode cards from comments and follow full listing
 
