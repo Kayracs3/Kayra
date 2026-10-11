@@ -1061,6 +1061,198 @@ class FilmizleHell : MainAPI() {
         return ids
     }
 
+    private fun findImdbId(document: Document): String? {
+        val context = detailContext(document)
+        val candidates = context.select("a[href*=imdb.com/title/], a[href*=imdb.com/title]")
+        for (anchor in candidates) {
+            val url = anchor.attr("href")
+            val label = normalizeSectionText(anchor.text() + " " + anchor.attr("title") + " " + anchor.className())
+            if (label.contains("imdb") || anchor.parents().any {
+                    normalizeSectionText(it.id() + " " + it.className()).contains("imdb")
+                }
+            ) {
+                Regex("""(?i)imdb\.com/title/(tt\d{7,10})""")
+                    .find(url)?.groupValues?.getOrNull(1)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun subtitleTitleMatches(expected: String, candidate: String): Boolean {
+        fun normalizeSubtitleTitle(value: String): String =
+            normalizeSectionText(value)
+                .replace(yearRegex, " ")
+                .replace(
+                    Regex("""\b(izle|turkce|turkce dublaj|dublaj|altyazili|altyazi|film|movie|1080p|720p|480p|bluray|brrip|webrip|webdl|hdtv|x264|x265|yify|yts)\b"""),
+                    " "
+                )
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+
+        val expectedTitle = normalizeSubtitleTitle(expected)
+        val candidateTitle = normalizeSubtitleTitle(candidate)
+        if (expectedTitle.length < 3 || candidateTitle.length < 3) return false
+        if (expectedTitle == candidateTitle ||
+            expectedTitle.contains(candidateTitle) ||
+            candidateTitle.contains(expectedTitle)
+        ) return true
+
+        val ignored = setOf("the", "and", "for", "with", "from", "into", "this", "that")
+        val expectedTokens = expectedTitle.split(' ').filter { it.length >= 3 && it !in ignored }.toSet()
+        val candidateTokens = candidateTitle.split(' ').filter { it.length >= 3 && it !in ignored }.toSet()
+        if (expectedTokens.isEmpty() || candidateTokens.isEmpty()) return false
+        val overlap = expectedTokens.intersect(candidateTokens).size.toDouble() / expectedTokens.size.toDouble()
+        return overlap >= 0.6
+    }
+
+    private suspend fun publishFallbackTurkishSubtitles(
+        moviePageUrl: String,
+        seenSubtitles: MutableSet<String>,
+        callback: (SubtitleFile) -> Unit
+    ): Int {
+        val movieResponse = runCatching {
+            app.get(
+                moviePageUrl,
+                headers = requestHeaders + ("Referer" to "$mainUrl/"),
+                referer = "$mainUrl/",
+                allowRedirects = true,
+                timeout = 10000
+            )
+        }.onFailure {
+            Log.d(name, "Harici altyazı için film sayfası alınamadı")
+        }.getOrNull() ?: return 0
+
+        if (!movieResponse.isSuccessful) return 0
+        val document = movieResponse.document
+        val context = detailContext(document)
+        val title = cleanTitle(
+            document.selectFirst("main h1, article h1, h1")?.text()
+                ?: document.selectFirst("meta[property=og:title]")?.attr("content")
+                ?: document.title()
+        )
+        if (title.length < 3) {
+            Log.d(name, "Harici altyazı araması atlandı: film başlığı bulunamadı")
+            return 0
+        }
+
+        val imdbId = findImdbId(document)
+        val year = parseYear(document, context)
+        val searchBase = "https://subtitles.website/strapi/api/search/subtitles"
+        val query = if (!imdbId.isNullOrBlank()) {
+            "imdb=" + URLEncoder.encode(imdbId, "UTF-8")
+        } else {
+            "title=" + URLEncoder.encode(title, "UTF-8")
+        }
+        val searchUrl = "$searchBase?$query&language=tr&format=srt"
+        val response = runCatching {
+            app.get(
+                searchUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "application/json",
+                    "Referer" to "https://subtitles.website/"
+                ),
+                referer = "https://subtitles.website/",
+                allowRedirects = true,
+                timeout = 10000
+            )
+        }.onFailure {
+            Log.d(name, "Harici Türkçe altyazı araması başarısız: " + it.javaClass.simpleName)
+        }.getOrNull() ?: return 0
+
+        if (!response.isSuccessful) {
+            Log.d(name, "Harici altyazı API HTTP=" + response.code)
+            return 0
+        }
+
+        val data = runCatching {
+            JSONObject(response.text).optJSONArray("data")
+        }.getOrNull()
+        if (data == null || data.length() == 0) {
+            Log.d(
+                name,
+                "Harici Türkçe altyazı bulunamadı: title=" + title.take(70) +
+                    ", imdb=" + (imdbId ?: "yok") + ", year=" + (year ?: 0)
+            )
+            return 0
+        }
+
+        val before = seenSubtitles.size
+        dataArray@ for (index in 0 until data.length()) {
+            if (seenSubtitles.size >= 12) break
+            val item = data.optJSONObject(index) ?: continue
+            val resultTitle = item.optString("film_title").ifBlank {
+                item.optString("title")
+            }
+            if (imdbId.isNullOrBlank() && !subtitleTitleMatches(title, resultTitle)) {
+                Log.d(name, "Harici altyazı başlık eşleşmedi: " + resultTitle.take(70))
+                continue@dataArray
+            }
+
+            val itemLanguage = item.optJSONObject("language")
+            val languageCode = itemLanguage?.optString("code").orEmpty()
+            val languageName = itemLanguage?.optString("name").orEmpty()
+            if (languageCode.isNotBlank() &&
+                !languageCode.equals("tr", true) &&
+                !languageCode.equals("tur", true) &&
+                !languageName.contains("turk", true)
+            ) continue@dataArray
+
+            val format = item.optString("format").lowercase(Locale.ROOT)
+            if (format.isNotBlank() && format !in setOf("srt", "vtt", "ass")) continue@dataArray
+
+            val id = item.optString("id")
+            var rawDownloadUrl = item.optString("download_url")
+            if (rawDownloadUrl.isBlank() && id.isNotBlank()) {
+                val downloadResponse = runCatching {
+                    app.get(
+                        "https://subtitles.website/strapi/api/search/download/" +
+                            URLEncoder.encode(id, "UTF-8"),
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Accept" to "application/json",
+                            "Referer" to "https://subtitles.website/"
+                        ),
+                        referer = "https://subtitles.website/",
+                        allowRedirects = true,
+                        timeout = 8000
+                    )
+                }.getOrNull()
+                if (downloadResponse != null && downloadResponse.isSuccessful) {
+                    rawDownloadUrl = runCatching {
+                        JSONObject(downloadResponse.text).optString("download_url")
+                    }.getOrDefault("")
+                }
+            }
+
+            if (rawDownloadUrl.isBlank()) continue@dataArray
+            val downloadUrl = when {
+                rawDownloadUrl.startsWith("https://", true) ||
+                    rawDownloadUrl.startsWith("http://", true) -> rawDownloadUrl
+                rawDownloadUrl.startsWith("/") ->
+                    "https://subtitles.website/strapi" + rawDownloadUrl
+                else -> "https://subtitles.website/strapi/" + rawDownloadUrl
+            }
+            if (!Regex("""(?i)\.(?:srt|vtt|ass)(?:[?#].*)?$""").containsMatchIn(downloadUrl)) {
+                Log.d(name, "Harici altyazı uzantısı desteklenmiyor: " + downloadUrl.substringBefore('?').take(160))
+                continue@dataArray
+            }
+            if (!seenSubtitles.add(downloadUrl)) continue@dataArray
+
+            val release = cleanText(item.optString("release")).take(65)
+            val label = if (release.isBlank()) "Türkçe (Harici altyazı)" else "Türkçe - $release"
+            callback(newSubtitleFile(label, downloadUrl))
+            Log.d(
+                name,
+                "Harici Türkçe altyazı eklendi: title=" + resultTitle.take(60) +
+                    ", release=" + release + ", year=" + (year ?: 0) +
+                    ", url=" + downloadUrl.substringBefore('?').take(160)
+            )
+        }
+
+        return (seenSubtitles.size - before).coerceAtLeast(0)
+    }
+
     private suspend fun publishPlayturkaApiSubtitles(
         id: String,
         referer: String,
@@ -1454,13 +1646,21 @@ class FilmizleHell : MainAPI() {
         if (!page.isSuccessful) return false
 
         val seenSubtitles = HashSet<String>()
-        publishSubtitles(page.document, page.text, page.url, seenSubtitles, subtitleCallback)
+        val emittedSubtitleUrls = HashSet<String>()
+        var emittedSubtitleCount = 0
+        val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
+            if (emittedSubtitleUrls.add(subtitle.url)) {
+                emittedSubtitleCount++
+                subtitleCallback(subtitle)
+            }
+        }
+        publishSubtitles(page.document, page.text, page.url, seenSubtitles, emitSubtitle)
         val visited = HashSet<String>()
         val visitedScripts = HashSet<String>()
         val (pageDirect, pageEmbeds) = collectPlayerCandidates(page.document, page.text, page.url)
         val (scriptDirect, scriptEmbeds) =
                 collectExternalScriptCandidates(
-                page.document, page.url, page.url, visitedScripts, seenSubtitles, subtitleCallback
+                page.document, page.url, page.url, visitedScripts, seenSubtitles, emitSubtitle
                 )
         val direct = LinkedHashSet<String>().apply {
             addAll(pageDirect)
@@ -1472,7 +1672,7 @@ class FilmizleHell : MainAPI() {
         }
         var found = false
         // FilmizleHell sources are selected client-side; inspect the source metadata on the movie page too.
-        if (publishPlayturkaManifestCandidates(page.url, page.document, page.text, seenSubtitles, subtitleCallback, callback) > 0) {
+        if (publishPlayturkaManifestCandidates(page.url, page.document, page.text, seenSubtitles, emitSubtitle, callback) > 0) {
             found = true
         }
         val allCandidates = LinkedHashSet<String>().apply {
@@ -1494,7 +1694,7 @@ class FilmizleHell : MainAPI() {
             }
 
             runCatching {
-                loadExtractor(candidate, referer, subtitleCallback) {
+                loadExtractor(candidate, referer, emitSubtitle) {
                     found = true
                     callback(it)
                 }
@@ -1517,19 +1717,19 @@ class FilmizleHell : MainAPI() {
             Log.d(name, "embed response: " + safeLogUrl(nested.url) + " HTTP=" + nested.code +
                 ", length=" + nested.text.length + ", type=" + nested.headers["content-type"].orEmpty())
             if (!nested.isSuccessful || nested.text.isBlank() || nested.text.length > 4_000_000) return
-            publishSubtitles(nested.document, nested.text, nested.url, seenSubtitles, subtitleCallback)
+            publishSubtitles(nested.document, nested.text, nested.url, seenSubtitles, emitSubtitle)
             if (runCatching { URI(nested.url).host.orEmpty().equals("p.playturka.space", true) }
                     .getOrDefault(false)
             ) {
                 val playturkaFound = publishPlayturkaManifestCandidates(
-                    nested.url, nested.document, nested.text, seenSubtitles, subtitleCallback, callback
+                    nested.url, nested.document, nested.text, seenSubtitles, emitSubtitle, callback
                 )
                 if (playturkaFound > 0) found = true
             }
             val (nextDirect, nextEmbeds) = collectPlayerCandidates(nested.document, nested.text, nested.url)
             val (jsDirect, jsEmbeds) =
                 collectExternalScriptCandidates(
-                    nested.document, nested.url, nested.url, visitedScripts, seenSubtitles, subtitleCallback
+                    nested.document, nested.url, nested.url, visitedScripts, seenSubtitles, emitSubtitle
                 )
             val nestedDirect = LinkedHashSet<String>().apply {
                 addAll(nextDirect)
@@ -1553,6 +1753,16 @@ class FilmizleHell : MainAPI() {
         }
 
         for (candidate in allCandidates.take(20)) resolve(candidate, page.url, 0)
+
+        // This source's HLS master often has no subtitle rendition. If neither
+        // the page/JS/extractors nor the HLS manifest provided any subtitles,
+        // offer matching Turkish sidecar subtitles from a separate subtitle catalogue.
+        if (emittedSubtitleCount == 0) {
+            val fallbackCount = publishFallbackTurkishSubtitles(data, seenSubtitles, emitSubtitle)
+            Log.d(name, "Harici Türkçe altyazı yedeği: count=" + fallbackCount +
+                ", emitted=" + emittedSubtitleCount)
+        }
+
         Log.d(name, "loadLinks: found=" + found + ", visited=" + visited.size + ", candidates=" + allCandidates.size)
         return found
     }
