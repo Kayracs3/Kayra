@@ -95,7 +95,7 @@ class DiziBoxLive : MainAPI() {
         val title = pageTitle(document) ?: return null
         val episodes = parseEpisodes(document)
 
-        val poster = posterOf(document)
+        val poster = posterOf(document) ?: verifiedSeriesPoster(normalized)
         val plot = pagePlot(document)
         val meta = pageMeta(document)
 
@@ -850,10 +850,26 @@ class DiziBoxLive : MainAPI() {
         }.toMutableList()
 
         var detailLookups = 0
+        var posterProbes = 0
         for ((response, hasCardContext) in selected) {
-            if (!response.posterUrl.isNullOrBlank() || !hasCardContext || detailLookups >= 20) continue
+            if (!response.posterUrl.isNullOrBlank()) continue
+
+            // DiziBOX afiş şablonu: /wp-content/uploads/afisler/{slug}-200x290.jpg
+            // Slug'dan türetilen adresi kullanmadan önce sunucudan doğrula.
+            if (posterProbes < 24) {
+                posterProbes++
+                val generatedPoster = verifiedSeriesPoster(response.url)
+                if (!generatedPoster.isNullOrBlank()) {
+                    response.posterUrl = generatedPoster
+                    continue
+                }
+            }
+
+            if (!hasCardContext || detailLookups >= 20) continue
             detailLookups++
-            val detailPoster = requestDocument(response.url)?.let { posterOf(it) }
+            val detailDocument = requestDocument(response.url)
+            val detailPoster = detailDocument?.let { posterOf(it) }
+                ?: verifiedSeriesPoster(response.url)
             if (!detailPoster.isNullOrBlank()) response.posterUrl = detailPoster
         }
 
@@ -912,6 +928,48 @@ class DiziBoxLive : MainAPI() {
         }
 
         return null
+    }
+
+    /**
+     * DiziBOX Live stores many series posters in WordPress uploads/afisler
+     * using the same post slug and a 200x290 filename. Verify the response is
+     * genuinely an image before assigning it, so a guessed URL never creates
+     * a broken poster or a poster belonging to another show.
+     */
+    private suspend fun verifiedSeriesPoster(seriesUrl: String): String? {
+        val path = runCatching { URI(seriesUrl).path.orEmpty() }.getOrDefault("")
+        val marker = "/diziler/"
+        val markerIndex = path.lowercase().indexOf(marker)
+        if (markerIndex < 0) return null
+
+        val rawSlug = path.substring(markerIndex + marker.length)
+            .trim('/')
+            .substringBefore('/')
+            .trim()
+        if (rawSlug.isBlank()) return null
+
+        val slug = runCatching {
+            java.net.URLDecoder.decode(rawSlug, "UTF-8")
+        }.getOrDefault(rawSlug)
+            .lowercase()
+            .replace('_', '-')
+            .replace(Regex("""[^a-z0-9-]"""), "")
+            .replace(Regex("""-{2,}"""), "-")
+            .trim('-')
+        if (slug.isBlank() || !slug.matches(Regex("""[a-z0-9]+(?:-[a-z0-9]+)*"""))) return null
+
+        val posterUrl = "$mainUrl/wp-content/uploads/afisler/$slug-200x290.jpg"
+        val response = runCatching {
+            app.get(posterUrl, headers = headers, referer = "$mainUrl/")
+        }.getOrNull() ?: return null
+
+        val contentType = response.headers.entries
+            .firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }
+            ?.value.orEmpty()
+
+        return posterUrl.takeIf {
+            response.isSuccessful && contentType.contains("image/", ignoreCase = true)
+        }
     }
 
     private fun posterCandidate(rawValue: String?): String? {
