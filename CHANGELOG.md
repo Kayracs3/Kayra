@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:c15929262a6af7ab87644d5ef0f8e2e81187f7db -->
+### Fix Playturka diagnostic regex escaping
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [c159292](https://github.com/Kayracs3/Kayra/commit/c15929262a6af7ab87644d5ef0f8e2e81187f7db)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:f13ee89bffc8ae1e5652bdc5a5a1ff8f46fdc994 -->
 ### Improve FilmizleHell Playturka HLS ID discovery
 
