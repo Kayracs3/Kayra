@@ -45,6 +45,7 @@ class FilmizleHell : MainAPI() {
     private val yearRegex = Regex("""(?<!\d)(19\d{2}|20\d{2})(?!\d)""")
     private val mediaRegex = Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+?\.(?:m3u8|mp4|mpd|webm)(?:\?[^"'<>\\\s]*)?""")
     private val subtitleRegex = Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+?\.(?:vtt|srt|ass)(?:\?[^"'<>\\\s]*)?""")
+    private val quotedSubtitleRegex = Regex("""(?i)["']((?:(?:https?:)?//|/|\.\.?/)?[^"'<>\\\s]{1,260}\.(?:vtt|srt|ass)(?:\?[^"'<>\\\s]*)?)["']""")
 
     private fun decode(raw: String): String = raw
         .replace("\\/", "/")
@@ -770,6 +771,8 @@ class FilmizleHell : MainAPI() {
         document: Document,
         html: String,
         callback: (ExtractorLink) -> Unit
+        seenSubtitles: MutableSet<String>,
+        subtitleCallback: (SubtitleFile) -> Unit
     ): Int {
         val host = runCatching { URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host != "p.playturka.space" && !html.contains("p.playturka.space", true)) return 0
@@ -907,6 +910,9 @@ class FilmizleHell : MainAPI() {
                         contentType.contains("mpegurl", true) ||
                         contentType.contains("m3u8", true))
                 ) {
+                    if (body.startsWith("#EXTM3U")) {
+                        publishHlsSubtitleTracks(manifest, body, seenSubtitles, subtitleCallback)
+                    }
                     val resolved = response.url.takeIf { isDirectMedia(it) } ?: manifest
                     publishDirect(resolved, playerReferer, callback)
                     Log.d(name, "Playturka manifest doğrulandı: id=" + id + ", url=" + safeLogUrl(resolved))
@@ -925,8 +931,10 @@ class FilmizleHell : MainAPI() {
         document: Document,
         base: String,
         referer: String,
-        visitedScripts: MutableSet<String>
+        seenSubtitles: MutableSet<String>,
+        subtitleCallback: (SubtitleFile) -> Unit
     ): Pair<Set<String>, Set<String>> {
+        subtitleCallback: (SubtitleFile) -> Unit
         val direct = LinkedHashSet<String>()
         val embeds = LinkedHashSet<String>()
         val blocked = listOf(
@@ -966,6 +974,13 @@ class FilmizleHell : MainAPI() {
                 continue
             }
             fetched++
+            publishSubtitles(
+                Jsoup.parse("", response.url),
+                response.text,
+                response.url,
+                seenSubtitles,
+                subtitleCallback
+            )
             val (scriptDirect, scriptEmbeds) =
                 collectPlayerCandidates(Jsoup.parse("", response.url), response.text, response.url)
             direct.addAll(scriptDirect)
@@ -997,8 +1012,13 @@ class FilmizleHell : MainAPI() {
         )
     }
 
-    private suspend fun publishSubtitles(document: Document, html: String, base: String, callback: (SubtitleFile) -> Unit) {
-        val seen = HashSet<String>()
+    private suspend fun publishSubtitles(
+        document: Document,
+        html: String,
+        base: String,
+        seen: MutableSet<String>,
+        callback: (SubtitleFile) -> Unit
+    ) {
         for (track in document.select("track[src], track[data-src]")) {
             val raw = track.attr("src").ifBlank { track.attr("data-src") }
             val url = fixUrl(raw, base) ?: continue
@@ -1007,9 +1027,38 @@ class FilmizleHell : MainAPI() {
             val label = track.attr("label").ifBlank { track.attr("srclang") }.ifBlank { "Altyazı" }
             callback(newSubtitleFile(label, url))
         }
-        subtitleRegex.findAll(decode(html)).forEach { match ->
+
+        val decoded = decode(html)
+        subtitleRegex.findAll(decoded).forEach { match ->
             val url = fixUrl(match.value, base) ?: return@forEach
             if (seen.add(url)) callback(newSubtitleFile("Altyazı", url))
+        }
+        quotedSubtitleRegex.findAll(decoded).forEach { match ->
+            val url = fixUrl(match.groupValues[1], base) ?: return@forEach
+            if (!Regex("""(?i)\.(?:vtt|srt|ass)(?:[?#].*)?$""").containsMatchIn(url)) return@forEach
+            if (seen.add(url)) callback(newSubtitleFile("Altyazı", url))
+        }
+    }
+
+    private fun publishHlsSubtitleTracks(
+        playlistUrl: String,
+        playlist: String,
+        seen: MutableSet<String>,
+        callback: (SubtitleFile) -> Unit
+    ) {
+        val trackLines = Regex("""(?im)^#EXT-X-MEDIA:[^\r\n]*TYPE=SUBTITLES[^\r\n]*$""")
+            .findAll(playlist)
+        for (match in trackLines) {
+            val line = match.value
+            val uri = Regex("""(?i)\bURI="([^"]+)"""").find(line)?.groupValues?.getOrNull(1) ?: continue
+            val url = fixUrl(uri, playlistUrl) ?: continue
+            // CloudStream's external SubtitleFile accepts standalone text-subtitle files,
+            // not an HLS rendition playlist itself.
+            if (!Regex("""(?i)\.(?:vtt|srt|ass)(?:[?#].*)?$""").containsMatchIn(url)) continue
+            val label = Regex("""(?i)\bNAME="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+                ?: Regex("""(?i)\bLANGUAGE="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+                ?: "Altyazı"
+            if (seen.add(url)) callback(newSubtitleFile(label, url))
         }
     }
 
@@ -1024,12 +1073,15 @@ class FilmizleHell : MainAPI() {
         }.onFailure { Log.w(name, "Oynatıcı sayfası alınamadı: " + data, it) }.getOrNull() ?: return false
         if (!page.isSuccessful) return false
 
-        publishSubtitles(page.document, page.text, page.url, subtitleCallback)
+        val seenSubtitles = HashSet<String>()
+        publishSubtitles(page.document, page.text, page.url, seenSubtitles, subtitleCallback)
         val visited = HashSet<String>()
         val visitedScripts = HashSet<String>()
         val (pageDirect, pageEmbeds) = collectPlayerCandidates(page.document, page.text, page.url)
         val (scriptDirect, scriptEmbeds) =
-            collectExternalScriptCandidates(page.document, page.url, page.url, visitedScripts)
+                collectExternalScriptCandidates(
+                page.document, page.url, page.url, visitedScripts, seenSubtitles, subtitleCallback
+                )
         val direct = LinkedHashSet<String>().apply {
             addAll(pageDirect)
             addAll(scriptDirect)
@@ -1040,7 +1092,7 @@ class FilmizleHell : MainAPI() {
         }
         var found = false
         // FilmizleHell sources are selected client-side; inspect the source metadata on the movie page too.
-        if (publishPlayturkaManifestCandidates(page.url, page.document, page.text, callback) > 0) {
+        if (publishPlayturkaManifestCandidates(page.url, page.document, page.text, seenSubtitles, subtitleCallback, callback) > 0) {
             found = true
         }
         val allCandidates = LinkedHashSet<String>().apply {
@@ -1085,18 +1137,20 @@ class FilmizleHell : MainAPI() {
             Log.d(name, "embed response: " + safeLogUrl(nested.url) + " HTTP=" + nested.code +
                 ", length=" + nested.text.length + ", type=" + nested.headers["content-type"].orEmpty())
             if (!nested.isSuccessful || nested.text.isBlank() || nested.text.length > 4_000_000) return
-            publishSubtitles(nested.document, nested.text, nested.url, subtitleCallback)
+            publishSubtitles(nested.document, nested.text, nested.url, seenSubtitles, subtitleCallback)
             if (runCatching { URI(nested.url).host.orEmpty().equals("p.playturka.space", true) }
                     .getOrDefault(false)
             ) {
                 val playturkaFound = publishPlayturkaManifestCandidates(
-                    nested.url, nested.document, nested.text, callback
+                    nested.url, nested.document, nested.text, seenSubtitles, subtitleCallback, callback
                 )
                 if (playturkaFound > 0) found = true
             }
             val (nextDirect, nextEmbeds) = collectPlayerCandidates(nested.document, nested.text, nested.url)
             val (jsDirect, jsEmbeds) =
-                collectExternalScriptCandidates(nested.document, nested.url, nested.url, visitedScripts)
+                collectExternalScriptCandidates(
+                    nested.document, nested.url, nested.url, visitedScripts, seenSubtitles, subtitleCallback
+                )
             val nestedDirect = LinkedHashSet<String>().apply {
                 addAll(nextDirect)
                 addAll(jsDirect)
