@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:bf34634c04226ac4d933ffebc52c01d978aaa4ef -->
+### Install Android 35 image before Kayra Doctor emulator smoke
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [bf34634](https://github.com/Kayracs3/Kayra/commit/bf34634c04226ac4d933ffebc52c01d978aaa4ef)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:26ee38371f8d6e0280677669a21371463565691b -->
 ### Skip provider edits for Android ADB infrastructure timeouts
 
