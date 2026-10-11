@@ -1,5 +1,78 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-11
+
+<!-- kayra-commit:23228b5fdde41e0a91c58df4bf511877843f817b -->
+### Fix DiziBoxLive poster build and workflow failures
+
+- Etkilenen alanlar: DiziBoxLive, Repo / CI
+- Commit: [23228b5](https://github.com/Kayracs3/Kayra/commit/23228b5fdde41e0a91c58df4bf511877843f817b)
+
+## 2026-10-11
+
+<!-- kayra-commit:60349a251a972056b3a1b3681f4bbc9b584d283c -->
+### Use verified DiziBoxLive afisler poster URL fallback
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [60349a2](https://github.com/Kayracs3/Kayra/commit/60349a251a972056b3a1b3681f4bbc9b584d283c)
+
+## 2026-10-10
+
+<!-- kayra-commit:38f6704cb7343fd213a4d2c483c9fa03079fd434 -->
+### Prefer DiziBoxLive visual cards over duplicate navigation links
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [38f6704](https://github.com/Kayracs3/Kayra/commit/38f6704cb7343fd213a4d2c483c9fa03079fd434)
+
+## 2026-10-10
+
+<!-- kayra-commit:1e0a4d49b1184349c190d5262215398e0119d53b -->
+### Refine DiziBoxLive card filtering for poster recovery
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [1e0a4d4](https://github.com/Kayracs3/Kayra/commit/1e0a4d49b1184349c190d5262215398e0119d53b)
+
+## 2026-10-10
+
+<!-- kayra-commit:78487c2827affd23929ca12d26524896f8e6ea9a -->
+### Fix DiziBoxLive catalogue posters and card extraction
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [78487c2](https://github.com/Kayracs3/Kayra/commit/78487c2827affd23929ca12d26524896f8e6ea9a)
+
+## 2026-10-10
+
+<!-- kayra-commit:e17176f7d95426ec3d866951d12f033924a1b310 -->
+### Fix Sinezy build after removing adult filters
+
+- Etkilenen alanlar: SinezyTo
+- Commit: [e17176f](https://github.com/Kayracs3/Kayra/commit/e17176f7d95426ec3d866951d12f033924a1b310)
+
+## 2026-10-10
+
+<!-- kayra-commit:2ed46376b836df572184c1eda0feab9077aeaa8a -->
+### Remove adult content filtering functions
+
+- Etkilenen alanlar: SinezyTo
+- Commit: [2ed4637](https://github.com/Kayracs3/Kayra/commit/2ed46376b836df572184c1eda0feab9077aeaa8a)
+
+## 2026-10-10
+
+<!-- kayra-commit:6b8d54fcdabf7be386846d7500d33918b92f16aa -->
+### Add mapping for 'Fantastik' films
+
+- Etkilenen alanlar: SinezyTo
+- Commit: [6b8d54f](https://github.com/Kayracs3/Kayra/commit/6b8d54fcdabf7be386846d7500d33918b92f16aa)
+
+## 2026-10-10
+
+<!-- kayra-commit:7072d3dfc28a66020eb93cd95f29d202e5d0c63e -->
+### Move plugin catalog README into doctor directory
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7072d3d](https://github.com/Kayracs3/Kayra/commit/7072d3dfc28a66020eb93cd95f29d202e5d0c63e)
+
+
 ## 2026-10-10
 
 <!-- kayra-commit:973c109c4c2937920cbbd0785f4a2430f9c313f0 -->
