@@ -553,6 +553,40 @@ def test_case(package, plugins_dir, item, timeout_seconds):
     return result
 
 
+
+def dismiss_first_run_setup(package):
+    """Dismiss CloudStream's first-run language/setup wizard before deep-link tests."""
+    print("CloudStream ilk kurulum ekranı kontrol ediliyor...", flush=True)
+    try:
+        launch_output = launch_account_activity(package)
+        print(f"CloudStream başlatma çıktısı: {launch_output[-500:]}", flush=True)
+        time.sleep(2)
+        skip_node, ui = wait_for_node(resource="skip_btt", timeout=8)
+        if not skip_node:
+            print("İlk kurulumdaki Skip setup düğmesi görünmedi; devam ediliyor.", flush=True)
+            return
+
+        print("CloudStream ilk kurulum ekranı bulundu; Skip setup seçiliyor.", flush=True)
+        tap_node(skip_node)
+        time.sleep(2)
+
+        # Some builds need another short wait for the wizard activity to close.
+        for _ in range(4):
+            ui = dump_ui()
+            if not find_resource_node(ui, "skip_btt"):
+                print("CloudStream ilk kurulum ekranı kapatıldı.", flush=True)
+                return
+            node = find_resource_node(ui, "skip_btt")
+            if node:
+                tap_node(node)
+            time.sleep(2)
+
+        print("UYARI: Skip setup ekranı hâlâ görünüyor; deep-link testi sonuçsuz kalabilir.", flush=True)
+    except Exception as exc:
+        # Do not crash the whole test before the JSON report can be written.
+        print(f"UYARI: İlk kurulum ekranı otomatik kapatılamadı: {type(exc).__name__}: {exc}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--package", required=True)
@@ -575,6 +609,9 @@ def main():
         item = dict(data)
         item["name"] = name
         cases.append(item)
+
+    if cases:
+        dismiss_first_run_setup(args.package)
 
     print(f"Playback smoke: {len(cases)} plugin bulundu.", flush=True)
     results = []
