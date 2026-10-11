@@ -2,6 +2,23 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:26ee38371f8d6e0280677669a21371463565691b -->
+### Skip provider edits for Android ADB infrastructure timeouts
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [26ee383](https://github.com/Kayracs3/Kayra/commit/26ee38371f8d6e0280677669a21371463565691b)
+
+## 2026-10-11
+
+<!-- kayra-commit:20cb4674c9e8b10e1b16786ccd9509328448e682 -->
+### Avoid blocking ActivityManager wait in CloudStream smoke tests
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [20cb467](https://github.com/Kayracs3/Kayra/commit/20cb4674c9e8b10e1b16786ccd9509328448e682)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:4ab8d86533458a3c2f7f328fa0f510f9b0cf9c1c -->
 ### Ensure Android emulator package is installed
 
