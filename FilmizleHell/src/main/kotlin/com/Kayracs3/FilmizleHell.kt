@@ -516,10 +516,41 @@ class FilmizleHell : MainAPI() {
             Regex("""\.(?:jpe?g|png|gif|webp|svg|ico|css|js|woff2?|ttf)(?:$|\?)""").containsMatchIn(url.lowercase(Locale.ROOT))
     }
 
+    private fun isRejectedPlayerCandidate(raw: String, fixed: String): Boolean {
+        val original = decode(raw).trim().lowercase(Locale.ROOT)
+        if (original.isBlank() || original.startsWith("javascript:") ||
+            original.contains("getembedurl") || original.contains("activesource") ||
+            original.contains("[object") || original.contains("undefined") ||
+            original.contains("null") || original.contains("${") ||
+            original.contains("function(") || original.contains("function (")
+        ) return true
+
+        val host = runCatching { URI(fixed).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+        val path = pathOf(fixed).lowercase(Locale.ROOT)
+        val blockedHosts = listOf(
+            "googletagmanager.com", "google-analytics.com", "accounts.google.com",
+            "static.cloudflareinsights.com", "github.com", "githubusercontent.com",
+            "fonts.googleapis.com", "fonts.gstatic.com", "doubleclick.net",
+            "googlesyndication.com", "googleadservices.com", "facebook.com",
+            "connect.facebook.net", "t.me", "telegram.org", "twitter.com",
+            "cdnjs.cloudflare.com", "cdn.jsdelivr.net", "unpkg.com"
+        )
+        if (blockedHosts.any { host == it || host.endsWith(".$it") }) return true
+        if (host == "filmizlehell.net" || host == "www.filmizlehell.net") {
+            if (path.contains("/film/getembedurl") || path.contains("/film/get-embed-url")) return true
+        }
+        if (path == "/gtag/js" || path == "/gsi/client" ||
+            path.endsWith("/beacon.min.js") || path.endsWith(".js") ||
+            path.endsWith(".css") || path.endsWith(".map")
+        ) return true
+        return false
+    }
+
     private fun addPlayerCandidate(raw: String?, base: String, direct: MutableSet<String>, embeds: MutableSet<String>) {
         val value = decode(raw.orEmpty()).trim().trim('"', '\'').trimEnd(';', ',')
+        if (value.isBlank() || value.length > 1800) return
         val fixed = fixUrl(value, base) ?: return
-        if (isStaticAsset(fixed)) return
+        if (isRejectedPlayerCandidate(value, fixed) || isStaticAsset(fixed)) return
         if (isDirectMedia(fixed)) {
             if (!fixed.contains("site.webm", true) && !fixed.contains("logo.webm", true)) direct += fixed
             return
@@ -543,11 +574,16 @@ class FilmizleHell : MainAPI() {
 
         val nodes = document.select(
             "iframe[src], iframe[data-src], iframe[data-url], video[src], video[data-src], " +
-                "source[src], source[data-src], embed[src], [data-embed], [data-player], [data-video], [data-iframe]"
+                "source[src], source[data-src], embed[src], [data-embed], [data-player], [data-video], " +
+                "[data-iframe], [data-source], [data-source-url], [data-source-id], [data-server], " +
+                "[data-server-id], [data-stream], [data-stream-id], [data-video-id], [data-file], " +
+                "button[onclick], [onclick]"
         )
         val attrs = listOf(
             "src", "data-src", "data-url", "data-embed", "data-player", "data-video",
-            "data-iframe", "data-iframe-src", "data-href", "data-link", "data-file", "data-hls"
+            "data-iframe", "data-iframe-src", "data-href", "data-link", "data-file", "data-hls",
+            "data-source", "data-source-url", "data-source-id", "data-server", "data-server-id",
+            "data-stream", "data-stream-id", "data-video-id", "data-media-id", "data-video"
         )
         for (element in nodes) {
             for (attr in attrs) {
@@ -584,8 +620,106 @@ class FilmizleHell : MainAPI() {
     private fun safeLogUrl(raw: String): String =
         runCatching {
             val uri = URI(raw)
-            (uri.host.orEmpty() + uri.path.orEmpty()).take(240)
+            val keys = uri.rawQuery.orEmpty().split('&')
+                .filter { it.isNotBlank() }
+                .map { it.substringBefore('=').take(32) }
+                .distinct()
+                .take(8)
+            val queryHint = if (keys.isEmpty()) "" else keys.joinToString(
+                prefix = "?",
+                separator = "&"
+            ) { "$it=*" }
+            (uri.host.orEmpty() + uri.path.orEmpty() + queryHint).take(260)
         }.getOrDefault(raw.substringBefore('?').take(240))
+
+    private fun extractPlayturkaIds(embedUrl: String, document: Document, html: String): Set<String> {
+        val host = runCatching { URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+        if (host != "p.playturka.space") return emptySet()
+        val ids = LinkedHashSet<String>()
+        val acceptedId = Regex("""^[A-Za-z0-9_-]{5,24}$""")
+        val queryNames = setOf(
+            "id", "v", "vid", "video", "video_id", "videoid", "source", "source_id",
+            "sourceid", "stream", "stream_id", "streamid", "media", "media_id", "key", "token"
+        )
+        runCatching { URI(embedUrl).rawQuery.orEmpty() }.getOrDefault("")
+            .split('&')
+            .forEach { pair ->
+                val key = pair.substringBefore('=')
+                if (key.lowercase(Locale.ROOT) in queryNames) {
+                    val rawValue = pair.substringAfter('=', "")
+                    val value = runCatching { java.net.URLDecoder.decode(rawValue, "UTF-8") }
+                        .getOrDefault(rawValue).trim()
+                    if (acceptedId.matches(value)) ids += value
+                }
+            }
+
+        val idAttributes = listOf(
+            "data-video-id", "data-source-id", "data-stream-id", "data-media-id",
+            "data-file-id", "data-id", "value"
+        )
+        for (element in document.select(
+            "[data-video-id], [data-source-id], [data-stream-id], [data-media-id], " +
+                "[data-file-id], [data-id], input[name*=video], input[name*=source]"
+        )) {
+            for (attr in idAttributes) {
+                val raw = element.attr(attr).trim()
+                if (acceptedId.matches(raw)) ids += raw
+            }
+        }
+
+        val patterns = listOf(
+            Regex("""(?i)(?:video[_-]?id|source[_-]?id|stream[_-]?id|media[_-]?id|file[_-]?id|activeSource)\s*["']?\s*[:=]\s*["']([A-Za-z0-9_-]{5,24})["']"""),
+            Regex("""(?i)/videos/([A-Za-z0-9_-]{5,24})/(?:master\.m3u8|index\.m3u8)""")
+        )
+        for (pattern in patterns) {
+            pattern.findAll(decode(html)).forEach { match ->
+                match.groupValues.getOrNull(1)?.takeIf { acceptedId.matches(it) }?.let(ids::add)
+            }
+        }
+        return ids
+    }
+
+    private suspend fun publishPlayturkaManifestCandidates(
+        embedUrl: String,
+        document: Document,
+        html: String,
+        callback: (ExtractorLink) -> Unit
+    ): Int {
+        val ids = extractPlayturkaIds(embedUrl, document, html)
+        if (ids.isEmpty()) {
+            Log.d(name, "Playturka: ID bulunamadı; sayfa=" + safeLogUrl(embedUrl))
+            return 0
+        }
+        var found = 0
+        for (id in ids.take(5)) {
+            val manifest = "https://p.playturka.space/videos/$id/master.m3u8"
+            val response = runCatching {
+                app.get(
+                    manifest,
+                    headers = requestHeaders + mapOf("Accept" to "*/*", "Referer" to embedUrl),
+                    referer = embedUrl,
+                    allowRedirects = true,
+                    timeout = 10000
+                )
+            }.onFailure {
+                Log.d(name, "Playturka manifest isteği başarısız: " + safeLogUrl(manifest))
+            }.getOrNull() ?: continue
+            val body = response.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+            val contentType = response.headers["content-type"].orEmpty()
+            if (response.isSuccessful &&
+                (body.startsWith("#EXTM3U") ||
+                    contentType.contains("mpegurl", true) ||
+                    contentType.contains("m3u8", true))
+            ) {
+                publishDirect(manifest, embedUrl, callback)
+                found++
+            } else {
+                Log.d(name, "Playturka manifest doğrulanmadı: " + safeLogUrl(manifest) +
+                    ", HTTP=" + response.code + ", type=" + contentType.take(80))
+            }
+        }
+        return found
+    }
 
     private suspend fun collectExternalScriptCandidates(
         document: Document,
@@ -597,7 +731,9 @@ class FilmizleHell : MainAPI() {
         val embeds = LinkedHashSet<String>()
         val blocked = listOf(
             "google-analytics", "googletagmanager", "doubleclick", "adsystem",
-            "advert", "hotjar", "clarity", "facebook", "cookie", "share"
+            "advert", "hotjar", "clarity", "facebook", "cookie", "share",
+            "cloudflareinsights", "github.com", "githubusercontent", "google.com",
+            "gstatic.com", "fonts.", "cdnjs", "jsdelivr", "unpkg"
         )
         val scriptUrls = document.select("script[src]")
             .mapNotNull { fixUrl(it.attr("src"), base) }
@@ -741,6 +877,14 @@ class FilmizleHell : MainAPI() {
                 ", length=" + nested.text.length + ", type=" + nested.headers["content-type"].orEmpty())
             if (!nested.isSuccessful || nested.text.isBlank() || nested.text.length > 4_000_000) return
             publishSubtitles(nested.document, nested.text, nested.url, subtitleCallback)
+            if (runCatching { URI(nested.url).host.orEmpty().equals("p.playturka.space", true) }
+                    .getOrDefault(false)
+            ) {
+                val playturkaFound = publishPlayturkaManifestCandidates(
+                    nested.url, nested.document, nested.text, callback
+                )
+                if (playturkaFound > 0) found = true
+            }
             val (nextDirect, nextEmbeds) = collectPlayerCandidates(nested.document, nested.text, nested.url)
             val (jsDirect, jsEmbeds) =
                 collectExternalScriptCandidates(nested.document, nested.url, nested.url, visitedScripts)
