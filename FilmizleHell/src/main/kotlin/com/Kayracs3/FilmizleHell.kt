@@ -1143,7 +1143,7 @@ class FilmizleHell : MainAPI() {
         val year = parseYear(document, context)
         var added = 0
 
-        fun publishSubtitleUrl(rawUrl: String, language: String, formatHint: String, sourceTitle: String): Boolean {
+        suspend fun publishSubtitleUrl(rawUrl: String, language: String, formatHint: String, sourceTitle: String): Boolean {
             val lang = language.trim().lowercase(Locale.ROOT)
             val isTurkish = lang == "tr" || lang == "tur" || lang == "turkish" ||
                 lang == "turkce" || lang.contains("turkish") || lang.contains("türkçe")
