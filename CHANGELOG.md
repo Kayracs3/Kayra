@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:01e4b286060ba5b963a9744c40e7b408c55eabf4 -->
+### Separate DiziPal episode cards from comments and follow full listing
+
+- Etkilenen alanlar: DiziPal
+- Commit: [01e4b28](https://github.com/Kayracs3/Kayra/commit/01e4b286060ba5b963a9744c40e7b408c55eabf4)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:10bf473c904c709ba828a406604624d9d4bf738c -->
 ### Remove duplicate subtitle callback declaration
 
