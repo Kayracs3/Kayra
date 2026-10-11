@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:5743740e6143059673cc327a46d74b5374ae43a1 -->
+### Improve FilmizleHell player extraction and genre parsing
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [5743740](https://github.com/Kayracs3/Kayra/commit/5743740e6143059673cc327a46d74b5374ae43a1)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:d0aa19b2955737b179a6fd3a86d1f19508c5e355 -->
 ### Add FilmizleHell CloudStream provider
 
