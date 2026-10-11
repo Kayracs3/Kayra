@@ -224,16 +224,21 @@ def launch_account_activity(package):
             package,
         ],
         check=False,
-        timeout=20,
+        timeout=12,
     )
     launcher = resolved.replace("\r", "").strip().splitlines()[-1] if resolved.strip() else ""
     if launcher and launcher != "No activity found" and "/" in launcher:
+        # Do not use ActivityManager's -W flag here. On CloudStream's first
+        # account/language wizard it can block until timeout even though the
+        # activity is running, preventing the test from tapping "Skip setup".
         return run(
-            ["adb", "shell", "am", "start", "-W", "-n", launcher],
+            ["adb", "shell", "am", "start", "-n", launcher],
             check=False,
-            timeout=20,
+            timeout=12,
         )
 
+    # monkey dispatches the launcher intent without waiting for an activity
+    # to report full startup.
     return run(
         [
             "adb", "shell", "monkey",
@@ -242,7 +247,7 @@ def launch_account_activity(package):
             "1",
         ],
         check=False,
-        timeout=20,
+        timeout=12,
     )
 
 
