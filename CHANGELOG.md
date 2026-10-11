@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:da89426ef4610915315c593629e2cda78e745277 -->
+### Refine temporary Playturka source diagnostics
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [da89426](https://github.com/Kayracs3/Kayra/commit/da89426ef4610915315c593629e2cda78e745277)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:cb18b5b4a81594d5c35762f1c6d7cf889558de63 -->
 ### Temporarily inspect Playturka player source flow
 
