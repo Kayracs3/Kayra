@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:c56cbc171c0e9afdac86e8a4e3865fd936b228de -->
+### Add URL-based provider generator entry point
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [c56cbc1](https://github.com/Kayracs3/Kayra/commit/c56cbc171c0e9afdac86e8a4e3865fd936b228de)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:23228b5fdde41e0a91c58df4bf511877843f817b -->
 ### Fix DiziBoxLive poster build and workflow failures
 
