@@ -268,9 +268,17 @@ class FilmKutusu : MainAPI() {
             if (text.length !in 2..40) continue
             if (text.equals("film", true) || text.equals("dizi", true)) continue
             if (text.contains("tümünü gör", true) || text.contains("film arşivi", true)) continue
-            val inNav = element.parents().any {
-                it.tagName() == "nav" || it.className().contains("menu", true) ||
-                    it.className().contains("header", true) || it.className().contains("footer", true)
+            // Yalnız gerçek site navigasyonlarını ele; "header" sözcüğü film detay
+            // kartlarında da geçebildiği için tür bağlantılarını yanlışlıkla silme.
+            val inNav = element.parents().any { ancestor ->
+                val classes = ancestor.classNames().map { it.lowercase(Locale.ROOT) }
+                ancestor.tagName() == "nav" || classes.any {
+                    it in setOf(
+                        "site-header", "site-footer", "main-menu", "primary-menu",
+                        "header-menu", "footer-menu", "main-navigation",
+                        "primary-navigation", "site-navigation", "nav-menu"
+                    )
+                }
             }
             if (inNav) continue
             found += text
