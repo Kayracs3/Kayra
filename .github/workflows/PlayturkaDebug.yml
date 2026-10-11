@@ -1,0 +1,104 @@
+name: Temporary Playturka Source Inspection
+
+on:
+  push:
+    paths:
+      - ".github/workflows/PlayturkaDebug.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect public player-page markup and scripts
+        run: |
+          python3 - <<'PY'
+          import re
+          import urllib.request
+          from urllib.parse import urljoin, urlparse
+
+          UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36"
+          page_url = "https://filmizlehell.net/film/4016-matchbox-the-movie-izle"
+          direct_scripts = [
+              "https://p.playturka.space/assets/js/fm.js",
+              "https://p.playturka.space/assets/js/bundle.js",
+          ]
+
+          def get(url, referer="https://filmizlehell.net/"):
+              req = urllib.request.Request(url, headers={
+                  "User-Agent": UA,
+                  "Accept": "*/*",
+                  "Referer": referer,
+              })
+              with urllib.request.urlopen(req, timeout=12) as response:
+                  return response.status, response.geturl(), response.read().decode("utf-8", "replace")
+
+          def snippets(label, body, patterns, limit=12, radius=220):
+              print("\n=== MATCHES:", label, "===")
+              seen = set()
+              n = 0
+              for pattern in patterns:
+                  for match in re.finditer(pattern, body, re.I):
+                      start, end = max(0, match.start()-radius), min(len(body), match.end()+radius)
+                      sample = re.sub(r"\s+", " ", body[start:end]).strip()
+                      if sample in seen:
+                          continue
+                      seen.add(sample)
+                      print("MATCH:", sample[:650])
+                      n += 1
+                      if n >= limit:
+                          return
+
+          try:
+              status, final_url, html = get(page_url)
+              print("FILM_PAGE", status, final_url, "length", len(html))
+              snippets("FILM PAGE ELEMENTS", html, [
+                  r"<[^>]{0,900}(?:playturka|Kaynak\\s*1|Filmi Başlat|iframe|video[_-]?id|source[_-]?id|embedurl)[^>]*>",
+                  r".{0,100}(?:playturka|video[_-]?id|source[_-]?id|embedurl|iframe).{0,180}",
+              ], limit=25, radius=150)
+              paths = re.findall(r"""<script[^>]+src=["']([^"']+\.js(?:\?[^"']*)?)["']""", html, re.I)
+              script_urls = []
+              for path in paths:
+                  u = urljoin(final_url, path)
+                  if urlparse(u).hostname in ("filmizlehell.net", "www.filmizlehell.net"):
+                      script_urls.append(u)
+              for u in list(dict.fromkeys(script_urls))[:8]:
+                  try:
+                      st, fu, js = get(u, final_url)
+                      print("\nSCRIPT", st, fu, "length", len(js))
+                      snippets(fu, js, [
+                          r"playturka",
+                          r"666film",
+                          r"getEmbedUrl",
+                          r"embed.?url",
+                          r"video.?id",
+                          r"source.?id",
+                          r"Filmi Başlat",
+                          r"Kaynak",
+                      ], limit=12, radius=300)
+                  except Exception as e:
+                      print("SCRIPT_FETCH_ERROR", u, repr(e))
+          except Exception as e:
+              print("FILM_PAGE_FETCH_ERROR", repr(e))
+
+          for u in direct_scripts:
+              try:
+                  st, fu, js = get(u, "https://p.playturka.space/")
+                  print("\nPLAYTURKA_SCRIPT", st, fu, "length", len(js))
+                  snippets(fu, js, [
+                      r"window\\.location\\.hash",
+                      r"location\\.hash",
+                      r"api/v1/player/session",
+                      r"master\\.m3u8",
+                      r"videoId",
+                      r"video_id",
+                      r"fetch\\s*\\(",
+                      r"Authorization",
+                  ], limit=18, radius=260)
+              except Exception as e:
+                  print("PLAYTURKA_FETCH_ERROR", u, repr(e))
+          PY
