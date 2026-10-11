@@ -341,7 +341,7 @@ class FilmKutusu : MainAPI() {
                 url.contains("youtube.com/embed", true) || url.contains("youtu.be/", true)) &&
                 (url.contains("youtube", true) || url.contains("youtu.be", true) || url.contains("vimeo", true))
         } ?: return null
-        return fixUrl(element.attr("src").ifBlank { element.attr("content") }.ifBlank { it.attr("href") }, base)
+        return fixUrl(element.attr("src").ifBlank { element.attr("content") }.ifBlank { element.attr("href") }, base)
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -387,7 +387,7 @@ class FilmKutusu : MainAPI() {
     private fun isDirectMedia(url: String): Boolean =
         Regex("""(?i)\.(m3u8|mp4|webm|mpd)(?:[?#].*)?$""").containsMatchIn(url)
 
-    private fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         val type = when {
             url.contains(".m3u8", true) -> ExtractorLinkType.M3U8
             url.contains(".mp4", true) || url.contains(".webm", true) -> ExtractorLinkType.VIDEO
