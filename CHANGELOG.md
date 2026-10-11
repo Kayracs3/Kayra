@@ -2,6 +2,31 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:a6afff481feaee54ff0ecfe1ccd788c535056bb6 -->
+### Do not auto-repair providers when playback smoke is unverified
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [a6afff4](https://github.com/Kayracs3/Kayra/commit/a6afff481feaee54ff0ecfe1ccd788c535056bb6)
+
+## 2026-10-11
+
+<!-- kayra-commit:755e77352d1d8d04380e16301a0596033172e354 -->
+### Clear stale CloudStream APKs before repeat smoke tests
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [755e773](https://github.com/Kayracs3/Kayra/commit/755e77352d1d8d04380e16301a0596033172e354)
+
+## 2026-10-11
+
+<!-- kayra-commit:d4dd558709e6bd2be27b67813e7338ea56c70317 -->
+### Dismiss CloudStream first-run setup before plugin smoke tests
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [d4dd558](https://github.com/Kayracs3/Kayra/commit/d4dd558709e6bd2be27b67813e7338ea56c70317)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:bf34634c04226ac4d933ffebc52c01d978aaa4ef -->
 ### Install Android 35 image before Kayra Doctor emulator smoke
 
