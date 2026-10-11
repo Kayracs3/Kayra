@@ -1061,6 +1061,90 @@ class FilmizleHell : MainAPI() {
         return ids
     }
 
+    private suspend fun publishPlayturkaApiSubtitles(
+        id: String,
+        referer: String,
+        seenSubtitles: MutableSet<String>,
+        subtitleCallback: (SubtitleFile) -> Unit
+    ): Int {
+        // The visible Playturka player can expose subtitle tracks in its HTML/JS
+        // player page even when its master.m3u8 contains no EXT-X-MEDIA entries.
+        // Read only the public player page and its ordinary JS assets; don't try
+        // to decode the opaque /api/video-url response.
+        val playerUrl = "https://p.playturka.space/api/player?id=" + URLEncoder.encode(id, "UTF-8")
+        val before = seenSubtitles.size
+        val response = runCatching {
+            app.get(
+                playerUrl,
+                headers = requestHeaders + mapOf("Accept" to "text/html,*/*", "Referer" to referer),
+                referer = referer,
+                allowRedirects = true,
+                timeout = 8000
+            )
+        }.onFailure {
+            Log.d(name, "Playturka player sayfası alınamadı: " + safeLogUrl(playerUrl))
+        }.getOrNull() ?: return 0
+
+        if (!response.isSuccessful || response.text.isBlank() || response.text.length > 4_000_000) {
+            Log.d(
+                name,
+                "Playturka player sayfası atlandı: " + safeLogUrl(playerUrl) +
+                    ", HTTP=" + response.code
+            )
+            return 0
+        }
+
+        publishSubtitles(
+            response.document,
+            response.text,
+            response.url,
+            seenSubtitles,
+            subtitleCallback
+        )
+
+        // The page can register caption tracks inside player JS rather than
+        // placing <track> elements in the initial HTML. Search the small set of
+        // player-related scripts explicitly, because filenames such as bundle.js
+        // may not contain the words "subtitle" or "player".
+        val scriptUrls = response.document.select("script[src]")
+            .mapNotNull { fixUrl(it.attr("src"), response.url) }
+            .distinct()
+            .filter { pathOf(it).substringBefore('?').endsWith(".js", true) }
+            .sortedByDescending { scriptUrl ->
+                val path = pathOf(scriptUrl).lowercase(Locale.ROOT)
+                listOf("subtitle", "caption", "track", "player", "video", "bundle", "fm", "source", "app")
+                    .count { path.contains(it) }
+            }
+            .take(5)
+
+        for (scriptUrl in scriptUrls) {
+            val script = runCatching {
+                app.get(
+                    scriptUrl,
+                    headers = requestHeaders + ("Referer" to response.url),
+                    referer = response.url,
+                    allowRedirects = true,
+                    timeout = 7000
+                )
+            }.onFailure {
+                Log.d(name, "Playturka altyazı JS alınamadı: " + safeLogUrl(scriptUrl))
+            }.getOrNull() ?: continue
+
+            if (!script.isSuccessful || script.text.isBlank() || script.text.length > 2_000_000) continue
+            publishSubtitles(
+                Jsoup.parse("", script.url),
+                script.text,
+                script.url,
+                seenSubtitles,
+                subtitleCallback
+            )
+        }
+
+        val added = seenSubtitles.size - before
+        Log.d(name, "Playturka player altyazı taraması: id=" + id + ", yeni=" + added)
+        return added
+    }
+
     private suspend fun publishPlayturkaManifestCandidates(
         embedUrl: String,
         document: Document,
@@ -1184,7 +1268,8 @@ class FilmizleHell : MainAPI() {
 
         var found = 0
         val playerReferer = if (host == "p.playturka.space") embedUrl else "https://p.playturka.space/"
-        for (id in ids.take(5)) {
+        for (id in ids.take(3)) {
+            publishPlayturkaApiSubtitles(id, playerReferer, seenSubtitles, subtitleCallback)
             for (fileName in listOf("master.m3u8", "index.m3u8")) {
                 val manifest = "https://p.playturka.space/videos/" + id + "/" + fileName
                 val response = runCatching {
