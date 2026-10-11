@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:37863100be734580ee25dd1a61377179a9691c70 -->
+### Improve FilmizleHell Turkish subtitle fallback
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [3786310](https://github.com/Kayracs3/Kayra/commit/37863100be734580ee25dd1a61377179a9691c70)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:8c93e029355641b84bc42f20b506bdc5a9fe896e -->
 ### Use canonical Turkish subtitle labels and filter fallback matches
 
