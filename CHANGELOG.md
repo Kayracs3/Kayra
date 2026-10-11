@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:d0aa19b2955737b179a6fd3a86d1f19508c5e355 -->
+### Add FilmizleHell CloudStream provider
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [d0aa19b](https://github.com/Kayracs3/Kayra/commit/d0aa19b2955737b179a6fd3a86d1f19508c5e355)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:5163295090d462af21784577ad75d109ca16ba93 -->
 ### Preserve FilmKutusu genre links in film details
 
