@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:2751f210e82890918bd67db2e9affc83675385af -->
+### Launch CloudStream setup without blocking ActivityManager wait
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [2751f21](https://github.com/Kayracs3/Kayra/commit/2751f210e82890918bd67db2e9affc83675385af)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:a6afff481feaee54ff0ecfe1ccd788c535056bb6 -->
 ### Do not auto-repair providers when playback smoke is unverified
 
