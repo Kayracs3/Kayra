@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:cea5308db112d9f2e144d3cefb4478c3783aac70 -->
+### Fix suspend HLS subtitle file publishing in FilmizleHell
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [cea5308](https://github.com/Kayracs3/Kayra/commit/cea5308db112d9f2e144d3cefb4478c3783aac70)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:8e1dc78c31fc23dbfeca0a7404f9f1f0f00544f6 -->
 ### Keep FilmizleHell poster and title images within their own card
 
