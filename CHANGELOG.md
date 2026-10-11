@@ -2,6 +2,15 @@
 
 ## 2026-10-11
 
+<!-- kayra-commit:cc512aa24f814ea405dea1777944e0f4e3e6c927 -->
+### Add Turkish external subtitle fallback when stream has no tracks
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [cc512aa](https://github.com/Kayracs3/Kayra/commit/cc512aa24f814ea405dea1777944e0f4e3e6c927)
+
+
+## 2026-10-11
+
 <!-- kayra-commit:bb2fef4d50f09133637a066e21a4e0f4f838cfcc -->
 ### Scan Playturka player HTML and scripts for subtitle tracks
 
