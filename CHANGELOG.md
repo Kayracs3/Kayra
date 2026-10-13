@@ -2,6 +2,23 @@
 
 ## 2026-10-13
 
+<!-- kayra-commit:e7afd5beb8602f11a4f2a1b9123bebb97768a7e2 -->
+### Keep URL plugin generation independent of emulator failures
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [e7afd5b](https://github.com/Kayracs3/Kayra/commit/e7afd5beb8602f11a4f2a1b9123bebb97768a7e2)
+
+## 2026-10-13
+
+<!-- kayra-commit:4cf5f5ef4c467a85a06bbc2c0f2e61f3d3e4606a -->
+### Separate Android emulator tests from URL plugin generation
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [4cf5f5e](https://github.com/Kayracs3/Kayra/commit/4cf5f5ef4c467a85a06bbc2c0f2e61f3d3e4606a)
+
+
+## 2026-10-13
+
 <!-- kayra-commit:4468f56d8e03325f6b56f7079ca3877de7a4ef76 -->
 ### Bound Android emulator cleanup and diagnostics
 
