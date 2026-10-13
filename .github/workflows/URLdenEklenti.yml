@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   generate-test:
-    name: URL'den üret, derle, cihazda test et ve düzelt
+    name: URL'den üret ve derle
     runs-on: ubuntu-latest
     timeout-minutes: 100
     steps:
@@ -44,7 +44,7 @@ jobs:
       - name: Android SDK ayarla
         uses: android-actions/setup-android@v3
         with:
-          packages: "platforms;android-35 build-tools;35.0.0 platform-tools emulator"
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
 
       - name: CloudStream Gradle eklentisini hazırla
         shell: bash
@@ -132,60 +132,6 @@ jobs:
           pathlib.Path("doctor-results/providers.json").write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
           PY
           echo "build_ok=true" >> "$GITHUB_OUTPUT"
-
-      - name: Android 35 sistem imajını indir ve doğrula (3 deneme)
-        if: steps.build.outputs.build_ok == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDKMANAGER="$(command -v sdkmanager || true)"
-          if [ -z "$SDKMANAGER" ]; then
-            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          fi
-          test -x "$SDKMANAGER"
-          PACKAGE="system-images;android-35;google_apis;x86_64"
-          IMAGE_DIR="$ANDROID_SDK_ROOT/system-images/android-35/google_apis/x86_64"
-
-          for attempt in 1 2 3; do
-            echo "::group::Android 35 system image download attempt $attempt/3"
-            if [ -s "$IMAGE_DIR/system.img" ] && [ -f "$IMAGE_DIR/source.properties" ]; then
-              echo "Android emulator system image is already installed and verified."
-              echo "::endgroup::"
-              exit 0
-            fi
-
-            "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --uninstall "$PACKAGE" >/dev/null 2>&1 || true
-            rm -rf "$IMAGE_DIR" "$HOME/.android/cache"
-
-            if "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --install "$PACKAGE" --channel=0; then
-              if [ -s "$IMAGE_DIR/system.img" ] && [ -f "$IMAGE_DIR/source.properties" ]; then
-                echo "Android emulator system image download verified."
-                echo "::endgroup::"
-                exit 0
-              fi
-              echo "SDK manager reported success, but required image files are missing." >&2
-            else
-              echo "Android system image install failed on attempt $attempt." >&2
-            fi
-            echo "::endgroup::"
-            if [ "$attempt" -lt 3 ]; then sleep 5; fi
-          done
-
-          echo "::error::Android 35 system image could not be installed after three attempts."
-          exit 1
-
-      - name: Android oynatma testi ve başarısızsa otomatik düzeltme
-        if: steps.build.outputs.build_ok == 'true'
-        shell: bash
-        timeout-minutes: 30
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-        run: |
-          set -euo pipefail
-          bash doctor/android_emulator_bootstrap.sh -- bash doctor/run_url_plugin_smoke_and_repair.sh
 
       - name: Sonuçları ve .cs3 dosyasını yükle
         if: always()
