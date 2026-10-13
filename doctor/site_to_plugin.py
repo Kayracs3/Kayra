@@ -20,11 +20,63 @@ def validate(url):
     return p
 
 def fetch(url,ref=''):
-    validate(url); headers={'User-Agent':'Mozilla/5.0 KayraBuilder/1.0','Accept':'text/html,application/json,*/*'}
-    if ref: headers['Referer']=ref
+    # Use a regular desktop-browser request profile. Some hosts reject the old
+    # custom "KayraBuilder" user agent before returning any page HTML.
+    headers={
+        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language':'tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6',
+        'Cache-Control':'no-cache',
+        'Pragma':'no-cache',
+        'Upgrade-Insecure-Requests':'1',
+    }
+    if ref:
+        headers['Referer']=ref
+    else:
+        headers['Sec-Fetch-Dest']='document'
+        headers['Sec-Fetch-Mode']='navigate'
+        headers['Sec-Fetch-Site']='none'
+        headers['Sec-Fetch-User']='?1'
+
+    # For a root/site URL only, try the matching www/non-www variant once if
+    # the canonical host returns an access error. This is normal host fallback,
+    # not a CAPTCHA or authentication bypass.
+    candidates=[url]
     try:
-        with urllib.request.build_opener(Guard).open(urllib.request.Request(url,headers=headers),timeout=14) as r: return {'url':r.geturl(),'status':r.status,'html':r.read(350000).decode('utf-8','replace')}
-    except Exception as e: return {'url':url,'status':getattr(e,'code',None),'html':'','error':str(e)[:180]}
+        parsed=urllib.parse.urlsplit(url)
+        host=parsed.hostname or ''
+        if parsed.scheme in ('http','https') and parsed.path in ('','/') and not parsed.query and not parsed.fragment:
+            if host.startswith('www.'):
+                alternate=host[4:]
+            elif host and host.count('.') >= 1:
+                alternate='www.'+host
+            else:
+                alternate=''
+            if alternate:
+                netloc=alternate
+                if parsed.port:
+                    netloc+=f':{parsed.port}'
+                variant=urllib.parse.urlunsplit((parsed.scheme,netloc,parsed.path or '/',parsed.query,parsed.fragment))
+                if variant!=url:
+                    candidates.append(variant)
+    except Exception:
+        pass
+
+    last_error=''
+    last_status=None
+    for candidate in candidates:
+        try:
+            validate(candidate)
+            with urllib.request.build_opener(Guard).open(urllib.request.Request(candidate,headers=headers),timeout=14) as response:
+                return {'url':response.geturl(),'status':response.status,'html':response.read(350000).decode('utf-8','replace')}
+        except Exception as e:
+            last_status=getattr(e,'code',None)
+            last_error=str(e)[:180]
+            # Only try the canonical host alias after an HTTP access/not-found
+            # response; DNS, TLS and other network failures remain explicit too.
+            if candidate==candidates[-1]:
+                break
+    return {'url':url,'status':last_status,'html':'','error':last_error}
 
 class P(HTMLParser):
     def __init__(self,url):
