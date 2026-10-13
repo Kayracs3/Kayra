@@ -1,5 +1,22 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-13
+
+<!-- kayra-commit:4468f56d8e03325f6b56f7079ca3877de7a4ef76 -->
+### Bound Android emulator cleanup and diagnostics
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [4468f56](https://github.com/Kayracs3/Kayra/commit/4468f56d8e03325f6b56f7079ca3877de7a4ef76)
+
+## 2026-10-13
+
+<!-- kayra-commit:41fa642bdc0328c55a2a311011c861f436a18e09 -->
+### Stop URL provider generation when site fetch is blocked
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [41fa642](https://github.com/Kayracs3/Kayra/commit/41fa642bdc0328c55a2a311011c861f436a18e09)
+
+
 ## 2026-10-11
 
 <!-- kayra-commit:263939ed3c171cee49f5e26863c4364a2697c6a5 -->
