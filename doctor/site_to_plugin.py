@@ -221,7 +221,12 @@ def save(p,d):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--mode',choices=('generate','repair'),required=True); ap.add_argument('--url',default=''); ap.add_argument('--provider-name',default=''); ap.add_argument('--run-id',default=''); ap.add_argument('--repo-root',default='.'); ap.add_argument('--report',required=True); ap.add_argument('--metadata',required=True); ap.add_argument('--build-log',default=''); ap.add_argument('--playback-report',default=''); x=ap.parse_args(); root=Path(x.repo_root).resolve(); rp=Path(x.report); mp=Path(x.metadata)
     if x.mode=='generate':
-        r=inspect(x.url); save(rp,r); known={}
+        r=inspect(x.url); save(rp,r)
+        status=r.get('status')
+        if not isinstance(status,int) or not 200 <= status < 300:
+            detail=str(r.get('error') or '').strip()
+            raise RuntimeError('Site HTML alınamadı; otomatik sağlayıcı üretimi durduruldu. HTTP '+str(status or 'yanıt yok')+'. Site erişim engeli/403 döndürüyorsa, doğrulanabilir sayfa içeriği olmadan işlevsel eklenti üretilemez.'+((' Ayrıntı: '+detail[:180]) if detail else ''))
+        known={}
         for b in root.glob('*/build.gradle.kts'):
             for k in b.parent.glob('src/main/kotlin/**/*.kt'):
                 m=re.search(r'''(?m)\bmainUrl\b[^=\n]*=\s*["'](https?://[^"']+)["']''',k.read_text(encoding='utf-8',errors='ignore'))
