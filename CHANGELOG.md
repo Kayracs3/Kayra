@@ -2,6 +2,15 @@
 
 ## 2026-10-13
 
+<!-- kayra-commit:b3601101c76bcc26198df27de30ea4a769b6f76d -->
+### Use browser-like headers and canonical host fallback for site analysis
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [b360110](https://github.com/Kayracs3/Kayra/commit/b3601101c76bcc26198df27de30ea4a769b6f76d)
+
+
+## 2026-10-13
+
 <!-- kayra-commit:e7afd5beb8602f11a4f2a1b9123bebb97768a7e2 -->
 ### Keep URL plugin generation independent of emulator failures
 
