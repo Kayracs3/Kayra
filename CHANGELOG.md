@@ -2,6 +2,15 @@
 
 ## 2026-10-13
 
+<!-- kayra-commit:d656fe8240ce3e66b74ab1ff300450ce88dd83aa -->
+### Try the site's public film index when homepage access fails
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [d656fe8](https://github.com/Kayracs3/Kayra/commit/d656fe8240ce3e66b74ab1ff300450ce88dd83aa)
+
+
+## 2026-10-13
+
 <!-- kayra-commit:d9beaec2d8aaebae9c0fc0a3fcffcee9c23096f0 -->
 ### Preserve useful HTTP diagnostics during host fallback
 
