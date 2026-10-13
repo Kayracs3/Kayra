@@ -2,6 +2,15 @@
 
 ## 2026-10-13
 
+<!-- kayra-commit:d9beaec2d8aaebae9c0fc0a3fcffcee9c23096f0 -->
+### Preserve useful HTTP diagnostics during host fallback
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [d9beaec](https://github.com/Kayracs3/Kayra/commit/d9beaec2d8aaebae9c0fc0a3fcffcee9c23096f0)
+
+
+## 2026-10-13
+
 <!-- kayra-commit:b3601101c76bcc26198df27de30ea4a769b6f76d -->
 ### Use browser-like headers and canonical host fallback for site analysis
 
