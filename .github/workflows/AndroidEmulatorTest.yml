@@ -1,0 +1,153 @@
+name: Android Emülatör Testi
+
+on:
+  workflow_run:
+    workflows: ["URL'den Eklenti Üret ve Test Et"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Test edilecek URL'den üretim çalıştırmasının Run ID değeri"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: android-emulator-test-${{ github.event.workflow_run.id || inputs.source_run_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  emulator-test:
+    name: Üretilen .cs3 dosyasını Android emülatöründe test et
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: JDK 17 ayarla
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK ve emülatörü hazırla
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools emulator"
+
+      - name: Üretim çalıştırmasının artefaktını indir
+        uses: actions/download-artifact@v4
+        with:
+          name: url-plugin-builder-${{ github.event_name == 'workflow_dispatch' && inputs.source_run_id || github.event.workflow_run.id }}
+          run-id: ${{ github.event_name == 'workflow_dispatch' && inputs.source_run_id || github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/url-plugin-artifact
+
+      - name: Üretilen dosyaları doğrula ve yerleştir
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACT_DIR="${RUNNER_TEMP}/url-plugin-artifact"
+          cp -a "$ARTIFACT_DIR/." "$GITHUB_WORKSPACE/" 2>/dev/null || true
+          mkdir -p doctor-results/cs3
+
+          if [ ! -s doctor-results/providers.json ]; then
+            PROVIDERS="$(find "$ARTIFACT_DIR" -type f -name providers.json -print -quit)"
+            test -n "$PROVIDERS"
+            cp "$PROVIDERS" doctor-results/providers.json
+          fi
+
+          if [ ! -s doctor-results/generated-provider.json ]; then
+            META="$(find "$ARTIFACT_DIR" -type f -name generated-provider.json -print -quit)"
+            test -n "$META"
+            cp "$META" doctor-results/generated-provider.json
+          fi
+
+          if [ ! -s doctor-results/site-analysis.json ]; then
+            REPORT="$(find "$ARTIFACT_DIR" -type f -name site-analysis.json -print -quit)"
+            test -n "$REPORT"
+            cp "$REPORT" doctor-results/site-analysis.json
+          fi
+
+          if ! find doctor-results/cs3 -maxdepth 1 -type f -name '*.cs3' -print -quit | grep -q .; then
+            find "$ARTIFACT_DIR" -type f -name '*.cs3' -exec cp {} doctor-results/cs3/ \;
+          fi
+
+          test -s doctor-results/providers.json
+          test -s doctor-results/generated-provider.json
+          test -s doctor-results/site-analysis.json
+          test -n "$(find doctor-results/cs3 -maxdepth 1 -type f -name '*.cs3' -print -quit)"
+          echo "İndirilen test girdileri:"
+          find doctor-results -maxdepth 3 -type f -print | sort
+
+      - name: Android 35 sistem imajını indir ve doğrula (3 deneme)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          test -x "$SDKMANAGER"
+          PACKAGE="system-images;android-35;google_apis;x86_64"
+          IMAGE_DIR="$ANDROID_SDK_ROOT/system-images/android-35/google_apis/x86_64"
+
+          for attempt in 1 2 3; do
+            echo "::group::Android 35 system image download attempt $attempt/3"
+            if [ -s "$IMAGE_DIR/system.img" ] && [ -f "$IMAGE_DIR/source.properties" ]; then
+              echo "Android emulator system image is already installed and verified."
+              echo "::endgroup::"
+              exit 0
+            fi
+
+            "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --uninstall "$PACKAGE" >/dev/null 2>&1 || true
+            rm -rf "$IMAGE_DIR" "$HOME/.android/cache"
+
+            if "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --install "$PACKAGE" --channel=0; then
+              if [ -s "$IMAGE_DIR/system.img" ] && [ -f "$IMAGE_DIR/source.properties" ]; then
+                echo "Android emulator system image download verified."
+                echo "::endgroup::"
+                exit 0
+              fi
+              echo "SDK manager reported success, but required image files are missing." >&2
+            else
+              echo "Android system image install failed on attempt $attempt." >&2
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then sleep 5; fi
+          done
+
+          echo "::error::Android 35 system image could not be installed after three attempts."
+          exit 1
+
+      - name: CloudStream kur ve oynatma smoke testini çalıştır
+        shell: bash
+        timeout-minutes: 40
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+        run: |
+          set -euo pipefail
+          bash doctor/android_emulator_bootstrap.sh -- bash doctor/run_url_plugin_smoke_and_repair.sh
+
+      - name: Emülatör test sonuçlarını yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-test-${{ github.event_name == 'workflow_dispatch' && inputs.source_run_id || github.event.workflow_run.id }}
+          path: |
+            doctor-results/
+            */src/main/kotlin/com/Kayracs3/*.kt
+            */build.gradle.kts
+          if-no-files-found: ignore
+          retention-days: 14
