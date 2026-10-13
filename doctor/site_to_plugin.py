@@ -62,21 +62,23 @@ def fetch(url,ref=''):
     except Exception:
         pass
 
-    last_error=''
-    last_status=None
-    for candidate in candidates:
+    failures=[]
+    for index,candidate in enumerate(candidates):
         try:
             validate(candidate)
             with urllib.request.build_opener(Guard).open(urllib.request.Request(candidate,headers=headers),timeout=14) as response:
                 return {'url':response.geturl(),'status':response.status,'html':response.read(350000).decode('utf-8','replace')}
         except Exception as e:
-            last_status=getattr(e,'code',None)
-            last_error=str(e)[:180]
-            # Only try the canonical host alias after an HTTP access/not-found
-            # response; DNS, TLS and other network failures remain explicit too.
-            if candidate==candidates[-1]:
+            status=getattr(e,'code',None)
+            failures.append({'url':candidate,'status':status,'html':'','error':str(e)[:180]})
+            # Try a host alias only for an HTTP response likely tied to the
+            # requested hostname, rather than masking DNS/TLS/configuration errors.
+            if index < len(candidates)-1 and status not in (403,404,406,429) and not (isinstance(status,int) and 500 <= status < 600):
                 break
-    return {'url':url,'status':last_status,'html':'','error':last_error}
+    # Keep an informative HTTP status (e.g. the original 403) if an alias
+    # attempt ends in a DNS/TLS failure without an HTTP status.
+    best=next((item for item in reversed(failures) if item['status'] is not None), failures[-1] if failures else {'url':url,'status':None,'html':'','error':'No request attempted'})
+    return best
 
 class P(HTMLParser):
     def __init__(self,url):
