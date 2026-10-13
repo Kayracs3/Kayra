@@ -46,6 +46,7 @@ def fetch(url,ref=''):
         parsed=urllib.parse.urlsplit(url)
         host=parsed.hostname or ''
         if parsed.scheme in ('http','https') and parsed.path in ('','/') and not parsed.query and not parsed.fragment:
+            hosts=[host]
             if host.startswith('www.'):
                 alternate=host[4:]
             elif host and host.count('.') >= 1:
@@ -53,12 +54,17 @@ def fetch(url,ref=''):
             else:
                 alternate=''
             if alternate:
-                netloc=alternate
+                hosts.append(alternate)
+            # Last normal public-page fallback: the site exposes a public film
+            # index at /film/. This is a regular page path, not an anti-bot
+            # challenge bypass. Do not try private APIs or challenge endpoints.
+            for candidate_host in hosts:
+                netloc=candidate_host
                 if parsed.port:
                     netloc+=f':{parsed.port}'
-                variant=urllib.parse.urlunsplit((parsed.scheme,netloc,parsed.path or '/',parsed.query,parsed.fragment))
-                if variant!=url:
-                    candidates.append(variant)
+                listing=urllib.parse.urlunsplit((parsed.scheme,netloc,'/film/','',''))
+                if listing not in candidates:
+                    candidates.append(listing)
     except Exception:
         pass
 
