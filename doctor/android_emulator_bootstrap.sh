@@ -77,13 +77,28 @@ cleanup() {
   local rc=$?
   trap - EXIT
   if [[ $rc -ne 0 ]]; then
-    echo "Android test failed; collecting emulator diagnostics." >&2
-    "$ADB" devices -l >&2 || true
-    "$ADB" -s "$SERIAL" logcat -d -t 2000 >"$LOGCAT_FILE" 2>/dev/null || true
+    echo "Android test failed; collecting bounded emulator diagnostics." >&2
+    timeout 8s "$ADB" devices -l >&2 || true
+    timeout 12s "$ADB" -s "$SERIAL" logcat -d -t 2000 >"$LOGCAT_FILE" 2>/dev/null || true
     tail -n 160 "$EMULATOR_LOG" >&2 || true
   fi
-  "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
-  kill -TERM "$EMULATOR_PID" >/dev/null 2>&1 || true
+
+  # ADB's emulator shutdown command can hang when the graphics process is
+  # unhealthy. Never let cleanup consume the whole Actions step timeout.
+  timeout 8s "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
+
+  if kill -0 "$EMULATOR_PID" 2>/dev/null; then
+    kill -TERM "$EMULATOR_PID" >/dev/null 2>&1 || true
+    for attempt in $(seq 1 8); do
+      kill -0 "$EMULATOR_PID" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$EMULATOR_PID" 2>/dev/null; then
+      echo "Emulator did not stop gracefully; sending SIGKILL." >&2
+      kill -KILL "$EMULATOR_PID" >/dev/null 2>&1 || true
+    fi
+  fi
+
   wait "$EMULATOR_PID" >/dev/null 2>&1 || true
   exit "$rc"
 }
