@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:6cfdce62854e1f32d5f4260c5cb096ff526877af -->
+### Install emulator after explicit SDK license acceptance
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [6cfdce6](https://github.com/Kayracs3/Kayra/commit/6cfdce62854e1f32d5f4260c5cb096ff526877af)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:4935b00dc32a326783f7761988b3edc88d6322e3 -->
 ### Correct offline-only source guard pattern
 
