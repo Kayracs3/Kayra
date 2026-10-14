@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:16590cbb38330047095a9bebaeecc90e6308e759 -->
+### Wait for and detect CloudStream first-run setup screen
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [16590cb](https://github.com/Kayracs3/Kayra/commit/16590cbb38330047095a9bebaeecc90e6308e759)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:062a063b17d86dd4a90d1f5f7600132a1ae14e53 -->
 ### Treat unverified Android smoke results as inconclusive
 
