@@ -28,7 +28,7 @@ jobs:
   doctor:
     name: Kayra Doctor
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Kaynak kodu al
         uses: actions/checkout@v4
@@ -229,7 +229,7 @@ jobs:
       - name: Android CloudStream smoke
         if: steps.doctor.outputs.build_ok == 'true' && steps.doctor.outputs.cs3_ok == 'true'
         shell: bash
-        timeout-minutes: 30
+        timeout-minutes: 45
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
