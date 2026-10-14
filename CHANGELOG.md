@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:062a063b17d86dd4a90d1f5f7600132a1ae14e53 -->
+### Treat unverified Android smoke results as inconclusive
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [062a063](https://github.com/Kayracs3/Kayra/commit/062a063b17d86dd4a90d1f5f7600132a1ae14e53)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:7ab78bcf4c6eeee17a4eba7beabb1e6cf8e933e7 -->
 ### Guard against remote model calls without AI secret strings
 
