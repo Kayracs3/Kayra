@@ -173,7 +173,7 @@ jobs:
             git commit -m "Add URL-generated CloudStream provider: $MODULE_NAME"
             SOURCE_PUSHED=0
             for attempt in 1 2 3; do
-              git fetch origin master
+              git fetch origin +refs/heads/master:refs/remotes/origin/master
               git rebase origin/master
               if git push origin HEAD:master; then
                 SOURCE_PUSHED=1
@@ -191,14 +191,14 @@ jobs:
 
           # Refresh the builds branch from the remote on every retry so a
           # concurrent compiler run cannot silently drop this publication.
-          git fetch origin builds
+          git fetch origin +refs/heads/builds:refs/remotes/origin/builds
           PUBLISH_DIR="$(mktemp -d)"
           rmdir "$PUBLISH_DIR"
           git worktree add --detach "$PUBLISH_DIR" origin/builds
           PUBLISH_OK=0
 
           for attempt in 1 2 3; do
-            git fetch origin builds
+            git fetch origin +refs/heads/builds:refs/remotes/origin/builds
             git -C "$PUBLISH_DIR" reset --hard origin/builds
             find "$PUBLISH_DIR" -maxdepth 1 -type f -name '*.cs3' -delete
             cp "$ARTIFACT_DIR"/*.cs3 "$PUBLISH_DIR"/
