@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:147a5e80ac481e4a1488758cbaee476a3939dc36 -->
+### Add offline compile test for deterministic provider template
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [147a5e8](https://github.com/Kayracs3/Kayra/commit/147a5e80ac481e4a1488758cbaee476a3939dc36)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:76dd24bf80b4316f077fa4a33be59ee7807aaa1e -->
 ### Accept SDK licenses before emulator install
 
