@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile doctor/site_to_plugin.py doctor/auto_fix.py
+          python3 -m py_compile doctor/site_to_plugin.py doctor/auto_fix.py doctor/template_smoke_test.py
           if grep -Eiq 'OPENAI_API_KEY|api\.openai\.com|def ai\(' doctor/site_to_plugin.py doctor/auto_fix.py; then
             echo "::error::AI API referansı bulundu; Doctor yalnızca yerel deterministik kurallarla çalışmalı."
             exit 1
@@ -118,6 +118,11 @@ jobs:
           chmod +x gradlew
           ./gradlew publishToMavenLocal --no-daemon --stacktrace
           test -f "$HOME/.m2/repository/com/lagradost/cloudstream3/gradle/local-SNAPSHOT/gradle-local-SNAPSHOT.pom"
+      - name: Deterministik eklenti şablonunu derle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 doctor/template_smoke_test.py --repo-root .
 
       - name: Git kullanıcı ayarla
         run: |
