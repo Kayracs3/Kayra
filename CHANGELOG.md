@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:4edd6bf3f09d25ab20edd5b4b87a291c5de91473 -->
+### Compile deterministic provider template in Doctor
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [4edd6bf](https://github.com/Kayracs3/Kayra/commit/4edd6bf3f09d25ab20edd5b4b87a291c5de91473)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:147a5e80ac481e4a1488758cbaee476a3939dc36 -->
 ### Add offline compile test for deterministic provider template
 
