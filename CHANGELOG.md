@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:b09221ed6f89931906ea12ec05eacca08d8e2474 -->
+### Resolve Doctor repair target from absolute compiler paths
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [b09221e](https://github.com/Kayracs3/Kayra/commit/b09221ed6f89931906ea12ec05eacca08d8e2474)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:61a0e6b3f0013aedd816ea4c26dc6e411d880340 -->
 ### Remove undefined DiziKorea search predicate
 
