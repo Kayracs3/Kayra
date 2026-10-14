@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:7ab78bcf4c6eeee17a4eba7beabb1e6cf8e933e7 -->
+### Guard against remote model calls without AI secret strings
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7ab78bc](https://github.com/Kayracs3/Kayra/commit/7ab78bcf4c6eeee17a4eba7beabb1e6cf8e933e7)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:4402089dc1a981b677f8ea03f4952dfb7a203b78 -->
 ### Keep generated-provider metadata local and deterministic
 
