@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Apply only local, deterministic fixes to known CloudStream API patterns."""
 import argparse
 import json
 import re
