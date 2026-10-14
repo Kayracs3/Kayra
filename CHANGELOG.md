@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:4402089dc1a981b677f8ea03f4952dfb7a203b78 -->
+### Keep generated-provider metadata local and deterministic
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [4402089](https://github.com/Kayracs3/Kayra/commit/4402089dc1a981b677f8ea03f4952dfb7a203b78)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:4edd6bf3f09d25ab20edd5b4b87a291c5de91473 -->
 ### Compile deterministic provider template in Doctor
 
