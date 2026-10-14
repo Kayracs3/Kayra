@@ -268,7 +268,7 @@ class DdiziTel : MainAPI() {
         )
     }
 
-        private fun matchesSearchQuery(query: String, title: String): Boolean {
+    private fun matchesSearchQuery(query: String, title: String): Boolean {
         fun normalize(value: String): String {
             val lowered = value.lowercase(java.util.Locale.ROOT).replace('ı', 'i')
             val decomposed = java.text.Normalizer.normalize(
@@ -306,7 +306,7 @@ class DdiziTel : MainAPI() {
         }
     }
 
-override suspend fun search(query: String, page: Int): SearchResponseList {
+    override suspend fun search(query: String, page: Int): SearchResponseList {
         val term = query.trim()
         if (term.isBlank()) return newSearchResponseList(emptyList(), false)
 
