@@ -355,7 +355,7 @@ override suspend fun search(query: String, page: Int): SearchResponseList {
                     " results=" + parsed.size
             )
             remember(parsed)
-            return parsed.isNotEmpty()
+            return items.any { matchesSearchQuery(term, it.name) }
         }
 
         // DDizi'nin arama ucu form gönderimi kullanıyor. Önce bilinen POST biçimini
