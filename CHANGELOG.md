@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:623ff59b2f8f573259cb69688d33dccf62a89b56 -->
+### Fix DdiziTel search filter variable reference
+
+- Etkilenen alanlar: DdiziTel
+- Commit: [623ff59](https://github.com/Kayracs3/Kayra/commit/623ff59b2f8f573259cb69688d33dccf62a89b56)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:22bc180f9bddeabf9f32f21af43b14d47238ef23 -->
 ### Fix search relevance and Doctor timeout
 
