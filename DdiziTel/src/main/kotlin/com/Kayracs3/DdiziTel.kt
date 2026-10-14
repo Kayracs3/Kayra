@@ -355,7 +355,7 @@ class DdiziTel : MainAPI() {
                     " results=" + parsed.size
             )
             remember(parsed)
-            return items.any { matchesSearchQuery(term, it.name) }
+            return parsed.any { matchesSearchQuery(term, it.name) }
         }
 
         // DDizi'nin arama ucu form gönderimi kullanıyor. Önce bilinen POST biçimini
