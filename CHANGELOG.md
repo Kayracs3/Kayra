@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:7c5e3c4c11cb8a5f906586ef4376cdfb0c77c88f -->
+### Replace AI site builder with deterministic provider templates
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7c5e3c4](https://github.com/Kayracs3/Kayra/commit/7c5e3c4c11cb8a5f906586ef4376cdfb0c77c88f)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:882dfd2f264d965be78b22bd47c20f42ac1dd25a -->
 ### Normalize legacy episode helpers in generated providers
 
