@@ -895,11 +895,12 @@ override suspend fun search(query: String): List<SearchResponse> {
         val apiResult = apiJson(apiUrl)
         if (apiResult != null) {
             val results = searchResponsesFromApi(apiResult).filter { matchesSearchQuery(q, it.name) }
-            Log.d(name, "JSON API arama tamamlandı: " + apiUrl + "; sonuç=" + results.size)
-            return results
+            Log.d(name, "JSON API arama tamamlandı: " + apiUrl + "; eşleşen sonuç=" + results.size)
+            if (results.isNotEmpty()) return results
+            Log.d(name, "JSON API yanıtında başlık eşleşmesi yok; HTML arama yedeğine geçiliyor.")
         }
 
-        // HTML search is only a fallback if the API request itself failed.
+        // Try the HTML search as a fallback when the API fails or returns no title matches.
         val candidates = listOf(
             "$mainUrl/?s=$encoded",
             "$mainUrl/?q=$encoded",
