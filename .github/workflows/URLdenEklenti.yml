@@ -191,6 +191,7 @@ jobs:
 
           # Refresh the builds branch from the remote on every retry so a
           # concurrent compiler run cannot silently drop this publication.
+          git fetch origin builds
           PUBLISH_DIR="$(mktemp -d)"
           rmdir "$PUBLISH_DIR"
           git worktree add --detach "$PUBLISH_DIR" origin/builds
