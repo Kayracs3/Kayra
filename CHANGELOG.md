@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-14
+
+<!-- kayra-commit:22bc180f9bddeabf9f32f21af43b14d47238ef23 -->
+### Fix search relevance and Doctor timeout
+
+- Etkilenen alanlar: AsyaFilmIzle, DdiziTel, DiziBoxLive, Dizigecesi, DiziKorea, Dizilla, DiziPal, DiziPod, DiziSol, DiziYou, Dramadizilerim, FilmizleHell, FilmKutusu, FilmMakinesi, FullHDFilmizlesene, HDFilmCehennemi, InatBox, JetFilmizle, RecTV, Repo / CI, SetFilmIzle, SinezyTo, WebDramaTurkey
+- Commit: [22bc180](https://github.com/Kayracs3/Kayra/commit/22bc180f9bddeabf9f32f21af43b14d47238ef23)
+
+
 ## 2026-10-13
 
 <!-- kayra-commit:d656fe8240ce3e66b74ab1ff300450ce88dd83aa -->
