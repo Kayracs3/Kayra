@@ -120,10 +120,6 @@ jobs:
       - name: Build ve otomatik düzeltme
         id: doctor
         shell: bash
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
         run: |
           set -u -o pipefail
 
@@ -182,18 +178,8 @@ jobs:
               break
             fi
 
-            # AI source repair is only valid when the Kotlin/Gradle build itself failed.
-            # Invalid/generated CS3 or blocked sites must not cause arbitrary Kotlin edits.
-            if [ "$build_ok" -eq 1 ]; then
-              echo "Build başarılı fakat CS3 doğrulaması başarısız. Otomatik kaynak düzeltmesi yapılmıyor."
-              break
-            fi
-
-            if [ -z "${OPENAI_API_KEY:-}" ]; then
-              echo "OPENAI_API_KEY yok. Otomatik düzeltme atlandı."
-              break
-            fi
-
+            # Only deterministic, locally defined API compatibility fixes are allowed.
+            # Never call a remote AI API or send source/logs outside the runner.
             if [ "$BRANCH_CREATED" -eq 0 ]; then
               git checkout -b "$FIX_BRANCH"
               BRANCH_CREATED=1
@@ -207,7 +193,7 @@ jobs:
               --attempt "$attempt"
 
             git diff --check
-            git diff --quiet && { echo "AI source değişikliği üretmedi."; break; } || true
+            git diff --quiet && { echo "Bilinen deterministik düzeltme uygulanamadı."; break; } || true
           done
 
           [ "$SUCCESS" -eq 1 ] && echo "success=true" >> "$GITHUB_OUTPUT" || echo "success=false" >> "$GITHUB_OUTPUT"
