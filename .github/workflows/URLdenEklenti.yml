@@ -13,7 +13,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: url-plugin-builder-${{ github.ref }}
@@ -125,6 +125,109 @@ jobs:
           pathlib.Path("doctor-results/providers.json").write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
           PY
           echo "build_ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Kaynak kodunu ve eklentiyi CloudStream deposuna yayımla
+        if: steps.build.outputs.build_ok == 'true'
+        shell: bash
+        env:
+          MODULE_NAME: ${{ steps.generate.outputs.module_name }}
+        run: |
+          set -euo pipefail
+
+          # Preserve every .cs3 produced by this successful build and the
+          # generated catalogue before changing branches or rebasing source.
+          test -d "$MODULE_NAME/src"
+          test -f "$MODULE_NAME/build.gradle.kts"
+          test -f "build/plugins.json"
+
+          ARTIFACT_DIR="$(mktemp -d)"
+          while IFS= read -r -d '' artifact; do
+            filename="$(basename "$artifact")"
+            if [[ -e "$ARTIFACT_DIR/$filename" ]]; then
+              echo "Duplicate .cs3 output filename: $filename" >&2
+              exit 1
+            fi
+            cp "$artifact" "$ARTIFACT_DIR/$filename"
+          done < <(find . -type f -path '*/build/*.cs3' -print0)
+
+          if ! find "$ARTIFACT_DIR" -maxdepth 1 -type f -name '*.cs3' -print -quit | grep -q .; then
+            echo "No .cs3 files available for publication." >&2
+            exit 1
+          fi
+          cp build/plugins.json "$ARTIFACT_DIR/plugins.json"
+          python3 - "$ARTIFACT_DIR/plugins.json" <<'PY'
+          import json, pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          data = json.loads(path.read_text(encoding="utf-8"))
+          if not isinstance(data, list) or not data:
+              raise SystemExit("Generated plugins.json is empty or has an invalid format.")
+          PY
+
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          # Keep the new provider's source in master so later builds do not
+          # remove it from the published plugin repository.
+          git add -- "$MODULE_NAME/build.gradle.kts" "$MODULE_NAME/src"
+          if ! git diff --cached --quiet; then
+            git commit -m "Add URL-generated CloudStream provider: $MODULE_NAME"
+            SOURCE_PUSHED=0
+            for attempt in 1 2 3; do
+              git fetch origin master
+              git rebase origin/master
+              if git push origin HEAD:master; then
+                SOURCE_PUSHED=1
+                break
+              fi
+              echo "Master push attempt $attempt failed; retrying."
+            done
+            if [ "$SOURCE_PUSHED" -ne 1 ]; then
+              echo "Unable to publish generated provider source to master." >&2
+              exit 1
+            fi
+          else
+            echo "Generated provider source is already present in master."
+          fi
+
+          # Refresh the builds branch from the remote on every retry so a
+          # concurrent compiler run cannot silently drop this publication.
+          PUBLISH_DIR="$(mktemp -d)"
+          rmdir "$PUBLISH_DIR"
+          git worktree add --detach "$PUBLISH_DIR" origin/builds
+          PUBLISH_OK=0
+
+          for attempt in 1 2 3; do
+            git fetch origin builds
+            git -C "$PUBLISH_DIR" reset --hard origin/builds
+            find "$PUBLISH_DIR" -maxdepth 1 -type f -name '*.cs3' -delete
+            cp "$ARTIFACT_DIR"/*.cs3 "$PUBLISH_DIR"/
+            cp "$ARTIFACT_DIR/plugins.json" "$PUBLISH_DIR/plugins.json"
+
+            git -C "$PUBLISH_DIR" config user.name "GitHub Actions"
+            git -C "$PUBLISH_DIR" config user.email "actions@github.com"
+            git -C "$PUBLISH_DIR" add -A
+            if ! git -C "$PUBLISH_DIR" diff --cached --quiet; then
+              git -C "$PUBLISH_DIR" commit -m "Publish URL-generated CloudStream provider: $MODULE_NAME"
+            else
+              echo "Published plugin files already match builds branch."
+            fi
+
+            if git -C "$PUBLISH_DIR" push origin HEAD:builds; then
+              PUBLISH_OK=1
+              break
+            fi
+            echo "Builds push attempt $attempt failed; refreshing and retrying."
+          done
+
+          git worktree remove --force "$PUBLISH_DIR"
+          rm -rf "$ARTIFACT_DIR"
+
+          if [ "$PUBLISH_OK" -ne 1 ]; then
+            echo "Unable to publish .cs3 files and plugins.json to builds." >&2
+            exit 1
+          fi
+
+          echo "Generated source and CloudStream plugin catalogue were published successfully."
 
       - name: Sonuçları ve .cs3 dosyasını yükle
         if: always()
