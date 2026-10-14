@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate/repair a CloudStream provider from a public site URL."""
+"""Generate/repair a CloudStream provider from public HTML using deterministic local rules only."""
 import argparse, ipaddress, json, re, socket, sys, urllib.error, urllib.parse, urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
@@ -588,7 +588,7 @@ class __CLASS__ : MainAPI() {
 
         val candidates = linkedSetOf<String>()
         for (element in document.select(
-            "iframe[src], iframe[data-src], video[src], video source[src], source[src], a[href*=.m3u8], a[href*=.mp4]"
+            "iframe[src], iframe[data-src], video[src], video source[src], source[src], a[href*='.m3u8'], a[href*='.mp4']"
         )) {
             val raw = when {
                 element.hasAttr("src") -> element.attr("src")
