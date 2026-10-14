@@ -2,6 +2,23 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:11b20fe0b651370d4d9519d9df60c51552039218 -->
+### Fetch builds branch before publishing generated plugins
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [11b20fe](https://github.com/Kayracs3/Kayra/commit/11b20fe0b651370d4d9519d9df60c51552039218)
+
+## 2026-10-14
+
+<!-- kayra-commit:78d38ad6b4c9bbdcda1d7d283e352b9839a46247 -->
+### Publish URL-generated providers to CloudStream repository
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [78d38ad](https://github.com/Kayracs3/Kayra/commit/78d38ad6b4c9bbdcda1d7d283e352b9839a46247)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:16590cbb38330047095a9bebaeecc90e6308e759 -->
 ### Wait for and detect CloudStream first-run setup screen
 
