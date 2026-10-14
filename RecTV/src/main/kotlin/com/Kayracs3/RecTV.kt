@@ -1548,7 +1548,7 @@ class RecTV : MainAPI() {
     // SEARCH
     // =========================================================
 
-        private fun matchesSearchQuery(query: String, title: String): Boolean {
+    private fun matchesSearchQuery(query: String, title: String): Boolean {
         fun normalize(value: String): String {
             val lowered = value.lowercase(java.util.Locale.ROOT).replace('ı', 'i')
             val decomposed = java.text.Normalizer.normalize(lowered, java.text.Normalizer.Form.NFD)
@@ -1577,7 +1577,7 @@ class RecTV : MainAPI() {
         }
     }
 
-override suspend fun search(
+    override suspend fun search(
         query: String
     ): List<SearchResponse> {
 
