@@ -190,6 +190,7 @@ override suspend fun search(query: String): List<SearchResponse> {
 
             val results = parseCards(document)
                 .filterNot { it.url.contains("/bolum/") }
+                .filter { matchesSearchQuery(q, it.name) }
                 .distinctBy { it.url }
 
             if (results.isNotEmpty()) return results
