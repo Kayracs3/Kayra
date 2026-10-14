@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:76dd24bf80b4316f077fa4a33be59ee7807aaa1e -->
+### Accept SDK licenses before emulator install
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [76dd24b](https://github.com/Kayracs3/Kayra/commit/76dd24bf80b4316f077fa4a33be59ee7807aaa1e)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:6cfdce62854e1f32d5f4260c5cb096ff526877af -->
 ### Install emulator after explicit SDK license acceptance
 
