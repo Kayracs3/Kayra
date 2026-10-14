@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:9557e1c8ab8323cb23448c8846c6a5a2121a6a46 -->
+### Remove AI API dependency from Kayra Doctor workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [9557e1c](https://github.com/Kayracs3/Kayra/commit/9557e1c8ab8323cb23448c8846c6a5a2121a6a46)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:c3c407b16bc32859a48f8631bb4fcc380da8f144 -->
 ### Remove OpenAI secrets from URL provider workflow
 
