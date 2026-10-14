@@ -41,7 +41,7 @@ class Dramadizilerim : MainAPI() {
     // SEARCH
     // ------------------------------------------------------------------------
 
-        private fun matchesSearchQuery(query: String, title: String): Boolean {
+    private fun matchesSearchQuery(query: String, title: String): Boolean {
         fun normalize(value: String): String {
             val lowered = value.lowercase(java.util.Locale.ROOT).replace('ı', 'i')
             val decomposed = java.text.Normalizer.normalize(lowered, java.text.Normalizer.Form.NFD)
@@ -70,7 +70,7 @@ class Dramadizilerim : MainAPI() {
         }
     }
 
-override suspend fun search(query: String): List<SearchResponse> {
+    override suspend fun search(query: String): List<SearchResponse> {
         val rawQuery = query.trim()
         if (rawQuery.isBlank()) return emptyList()
         val encoded = URLEncoder.encode(rawQuery, "UTF-8")
