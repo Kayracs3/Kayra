@@ -42,6 +42,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Python betiklerini ve AI bağımsızlığını doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile doctor/site_to_plugin.py doctor/auto_fix.py
+          if grep -Eiq 'OPENAI_API_KEY|api\\.openai\\.com|def ai\\(' doctor/site_to_plugin.py doctor/auto_fix.py; then
+            echo "::error::AI API referansı bulundu; Doctor yalnızca yerel deterministik kurallarla çalışmalı."
+            exit 1
+          fi
+
       - name: JDK 17 Ayarla
         uses: actions/setup-java@v4
         with:
