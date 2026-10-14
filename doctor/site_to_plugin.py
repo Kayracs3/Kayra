@@ -715,7 +715,7 @@ def main():
         meta={'module_name':class_name,'display_name':display,'origin':r['origin'],
               'source_path':str(source_file.relative_to(root)).replace('\\','/'),
               'search_query':next((z['title'] for z in r['links'] if len(z['title'])>2),display),
-              'summary':'Deterministik HTML/Jsoup şablonuyla üretildi; OpenAI veya başka bir yapay zekâ API çağrısı yapılmadı. Video bağlantıları yalnızca sayfada bulunan kaynaklardan aranır.'}
+              'summary':'Deterministik HTML/Jsoup şablonuyla üretildi. Video bağlantıları yalnızca sayfada gözlenen kaynaklardan aranır.'}
         save(mp,meta)
         print(json.dumps(meta,ensure_ascii=False))
     else:
