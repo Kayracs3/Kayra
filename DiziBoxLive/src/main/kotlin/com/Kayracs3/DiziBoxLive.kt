@@ -60,7 +60,47 @@ class DiziBoxLive : MainAPI() {
         )
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
+        private fun matchesSearchQuery(query: String, title: String): Boolean {
+        fun normalize(value: String): String = value.lowercase(java.util.Locale.ROOT)
+            .replace('ı', 'i')
+            .replace('ş', 's')
+            .replace('ğ', 'g')
+            .replace('ü', 'u')
+            .replace('ö', 'o')
+            .replace('ç', 'c')
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
+
+        val normalizedQuery = normalize(query)
+        val normalizedTitle = normalize(title)
+        if (normalizedQuery.isBlank() || normalizedTitle.isBlank()) return false
+
+        val ignored = setOf("the", "a", "an", "of", "and", "or", "ve")
+        val releaseYear = Regex("(?:18|19|20|21)\\d{2}")
+        val words = normalizedQuery.split(' ')
+            .filterNot { it in ignored || releaseYear.matches(it) }
+        if (words.isEmpty()) return normalizedQuery == normalizedTitle
+
+        val titleWords = normalizedTitle.split(' ').toSet()
+        val numberWords = mapOf(
+            "0" to "zero", "1" to "one", "2" to "two", "3" to "three",
+            "4" to "four", "5" to "five", "6" to "six", "7" to "seven",
+            "8" to "eight", "9" to "nine", "10" to "ten"
+        )
+        return words.all { word ->
+            val mappedNumber = numberWords[word]
+            titleWords.any { candidate ->
+                candidate == word ||
+                    (mappedNumber != null && candidate == mappedNumber) ||
+                    (candidate.length >= 4 && word.length >= 4 &&
+                        kotlin.math.abs(candidate.length - word.length) <= 2 &&
+                        (candidate.startsWith(word) || word.startsWith(candidate)))
+            }
+        }
+    }
+
+override suspend fun search(query: String): List<SearchResponse> {
         val q = query.trim()
         if (q.length < 2) return emptyList()
 
@@ -77,7 +117,7 @@ class DiziBoxLive : MainAPI() {
         for (url in urls) {
             val document = requestDocument(url) ?: continue
 
-            val results = seriesResponses(document)
+            val results = seriesResponses(document).filter { matchesSearchQuery(q, it.name) }
 
             if (results.isNotEmpty()) return results
         }
