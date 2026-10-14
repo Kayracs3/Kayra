@@ -61,16 +61,23 @@ jobs:
       - name: Android SDK Ayarla
         uses: android-actions/setup-android@v3
         with:
-          packages: "platforms;android-35 build-tools;35.0.0 platform-tools emulator"
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
 
       - name: Android 35 sistem imajını indir ve doğrula (3 deneme)
         shell: bash
         run: |
           set -euo pipefail
-          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
           PACKAGE="system-images;android-35;google_apis;x86_64"
           IMAGE_DIR="$ANDROID_SDK_ROOT/system-images/android-35/google_apis/x86_64"
           test -x "$SDKMANAGER"
+
+          # The setup action can miss licenses for the emulator package on runner images.
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --install emulator
 
           for attempt in 1 2 3; do
             echo "::group::Android system image install attempt $attempt/3"
