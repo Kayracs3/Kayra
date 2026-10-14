@@ -74,7 +74,6 @@ override suspend fun search(query: String): List<SearchResponse> {
         val rawQuery = query.trim()
         if (rawQuery.isBlank()) return emptyList()
         val encoded = URLEncoder.encode(rawQuery, "UTF-8")
-        val wanted = normalizeSearch(rawQuery)
         val candidates = listOf(
             "$mainUrl/dizi?search=$encoded&page=1",
             "$mainUrl/series?search=$encoded&page=1",
