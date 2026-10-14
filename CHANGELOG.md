@@ -2,6 +2,23 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:c3c407b16bc32859a48f8631bb4fcc380da8f144 -->
+### Remove OpenAI secrets from URL provider workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [c3c407b](https://github.com/Kayracs3/Kayra/commit/c3c407b16bc32859a48f8631bb4fcc380da8f144)
+
+## 2026-10-14
+
+<!-- kayra-commit:9acd6ab9f968057437190ab7fe470af0372dca59 -->
+### Remove AI calls from Doctor auto-fix
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [9acd6ab](https://github.com/Kayracs3/Kayra/commit/9acd6ab9f968057437190ab7fe470af0372dca59)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:7c5e3c4c11cb8a5f906586ef4376cdfb0c77c88f -->
 ### Replace AI site builder with deterministic provider templates
 
