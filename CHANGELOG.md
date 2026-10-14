@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:882dfd2f264d965be78b22bd47c20f42ac1dd25a -->
+### Normalize legacy episode helpers in generated providers
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [882dfd2](https://github.com/Kayracs3/Kayra/commit/882dfd2f264d965be78b22bd47c20f42ac1dd25a)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:26188035f727810bde4d27a288a80d135056edb0 -->
 ### Normalize legacy episode helpers in generated providers
 
