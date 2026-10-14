@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:7310fa8108bc485b13811f7e03cf797e66818b57 -->
+### Make generated plugin publication branch refresh reliable
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7310fa8](https://github.com/Kayracs3/Kayra/commit/7310fa8108bc485b13811f7e03cf797e66818b57)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:11b20fe0b651370d4d9519d9df60c51552039218 -->
 ### Fetch builds branch before publishing generated plugins
 
