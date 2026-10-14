@@ -150,6 +150,35 @@ class JetFilmizle : MainAPI() {
         }
     }
 
+    private fun matchesSearchQuery(query: String, title: String): Boolean {
+        fun normalize(value: String): String {
+            val lowered = value.lowercase(java.util.Locale.ROOT).replace('ı', 'i')
+            val decomposed = java.text.Normalizer.normalize(lowered, java.text.Normalizer.Form.NFD)
+            return decomposed.replace(Regex("\\p{M}+"), "")
+                .replace(Regex("[^a-z0-9]+"), " ").trim().replace(Regex("\\s+"), " ")
+        }
+        val q = normalize(query)
+        val t = normalize(title)
+        if (q.isBlank() || t.isBlank()) return false
+        val ignored = setOf("the", "a", "an", "of", "and", "or", "ve")
+        val year = Regex("(?:18|19|20|21)\\d{2}")
+        val words = q.split(' ').filterNot { it in ignored || year.matches(it) }
+        if (words.isEmpty()) return q == t
+        val titleWords = t.split(' ').toSet()
+        val numberWords = mapOf("0" to "zero", "1" to "one", "2" to "two", "3" to "three",
+            "4" to "four", "5" to "five", "6" to "six", "7" to "seven", "8" to "eight",
+            "9" to "nine", "10" to "ten")
+        return words.all { word ->
+            val mapped = numberWords[word]
+            titleWords.any { candidate ->
+                candidate == word || (mapped != null && candidate == mapped) ||
+                    (candidate.length >= 4 && word.length >= 4 &&
+                        kotlin.math.abs(candidate.length - word.length) <= 2 &&
+                        (candidate.startsWith(word) || word.startsWith(candidate)))
+            }
+        }
+    }
+
     override suspend fun search(query: String): List<SearchResponse> {
         val q = query.trim()
         if (q.isBlank()) return emptyList()
@@ -194,7 +223,8 @@ class JetFilmizle : MainAPI() {
                 Log.d(JET_TAG, "JSON search parse failed: ${it.message}")
                 emptyList()
             }
-            if (apiResults.isNotEmpty()) return apiResults
+            val matchingApiResults = apiResults.filter { matchesSearchQuery(q, it.name) }
+            if (matchingApiResults.isNotEmpty()) return matchingApiResults
         }
 
         val fallbackUrls = listOf(
@@ -213,6 +243,7 @@ class JetFilmizle : MainAPI() {
             val results = document.select(
                 "article.movie, .movie-card, .movie-item, .film-card, .film-item, .card.movie, a[href*='/film/'], a[href*='/dizi/']"
             ).mapNotNull { it.toSearchResult() }.distinctBy { it.url }
+                .filter { matchesSearchQuery(q, it.name) }
             Log.d(JET_TAG, "HTML search $url -> ${results.size} results")
             if (results.isNotEmpty()) return results
         }

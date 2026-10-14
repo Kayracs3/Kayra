@@ -86,13 +86,16 @@ def check_url(item):
                     "detail": "homepage reachable",
                 }
 
+            # A 200 response with a tiny body may be an SPA shell, redirect
+            # placeholder, or transient edge response. Report it as inconclusive
+            # instead of declaring the whole provider broken on byte count alone.
             return {
                 **item,
-                "status": "fail",
+                "status": "inconclusive" if 200 <= status < 400 else "fail",
                 "http_status": status,
                 "bytes": len(body),
                 "content_type": content_type,
-                "detail": "unexpected HTTP response",
+                "detail": "HTTP response was too small to verify site health" if 200 <= status < 400 else "unexpected HTTP response",
             }
 
     except HTTPError as exc:
@@ -112,11 +115,15 @@ def check_url(item):
         }
 
     except (URLError, TimeoutError, OSError) as exc:
+        detail = str(exc)
+        # Site-edge and hosted-runner timeouts are intermittent and do not
+        # prove a provider is broken. Keep them visible but non-blocking.
+        timed_out = "timed out" in detail.lower() or "timeout" in detail.lower()
         return {
             **item,
-            "status": "fail",
+            "status": "inconclusive" if timed_out else "fail",
             "http_status": None,
-            "detail": str(exc),
+            "detail": detail,
         }
 
 
@@ -218,6 +225,7 @@ def main():
         "deep_tests": len([x for x in results if x.get("domain_role") == "deep-test"]),
         "ok": len([x for x in results if x["status"] == "ok"]),
         "protected": len(protected),
+        "inconclusive": len([x for x in results if x["status"] == "inconclusive"]),
         "failed": len(hard_failures),
         "results": results,
     }

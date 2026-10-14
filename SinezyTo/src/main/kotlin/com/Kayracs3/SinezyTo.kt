@@ -595,6 +595,35 @@ class SinezyTo : MainAPI() {
         return newHomePageResponse(request.name, items, hasNext = items.isNotEmpty())
     }
 
+    private fun matchesSearchQuery(query: String, title: String): Boolean {
+        fun normalize(value: String): String {
+            val lowered = value.lowercase(java.util.Locale.ROOT).replace('ı', 'i')
+            val decomposed = java.text.Normalizer.normalize(lowered, java.text.Normalizer.Form.NFD)
+            return decomposed.replace(Regex("\\p{M}+"), "")
+                .replace(Regex("[^a-z0-9]+"), " ").trim().replace(Regex("\\s+"), " ")
+        }
+        val q = normalize(query)
+        val t = normalize(title)
+        if (q.isBlank() || t.isBlank()) return false
+        val ignored = setOf("the", "a", "an", "of", "and", "or", "ve")
+        val year = Regex("(?:18|19|20|21)\\d{2}")
+        val words = q.split(' ').filterNot { it in ignored || year.matches(it) }
+        if (words.isEmpty()) return q == t
+        val titleWords = t.split(' ').toSet()
+        val numberWords = mapOf("0" to "zero", "1" to "one", "2" to "two", "3" to "three",
+            "4" to "four", "5" to "five", "6" to "six", "7" to "seven", "8" to "eight",
+            "9" to "nine", "10" to "ten")
+        return words.all { word ->
+            val mapped = numberWords[word]
+            titleWords.any { candidate ->
+                candidate == word || (mapped != null && candidate == mapped) ||
+                    (candidate.length >= 4 && word.length >= 4 &&
+                        kotlin.math.abs(candidate.length - word.length) <= 2 &&
+                        (candidate.startsWith(word) || word.startsWith(candidate)))
+            }
+        }
+    }
+
     override suspend fun search(query: String, page: Int): SearchResponseList {
         val q = query.trim()
         if (q.isBlank()) return newSearchResponseList(emptyList(), false)
@@ -620,6 +649,7 @@ class SinezyTo : MainAPI() {
             // Hem film hem dizi kartlarını dene; kategori ve arama sayfaları farklı
             // class isimleri kullanabiliyor.
             val items = (parseCards(response.document, false) + parseCards(response.document, true))
+                .filter { matchesSearchQuery(q, it.name) }
                 .distinctBy { it.url }
             android.util.Log.d("Sinezy", "Arama: $url -> ${items.size} sonuç")
             items.forEach { found.putIfAbsent(it.url, it) }
