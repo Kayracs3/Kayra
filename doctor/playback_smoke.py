@@ -566,9 +566,18 @@ def dismiss_first_run_setup(package):
         launch_output = launch_account_activity(package)
         print(f"CloudStream başlatma çıktısı: {launch_output[-500:]}", flush=True)
         time.sleep(2)
-        skip_node, ui = wait_for_node(resource="skip_btt", timeout=8)
+        # The app's first launch can take longer than the normal activity start.
+        # Wait for both the stable resource ID and localized visible button text.
+        skip_node, ui = wait_for_node(resource="skip_btt", timeout=22)
         if not skip_node:
-            print("İlk kurulumdaki Skip setup düğmesi görünmedi; devam ediliyor.", flush=True)
+            skip_node = (
+                find_text_node(ui, "Skip setup")
+                or find_text_node(ui, "Skip")
+                or find_text_node(ui, "Kurulumu atla")
+                or find_text_node(ui, "Kurulumu geç")
+            )
+        if not skip_node:
+            print("İlk kurulumdaki Skip setup düğmesi görünmedi; mevcut ekran korunuyor.", flush=True)
             return
 
         print("CloudStream ilk kurulum ekranı bulundu; Skip setup seçiliyor.", flush=True)
