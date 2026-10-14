@@ -2,6 +2,15 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:61a0e6b3f0013aedd816ea4c26dc6e411d880340 -->
+### Remove undefined DiziKorea search predicate
+
+- Etkilenen alanlar: DiziKorea
+- Commit: [61a0e6b](https://github.com/Kayracs3/Kayra/commit/61a0e6b3f0013aedd816ea4c26dc6e411d880340)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:623ff59b2f8f573259cb69688d33dccf62a89b56 -->
 ### Fix DdiziTel search filter variable reference
 
