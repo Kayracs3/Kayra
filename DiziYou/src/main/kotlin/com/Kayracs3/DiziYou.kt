@@ -264,10 +264,12 @@ class DiziYou : MainAPI() {
     private fun Document.selectSeriesAnchors(): List<Element> = selectSeriesCards()
 
         private fun matchesSearchQuery(query: String, title: String): Boolean {
-        fun normalize(value: String): String = value.lowercase(java.util.Locale.ROOT)
-            .replace('ı', 'i').replace('ş', 's').replace('ğ', 'g')
-            .replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')
-            .replace(Regex("[^a-z0-9]+"), " ").trim().replace(Regex("\\s+"), " ")
+        fun normalize(value: String): String {
+            val lowered = value.lowercase(java.util.Locale.ROOT).replace('ı', 'i')
+            val decomposed = java.text.Normalizer.normalize(lowered, java.text.Normalizer.Form.NFD)
+            return decomposed.replace(Regex("\\p{M}+"), "")
+                .replace(Regex("[^a-z0-9]+"), " ").trim().replace(Regex("\\s+"), " ")
+        }
         val q = normalize(query)
         val t = normalize(title)
         if (q.isBlank() || t.isBlank()) return false
