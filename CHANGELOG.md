@@ -2,6 +2,23 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:4935b00dc32a326783f7761988b3edc88d6322e3 -->
+### Correct offline-only source guard pattern
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [4935b00](https://github.com/Kayracs3/Kayra/commit/4935b00dc32a326783f7761988b3edc88d6322e3)
+
+## 2026-10-14
+
+<!-- kayra-commit:714d796090c39d32f5f8ca6a400b608486c958d4 -->
+### Remove AI secrets from Android smoke workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [714d796](https://github.com/Kayracs3/Kayra/commit/714d796090c39d32f5f8ca6a400b608486c958d4)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:56770f732db88bb17b83707cd6bb107eed429d51 -->
 ### Document deterministic offline Doctor repairs
 
