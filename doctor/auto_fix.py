@@ -7,7 +7,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-FILE_RE = re.compile(r"file:///.*?/src/([^:\n]+\.kt):(\d+)")
+FILE_RE = re.compile(r"file://(/[^:\n]+?\.kt):(\d+)")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -28,8 +28,47 @@ def main():
         if build_log_path.exists():
             log = build_log_path.read_text(encoding="utf-8", errors="ignore")
 
-    match = FILE_RE.search(log)
-    relative = match.group(1).replace("\\", "/") if match else None
+    relative = None
+    target = None
+
+    # Kotlin compiler file URLs are absolute. The old expression stripped the
+    # module's own "/src/" segment, leaving e.g. "main/kotlin/Provider.kt",
+    # which is not a valid path from the repository root.
+    for match in FILE_RE.finditer(log):
+        try:
+            candidate = Path(match.group(1)).resolve()
+            candidate_relative = candidate.relative_to(root).as_posix()
+        except (ValueError, OSError):
+            continue
+
+        parts = Path(candidate_relative).parts
+        if len(parts) < 5 or parts[1:4] != ("src", "main", "kotlin"):
+            continue
+        if not candidate.is_file():
+            continue
+        if not (root / parts[0] / "build.gradle.kts").is_file():
+            continue
+
+        relative = candidate_relative
+        target = candidate
+        break
+
+    if not relative:
+        # Older/custom build logs may only expose a repository-relative path.
+        for match in FILE_RE.finditer(log):
+            raw_path = match.group(1).replace("\\\\", "/")
+            for marker in ("/src/",):
+                if marker in raw_path:
+                    candidate_relative = raw_path.split(marker, 1)[1]
+                    # This fallback is intentionally not accepted unless it
+                    # resolves to a real provider Kotlin file below.
+                    candidate = root / candidate_relative
+                    if candidate.is_file():
+                        relative = candidate_relative
+                        target = candidate
+                        break
+            if relative:
+                break
 
     if not relative:
         health_path = Path(args.health_log)
@@ -39,20 +78,28 @@ def main():
             except Exception:
                 health_data = {}
             for item in health_data.get("results", []):
-                if item.get("status") == "fail" and item.get("source"):
-                    relative = str(item["source"]).replace("\\", "/")
+                source = str(item.get("source", "")).replace("\\\\", "/")
+                candidate = root / source
+                parts = Path(source).parts
+                if (
+                    item.get("status") == "fail"
+                    and source
+                    and candidate.is_file()
+                    and len(parts) >= 5
+                    and parts[1:4] == ("src", "main", "kotlin")
+                    and (root / parts[0] / "build.gradle.kts").is_file()
+                ):
+                    relative = source
+                    target = candidate
                     break
 
-    if not relative:
-        raise RuntimeError("Could not identify Kotlin source file")
+    if not relative or target is None:
+        raise RuntimeError("Could not identify an existing provider Kotlin source file")
 
-    target = root / relative
     parts = Path(relative).parts
-    if not target.exists():
-        raise RuntimeError("Target source does not exist: " + relative)
     if len(parts) < 5 or parts[1:4] != ("src", "main", "kotlin"):
         raise RuntimeError("Unsafe target path: " + relative)
-    if not (root / parts[0] / "build.gradle.kts").exists():
+    if not (root / parts[0] / "build.gradle.kts").is_file():
         raise RuntimeError("Target is not a provider module: " + relative)
 
     source = target.read_text(encoding="utf-8", errors="ignore")
