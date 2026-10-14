@@ -540,7 +540,7 @@ class DiziKorea : MainAPI() {
                     .distinctBy {
                         it.url
                     }
-                    .filter { matchesSearchQuery(query, it.name) && isContentUrl(it.url) }
+                    .filter { matchesSearchQuery(query, it.name) }
 
             if (
                 results.isNotEmpty()
