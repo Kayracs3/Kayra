@@ -2,6 +2,31 @@
 
 ## 2026-10-14
 
+<!-- kayra-commit:56770f732db88bb17b83707cd6bb107eed429d51 -->
+### Document deterministic offline Doctor repairs
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [56770f7](https://github.com/Kayracs3/Kayra/commit/56770f732db88bb17b83707cd6bb107eed429d51)
+
+## 2026-10-14
+
+<!-- kayra-commit:bf9985948cd68da982df47ae01fc301c6bcd5ae8 -->
+### Add syntax and no-AI guard for Doctor scripts
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [bf99859](https://github.com/Kayracs3/Kayra/commit/bf9985948cd68da982df47ae01fc301c6bcd5ae8)
+
+## 2026-10-14
+
+<!-- kayra-commit:e31da14873e60bd29045e7f4c1bb5ace3ebefafa -->
+### Harden deterministic site parser without AI
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [e31da14](https://github.com/Kayracs3/Kayra/commit/e31da14873e60bd29045e7f4c1bb5ace3ebefafa)
+
+
+## 2026-10-14
+
 <!-- kayra-commit:9557e1c8ab8323cb23448c8846c6a5a2121a6a46 -->
 ### Remove AI API dependency from Kayra Doctor workflow
 
