@@ -133,9 +133,6 @@ jobs:
         timeout-minutes: 40
         env:
           GH_TOKEN: ${{ github.token }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
         run: |
           set -euo pipefail
           bash doctor/android_emulator_bootstrap.sh -- bash doctor/run_url_plugin_smoke_and_repair.sh
