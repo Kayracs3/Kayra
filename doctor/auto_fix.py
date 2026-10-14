@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
 import re
 import sys
-import urllib.request
 from pathlib import Path
 
 FILE_RE = re.compile(r"file://(/[^:\n]+?\.kt):(\d+)")
@@ -103,64 +101,26 @@ def main():
         raise RuntimeError("Target is not a provider module: " + relative)
 
     source = target.read_text(encoding="utf-8", errors="ignore")
-    health_path = Path(args.health_log)
-    health = health_path.read_text(encoding="utf-8", errors="ignore") if health_path.exists() else "{}"
+    # Reuse the same local, deterministic CloudStream API normalizer as the URL builder.
+    # This path never sends source code or logs to an external AI service.
+    sys.path.insert(0, str(root / "doctor"))
+    try:
+        from site_to_plugin import _normalize_cloudstream_api
+        updated = _normalize_cloudstream_api(source)
+    except Exception as exc:
+        print("DETERMINISTIC_FIX_UNAVAILABLE:", str(exc))
+        return
 
-    prompt = (
-        "You are Kayra Doctor, a conservative Kotlin CloudStream provider repair agent.\n\n"
-        "Modify exactly one Kotlin provider source file. Do not add dependencies or edit Gradle/workflow files.\n"
-        "Return only JSON with path, content, reason. Content must be the complete file.\n\n"
-        "Attempt: " + args.attempt + "\n"
-        "Path: " + relative + "\n\n"
-        "Build error:\n" + log[-30000:] + "\n\n"
-        "Health report:\n" + health[-8000:] + "\n\n"
-        "Source:\n" + source[-90000:]
-    )
-    key = os.environ.get("OPENAI_API_KEY")
-    if not key:
-        raise RuntimeError("OPENAI_API_KEY is missing")
-    model = os.environ.get("OPENAI_MODEL") or "gpt-6-luna"
-    base = os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+    if updated == source:
+        print("DETERMINISTIC_FIX_SKIPPED: No known safe Kotlin API normalization applies to", relative)
+        return
 
-    body = json.dumps({"model": model, "input": prompt}).encode()
-    request = urllib.request.Request(
-        base.rstrip("/") + "/responses",
-        data=body,
-        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
-        method="POST",
-    )
+    if "package com.Kayracs3" not in updated or "MainAPI" not in updated:
+        print("DETERMINISTIC_FIX_SKIPPED: Normalized source failed basic safety checks:", relative)
+        return
 
-    with urllib.request.urlopen(request, timeout=180) as response:
-        data = json.loads(response.read().decode())
-
-    text = data.get("output_text")
-    if not text:
-        for item in data.get("output", []):
-            for part in item.get("content", []):
-                if isinstance(part, dict) and isinstance(part.get("text"), str):
-                    text = part["text"]
-                    break
-            if text:
-                break
-
-    if not text:
-        raise RuntimeError("Model returned no text")
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1]
-        if text.rstrip().endswith("```"):
-            text = text.rstrip()[:-3]
-
-    result = json.loads(text.strip())
-    if result.get("path") != relative:
-        raise RuntimeError("Model returned a different path")
-
-    replacement = result.get("content")
-    if not isinstance(replacement, str) or not replacement.strip():
-        raise RuntimeError("Model returned empty source")
-
-    target.write_text(replacement.rstrip() + "\n", encoding="utf-8")
-    print("AI reason:", result.get("reason", "not supplied"))
+    target.write_text(updated.rstrip() + "\n", encoding="utf-8")
+    print("DETERMINISTIC_FIX: Applied known CloudStream API compatibility rules.")
     print("Updated:", relative)
 
 if __name__ == "__main__":
