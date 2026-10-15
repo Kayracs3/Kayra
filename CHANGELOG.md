@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:ea905b1185c025cbe78112d451176a843ee51183 -->
+### Add local helper compatibility for SinemaCX provider
+
+- Etkilenen alanlar: SinemaCX
+- Commit: [ea905b1](https://github.com/Kayracs3/Kayra/commit/ea905b1185c025cbe78112d451176a843ee51183)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:283e7ce09b827e5fece811861b32454bedc58003 -->
 ### Fix namespace and build configuration for uploaded providers
 
