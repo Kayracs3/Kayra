@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:28ce71b71c0a1c37180dc6fd0a66a0b7f32f790c -->
+### Fix DDizi lazy-loaded episode player links
+
+- Etkilenen alanlar: DDizi
+- Commit: [28ce71b](https://github.com/Kayracs3/Kayra/commit/28ce71b71c0a1c37180dc6fd0a66a0b7f32f790c)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:a1c3420915894095ce3127a1cf49916df6bc0902 -->
 ### Fix DDizi episode links for lazy embeds and external players
 
