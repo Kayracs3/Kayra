@@ -2,6 +2,23 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:6c0cf6e0d6ed8b5208a68aced593a610ddc88ca2 -->
+### Complete uploaded provider integration
+
+- Etkilenen alanlar: CineStream
+- Commit: [6c0cf6e](https://github.com/Kayracs3/Kayra/commit/6c0cf6e0d6ed8b5208a68aced593a610ddc88ca2)
+
+## 2026-10-15
+
+<!-- kayra-commit:0d51af108b39edb5f5fc68fae57a1b54a6ef925b -->
+### Complete uploaded provider integration
+
+- Etkilenen alanlar: SinemaCX
+- Commit: [0d51af1](https://github.com/Kayracs3/Kayra/commit/0d51af108b39edb5f5fc68fae57a1b54a6ef925b)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:ea905b1185c025cbe78112d451176a843ee51183 -->
 ### Add local helper compatibility for SinemaCX provider
 
