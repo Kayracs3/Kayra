@@ -141,7 +141,7 @@ abstract class NeonMainAPI : MainAPI() {
         }
 
         val html = document.html().replace("\\/", "/").replace("&amp;", "&")
-        Regex("""(?i)(?:https?:)?//[^"'<>\\s]+""")
+        Regex("""(?i)(?:https?:)?//[^"'<>\s]+""")
             .findAll(html)
             .forEach { match -> add(match.value) }
 
