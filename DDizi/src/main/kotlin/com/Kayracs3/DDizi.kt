@@ -396,8 +396,15 @@ class DDizi : MainAPI() {
     // The provider HTTP client and Cronet do not necessarily share the same cookie jar.
     private fun headersWithCookies(u: String, cookies: Map<String, String>): Map<String, String> {
         val headers = headersFor(u).toMutableMap()
-        if (!isTwimg(u) && cookies.isNotEmpty()) {
-            headers["Cookie"] = cookies.entries.joinToString("; ") { (key, value) -> "${key}=${value}" }
+        if (!isTwimg(u)) {
+            // Mirror a normal browser request; Streambox responds to the plugin's
+            // HTTP probe but may return a non-HLS response to the player's default UA.
+            headers["User-Agent"] =
+                "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+            headers["Accept"] = "*/*"
+            if (cookies.isNotEmpty()) {
+                headers["Cookie"] = cookies.entries.joinToString("; ") { (key, value) -> "${key}=${value}" }
+            }
         }
         return headers
     }
@@ -605,70 +612,21 @@ class DDizi : MainAPI() {
         }
 
         if (variants.isNotEmpty()) {
-            var sent = false
-            for (variant in variants.distinct()) {
-                // HLS children are sometimes hotlink-protected against the page
-                // Referer. Probe them as children of the actual master playlist first.
-                val variantRes = try {
-                    app.get(
-                        variant,
-                        referer = url,
-                        headers = headersWithCookies(variant, masterCookies) + mapOf("Accept" to "*/*"),
-                        cookies = masterCookies
-                    )
-                } catch (e: Exception) {
-                    Log.w("DDiziDebug", "variant probe failed url=${debugUrl(variant)} parent=${debugUrl(url)}", e)
-                    null
-                }
-
-                val variantCookies = masterCookies + (variantRes?.cookies ?: emptyMap())
-                val variantBody = variantRes?.text?.removePrefix("\uFEFF")?.trimStart().orEmpty()
-                val variantIsManifest = variantBody.startsWith("#EXTM3U")
-                val variantPreview = variantBody.take(96)
-                    .map { ch -> if (ch.isLetterOrDigit() || ch in "#<>/:-_. ") ch else ' ' }
-                    .joinToString("")
-                    .replace(Regex("\\s+"), " ")
-                    .take(80)
-                debug(
-                    "variant response url=${debugUrl(variant)} code=${variantRes?.code ?: -1} " +
-                        "length=${variantBody.length} isManifest=$variantIsManifest " +
-                        "parentReferer=${debugUrl(url)} preview=$variantPreview"
-                )
-
-                if (variantRes != null && variantRes.code in 200..299 && variantIsManifest) {
-                    // Pass the real manifest body through the same parser using
-                    // its parent as Referer; if it is another custom playlist,
-                    // keep the verified URL rather than the unverified master.txt URL.
-                    val parsed = runCatching {
-                        M3u8Helper.generateM3u8(
-                            "$name ${hostOf(variant)}", variant, url, null,
-                            headersWithCookies(variant, variantCookies)
-                        )
-                    }.onFailure {
-                        Log.w("DDiziDebug", "variant parser failed url=${debugUrl(variant)}", it)
-                    }.getOrDefault(emptyList())
-
-                    if (parsed.isNotEmpty()) {
-                        parsed.forEach(callback)
-                    } else {
-                        callback(
-                            newExtractorLink(name, "$name ${hostOf(variant)}", variant, ExtractorLinkType.M3U8) {
-                                this.referer = url
-                                this.headers = headersWithCookies(variant, variantCookies)
-                                this.quality = Qualities.Unknown.value
-                            }
-                        )
+            // Do not prefetch or parse the child playlist here.
+            // The child endpoint may return a different response on subsequent
+            // requests; let ExoPlayer perform the first request and parse the
+            // verified master playlist's child URL itself.
+            variants.distinct().forEach { variant ->
+                callback(
+                    newExtractorLink(name, "$name ${hostOf(variant)}", variant, ExtractorLinkType.M3U8) {
+                        this.referer = url
+                        this.headers = headersWithCookies(variant, masterCookies)
+                        this.quality = Qualities.Unknown.value
                     }
-                    sent = true
-                } else {
-                    // No manifest was returned from this child URL. Don't pretend
-                    // it is playable; preserve a diagnostic so the actual response
-                    // (HTML/JSON/empty/other) identifies the remaining blocker.
-                    debug("variant rejected url=${debugUrl(variant)} reason=non_manifest")
-                }
+                )
             }
-            debug("master.txt variants=${variants.size} sent=$sent")
-            return sent
+            debug("master.txt variants=${variants.size} sent=${variants.isNotEmpty()}")
+            return variants.isNotEmpty()
         }
 
         // A valid media playlist can be passed directly to ExoPlayer.
