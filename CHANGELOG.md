@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:59d6c7a25bb0dbe06e7f0087fb6a00b007e4ed2f -->
+### Recognize DDizi master.txt HLS playlists
+
+- Etkilenen alanlar: DDizi
+- Commit: [59d6c7a](https://github.com/Kayracs3/Kayra/commit/59d6c7a25bb0dbe06e7f0087fb6a00b007e4ed2f)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:cd05d229748e05fc77d413d6a37f55b7836c2be4 -->
 ### Add DDizi episode source diagnostics
 
