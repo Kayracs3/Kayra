@@ -1,6 +1,7 @@
 package com.Kayracs3
 
 import android.util.Base64
+import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
@@ -337,6 +338,17 @@ class DDizi : MainAPI() {
     private fun hostOf(u: String): String =
         runCatching { java.net.URI(u).host }.getOrNull() ?: "link"
 
+    // Diagnostik loglarda olası geçici tokenları içeren query parametrelerini yazdırma.
+    private fun debugUrl(u: String): String =
+        runCatching {
+            val uri = java.net.URI(u)
+            "${uri.host ?: "?"}${uri.path ?: ""}"
+        }.getOrDefault(u.take(180))
+
+    private fun debug(message: String) {
+        Log.d("DDiziDebug", message)
+    }
+
     // Boş iframe src değerleri ve JavaScript placeholder'ları yüzünden gerçek
     // data-src/data-lazy-src adresinin atlanmasını önler.
     private fun absoluteHttpUrl(value: String, base: String): String? {
@@ -384,10 +396,21 @@ class DDizi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val epUrl = fixUrl(data)
-        val res = app.get(epUrl, referer = "$mainUrl/")
+        debug("loadLinks start page=${debugUrl(epUrl)}")
+        val res = try {
+            app.get(epUrl, referer = "$mainUrl/")
+        } catch (e: Exception) {
+            Log.w("DDiziDebug", "episode request failed page=${debugUrl(epUrl)}", e)
+            return false
+        }
         val pageCookies = res.cookies
         val html = res.text
         val doc = res.document
+        debug(
+            "episode response code=${res.code} htmlLength=${html.length} " +
+                "iframeCount=${doc.select("iframe").size} playerIds=${playerRegex.findAll(html).count()} " +
+                "m3u8Count=${m3u8Regex.findAll(html).count()} mp4Count=${mp4Regex.findAll(html).count()}"
+        )
 
         val candidates = LinkedHashSet<String>()
         val sourceAttributes = listOf(
@@ -411,12 +434,24 @@ class DDizi : MainAPI() {
         doc.selectFirst("meta[property=og:video]")?.attr("content")
             ?.takeIf { it.isNotBlank() }?.let { candidates.add(fixUrl(it)) }
 
+        debug(
+            "candidateCount=${candidates.size} candidates=" +
+                candidates.take(12).joinToString(",") { debugUrl(it) } +
+                if (candidates.size > 12) ",..." else ""
+        )
         var found = false
         for (c in candidates) {
-            if (resolve(c, epUrl, 0, pageCookies, subtitleCallback, callback)) found = true
+            val resolved = resolve(c, epUrl, 0, pageCookies, subtitleCallback, callback)
+            debug("candidate result url=${debugUrl(c)} resolved=$resolved")
+            if (resolved) found = true
         }
         // Oynatıcıdan sonuç çıkmadıysa bölüm sayfasının kaynağında doğrudan gömülü akış ara.
-        if (!found && scanText(html, epUrl, epUrl, 0, pageCookies, subtitleCallback, callback)) found = true
+        if (!found) {
+            val fallback = scanText(html, epUrl, epUrl, 0, pageCookies, subtitleCallback, callback)
+            debug("page source fallback result=$fallback page=${debugUrl(epUrl)}")
+            if (fallback) found = true
+        }
+        debug("loadLinks finish page=${debugUrl(epUrl)} found=$found")
         return found
     }
 
@@ -428,7 +463,11 @@ class DDizi : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        if (depth > 4) return false
+        if (depth > 4) {
+            debug("resolve depth limit url=${debugUrl(url)}")
+            return false
+        }
+        debug("resolve start depth=$depth url=${debugUrl(url)} referer=${debugUrl(referer)}")
 
         // Bazı bölüm/player sayfaları doğrudan medya URL'si veriyor; extractor'a bırakmadan aç.
         val directHls = m3u8Regex.find(url)?.value
@@ -452,26 +491,39 @@ class DDizi : MainAPI() {
             // Bilinen hostları önce yerleşik extractor ile dene. Tanınmayan embedlerde HTML'i ayrıca tara.
             val extracted = runCatching {
                 loadExtractor(url, referer, subtitleCallback, callback)
+            }.onFailure {
+                Log.w("DDiziDebug", "extractor error url=${debugUrl(url)}", it)
             }.getOrDefault(false)
+            debug("external extractor url=${debugUrl(url)} extracted=$extracted")
             if (extracted) return true
 
-            val res = runCatching {
+            val res = try {
                 app.get(url, referer = referer, headers = mapOf(
                     "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
                 ))
-            }.getOrNull() ?: return false
+            } catch (e: Exception) {
+                Log.w("DDiziDebug", "external request failed url=${debugUrl(url)}", e)
+                return false
+            }
+            debug("external response url=${debugUrl(url)} code=${res.code} htmlLength=${res.text.length}")
             if (res.code !in 200..299) return false
             return scanText(
                 res.text, url, url, depth + 1, res.cookies, subtitleCallback, callback
             )
         }
 
-        val res = runCatching {
+        val res = try {
             app.get(url, referer = referer, headers = playerHeaders, cookies = cookies)
-        }.getOrNull() ?: return false
+        } catch (e: Exception) {
+            Log.w("DDiziDebug", "DDizi player request failed url=${debugUrl(url)}", e)
+            return false
+        }
+        debug("DDizi player response url=${debugUrl(url)} code=${res.code} htmlLength=${res.text.length}")
         if (res.code !in 200..299) return false
         val nextCookies = cookies + res.cookies
-        return scanText(res.text, url, url, depth + 1, nextCookies, subtitleCallback, callback)
+        val found = scanText(res.text, url, url, depth + 1, nextCookies, subtitleCallback, callback)
+        debug("DDizi player scan url=${debugUrl(url)} found=$found")
+        return found
     }
 
     private suspend fun scanText(
