@@ -316,7 +316,7 @@ class DDizi : MainAPI() {
 
     // ------------------------------------------------------------------ video bağlantıları
 
-    private val m3u8Regex = Regex("""https?://[^\s"'<>\\)]+?\.m3u8[^\s"'<>\\)]*""")
+    private val m3u8Regex = Regex("""https?://[^\s"'<>\\)]+?(?:\.m3u8|/master\.txt)[^\s"'<>\\)]*""", RegexOption.IGNORE_CASE)
     private val mp4Regex = Regex("""https?://[^\s"'<>\\)]+?\.mp4[^\s"'<>\\)]*""")
     private val embedRegex = Regex(
         """https?://(?:[\w-]+\.)*(?:dailymotion\.com|dai\.ly|ok\.ru|vk\.com|vk\.ru|mail\.ru|sibnet\.ru|vidmoly\.\w+|streamtape\.\w+|doodstream\.\w+|dood\.\w+|mixdrop\.\w+|voe\.sx|filemoon\.\w+|vimeo\.com|uqload\.\w+|upstream\.to|supervideo\.\w+|youtube\.com/embed|youtube-nocookie\.com/embed|drive\.google\.com)/[^\s"'<>\\]+"""
@@ -409,7 +409,7 @@ class DDizi : MainAPI() {
         debug(
             "episode response code=${res.code} htmlLength=${html.length} " +
                 "iframeCount=${doc.select("iframe").size} playerIds=${playerRegex.findAll(html).count()} " +
-                "m3u8Count=${m3u8Regex.findAll(html).count()} mp4Count=${mp4Regex.findAll(html).count()}"
+                "playlistCount=${m3u8Regex.findAll(html).count()} mp4Count=${mp4Regex.findAll(html).count()}"
         )
 
         val candidates = LinkedHashSet<String>()
