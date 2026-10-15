@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:d0db0f67fa5bf6f09e847099e70eb2eeba09e56c -->
+### Probe Streambox child playlist with master referer
+
+- Etkilenen alanlar: DDizi
+- Commit: [d0db0f6](https://github.com/Kayracs3/Kayra/commit/d0db0f67fa5bf6f09e847099e70eb2eeba09e56c)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:19d98cc06052d416006adc2c50a72b41840a3ba2 -->
 ### Validate Streambox master.txt before creating DDizi HLS links
 
