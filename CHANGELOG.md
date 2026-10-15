@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:a1c3420915894095ce3127a1cf49916df6bc0902 -->
+### Fix DDizi episode links for lazy embeds and external players
+
+- Etkilenen alanlar: DDizi
+- Commit: [a1c3420](https://github.com/Kayracs3/Kayra/commit/a1c3420915894095ce3127a1cf49916df6bc0902)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:28a5321e1e87f1cb70c69ecddcc696982e07f735 -->
 ### Fix missing SinemaCX metadata helper references
 
