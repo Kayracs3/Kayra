@@ -10,6 +10,7 @@ cloudstream {
 }
 
 android {
+    namespace = "com.neoncs3"
     buildFeatures {
         buildConfig = true
     }
