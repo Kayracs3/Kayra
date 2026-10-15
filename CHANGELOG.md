@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:8bb1845376b0a76c1876c9db81049b1180f2c591 -->
+### Avoid duplicate DDizi Streambox playlist requests during link extraction
+
+- Etkilenen alanlar: DDizi
+- Commit: [8bb1845](https://github.com/Kayracs3/Kayra/commit/8bb1845376b0a76c1876c9db81049b1180f2c591)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:c78c3c9b9c312c6c9e7c981b069858e481ac66ea -->
 ### Carry Streambox playlist cookies into DDizi playback links
 
