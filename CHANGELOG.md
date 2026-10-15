@@ -2,6 +2,23 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:d01251634ee1885e7f0725c5edda704d50a0eee7 -->
+### Make Kayra Doctor search complete compiler logs
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [d012516](https://github.com/Kayracs3/Kayra/commit/d01251634ee1885e7f0725c5edda704d50a0eee7)
+
+## 2026-10-15
+
+<!-- kayra-commit:19a8e1ea51109f1fd0c06efba0c7ac3865b7b6ae -->
+### Add compile-time coroutine API dependency to CineStream
+
+- Etkilenen alanlar: CineStream
+- Commit: [19a8e1e](https://github.com/Kayracs3/Kayra/commit/19a8e1ea51109f1fd0c06efba0c7ac3865b7b6ae)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:cf52ddca63b17a208b8062391492baa53ea0c003 -->
 ### Initialize DDizi plugin context consistently
 
