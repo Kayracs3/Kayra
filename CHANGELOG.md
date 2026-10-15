@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:c78c3c9b9c312c6c9e7c981b069858e481ac66ea -->
+### Carry Streambox playlist cookies into DDizi playback links
+
+- Etkilenen alanlar: DDizi
+- Commit: [c78c3c9](https://github.com/Kayracs3/Kayra/commit/c78c3c9b9c312c6c9e7c981b069858e481ac66ea)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:d0db0f67fa5bf6f09e847099e70eb2eeba09e56c -->
 ### Probe Streambox child playlist with master referer
 
