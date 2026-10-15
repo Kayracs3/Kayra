@@ -475,6 +475,9 @@ class DDizi : MainAPI() {
         // Bazı bölüm/player sayfaları doğrudan medya URL'si veriyor; extractor'a bırakmadan aç.
         val directHls = m3u8Regex.find(url)?.value
         if (directHls != null) {
+            if (directHls.contains("/master.txt", ignoreCase = true)) {
+                return resolveMasterTxt(directHls, referer, cookies, callback)
+            }
             val links = M3u8Helper.generateM3u8(
                 "${name} ${hostOf(directHls)}", directHls,
                 refererFor(directHls, referer), null, headersFor(directHls)
@@ -483,8 +486,6 @@ class DDizi : MainAPI() {
                 links.forEach(callback)
                 return true
             }
-            // Bazı Streambox master.txt yanıtları M3u8Helper tarafından ayrıştırılamıyor.
-            // HLS kaynağını doğru iframe Referer'ıyla doğrudan oynatıcıya da sun.
             debug("HLS helper rejected direct URL=${debugUrl(directHls)} referer=${debugUrl(referer)}")
             callback(newExtractorLink(name, "${name} ${hostOf(directHls)}", directHls, ExtractorLinkType.M3U8) {
                 this.referer = refererFor(directHls, referer)
@@ -542,6 +543,92 @@ class DDizi : MainAPI() {
         return found
     }
 
+
+    /**
+     * The Streambox URL is named master.txt, but some clients may receive an
+     * error/interstitial page instead of an HLS manifest. Verify the response
+     * before handing it to ExoPlayer; expand variant playlists when present.
+     */
+    private suspend fun resolveMasterTxt(
+        url: String,
+        referer: String,
+        cookies: Map<String, String>,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val res = try {
+            app.get(
+                url,
+                referer = referer,
+                headers = headersFor(url) + mapOf("Accept" to "*/*"),
+                cookies = cookies
+            )
+        } catch (e: Exception) {
+            Log.w("DDiziDebug", "master.txt probe failed url=${debugUrl(url)}", e)
+            return false
+        }
+
+        val body = res.text.removePrefix("\uFEFF").trimStart()
+        val isManifest = body.startsWith("#EXTM3U")
+        val preview = body.take(96)
+            .map { ch -> if (ch.isLetterOrDigit() || ch in "#<>/:-_. ") ch else ' ' }
+            .joinToString("")
+            .replace(Regex("\\s+"), " ")
+            .take(80)
+        debug(
+            "master.txt response url=${debugUrl(url)} code=${res.code} " +
+                "length=${body.length} isManifest=$isManifest preview=$preview"
+        )
+        if (res.code !in 200..299 || !isManifest) return false
+
+        val lines = body.lines().map { it.trim() }
+        val variants = ArrayList<String>()
+        lines.forEachIndexed { index, line ->
+            if (line.startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) {
+                val next = lines.drop(index + 1).firstOrNull {
+                    it.isNotBlank() && !it.startsWith("#")
+                }
+                next?.let { absoluteHttpUrl(it, url) }?.let(variants::add)
+            }
+        }
+
+        if (variants.isNotEmpty()) {
+            var sent = false
+            for (variant in variants.distinct()) {
+                val parsed = runCatching {
+                    M3u8Helper.generateM3u8(
+                        "$name ${hostOf(variant)}", variant,
+                        refererFor(variant, referer), null, headersFor(variant)
+                    )
+                }.onFailure {
+                    Log.w("DDiziDebug", "variant parser failed url=${debugUrl(variant)}", it)
+                }.getOrDefault(emptyList())
+
+                if (parsed.isNotEmpty()) {
+                    parsed.forEach(callback)
+                } else {
+                    callback(
+                        newExtractorLink(name, "$name ${hostOf(variant)}", variant, ExtractorLinkType.M3U8) {
+                            this.referer = refererFor(variant, referer)
+                            this.headers = headersFor(variant)
+                            this.quality = Qualities.Unknown.value
+                        }
+                    )
+                }
+                sent = true
+            }
+            debug("master.txt variants=${variants.size} sent=$sent")
+            return sent
+        }
+
+        // A valid media playlist can be passed directly to ExoPlayer.
+        callback(newExtractorLink(name, "$name ${hostOf(url)}", url, ExtractorLinkType.M3U8) {
+            this.referer = refererFor(url, referer)
+            this.headers = headersFor(url)
+            this.quality = Qualities.Unknown.value
+        })
+        return true
+    }
+
     private suspend fun scanText(
         raw: String,
         base: String,
@@ -571,21 +658,15 @@ class DDizi : MainAPI() {
 
         // Doğrudan HLS
         for (m in m3u8Regex.findAll(all).map { it.value }.distinct()) {
+            if (m.contains("/master.txt", ignoreCase = true)) {
+                if (resolveMasterTxt(m, referer, cookies, callback)) found = true
+                continue
+            }
             val links = M3u8Helper.generateM3u8(
                 "$name ${hostOf(m)}", m, refererFor(m, referer), null, headersFor(m)
             )
             if (links.isNotEmpty()) {
                 links.forEach(callback)
-                found = true
-            } else if (m.contains("/master.txt", ignoreCase = true)) {
-                // master.txt uzantısı HLS verisini tanımlar, ancak bazı sürümlerde
-                // M3u8Helper yanıtı çözemiyor. Ham HLS adresini de ExoPlayer'a bırak.
-                debug("HLS helper rejected master.txt URL=${debugUrl(m)} referer=${debugUrl(referer)}; offering direct HLS link")
-                callback(newExtractorLink(name, "$name ${hostOf(m)}", m, ExtractorLinkType.M3U8) {
-                    this.referer = refererFor(m, referer)
-                    this.headers = headersFor(m)
-                    this.quality = Qualities.Unknown.value
-                })
                 found = true
             } else {
                 debug("HLS helper rejected URL=${debugUrl(m)} referer=${debugUrl(referer)}")
