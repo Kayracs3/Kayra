@@ -385,7 +385,10 @@ class DDizi : MainAPI() {
     // Videolar Twitter/X CDN'inden (video.twimg.com/amplify_video/.../pl/xxx.m3u8) geliyor.
     // Bu CDN için ddizi Referer/Origin göndermiyoruz; Twitter'ın kendi oynatıcısı gibi x.com kullanıyoruz.
     private fun isTwimg(u: String) = hostOf(u).endsWith("twimg.com")
-    private fun refererFor(u: String) = if (isTwimg(u)) "https://x.com/" else mediaReferer
+    private fun refererFor(u: String, fallbackReferer: String? = null): String =
+        if (isTwimg(u)) "https://x.com/" else
+            fallbackReferer?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+                ?: mediaReferer
     private fun headersFor(u: String): Map<String, String> =
         if (isTwimg(u)) emptyMap() else mediaHeaders
 
@@ -472,15 +475,28 @@ class DDizi : MainAPI() {
         // Bazı bölüm/player sayfaları doğrudan medya URL'si veriyor; extractor'a bırakmadan aç.
         val directHls = m3u8Regex.find(url)?.value
         if (directHls != null) {
-            M3u8Helper.generateM3u8(
-                "${name} ${hostOf(directHls)}", directHls, refererFor(directHls), null, headersFor(directHls)
-            ).forEach(callback)
+            val links = M3u8Helper.generateM3u8(
+                "${name} ${hostOf(directHls)}", directHls,
+                refererFor(directHls, referer), null, headersFor(directHls)
+            )
+            if (links.isNotEmpty()) {
+                links.forEach(callback)
+                return true
+            }
+            // Bazı Streambox master.txt yanıtları M3u8Helper tarafından ayrıştırılamıyor.
+            // HLS kaynağını doğru iframe Referer'ıyla doğrudan oynatıcıya da sun.
+            debug("HLS helper rejected direct URL=${debugUrl(directHls)} referer=${debugUrl(referer)}")
+            callback(newExtractorLink(name, "${name} ${hostOf(directHls)}", directHls, ExtractorLinkType.M3U8) {
+                this.referer = refererFor(directHls, referer)
+                this.headers = headersFor(directHls)
+                this.quality = Qualities.Unknown.value
+            })
             return true
         }
         val directMp4 = mp4Regex.find(url)?.value
         if (directMp4 != null) {
             callback(newExtractorLink(name, "${name} ${hostOf(directMp4)}", directMp4, ExtractorLinkType.VIDEO) {
-                this.referer = refererFor(directMp4)
+                this.referer = refererFor(directMp4, referer)
                 this.headers = headersFor(directMp4)
                 this.quality = Qualities.Unknown.value
             })
@@ -555,15 +571,31 @@ class DDizi : MainAPI() {
 
         // Doğrudan HLS
         for (m in m3u8Regex.findAll(all).map { it.value }.distinct()) {
-            M3u8Helper.generateM3u8("$name ${hostOf(m)}", m, refererFor(m), null, headersFor(m))
-                .forEach(callback)
-            found = true
+            val links = M3u8Helper.generateM3u8(
+                "$name ${hostOf(m)}", m, refererFor(m, referer), null, headersFor(m)
+            )
+            if (links.isNotEmpty()) {
+                links.forEach(callback)
+                found = true
+            } else if (m.contains("/master.txt", ignoreCase = true)) {
+                // master.txt uzantısı HLS verisini tanımlar, ancak bazı sürümlerde
+                // M3u8Helper yanıtı çözemiyor. Ham HLS adresini de ExoPlayer'a bırak.
+                debug("HLS helper rejected master.txt URL=${debugUrl(m)} referer=${debugUrl(referer)}; offering direct HLS link")
+                callback(newExtractorLink(name, "$name ${hostOf(m)}", m, ExtractorLinkType.M3U8) {
+                    this.referer = refererFor(m, referer)
+                    this.headers = headersFor(m)
+                    this.quality = Qualities.Unknown.value
+                })
+                found = true
+            } else {
+                debug("HLS helper rejected URL=${debugUrl(m)} referer=${debugUrl(referer)}")
+            }
         }
         // Doğrudan MP4
         for (m in mp4Regex.findAll(all).map { it.value }.distinct()) {
             callback(
                 newExtractorLink(name, "$name ${hostOf(m)}", m, ExtractorLinkType.VIDEO) {
-                    this.referer = refererFor(m)
+                    this.referer = refererFor(m, referer)
                     this.headers = headersFor(m)
                     this.quality = Qualities.Unknown.value
                 }
@@ -602,7 +634,7 @@ class DDizi : MainAPI() {
             if (s.isNotBlank() && !s.endsWith(".m3u8")) {
                 callback(
                     newExtractorLink(name, "$name ${hostOf(s)}", fixUrl(s), ExtractorLinkType.VIDEO) {
-                        this.referer = refererFor(s)
+                        this.referer = refererFor(s, referer)
                         this.headers = headersFor(s)
                         this.quality = Qualities.Unknown.value
                     }
