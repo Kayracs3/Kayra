@@ -1,6 +1,12 @@
 import java.util.Properties
 
 version = 487
+
+dependencies {
+    // CloudStream already provides coroutines at runtime. Compile against the
+    // API here without bundling a second coroutine runtime into the plugin.
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+}
 android {
     namespace = "com.neoncs3"
     defaultConfig {
