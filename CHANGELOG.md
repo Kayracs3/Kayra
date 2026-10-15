@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:cf0796c667c43c0e3bb98ffeea8f14a630d3c90e -->
+### Fix CineStream coroutine version conflict
+
+- Etkilenen alanlar: CineStream
+- Commit: [cf0796c](https://github.com/Kayracs3/Kayra/commit/cf0796c667c43c0e3bb98ffeea8f14a630d3c90e)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:c72eb0088cef414fe617d90d71a6bf7750d5f8c5 -->
 ### Rename three plugin packages from neoncs3 to Kayracs3
 
