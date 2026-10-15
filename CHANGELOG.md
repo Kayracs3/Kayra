@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:a500e539ee2f28f99a9fadbf3684e90fc46279f7 -->
+### Fix player URL matching in SinemaCX compatibility helpers
+
+- Etkilenen alanlar: SinemaCX
+- Commit: [a500e53](https://github.com/Kayracs3/Kayra/commit/a500e539ee2f28f99a9fadbf3684e90fc46279f7)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:6c0cf6e0d6ed8b5208a68aced593a610ddc88ca2 -->
 ### Complete uploaded provider integration
 
