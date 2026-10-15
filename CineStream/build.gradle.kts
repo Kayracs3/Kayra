@@ -1,7 +1,8 @@
-import org.jetbrains.kotlin.konan.properties.Properties
+import java.util.Properties
 
 version = 487
 android {
+    namespace = "com.neoncs3"
     defaultConfig {
         val properties = Properties()
         // local.properties is developer-local and is intentionally not committed.
