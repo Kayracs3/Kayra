@@ -20,6 +20,30 @@
         "name": "AsyaFilmIzle"
     },
     {
+        "iconUrl": "https://raw.githubusercontent.com/Kayracs3/Kayra/master/CineStream/icon.png",
+        "fileHash": "sha256-4a676af647a4cf6fec1e633f2f3825c55e0ba8f8e37af68f932d659e3ce21896",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 689265,
+        "status": 1,
+        "language": "en",
+        "authors": [
+            "megix"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Movie",
+            "AsianDrama",
+            "Anime",
+            "Torrent"
+        ],
+        "version": 487,
+        "internalName": "CineStream",
+        "description": "One stop solution for Movies, Series, Anime, AsianDrama and Torrents",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/CineStream.cs3",
+        "name": "CineStream"
+    },
+    {
         "iconUrl": "https://dizipal1583.com/favicon.ico",
         "fileHash": "sha256-9761791cc7aba1b0fb9ee2884c3029d74fb7881fbcd33a808c31e8c3dd1e5bae",
         "apiVersion": 1,
@@ -41,12 +65,12 @@
         "name": "ClipBox"
     },
     {
-        "iconUrl": "https://www.ddizi.tel/favicon.ico",
-        "fileHash": "sha256-26eb4de471b379db0214f607764cac85f4197cfc22570dd6be326238f7c19c1f",
+        "iconUrl": "https://www.google.com/s2/favicons?domain=ddizi.tel&sz=%size%",
+        "fileHash": "sha256-608328833283249873dfc6e463828bb7f5b5ea0052de4fe853142f7a941150bc",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 48741,
-        "status": 3,
+        "fileSize": 35565,
+        "status": 1,
         "language": "tr",
         "authors": [
             "Kayracs3"
@@ -55,10 +79,10 @@
             "TvSeries"
         ],
         "version": 1,
-        "internalName": "DdiziTel",
-        "description": "DDizi T\u00fcrk\u00e7e dizi ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DdiziTel.cs3",
-        "name": "DdiziTel"
+        "internalName": "DDizi",
+        "description": "DDizi - yerli, yabanc\u0131 ve eski diziler",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DDizi.cs3",
+        "name": "DDizi"
     },
     {
         "iconUrl": "https://www.dizibox.live/favicon.ico",
@@ -452,6 +476,26 @@
         "description": "SetFilmIzle film ve dizi sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SetFilmIzle.cs3",
         "name": "SetFilmIzle"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=sinemacc.com&sz=%size%",
+        "fileHash": "sha256-3f2e6966d4d6cdd9dbd1de072bef9e7c75ae1f0f7865013c7068aa63c82971b1",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 55663,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 23,
+        "internalName": "SinemaCX",
+        "description": "Sinema CC - T\u00fcrk\u00e7e dublaj ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinemaCX.cs3",
+        "name": "SinemaCX"
     },
     {
         "iconUrl": "https://sinezy.si/favicon.ico",
