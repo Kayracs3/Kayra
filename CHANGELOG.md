@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:61c5b43c23dddfa8da16defafb93f3b903102273 -->
+### Pass DDizi player referer to Streambox and offer raw HLS fallback
+
+- Etkilenen alanlar: DDizi
+- Commit: [61c5b43](https://github.com/Kayracs3/Kayra/commit/61c5b43c23dddfa8da16defafb93f3b903102273)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:59d6c7a25bb0dbe06e7f0087fb6a00b007e4ed2f -->
 ### Recognize DDizi master.txt HLS playlists
 
