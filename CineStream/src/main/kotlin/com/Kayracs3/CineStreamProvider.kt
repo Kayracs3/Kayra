@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 // Cloudstream Core, Utils, & Logging
 import com.lagradost.api.Log
@@ -25,8 +25,8 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import com.fasterxml.jackson.annotation.JsonProperty
 
-import com.neoncs3.CineStreamExtractors.invokeAllSources
-import com.neoncs3.CineStreamExtractors.invokeAllAnimeSources
+import com.Kayracs3.CineStreamExtractors.invokeAllSources
+import com.Kayracs3.CineStreamExtractors.invokeAllAnimeSources
 
 open class CineStreamProvider : MainAPI() {
     override var mainUrl = "https://cinemeta-catalogs.strem.io"

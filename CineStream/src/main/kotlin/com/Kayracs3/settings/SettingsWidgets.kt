@@ -1,4 +1,4 @@
-package com.neoncs3.settings
+package com.Kayracs3.settings
 
 import android.content.Context
 import android.graphics.Color
@@ -8,7 +8,7 @@ import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
-import com.neoncs3.settings.SettingsTheme.dp
+import com.Kayracs3.settings.SettingsTheme.dp
 
 /**
  * Small, reusable UI building blocks shared across all Settings card files.

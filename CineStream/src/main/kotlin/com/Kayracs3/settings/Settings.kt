@@ -1,10 +1,10 @@
-package com.neoncs3.settings
+package com.Kayracs3.settings
 
 import android.content.Context
 import android.net.Uri
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
-import com.neoncs3.ProviderRegistry
+import com.Kayracs3.ProviderRegistry
 
 object Settings {
 

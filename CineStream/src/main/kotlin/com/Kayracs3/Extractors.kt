@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 // Cloudstream Core, Network, Utils, & Logging
 import com.lagradost.api.Log
@@ -37,7 +37,7 @@ import javax.crypto.spec.SecretKeySpec
 import java.security.SecureRandom
 import javax.crypto.Cipher
 
-import com.neoncs3.settings.Settings
+import com.Kayracs3.settings.Settings
 
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 

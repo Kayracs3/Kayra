@@ -1,6 +1,6 @@
 // Site yapısı ve player akışı için mevcut açık kaynak SinemaCX sağlayıcısından yararlanılmıştır.
 
-package com.neoncs3
+package com.Kayracs3
 
 import android.util.Log
 import org.jsoup.nodes.Element

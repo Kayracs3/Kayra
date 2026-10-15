@@ -1,4 +1,4 @@
-package com.neoncs3.settings
+package com.Kayracs3.settings
 
 import android.content.Context
 import android.graphics.Color

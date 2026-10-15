@@ -8,7 +8,7 @@ dependencies {
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 }
 android {
-    namespace = "com.neoncs3"
+    namespace = "com.Kayracs3"
     defaultConfig {
         val properties = Properties()
         // local.properties is developer-local and is intentionally not committed.

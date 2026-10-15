@@ -3,7 +3,7 @@ version = 1
 
 cloudstream {
     description = "DDizi - yerli, yabancı ve eski diziler"
-    authors = listOf("neoncs3")
+    authors = listOf("Kayracs3")
 
     /**
      * Status int as one of the following:
@@ -22,5 +22,5 @@ cloudstream {
 }
 
 android {
-    namespace = "com.neoncs3"
+    namespace = "com.Kayracs3"
 }

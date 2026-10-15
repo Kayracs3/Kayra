@@ -1,4 +1,4 @@
-package com.neoncs3.settings
+package com.Kayracs3.settings
 
 import android.app.AlertDialog
 import android.content.ClipData
@@ -11,7 +11,7 @@ import android.view.Gravity
 import android.view.View
 import android.webkit.CookieManager
 import android.widget.*
-import com.neoncs3.settings.SettingsTheme.dp
+import com.Kayracs3.settings.SettingsTheme.dp
 
 /**
  * Assembles the full Settings AlertDialog and every collapsible card inside it.

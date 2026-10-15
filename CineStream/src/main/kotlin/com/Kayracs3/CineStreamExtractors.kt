@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 // Cloudstream Core & Utils
 import com.lagradost.cloudstream3.*
@@ -34,7 +34,7 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 
-import com.neoncs3.settings.Settings
+import com.Kayracs3.settings.Settings
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

@@ -1,4 +1,4 @@
-package com.neoncs3.settings
+package com.Kayracs3.settings
 
 import android.app.AlertDialog
 import android.content.Context
@@ -9,7 +9,7 @@ import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.*
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
-import com.neoncs3.settings.SettingsTheme.dp
+import com.Kayracs3.settings.SettingsTheme.dp
 
 /**
  * Builds the "🎬 Providers" collapsible card and each individual provider row.

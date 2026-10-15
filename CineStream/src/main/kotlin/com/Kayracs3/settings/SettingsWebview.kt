@@ -1,4 +1,4 @@
-package com.neoncs3.settings
+package com.Kayracs3.settings
 
 import android.annotation.SuppressLint
 import android.app.Dialog
@@ -17,7 +17,7 @@ import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.*
 import android.widget.*
-import com.neoncs3.settings.SettingsTheme.dp
+import com.Kayracs3.settings.SettingsTheme.dp
 
 
 //WebView login dialog for extracting authentication tokens.

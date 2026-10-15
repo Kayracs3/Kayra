@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 // Cloudstream & NiceHttp
 import com.lagradost.api.Log
@@ -55,7 +55,7 @@ import kotlin.math.min
 import java.util.Base64
 
 // Settings
-import com.neoncs3.settings.Settings
+import com.Kayracs3.settings.Settings
 
 
 class SpecOption(searchTerms: List<String>, val label: String) {

@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 
 // Cloudstream Core & Utils
@@ -30,8 +30,8 @@ import kotlinx.coroutines.coroutineScope
 import org.json.JSONObject
 import org.jsoup.parser.Parser
 
-import com.neoncs3.CineStreamExtractors.invokeAllSources
-import com.neoncs3.CineStreamExtractors.invokeAllAnimeSources
+import com.Kayracs3.CineStreamExtractors.invokeAllSources
+import com.Kayracs3.CineStreamExtractors.invokeAllAnimeSources
 
 class CineSimklProvider: MainAPI() {
     override var name = "CineSimkl"

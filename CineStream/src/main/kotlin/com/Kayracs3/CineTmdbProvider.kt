@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.LoadResponse.Companion.addImdbId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
-import com.neoncs3.CineStreamExtractors.invokeAllSources
+import com.Kayracs3.CineStreamExtractors.invokeAllSources
 
 class CineTmdbProvider: MainAPI() {
     override var name = "CineTmdb"

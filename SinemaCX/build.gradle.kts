@@ -2,7 +2,7 @@ version = 23
 
 cloudstream {
     description = "Sinema CC - Türkçe dublaj ve altyazılı film sağlayıcısı"
-    authors = listOf("neoncs3")
+    authors = listOf("Kayracs3")
     status = 1
     tvTypes = listOf("Movie")
     language = "tr"
@@ -10,7 +10,7 @@ cloudstream {
 }
 
 android {
-    namespace = "com.neoncs3"
+    namespace = "com.Kayracs3"
     buildFeatures {
         buildConfig = true
     }
