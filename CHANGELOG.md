@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:cf52ddca63b17a208b8062391492baa53ea0c003 -->
+### Initialize DDizi plugin context consistently
+
+- Etkilenen alanlar: DDizi
+- Commit: [cf52ddc](https://github.com/Kayracs3/Kayra/commit/cf52ddca63b17a208b8062391492baa53ea0c003)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:a500e539ee2f28f99a9fadbf3684e90fc46279f7 -->
 ### Fix player URL matching in SinemaCX compatibility helpers
 
