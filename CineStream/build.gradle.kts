@@ -5,7 +5,7 @@ version = 487
 dependencies {
     // CloudStream already provides coroutines at runtime. Compile against the
     // API here without bundling a second coroutine runtime into the plugin.
-    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1")
 }
 android {
     namespace = "com.Kayracs3"
