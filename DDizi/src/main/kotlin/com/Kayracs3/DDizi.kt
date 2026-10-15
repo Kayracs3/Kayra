@@ -392,6 +392,16 @@ class DDizi : MainAPI() {
     private fun headersFor(u: String): Map<String, String> =
         if (isTwimg(u)) emptyMap() else mediaHeaders
 
+    // Cookies set by Streambox during manifest probing must also reach ExoPlayer.
+    // The provider HTTP client and Cronet do not necessarily share the same cookie jar.
+    private fun headersWithCookies(u: String, cookies: Map<String, String>): Map<String, String> {
+        val headers = headersFor(u).toMutableMap()
+        if (!isTwimg(u) && cookies.isNotEmpty()) {
+            headers["Cookie"] = cookies.entries.joinToString("; ") { (key, value) -> "${key}=${value}" }
+        }
+        return headers
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -567,6 +577,9 @@ class DDizi : MainAPI() {
             return false
         }
 
+        // Keep cookies newly issued by the master playlist; its child playlist may
+        // depend on them even when the initial probe succeeds without an error.
+        val masterCookies = cookies + res.cookies
         val body = res.text.removePrefix("\uFEFF").trimStart()
         val isManifest = body.startsWith("#EXTM3U")
         val preview = body.take(96)
@@ -600,14 +613,15 @@ class DDizi : MainAPI() {
                     app.get(
                         variant,
                         referer = url,
-                        headers = headersFor(variant) + mapOf("Accept" to "*/*"),
-                        cookies = cookies
+                        headers = headersWithCookies(variant, masterCookies) + mapOf("Accept" to "*/*"),
+                        cookies = masterCookies
                     )
                 } catch (e: Exception) {
                     Log.w("DDiziDebug", "variant probe failed url=${debugUrl(variant)} parent=${debugUrl(url)}", e)
                     null
                 }
 
+                val variantCookies = masterCookies + (variantRes?.cookies ?: emptyMap())
                 val variantBody = variantRes?.text?.removePrefix("\uFEFF")?.trimStart().orEmpty()
                 val variantIsManifest = variantBody.startsWith("#EXTM3U")
                 val variantPreview = variantBody.take(96)
@@ -627,7 +641,8 @@ class DDizi : MainAPI() {
                     // keep the verified URL rather than the unverified master.txt URL.
                     val parsed = runCatching {
                         M3u8Helper.generateM3u8(
-                            "$name ${hostOf(variant)}", variant, url, null, headersFor(variant)
+                            "$name ${hostOf(variant)}", variant, url, null,
+                            headersWithCookies(variant, variantCookies)
                         )
                     }.onFailure {
                         Log.w("DDiziDebug", "variant parser failed url=${debugUrl(variant)}", it)
@@ -639,7 +654,7 @@ class DDizi : MainAPI() {
                         callback(
                             newExtractorLink(name, "$name ${hostOf(variant)}", variant, ExtractorLinkType.M3U8) {
                                 this.referer = url
-                                this.headers = headersFor(variant)
+                                this.headers = headersWithCookies(variant, variantCookies)
                                 this.quality = Qualities.Unknown.value
                             }
                         )
@@ -659,7 +674,7 @@ class DDizi : MainAPI() {
         // A valid media playlist can be passed directly to ExoPlayer.
         callback(newExtractorLink(name, "$name ${hostOf(url)}", url, ExtractorLinkType.M3U8) {
             this.referer = refererFor(url, referer)
-            this.headers = headersFor(url)
+            this.headers = headersWithCookies(url, masterCookies)
             this.quality = Qualities.Unknown.value
         })
         return true
