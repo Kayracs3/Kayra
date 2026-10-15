@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:28a5321e1e87f1cb70c69ecddcc696982e07f735 -->
+### Fix missing SinemaCX metadata helper references
+
+- Etkilenen alanlar: SinemaCX
+- Commit: [28a5321](https://github.com/Kayracs3/Kayra/commit/28a5321e1e87f1cb70c69ecddcc696982e07f735)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:cf0796c667c43c0e3bb98ffeea8f14a630d3c90e -->
 ### Fix CineStream coroutine version conflict
 
