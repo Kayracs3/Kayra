@@ -20,3 +20,7 @@ cloudstream {
 
     iconUrl = "https://www.google.com/s2/favicons?domain=ddizi.tel&sz=%size%"
 }
+
+android {
+    namespace = "com.neoncs3"
+}
