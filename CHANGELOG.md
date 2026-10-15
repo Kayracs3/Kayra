@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:c72eb0088cef414fe617d90d71a6bf7750d5f8c5 -->
+### Rename three plugin packages from neoncs3 to Kayracs3
+
+- Etkilenen alanlar: CineStream, DDizi, SinemaCX
+- Commit: [c72eb00](https://github.com/Kayracs3/Kayra/commit/c72eb0088cef414fe617d90d71a6bf7750d5f8c5)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:d01251634ee1885e7f0725c5edda704d50a0eee7 -->
 ### Make Kayra Doctor search complete compiler logs
 
