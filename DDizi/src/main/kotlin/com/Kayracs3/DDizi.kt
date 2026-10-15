@@ -337,6 +337,34 @@ class DDizi : MainAPI() {
     private fun hostOf(u: String): String =
         runCatching { java.net.URI(u).host }.getOrNull() ?: "link"
 
+    // Boş iframe src değerleri ve JavaScript placeholder'ları yüzünden gerçek
+    // data-src/data-lazy-src adresinin atlanmasını önler.
+    private fun absoluteHttpUrl(value: String, base: String): String? {
+        val raw = value.trim()
+        if (raw.isBlank() ||
+            raw.startsWith("javascript:", ignoreCase = true) ||
+            raw.startsWith("data:", ignoreCase = true) ||
+            raw.startsWith("blob:", ignoreCase = true) ||
+            raw.startsWith("about:", ignoreCase = true) ||
+            raw.startsWith("mailto:", ignoreCase = true) ||
+            raw.startsWith("#") ||
+            raw.contains("{") ||
+            raw.contains(" ")
+        ) return null
+
+        val absolute = when {
+            raw.startsWith("//") -> "https:$raw"
+            raw.startsWith("http://", ignoreCase = true) ||
+                raw.startsWith("https://", ignoreCase = true) -> raw
+            else -> runCatching { java.net.URI(base).resolve(raw).toString() }
+                .getOrElse { fixUrl(raw) }
+        }
+        return absolute.takeIf {
+            it.startsWith("http://", ignoreCase = true) ||
+                it.startsWith("https://", ignoreCase = true)
+        }
+    }
+
     private fun isDdiziHost(u: String): Boolean {
         val host = hostOf(u).lowercase(Locale.ROOT)
         return host == "ddizi.tel" || host.endsWith(".ddizi.tel")
@@ -372,23 +400,12 @@ class DDizi : MainAPI() {
                 "source[src], source[data-src], [data-video], [data-url], [data-embed], " +
                 "[data-iframe], [data-file], [data-player]"
         ).forEach { element ->
-            val value = sourceAttributes.asSequence()
-                .map { element.attr(it).trim() }
-                .firstOrNull {
-                    it.isNotBlank() &&
-                        !it.startsWith("javascript:", ignoreCase = true) &&
-                        !it.startsWith("data:", ignoreCase = true) &&
-                        !it.contains("{") && !it.contains(" ")
-                } ?: return@forEach
-            val absolute = when {
-                value.startsWith("//") -> "https:$value"
-                value.startsWith("http://", true) || value.startsWith("https://", true) -> value
-                else -> runCatching { java.net.URI(epUrl).resolve(value).toString() }
-                    .getOrElse { fixUrl(value) }
-            }
-            if (absolute.startsWith("http://", true) || absolute.startsWith("https://", true)) {
-                candidates.add(absolute)
-            }
+            // src "about:blank" olsa bile gerçek adres data-src alanında bulunabilir.
+            // İlk dolu alanla durmak yerine bilinen tüm alanları dene.
+            sourceAttributes.asSequence()
+                .map { element.attr(it) }
+                .mapNotNull { absoluteHttpUrl(it, epUrl) }
+                .forEach(candidates::add)
         }
         playerRegex.findAll(html).forEach { candidates.add(fixUrl(it.value)) }
         doc.selectFirst("meta[property=og:video]")?.attr("content")
@@ -517,22 +534,12 @@ class DDizi : MainAPI() {
             "iframe[src], iframe[data-src], iframe[data-lazy-src], video[src], video[data-src], " +
                 "source[src], source[data-src], [data-video], [data-url], [data-embed], " +
                 "[data-iframe], [data-file], [data-player]"
-        ).mapNotNull { element ->
-            val s = frameAttributes.asSequence()
-                .map { element.attr(it).trim() }
-                .firstOrNull {
-                    it.isNotBlank() &&
-                        !it.startsWith("javascript:", ignoreCase = true) &&
-                        !it.startsWith("data:", ignoreCase = true) &&
-                        !it.contains("{") && !it.contains(" ")
-                } ?: return@mapNotNull null
-            val abs = when {
-                s.startsWith("//") -> "https:$s"
-                s.startsWith("http://", true) || s.startsWith("https://", true) -> s
-                else -> runCatching { java.net.URI(base).resolve(s).toString() }
-                    .getOrElse { fixUrl(s) }
-            }
-            abs.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+        ).flatMap { element ->
+            // Aynı elementte src ve data-src birlikte bulunabilir; ikisini de koru.
+            frameAttributes.asSequence()
+                .map { element.attr(it) }
+                .mapNotNull { absoluteHttpUrl(it, base) }
+                .toList()
         }.distinct()
         for (f in frames) {
             if (f == base) continue
