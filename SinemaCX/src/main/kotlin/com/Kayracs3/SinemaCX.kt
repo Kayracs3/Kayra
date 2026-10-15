@@ -307,7 +307,7 @@ class SinemaCX : NeonMainAPI() {
             }
         }
 
-        val results = neonRelevantSearchResults(searchResults.distinctBy { it.url }, q)
+        val results = searchResults.distinctBy { it.url }
         Log.d(SCX_TAG, "TMDB arama: " + q + " -> " + results.size + " SinemaCX sonucu")
         return results
     }
@@ -675,8 +675,7 @@ class SinemaCX : NeonMainAPI() {
         val finalActors = if (actors.isNotEmpty()) actors else tmdbExtras.first
         val finalTrailers = if (!trailer.isNullOrBlank()) listOf(trailer) else tmdbExtras.second
 
-        return neonEnrichResponse(
-            newMovieLoadResponse(title, url, TvType.Movie, url) {
+        return newMovieLoadResponse(title, url, TvType.Movie, url) {
 
             this.posterUrl = poster
             this.year = year
@@ -691,10 +690,7 @@ class SinemaCX : NeonMainAPI() {
 
             finalTrailers.forEach { addTrailer(it) }
         
-            },
-            document = document,
-            baseUrl = url,
-        )
+        }
     }
 
 override suspend fun loadLinks(
