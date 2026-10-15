@@ -2,6 +2,15 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:259c789685c657b6a0e8cd1eea26c3886e24f724 -->
+### Delete DdiziTel directory
+
+- Etkilenen alanlar: DdiziTel
+- Commit: [259c789](https://github.com/Kayracs3/Kayra/commit/259c789685c657b6a0e8cd1eea26c3886e24f724)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:184cfbda31692d5507bb35216a4e8e203edcecd0 -->
 ### Add files via upload
 
