@@ -2,6 +2,31 @@
 
 ## 2026-10-15
 
+<!-- kayra-commit:283e7ce09b827e5fece811861b32454bedc58003 -->
+### Fix namespace and build configuration for uploaded providers
+
+- Etkilenen alanlar: CineStream
+- Commit: [283e7ce](https://github.com/Kayracs3/Kayra/commit/283e7ce09b827e5fece811861b32454bedc58003)
+
+## 2026-10-15
+
+<!-- kayra-commit:8af378da357cd8931ac6b0e9028abc6b1bcb3857 -->
+### Fix namespace and build configuration for uploaded providers
+
+- Etkilenen alanlar: DDizi
+- Commit: [8af378d](https://github.com/Kayracs3/Kayra/commit/8af378da357cd8931ac6b0e9028abc6b1bcb3857)
+
+## 2026-10-15
+
+<!-- kayra-commit:a643b552be2d3223e53dad133cb7a1f758eccf45 -->
+### Fix namespace and build configuration for uploaded providers
+
+- Etkilenen alanlar: SinemaCX
+- Commit: [a643b55](https://github.com/Kayracs3/Kayra/commit/a643b552be2d3223e53dad133cb7a1f758eccf45)
+
+
+## 2026-10-15
+
 <!-- kayra-commit:3fdfa4628f658dae2424c0ecf86dcb6dd68e5e50 -->
 ### Add files via upload
 
