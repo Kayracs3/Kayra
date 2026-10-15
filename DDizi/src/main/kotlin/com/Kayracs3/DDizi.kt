@@ -322,9 +322,7 @@ class DDizi : MainAPI() {
     )
     private val playerRegex = Regex("""/player/oynat/[A-Za-z0-9_-]+""")
 
-    // Bölüm sayfasının verdiği çerezler oynatıcı sayfası için gerekebilir (aksi halde 404 dönüyor).
-    private var sessionCookies: Map<String, String> = emptyMap()
-
+    // Çerezler her loadLinks çağrısında yerel tutulur; paralel bölüm yüklemeleri birbirini ezmez.
     private val playerHeaders = mapOf(
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Sec-Fetch-Dest" to "iframe",
@@ -338,6 +336,11 @@ class DDizi : MainAPI() {
 
     private fun hostOf(u: String): String =
         runCatching { java.net.URI(u).host }.getOrNull() ?: "link"
+
+    private fun isDdiziHost(u: String): Boolean {
+        val host = hostOf(u).lowercase(Locale.ROOT)
+        return host == "ddizi.tel" || host.endsWith(".ddizi.tel")
+    }
 
     // Videolar Twitter/X CDN'inden (video.twimg.com/amplify_video/.../pl/xxx.m3u8) geliyor.
     // Bu CDN için ddizi Referer/Origin göndermiyoruz; Twitter'ın kendi oynatıcısı gibi x.com kullanıyoruz.
@@ -354,14 +357,38 @@ class DDizi : MainAPI() {
     ): Boolean {
         val epUrl = fixUrl(data)
         val res = app.get(epUrl, referer = "$mainUrl/")
-        sessionCookies = res.cookies
+        val pageCookies = res.cookies
         val html = res.text
         val doc = res.document
 
         val candidates = LinkedHashSet<String>()
-        doc.select("iframe[src], iframe[data-src]").forEach {
-            val s = it.attr("src").ifBlank { it.attr("data-src") }
-            if (s.isNotBlank()) candidates.add(fixUrl(s))
+        val sourceAttributes = listOf(
+            "src", "data-src", "data-lazy-src", "data-video", "data-url",
+            "data-embed", "data-iframe", "data-file", "data-player"
+        )
+        // Bazı bölümlerde oynatıcı adresi iframe yerine lazy-load/data-* alanlarında tutuluyor.
+        doc.select(
+            "iframe[src], iframe[data-src], iframe[data-lazy-src], video[src], video[data-src], " +
+                "source[src], source[data-src], [data-video], [data-url], [data-embed], " +
+                "[data-iframe], [data-file], [data-player]"
+        ).forEach { element ->
+            val value = sourceAttributes.asSequence()
+                .map { element.attr(it).trim() }
+                .firstOrNull {
+                    it.isNotBlank() &&
+                        !it.startsWith("javascript:", ignoreCase = true) &&
+                        !it.startsWith("data:", ignoreCase = true) &&
+                        !it.contains("{") && !it.contains(" ")
+                } ?: return@forEach
+            val absolute = when {
+                value.startsWith("//") -> "https:$value"
+                value.startsWith("http://", true) || value.startsWith("https://", true) -> value
+                else -> runCatching { java.net.URI(epUrl).resolve(value).toString() }
+                    .getOrElse { fixUrl(value) }
+            }
+            if (absolute.startsWith("http://", true) || absolute.startsWith("https://", true)) {
+                candidates.add(absolute)
+            }
         }
         playerRegex.findAll(html).forEach { candidates.add(fixUrl(it.value)) }
         doc.selectFirst("meta[property=og:video]")?.attr("content")
@@ -369,10 +396,10 @@ class DDizi : MainAPI() {
 
         var found = false
         for (c in candidates) {
-            if (resolve(c, epUrl, 0, subtitleCallback, callback)) found = true
+            if (resolve(c, epUrl, 0, pageCookies, subtitleCallback, callback)) found = true
         }
         // Oynatıcıdan sonuç çıkmadıysa bölüm sayfasının kaynağında doğrudan gömülü akış ara.
-        if (!found && scanText(html, epUrl, epUrl, 0, subtitleCallback, callback)) found = true
+        if (!found && scanText(html, epUrl, epUrl, 0, pageCookies, subtitleCallback, callback)) found = true
         return found
     }
 
@@ -380,19 +407,54 @@ class DDizi : MainAPI() {
         url: String,
         referer: String,
         depth: Int,
+        cookies: Map<String, String>,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        if (depth > 3) return false
-        if (!url.contains("ddizi.tel")) {
-            return runCatching { loadExtractor(url, referer, subtitleCallback, callback) }
-                .getOrDefault(false)
+        if (depth > 4) return false
+
+        // Bazı bölüm/player sayfaları doğrudan medya URL'si veriyor; extractor'a bırakmadan aç.
+        val directHls = m3u8Regex.find(url)?.value
+        if (directHls != null) {
+            M3u8Helper.generateM3u8(
+                "${name} ${hostOf(directHls)}", directHls, refererFor(directHls), null, headersFor(directHls)
+            ).forEach(callback)
+            return true
         }
+        val directMp4 = mp4Regex.find(url)?.value
+        if (directMp4 != null) {
+            callback(newExtractorLink(name, "${name} ${hostOf(directMp4)}", directMp4, ExtractorLinkType.VIDEO) {
+                this.referer = refererFor(directMp4)
+                this.headers = headersFor(directMp4)
+                this.quality = Qualities.Unknown.value
+            })
+            return true
+        }
+
+        if (!isDdiziHost(url)) {
+            // Bilinen hostları önce yerleşik extractor ile dene. Tanınmayan embedlerde HTML'i ayrıca tara.
+            val extracted = runCatching {
+                loadExtractor(url, referer, subtitleCallback, callback)
+            }.getOrDefault(false)
+            if (extracted) return true
+
+            val res = runCatching {
+                app.get(url, referer = referer, headers = mapOf(
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                ))
+            }.getOrNull() ?: return false
+            if (res.code !in 200..299) return false
+            return scanText(
+                res.text, url, url, depth + 1, res.cookies, subtitleCallback, callback
+            )
+        }
+
         val res = runCatching {
-            app.get(url, referer = referer, headers = playerHeaders, cookies = sessionCookies)
+            app.get(url, referer = referer, headers = playerHeaders, cookies = cookies)
         }.getOrNull() ?: return false
         if (res.code !in 200..299) return false
-        return scanText(res.text, url, url, depth, subtitleCallback, callback)
+        val nextCookies = cookies + res.cookies
+        return scanText(res.text, url, url, depth + 1, nextCookies, subtitleCallback, callback)
     }
 
     private suspend fun scanText(
@@ -400,6 +462,7 @@ class DDizi : MainAPI() {
         base: String,
         referer: String,
         depth: Int,
+        cookies: Map<String, String>,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
@@ -446,16 +509,34 @@ class DDizi : MainAPI() {
         }
         // İç içe iframe / video etiketleri
         val inner = Jsoup.parse(all, base)
-        val frames = inner.select("iframe[src], iframe[data-src]").mapNotNull {
-            val s = it.attr("src").ifBlank { it.attr("data-src") }
-            if (s.isBlank()) null else {
-                val abs = if (s.startsWith("//")) "https:$s" else if (s.startsWith("http")) s else fixUrl(s)
-                abs
+        val frameAttributes = listOf(
+            "src", "data-src", "data-lazy-src", "data-video", "data-url",
+            "data-embed", "data-iframe", "data-file", "data-player"
+        )
+        val frames = inner.select(
+            "iframe[src], iframe[data-src], iframe[data-lazy-src], video[src], video[data-src], " +
+                "source[src], source[data-src], [data-video], [data-url], [data-embed], " +
+                "[data-iframe], [data-file], [data-player]"
+        ).mapNotNull { element ->
+            val s = frameAttributes.asSequence()
+                .map { element.attr(it).trim() }
+                .firstOrNull {
+                    it.isNotBlank() &&
+                        !it.startsWith("javascript:", ignoreCase = true) &&
+                        !it.startsWith("data:", ignoreCase = true) &&
+                        !it.contains("{") && !it.contains(" ")
+                } ?: return@mapNotNull null
+            val abs = when {
+                s.startsWith("//") -> "https:$s"
+                s.startsWith("http://", true) || s.startsWith("https://", true) -> s
+                else -> runCatching { java.net.URI(base).resolve(s).toString() }
+                    .getOrElse { fixUrl(s) }
             }
+            abs.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
         }.distinct()
         for (f in frames) {
             if (f == base) continue
-            if (resolve(f, referer, depth + 1, subtitleCallback, callback)) found = true
+            if (resolve(f, referer, depth + 1, cookies, subtitleCallback, callback)) found = true
         }
         inner.select("video[src], video source[src]").forEach {
             val s = it.attr("src")
