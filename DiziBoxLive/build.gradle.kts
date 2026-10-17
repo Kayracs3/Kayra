@@ -1,4 +1,4 @@
-version = 3
+version = 4
 
 cloudstream {
     description = "DiziBOX Live yabancı dizi katalog ve bölüm sağlayıcısı"
