@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:0865961a5545bef89e9685891a7b63c68d3bd533 -->
+### Handle AsyaWatch Cloudflare rate limits gracefully
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [0865961](https://github.com/Kayracs3/Kayra/commit/0865961a5545bef89e9685891a7b63c68d3bd533)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:25ac69442dc10dc4a30eeea8157a9faf04436576 -->
 ### Support AsyaWatch HLS subtitle playlists
 
