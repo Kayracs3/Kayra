@@ -33,6 +33,7 @@ import org.jsoup.nodes.Document
 import java.net.URI
 import java.net.URLEncoder
 import java.util.Calendar
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * AsyaWatch sağlayıcısı. API yanıtları, detay metadatası, bölüm listeleri ve
@@ -100,8 +101,40 @@ class AsyaWatch : MainAPI() {
         "Referer" to "$mainUrl/"
     )
 
-    private data class PageData(val document: Document, val secureData: JSONObject?)
+    private data class PageData(
+        val document: Document,
+        val secureData: JSONObject?,
+        val isRateLimited: Boolean = false
+    )
     private data class SourceItem(val raw: String, val quality: String)
+
+    @Volatile private var rateLimitedUntil = 0L
+    @Volatile private var lastPosterFallbackAt = 0L
+    private val posterFallbackCache = ConcurrentHashMap<String, String>()
+    private val noPosterSentinel = "__NO_ASYAWATCH_POSTER__"
+
+    private fun isRateLimitResponse(code: Int, body: String): Boolean {
+        val lower = body.lowercase()
+        return code == 1015 || code == 429 ||
+            lower.contains("error 1015") ||
+            lower.contains("you are being rate limited") ||
+            (lower.contains("cloudflare") && lower.contains("rate limit"))
+    }
+
+    private fun noteRateLimit() {
+        rateLimitedUntil = maxOf(rateLimitedUntil, System.currentTimeMillis() + 5 * 60 * 1000L)
+    }
+
+    private fun isCoolingDown(): Boolean = System.currentTimeMillis() < rateLimitedUntil
+
+    private fun titleFromUrl(url: String): String {
+        val path = runCatching { URI(url).path.orEmpty() }.getOrDefault(url.substringBefore('?'))
+        val slug = path.trimEnd('/').substringAfterLast('/').substringBeforeLast('.', missingDelimiterValue = path.substringAfterLast('/'))
+        return slug.replace(Regex("""[-_+]+"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+            .ifBlank { "AsyaWatch içeriği" }
+    }
 
     private fun field(obj: JSONObject?, vararg keys: String): String? {
         if (obj == null) return null
@@ -303,20 +336,35 @@ class AsyaWatch : MainAPI() {
     }
 
     private suspend fun getPageData(url: String): PageData {
+        if (isCoolingDown()) return PageData(Jsoup.parse("", url), null, isRateLimited = true)
+
         val response = app.get(
             url,
             headers = siteHeaders,
             referer = "$mainUrl/",
             allowRedirects = true
         )
+        val body = response.text
+        if (isRateLimitResponse(response.code, body)) {
+            noteRateLimit()
+            return PageData(Jsoup.parse(body, url), null, isRateLimited = true)
+        }
+
         val document = response.document
         return PageData(document, pageSecureData(document))
     }
 
     private suspend fun postJson(url: String): JSONObject? {
-        val body = runCatching {
-            app.post(url, headers = apiHeaders, referer = "$mainUrl/").text
+        if (isCoolingDown()) return null
+        val response = runCatching {
+            app.post(url, headers = apiHeaders, referer = "$mainUrl/")
         }.getOrNull() ?: return null
+        val body = response.text
+        if (isRateLimitResponse(response.code, body)) {
+            noteRateLimit()
+            return null
+        }
+        if (!response.isSuccessful) return null
         return decodeApiResponse(body)
     }
 
