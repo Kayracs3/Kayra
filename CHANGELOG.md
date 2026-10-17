@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:ca938e96ad084a1e65ac42e3a212885a2f62b3a1 -->
+### Bump InatBox plugin version for poster fix
+
+- Etkilenen alanlar: InatBox
+- Commit: [ca938e9](https://github.com/Kayracs3/Kayra/commit/ca938e96ad084a1e65ac42e3a212885a2f62b3a1)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:59eceb857995cd50480090fd31b6f6336cff8993 -->
 ### Restore InatBox poster URL parsing fallbacks
 
