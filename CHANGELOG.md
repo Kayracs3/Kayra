@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:307e2db3897e1047791212399ea156ef7fd37cdc -->
+### Bump AsyaWatch version for subtitle request headers
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [307e2db](https://github.com/Kayracs3/Kayra/commit/307e2db3897e1047791212399ea156ef7fd37cdc)
+
+## 2026-10-17
+
+<!-- kayra-commit:a8cd41130be494318f7dbd4708dc8c6055a39b6f -->
+### Pass player request headers to AsyaWatch subtitles
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [a8cd411](https://github.com/Kayracs3/Kayra/commit/a8cd41130be494318f7dbd4708dc8c6055a39b6f)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:d58b65f394f53305051b975f15a0126f7e826e8c -->
 ### Handle unlabelled PlayerJS subtitle URLs
 
