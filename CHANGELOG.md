@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:205515495fe2425f71641fd00dd46c6e511428b4 -->
+### Bump AsyaWatch version for subtitle track mapping fix
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [2055154](https://github.com/Kayracs3/Kayra/commit/205515495fe2425f71641fd00dd46c6e511428b4)
+
+## 2026-10-17
+
+<!-- kayra-commit:0a60092ec34c60dc55755e0f2b9f665754eee290 -->
+### Fix AsyaWatch subtitle labels by matching each track URL correctly
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [0a60092](https://github.com/Kayracs3/Kayra/commit/0a60092ec34c60dc55755e0f2b9f665754eee290)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:107a0ffee8e0b46023866e94d8db2148376e1a41 -->
 ### Bump AsyaWatch version after restoring v12 subtitles
 
