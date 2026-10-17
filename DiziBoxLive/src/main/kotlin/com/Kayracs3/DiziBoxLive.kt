@@ -565,7 +565,7 @@ class DiziBoxLive : MainAPI() {
                     runCatching { getAndUnpack(scriptText) }.getOrNull()?.let(texts::add)
                 }
             }
-            texts.flatMap { scanMediaUrls(it, pageUrl) }.distinct().forEach { media ->
+            for (media in texts.flatMap { scanMediaUrls(it, pageUrl) }.distinct()) {
                 emitDirect(media, pageUrl, ::emit)
             }
 
@@ -637,7 +637,7 @@ class DiziBoxLive : MainAPI() {
         return found.toList()
     }
 
-    private fun emitDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun emitDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         val value = url.lowercase(Locale.ROOT)
         val type = when {
             value.contains(".m3u8") || value.contains("/hls/") -> ExtractorLinkType.M3U8
@@ -658,29 +658,35 @@ class DiziBoxLive : MainAPI() {
         })
     }
 
-    private fun collectSubtitles(document: Document, pageUrl: String, callback: (SubtitleFile) -> Unit) {
+    private suspend fun collectSubtitles(
+        document: Document,
+        pageUrl: String,
+        callback: (SubtitleFile) -> Unit,
+    ) {
         val seen = HashSet<String>()
-        document.select("track[src], track[data-src], track[data-url], [data-subtitle]").forEach { element ->
+        for (element in document.select("track[src], track[data-src], track[data-url], [data-subtitle]")) {
             val raw = element.attr("src").ifBlank { element.attr("data-src") }
                 .ifBlank { element.attr("data-url") }.ifBlank { element.attr("data-subtitle") }
-            val url = absoluteUrl(raw, pageUrl) ?: return@forEach
-            if (!isSubtitleUrl(url) || !seen.add(url)) return@forEach
+            val url = absoluteUrl(raw, pageUrl) ?: continue
+            if (!isSubtitleUrl(url) || !seen.add(url)) continue
             val label = element.attr("label").ifBlank {
                 element.attr("srclang").ifBlank { "Türkçe" }
             }
             callback(newSubtitleFile(label, url))
         }
-        document.select("script").forEach { script ->
+        val pattern = Regex(
+            """https?://[^\s"'<>]+?\.(?:vtt|srt)(?:\?[^\s"'<>]*)?""",
+            RegexOption.IGNORE_CASE
+        )
+        for (script in document.select("script")) {
             val raw = script.data().ifBlank { script.html() }.replace("\\/", "/")
-            Regex("""https?://[^\s"'<>]+?\.(?:vtt|srt)(?:\?[^\s"'<>]*)?""", RegexOption.IGNORE_CASE)
-                .findAll(raw).forEach { match ->
-                    val url = absoluteUrl(match.value.trimEnd(')', ']', '}', ';', ','), pageUrl)
-                        ?: return@forEach
-                    if (seen.add(url)) callback(newSubtitleFile("Türkçe", url))
-                }
+            for (match in pattern.findAll(raw)) {
+                val url = absoluteUrl(match.value.trimEnd(')', ']', '}', ';', ','), pageUrl)
+                    ?: continue
+                if (seen.add(url)) callback(newSubtitleFile("Türkçe", url))
+            }
         }
     }
-
     private fun isSubtitleUrl(url: String): Boolean =
         Regex("""(?i)\.(?:vtt|srt|ass|ssa)(?:$|[?#])""").containsMatchIn(url)
 
