@@ -84,9 +84,7 @@ class AsyaWatch : MainAPI() {
         "8" to "Korku Dizi",
         "4" to "Komedi Dizi",
         "7" to "Romantik Dizi",
-        "1" to "Suç Dizi",
-        "26" to "Savaş Dizi",
-        "11" to "Western Dizi"
+        "1" to "Suç Dizi"
     )
 
     private val siteHeaders = mapOf(
