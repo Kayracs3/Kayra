@@ -168,10 +168,10 @@
     },
     {
         "iconUrl": "https://dizi79.life/favicon.ico",
-        "fileHash": "sha256-d84d984625372a56003ff9e1151bee214dbc05e218cdf82a8b0ef81d04599ecc",
+        "fileHash": "sha256-596f286a7bec78949f18e8c6b0415eef2dcb223c0bd77bb832103820de310881",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 47654,
+        "fileSize": 48234,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -181,7 +181,7 @@
             "TvSeries",
             "Movie"
         ],
-        "version": 5,
+        "version": 6,
         "internalName": "DiziLife",
         "description": "DiziLife \u2014 dizi ve film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziLife.cs3",
