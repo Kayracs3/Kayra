@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:cf10d0af8d3408db95005471bb868d905bd1cb8f -->
+### Preserve HLS master playlist audio groups in DiziLife
+
+- Etkilenen alanlar: DiziLife
+- Commit: [cf10d0a](https://github.com/Kayracs3/Kayra/commit/cf10d0af8d3408db95005471bb868d905bd1cb8f)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:a60a60e7a423e9ea3646a52421668163ada5299f -->
 ### Resolve DiziLife HLS stream and Turkish subtitle from player ID
 
