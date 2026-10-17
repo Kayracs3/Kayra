@@ -1,587 +1,567 @@
 [
-    {
-        "iconUrl": "https://asyafilmizle.com/favicon.ico",
-        "fileHash": "sha256-3fa62b42f6c7d811c14bba62024b9a646a8d4145a69293b121b7d63f1711c4e7",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 57154,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 2,
-        "internalName": "AsyaFilmIzle",
-        "description": "AsyaFilm\u0130zle \u2014 Asya filmleri ve dizileri sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaFilmIzle.cs3",
-        "name": "AsyaFilmIzle"
-    },
-    {
-        "iconUrl": "https://raw.githubusercontent.com/Kayracs3/Kayra/master/CineStream/icon.png",
-        "fileHash": "sha256-4a676af647a4cf6fec1e633f2f3825c55e0ba8f8e37af68f932d659e3ce21896",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 689265,
-        "status": 1,
-        "language": "en",
-        "authors": [
-            "megix"
-        ],
-        "tvTypes": [
-            "TvSeries",
-            "Movie",
-            "AsianDrama",
-            "Anime",
-            "Torrent"
-        ],
-        "version": 487,
-        "internalName": "CineStream",
-        "description": "One stop solution for Movies, Series, Anime, AsianDrama and Torrents",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/CineStream.cs3",
-        "name": "CineStream"
-    },
-    {
-        "iconUrl": "https://dizipal1583.com/favicon.ico",
-        "fileHash": "sha256-9761791cc7aba1b0fb9ee2884c3029d74fb7881fbcd33a808c31e8c3dd1e5bae",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 14794,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 3,
-        "internalName": "ClipBox",
-        "description": "T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/ClipBox.cs3",
-        "name": "ClipBox"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=ddizi.tel&sz=%size%",
-        "fileHash": "sha256-9608cc85f6b3990c3e131fccf655ae532d837c2d20b03e4b122d39be21f28fd4",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 47628,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries"
-        ],
-        "version": 1,
-        "internalName": "DDizi",
-        "description": "DDizi - yerli, yabanc\u0131 ve eski diziler",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DDizi.cs3",
-        "name": "DDizi"
-    },
-    {
-        "iconUrl": "https://www.dizibox.live/favicon.ico",
-        "fileHash": "sha256-087488a99fbeab74c1dc6c36238704f5d706a5c6de6049381635b8d86d2df310",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 44873,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries"
-        ],
-        "version": 8,
-        "internalName": "DiziBoxLive",
-        "description": "DiziBOX Live yabanc\u0131 dizi katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziBoxLive.cs3",
-        "name": "DiziBoxLive"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=dizidad.com&sz=%size%",
-        "fileHash": "sha256-1c4a584f92dfb1b089a6dbbd0bce77bb6af20a89a1ce3227797bd0045ec3bdf8",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 45410,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 27,
-        "internalName": "DiziDad",
-        "description": "DiziDAD \u2014 t\u00fcm diziler, filmler ve eksiksiz sezon/b\u00f6l\u00fcm listeleri",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziDad.cs3",
-        "name": "DiziDad"
-    },
-    {
-        "iconUrl": "https://dizigecesi.com/favicon.ico",
-        "fileHash": "sha256-4e405e7c54e78351c72968f02ccfcb24adb980f2519553c98a1c3453e7667aff",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 54112,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries",
-            "Movie"
-        ],
-        "version": 2,
-        "internalName": "Dizigecesi",
-        "description": "Dizigecesi film ve dizi sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizigecesi.cs3",
-        "name": "Dizigecesi"
-    },
-    {
-        "iconUrl": "https://dizikorea3.com//favicon.ico",
-        "fileHash": "sha256-f6cfec4bda2de940e4a6b542b316786ace496a6650753f6a0b43371ec8edd29c",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 34349,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries"
-        ],
-        "version": 1,
-        "internalName": "DiziKorea",
-        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziKorea.cs3",
-        "name": "DiziKorea"
-    },
-    {
-        "iconUrl": "https://dizi79.life/favicon.ico",
-        "fileHash": "sha256-9cf9d0ef0a2286a4e449dda8f92db93de0d83d2c5ec08c8d0ddf242c164ba765",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 50107,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries",
-            "Movie"
-        ],
-        "version": 7,
-        "internalName": "DiziLife",
-        "description": "DiziLife \u2014 dizi ve film sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziLife.cs3",
-        "name": "DiziLife"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=dizilla.club&sz=%size%",
-        "fileHash": "sha256-4e458e68897a5d3611a39adef1e0ea9e33e52fe3ce30b1aedfd42ea8b8b2814b",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 53186,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries"
-        ],
-        "version": 14,
-        "internalName": "Dizilla",
-        "description": "Dizilla t\u00fcm yabanc\u0131 dizileri \u00fccretsiz olarak T\u00fcrk\u00e7e Dublaj ve altyaz\u0131l\u0131 se\u00e7enekleri ile 1080P kalite izleyebilece\u011finiz yeni nesil yabanc\u0131 dizi izleme siteniz.",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizilla.cs3",
-        "name": "Dizilla"
-    },
-    {
-        "iconUrl": "https://dizipal1588.com/favicon.ico",
-        "fileHash": "sha256-9f4e99184d7f9a470e8779ee16453c9883eaa74ee37f7a376ae4540524ab19be",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 91744,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries",
-            "Movie"
-        ],
-        "version": 18,
-        "internalName": "DiziPal",
-        "description": "Dizipal dizi ve film sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPal.cs3",
-        "name": "DiziPal"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=720pizle.ai&sz=%size%",
-        "fileHash": "sha256-dde69900ad3fbffcacb5fb86af851e20b7d9c83a2b1950f8a8d80e0904058c66",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 34420,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie"
-        ],
-        "version": 6,
-        "internalName": "DiziPod",
-        "description": "1080P yabanc\u0131 film izle, T\u00fcrk\u00e7e dublaj ve T\u00fcrk\u00e7e altyaz\u0131l\u0131 film se\u00e7enekleri ile T\u00fcrkiye'nin en geni\u015f film ar\u015fivi 720pizle Full hd film izle.",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPod.cs3",
-        "name": "DiziPod"
-    },
-    {
-        "iconUrl": "https://dizisol.com/favicon.ico",
-        "fileHash": "sha256-0115676feb0dd307af1b7574d90e1d4326cf1108d13c92c2b89ad291bdae6e5d",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 71425,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 3,
-        "internalName": "DiziSol",
-        "description": "DiziSol film ve dizi sa\u011flay\u0131c\u0131s\u0131; sezon, b\u00f6l\u00fcm, metadata ve video kaynaklar\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziSol.cs3",
-        "name": "DiziSol"
-    },
-    {
-        "iconUrl": "https://www.diziyou.one/favicon.ico",
-        "fileHash": "sha256-a4ea8964d666f0fb67683a1f75a55f2f16e4befcc3db5340919b69033c4e03fa",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 29755,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries"
-        ],
-        "version": 1,
-        "internalName": "DiziYou",
-        "description": "katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziYou.cs3",
-        "name": "DiziYou"
-    },
-    {
-        "iconUrl": "https://www.dramadizilerim.com/favicon.ico",
-        "fileHash": "sha256-d62ac6996c677fe88c125782678907896a4911eb025dde52ee8314bc9094719b",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 32666,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Dramadizilerim"
-        ],
-        "tvTypes": [
-            "TvSeries"
-        ],
-        "version": 1,
-        "internalName": "Dramadizilerim",
-        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dramadizilerim.cs3",
-        "name": "Dramadizilerim"
-    },
-    {
-        "iconUrl": "https://filmizlehell.net/favicon.ico",
-        "fileHash": "sha256-38e8de8278fa3e8da960de064a0d9641ae17680809531903ff77a75b1a87deaf",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 94655,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie"
-        ],
-        "version": 5,
-        "internalName": "FilmizleHell",
-        "description": "FilmizleHell film ar\u015fivi; arama, afi\u015f, IMDb, oyuncu bilgileri ve video kaynaklar\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmizleHell.cs3",
-        "name": "FilmizleHell"
-    },
-    {
-        "iconUrl": "https://filmkutusu.com/favicon.ico",
-        "fileHash": "sha256-7309daf39f47d0615796554ab7cc38952b48848dd3b29e09ecedca6bbea603e5",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 33862,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie"
-        ],
-        "version": 1,
-        "internalName": "FilmKutusu",
-        "description": "FilmKutusu film ar\u015fivi, arama ve film bilgileri",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmKutusu.cs3",
-        "name": "FilmKutusu"
-    },
-    {
-        "iconUrl": "https://dizipal1583.com/favicon.ico",
-        "fileHash": "sha256-a6e16aeee42f43124c364875d881b8ae7bb047f9a23366318ddf931180ea506e",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 63802,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "FilmMakinas\u0131"
-        ],
-        "tvTypes": [
-            "TvSeries"
-        ],
-        "version": 2,
-        "internalName": "FilmMakinesi",
-        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmMakinesi.cs3",
-        "name": "FilmMakinesi"
-    },
-    {
-        "iconUrl": "https://www.filmmodu.one/favicon.ico",
-        "fileHash": "sha256-8514416fd973cdd53d893cdcbf6592ecba205ed58c587d20c24e9ced52172d26",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 38176,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie"
-        ],
-        "version": 2,
-        "internalName": "FilmModu",
-        "description": "FilmModu film sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmModu.cs3",
-        "name": "FilmModu"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=www.fullhdfilmizlesene.de&sz=%size%",
-        "fileHash": "sha256-c9fd2c7a4c0e0010bd798bbe04c94aa5495b9b155175d7cdc55e9aecfe9b367a",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 43809,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie"
-        ],
-        "version": 4,
-        "internalName": "FullHDFilmizlesene",
-        "description": "Sinema zevkini evinize kadar getirdik. T\u00fcrkiye'nin lider Film sitesinde, en yeni filmleri Full HD izleyin.",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FullHDFilmizlesene.cs3",
-        "name": "FullHDFilmizlesene"
-    },
-    {
-        "iconUrl": "https://hdfilmcehennemi.nl/favicon.ico",
-        "fileHash": "sha256-1a74d02a175f95ff7d003ac975bc953880bcbea72b656a5bbc523722680a065a",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 74007,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "TvSeries"
-        ],
-        "version": 1,
-        "internalName": "HDFilmCehennemi",
-        "description": "T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/HDFilmCehennemi.cs3",
-        "name": "HDFilmCehennemi"
-    },
-    {
-        "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
-        "fileHash": "sha256-55ee35ef1bd4be0f25fb11bfdd7e076d4ee0a0b49cbc453fdbc8b836373a8df7",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 77250,
-        "status": 3,
-        "language": "tr",
-        "authors": [
-            "JustRelaxable",
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries",
-            "Live"
-        ],
-        "version": 14,
-        "internalName": "InatBox",
-        "description": "\u0130natBox cloudstream eklentisidir. Sevdi\u011finiz yay\u0131n platformlar\u0131n\u0131 ve canl\u0131 ma\u00e7lar\u0131 burada bulabilirsiniz.",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBox.cs3",
-        "name": "InatBox"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=jetfilmizle.now&sz=%size%",
-        "fileHash": "sha256-a8663b4704b21b2aec73af27ec011db504a47f8d4924db117eeb2a05e21d05d4",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 36963,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 23,
-        "internalName": "JetFilmizle",
-        "description": "Jet Film - T\u00fcrk\u00e7e dublajl\u0131 ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/JetFilmizle.cs3",
-        "name": "JetFilmizle"
-    },
-    {
-        "iconUrl": "https://rectvapk.cc/wp-content/uploads/2023/02/Rec-TV.webp",
-        "fileHash": "sha256-659ad3a4cf31c566b4f121a0db71a06cb986abda90d7bb273eb022d1ac36e668",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 57109,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "keyiflerolsun",
-            "yusiqo",
-            "inatchii",
-            "JustRelaxable"
-        ],
-        "tvTypes": [
-            "Movie",
-            "Live",
-            "TvSeries"
-        ],
-        "version": 65,
-        "internalName": "RecTV",
-        "description": "RecTv APK, T\u00fcrkiye\u2019deki en pop\u00fcler \u00c7evrimi\u00e7i Medya Ak\u0131\u015f platformlar\u0131ndan biridir. Filmlerin, Canl\u0131 Sporlar\u0131n, Web Dizilerinin ve \u00e7ok daha fazlas\u0131n\u0131n keyfini \u00fccretsiz \u00e7\u0131kar\u0131n.",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/RecTV.cs3",
-        "name": "RecTV"
-    },
-    {
-        "iconUrl": "https://www.setfilmizle.ltd/favicon.ico",
-        "fileHash": "sha256-6edf9360f77f1b435d1fa67f544fb5dcc37de527d591585a1e2b5ceb3b7999c1",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 58905,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayras3"
-        ],
-        "tvTypes": [
-            "TvSeries",
-            "Movie"
-        ],
-        "version": 1,
-        "internalName": "SetFilmIzle",
-        "description": "SetFilmIzle film ve dizi sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SetFilmIzle.cs3",
-        "name": "SetFilmIzle"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=sinemacc.com&sz=%size%",
-        "fileHash": "sha256-3f2e6966d4d6cdd9dbd1de072bef9e7c75ae1f0f7865013c7068aa63c82971b1",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 55663,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie"
-        ],
-        "version": 23,
-        "internalName": "SinemaCX",
-        "description": "Sinema CC - T\u00fcrk\u00e7e dublaj ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinemaCX.cs3",
-        "name": "SinemaCX"
-    },
-    {
-        "iconUrl": "https://sinezy.si/favicon.ico",
-        "fileHash": "sha256-876049f44ffe22bfaaadf4db3095b56d6f27fa89b5018047d4215ccccb9bc514",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 76508,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 1,
-        "internalName": "SinezyTo",
-        "description": "Sinezy.to film ve dizi sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinezyTo.cs3",
-        "name": "SinezyTo"
-    },
-    {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=https://webdramaturkey2.com&sz=%size%",
-        "fileHash": "sha256-e2f712bb43831afc23b154ed09087ff2da96b729807331db04f1192ffd555e2c",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 59869,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "AsianDrama",
-            "Movie",
-            "Anime",
-            "Others"
-        ],
-        "version": 1,
-        "internalName": "WebDramaTurkey",
-        "description": "Web Drama Turkey Kore, \u00c7in ve Asya dizileri sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/WebDramaTurkey.cs3",
-        "name": "WebDramaTurkey"
-    }
+  {
+    "iconUrl": "https://asyafilmizle.com/favicon.ico",
+    "fileHash": "sha256-3fa62b42f6c7d811c14bba62024b9a646a8d4145a69293b121b7d63f1711c4e7",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 57154,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries"
+    ],
+    "version": 2,
+    "internalName": "AsyaFilmIzle",
+    "description": "AsyaFilmİzle — Asya filmleri ve dizileri sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaFilmIzle.cs3",
+    "name": "AsyaFilmIzle"
+  },
+  {
+    "iconUrl": "https://raw.githubusercontent.com/Kayracs3/Kayra/master/CineStream/icon.png",
+    "fileHash": "sha256-4a676af647a4cf6fec1e633f2f3825c55e0ba8f8e37af68f932d659e3ce21896",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 689265,
+    "status": 1,
+    "language": "en",
+    "authors": [
+      "megix"
+    ],
+    "tvTypes": [
+      "TvSeries",
+      "Movie",
+      "AsianDrama",
+      "Anime",
+      "Torrent"
+    ],
+    "version": 487,
+    "internalName": "CineStream",
+    "description": "One stop solution for Movies, Series, Anime, AsianDrama and Torrents",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/CineStream.cs3",
+    "name": "CineStream"
+  },
+  {
+    "iconUrl": "https://dizipal1583.com/favicon.ico",
+    "fileHash": "sha256-9761791cc7aba1b0fb9ee2884c3029d74fb7881fbcd33a808c31e8c3dd1e5bae",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 14794,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries"
+    ],
+    "version": 3,
+    "internalName": "ClipBox",
+    "description": "Türkiye katalog ve bölüm sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/ClipBox.cs3",
+    "name": "ClipBox"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=ddizi.tel&sz=%size%",
+    "fileHash": "sha256-9608cc85f6b3990c3e131fccf655ae532d837c2d20b03e4b122d39be21f28fd4",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 47628,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "DDizi",
+    "description": "DDizi - yerli, yabancı ve eski diziler",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DDizi.cs3",
+    "name": "DDizi"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=dizidad.com&sz=%size%",
+    "fileHash": "sha256-1c4a584f92dfb1b089a6dbbd0bce77bb6af20a89a1ce3227797bd0045ec3bdf8",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 45410,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries"
+    ],
+    "version": 27,
+    "internalName": "DiziDad",
+    "description": "DiziDAD — tüm diziler, filmler ve eksiksiz sezon/bölüm listeleri",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziDad.cs3",
+    "name": "DiziDad"
+  },
+  {
+    "iconUrl": "https://dizigecesi.com/favicon.ico",
+    "fileHash": "sha256-4e405e7c54e78351c72968f02ccfcb24adb980f2519553c98a1c3453e7667aff",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 54112,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "TvSeries",
+      "Movie"
+    ],
+    "version": 2,
+    "internalName": "Dizigecesi",
+    "description": "Dizigecesi film ve dizi sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizigecesi.cs3",
+    "name": "Dizigecesi"
+  },
+  {
+    "iconUrl": "https://dizikorea3.com//favicon.ico",
+    "fileHash": "sha256-f6cfec4bda2de940e4a6b542b316786ace496a6650753f6a0b43371ec8edd29c",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 34349,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "DiziKorea",
+    "description": "DiziPal Türkiye katalog ve bölüm sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziKorea.cs3",
+    "name": "DiziKorea"
+  },
+  {
+    "iconUrl": "https://dizi79.life/favicon.ico",
+    "fileHash": "sha256-9cf9d0ef0a2286a4e449dda8f92db93de0d83d2c5ec08c8d0ddf242c164ba765",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 50107,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "TvSeries",
+      "Movie"
+    ],
+    "version": 7,
+    "internalName": "DiziLife",
+    "description": "DiziLife — dizi ve film sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziLife.cs3",
+    "name": "DiziLife"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=dizilla.club&sz=%size%",
+    "fileHash": "sha256-4e458e68897a5d3611a39adef1e0ea9e33e52fe3ce30b1aedfd42ea8b8b2814b",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 53186,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "TvSeries"
+    ],
+    "version": 14,
+    "internalName": "Dizilla",
+    "description": "Dizilla tüm yabancı dizileri ücretsiz olarak Türkçe Dublaj ve altyazılı seçenekleri ile 1080P kalite izleyebileceğiniz yeni nesil yabancı dizi izleme siteniz.",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizilla.cs3",
+    "name": "Dizilla"
+  },
+  {
+    "iconUrl": "https://dizipal1588.com/favicon.ico",
+    "fileHash": "sha256-9f4e99184d7f9a470e8779ee16453c9883eaa74ee37f7a376ae4540524ab19be",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 91744,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "TvSeries",
+      "Movie"
+    ],
+    "version": 18,
+    "internalName": "DiziPal",
+    "description": "Dizipal dizi ve film sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPal.cs3",
+    "name": "DiziPal"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=720pizle.ai&sz=%size%",
+    "fileHash": "sha256-dde69900ad3fbffcacb5fb86af851e20b7d9c83a2b1950f8a8d80e0904058c66",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 34420,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie"
+    ],
+    "version": 6,
+    "internalName": "DiziPod",
+    "description": "1080P yabancı film izle, Türkçe dublaj ve Türkçe altyazılı film seçenekleri ile Türkiye'nin en geniş film arşivi 720pizle Full hd film izle.",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPod.cs3",
+    "name": "DiziPod"
+  },
+  {
+    "iconUrl": "https://dizisol.com/favicon.ico",
+    "fileHash": "sha256-0115676feb0dd307af1b7574d90e1d4326cf1108d13c92c2b89ad291bdae6e5d",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 71425,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries"
+    ],
+    "version": 3,
+    "internalName": "DiziSol",
+    "description": "DiziSol film ve dizi sağlayıcısı; sezon, bölüm, metadata ve video kaynakları",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziSol.cs3",
+    "name": "DiziSol"
+  },
+  {
+    "iconUrl": "https://www.diziyou.one/favicon.ico",
+    "fileHash": "sha256-a4ea8964d666f0fb67683a1f75a55f2f16e4befcc3db5340919b69033c4e03fa",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 29755,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "DiziYou",
+    "description": "katalog ve bölüm sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziYou.cs3",
+    "name": "DiziYou"
+  },
+  {
+    "iconUrl": "https://www.dramadizilerim.com/favicon.ico",
+    "fileHash": "sha256-d62ac6996c677fe88c125782678907896a4911eb025dde52ee8314bc9094719b",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 32666,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Dramadizilerim"
+    ],
+    "tvTypes": [
+      "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "Dramadizilerim",
+    "description": "DiziPal Türkiye katalog ve bölüm sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dramadizilerim.cs3",
+    "name": "Dramadizilerim"
+  },
+  {
+    "iconUrl": "https://filmizlehell.net/favicon.ico",
+    "fileHash": "sha256-38e8de8278fa3e8da960de064a0d9641ae17680809531903ff77a75b1a87deaf",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 94655,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie"
+    ],
+    "version": 5,
+    "internalName": "FilmizleHell",
+    "description": "FilmizleHell film arşivi; arama, afiş, IMDb, oyuncu bilgileri ve video kaynakları",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmizleHell.cs3",
+    "name": "FilmizleHell"
+  },
+  {
+    "iconUrl": "https://filmkutusu.com/favicon.ico",
+    "fileHash": "sha256-7309daf39f47d0615796554ab7cc38952b48848dd3b29e09ecedca6bbea603e5",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 33862,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie"
+    ],
+    "version": 1,
+    "internalName": "FilmKutusu",
+    "description": "FilmKutusu film arşivi, arama ve film bilgileri",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmKutusu.cs3",
+    "name": "FilmKutusu"
+  },
+  {
+    "iconUrl": "https://dizipal1583.com/favicon.ico",
+    "fileHash": "sha256-a6e16aeee42f43124c364875d881b8ae7bb047f9a23366318ddf931180ea506e",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 63802,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "FilmMakinası"
+    ],
+    "tvTypes": [
+      "TvSeries"
+    ],
+    "version": 2,
+    "internalName": "FilmMakinesi",
+    "description": "DiziPal Türkiye katalog ve bölüm sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmMakinesi.cs3",
+    "name": "FilmMakinesi"
+  },
+  {
+    "iconUrl": "https://www.filmmodu.one/favicon.ico",
+    "fileHash": "sha256-8514416fd973cdd53d893cdcbf6592ecba205ed58c587d20c24e9ced52172d26",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 38176,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie"
+    ],
+    "version": 2,
+    "internalName": "FilmModu",
+    "description": "FilmModu film sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmModu.cs3",
+    "name": "FilmModu"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=www.fullhdfilmizlesene.de&sz=%size%",
+    "fileHash": "sha256-c9fd2c7a4c0e0010bd798bbe04c94aa5495b9b155175d7cdc55e9aecfe9b367a",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 43809,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie"
+    ],
+    "version": 4,
+    "internalName": "FullHDFilmizlesene",
+    "description": "Sinema zevkini evinize kadar getirdik. Türkiye'nin lider Film sitesinde, en yeni filmleri Full HD izleyin.",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FullHDFilmizlesene.cs3",
+    "name": "FullHDFilmizlesene"
+  },
+  {
+    "iconUrl": "https://hdfilmcehennemi.nl/favicon.ico",
+    "fileHash": "sha256-1a74d02a175f95ff7d003ac975bc953880bcbea72b656a5bbc523722680a065a",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 74007,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "HDFilmCehennemi",
+    "description": "Türkiye katalog ve bölüm sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/HDFilmCehennemi.cs3",
+    "name": "HDFilmCehennemi"
+  },
+  {
+    "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
+    "fileHash": "sha256-55ee35ef1bd4be0f25fb11bfdd7e076d4ee0a0b49cbc453fdbc8b836373a8df7",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 77250,
+    "status": 3,
+    "language": "tr",
+    "authors": [
+      "JustRelaxable",
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries",
+      "Live"
+    ],
+    "version": 14,
+    "internalName": "InatBox",
+    "description": "İnatBox cloudstream eklentisidir. Sevdiğiniz yayın platformlarını ve canlı maçları burada bulabilirsiniz.",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBox.cs3",
+    "name": "InatBox"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=jetfilmizle.now&sz=%size%",
+    "fileHash": "sha256-a8663b4704b21b2aec73af27ec011db504a47f8d4924db117eeb2a05e21d05d4",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 36963,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries"
+    ],
+    "version": 23,
+    "internalName": "JetFilmizle",
+    "description": "Jet Film - Türkçe dublajlı ve altyazılı film sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/JetFilmizle.cs3",
+    "name": "JetFilmizle"
+  },
+  {
+    "iconUrl": "https://rectvapk.cc/wp-content/uploads/2023/02/Rec-TV.webp",
+    "fileHash": "sha256-659ad3a4cf31c566b4f121a0db71a06cb986abda90d7bb273eb022d1ac36e668",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 57109,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "keyiflerolsun",
+      "yusiqo",
+      "inatchii",
+      "JustRelaxable"
+    ],
+    "tvTypes": [
+      "Movie",
+      "Live",
+      "TvSeries"
+    ],
+    "version": 65,
+    "internalName": "RecTV",
+    "description": "RecTv APK, Türkiye’deki en popüler Çevrimiçi Medya Akış platformlarından biridir. Filmlerin, Canlı Sporların, Web Dizilerinin ve çok daha fazlasının keyfini ücretsiz çıkarın.",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/RecTV.cs3",
+    "name": "RecTV"
+  },
+  {
+    "iconUrl": "https://www.setfilmizle.ltd/favicon.ico",
+    "fileHash": "sha256-6edf9360f77f1b435d1fa67f544fb5dcc37de527d591585a1e2b5ceb3b7999c1",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 58905,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayras3"
+    ],
+    "tvTypes": [
+      "TvSeries",
+      "Movie"
+    ],
+    "version": 1,
+    "internalName": "SetFilmIzle",
+    "description": "SetFilmIzle film ve dizi sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SetFilmIzle.cs3",
+    "name": "SetFilmIzle"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=sinemacc.com&sz=%size%",
+    "fileHash": "sha256-3f2e6966d4d6cdd9dbd1de072bef9e7c75ae1f0f7865013c7068aa63c82971b1",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 55663,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie"
+    ],
+    "version": 23,
+    "internalName": "SinemaCX",
+    "description": "Sinema CC - Türkçe dublaj ve altyazılı film sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinemaCX.cs3",
+    "name": "SinemaCX"
+  },
+  {
+    "iconUrl": "https://sinezy.si/favicon.ico",
+    "fileHash": "sha256-876049f44ffe22bfaaadf4db3095b56d6f27fa89b5018047d4215ccccb9bc514",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 76508,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "SinezyTo",
+    "description": "Sinezy.to film ve dizi sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinezyTo.cs3",
+    "name": "SinezyTo"
+  },
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=https://webdramaturkey2.com&sz=%size%",
+    "fileHash": "sha256-e2f712bb43831afc23b154ed09087ff2da96b729807331db04f1192ffd555e2c",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 59869,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+      "Kayracs3"
+    ],
+    "tvTypes": [
+      "AsianDrama",
+      "Movie",
+      "Anime",
+      "Others"
+    ],
+    "version": 1,
+    "internalName": "WebDramaTurkey",
+    "description": "Web Drama Turkey Kore, Çin ve Asya dizileri sağlayıcısı",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/WebDramaTurkey.cs3",
+    "name": "WebDramaTurkey"
+  }
 ]
