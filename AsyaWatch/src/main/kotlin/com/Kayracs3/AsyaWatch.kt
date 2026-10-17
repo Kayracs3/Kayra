@@ -756,8 +756,9 @@ class AsyaWatch : MainAPI() {
     private fun looksLikeSubtitle(url: String): Boolean {
         val value = url.lowercase()
         return Regex("""(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:[?#].*)?$""").containsMatchIn(value) ||
-            // Several players expose translated subtitles as a dedicated HLS playlist,
-            // for example /sub_turkish/subtitles.m3u8. This is not a video master playlist.
+            // Subtitle playlists may have different filenames (index.m3u8, playlist.m3u8,
+            // subtitles.m3u8) below a language-specific sub_* directory.
+            Regex("""(?i)/sub[_-][a-z0-9_-]+/[^?#]+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:[?#].*)?$""").containsMatchIn(value) ||
             Regex("""(?i)/(?:sub_[a-z0-9_-]+/)?(?:subtitles?|captions?)(?:\.m3u8?)?(?:[?#].*)?$""").containsMatchIn(value) ||
             value.contains("/subtitle/") || value.contains("/subtitles/") ||
             value.contains("/caption/") || value.contains("/captions/") ||
@@ -800,7 +801,7 @@ class AsyaWatch : MainAPI() {
             .trim()
         return when {
             normalized.contains("turk") || normalized.contains("türk") ||
-                Regex("""(?:^|[^a-z])(?:tr|tur|turkish|turkce)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Türkçe"
+                Regex("""(?:^|[^a-z])(?:tr|tur|turkish|turkce)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Turkish"
             normalized.contains("english") || normalized.contains("ingiliz") ||
                 Regex("""(?:^|[^a-z])(?:en|eng)(?:$|[^a-z])""").containsMatchIn(normalized) -> "English"
             normalized.contains("korean") || normalized.contains("korece") ||
@@ -894,22 +895,23 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // PlayerJS configuration commonly stores both language tracks in one string:
-        // subtitle: "[Turkish]https://.../tr.vtt,[English]https://.../en.vtt"
-        // Extract the label along with each URL before generic URL scanning.
+        // PlayerJS accepts comma-separated subtitle lists and, in newer configurations,
+        // inline tracks inside file:"... (subtitle:[En]url[Tr]url)". Track URLs can touch
+        // the next [Language] marker with no comma, so the URL pattern must stop at '['.
+        val taggedPlayerTrack = Regex(
+            """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s\[\]"']+|/[^,\s\[\]"']+|\.\.?/[^,\s\[\]"']+|[^,\s\[\]"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s\[\]"']*)?)"""
+        )
+
+        // Standard PlayerJS subtitle/subtitles field.
         val playerSubtitleField = Regex(
             """(?is)\b(?:subtitle|subtitles|captions?)\b\s*[:=]\s*["']([^"']{1,8000})["']"""
         )
         playerSubtitleField.findAll(body).forEach { match ->
             val config = match.groupValues[1]
-            val tagged = Regex(
-                """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s"']+|/[^,\s"']+|\.\.?/[^,\s"']+|[^,\s"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s"']*)?)"""
-            )
-            val entries = tagged.findAll(config).toList()
+            val entries = taggedPlayerTrack.findAll(config).toList()
             if (entries.isNotEmpty()) {
-                for (entry in entries) add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
+                entries.forEach { add(it.groupValues[2], it.groupValues[1], forceSubtitle = true) }
             } else {
-                // PlayerJS tek bir altyazı için sadece çıplak URL kullanabilir.
                 config.split(',').map { it.trim() }.filter { candidate ->
                     candidate.startsWith("http://", true) ||
                         candidate.startsWith("https://", true) ||
@@ -918,6 +920,16 @@ class AsyaWatch : MainAPI() {
                 }.forEach { add(it, "Altyazı", forceSubtitle = true) }
             }
         }
+
+        // Newer PlayerJS format stores a playlist inline in a video URL:
+        // file:"...m3u8(subtitle:[English].../en.vtt[Turkish].../tr.vtt)".
+        Regex("""(?is)\(\s*subtitle(?:s)?\s*:\s*([^)]+)\)""")
+            .findAll(body)
+            .forEach { match ->
+                taggedPlayerTrack.findAll(match.groupValues[1]).forEach { entry ->
+                    add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
+                }
+            }
 
         // Parse label + URL only inside the same object. A broad regex can accidentally
         // pair a Turkish label with the next object's English URL.
