@@ -38,6 +38,11 @@ class DiziBoxLive : MainAPI() {
         "Referer" to "$mainUrl/",
     )
 
+    // Cloudflare/hotlink-protected image hosts can reject CloudStream's image
+    // loader unless poster requests carry the same browser headers.
+    private val posterRequestHeaders = headers +
+        ("Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Son Eklenenler",
         "$mainUrl/efsane-diziler/" to "Efsane Diziler",
@@ -131,6 +136,7 @@ class DiziBoxLive : MainAPI() {
         return items.map { item ->
             newTvSeriesSearchResponse(item.title, item.url, TvType.TvSeries) {
                 posterUrl = item.poster
+                posterHeaders = this@DiziBoxLive.posterRequestHeaders
             }
         }
     }
@@ -310,7 +316,51 @@ class DiziBoxLive : MainAPI() {
         }
     }
 
+    private fun posterFromSeriesLink(document: Document): String? {
+        val links = document.select("a[href]")
+        val seriesTargets = links.mapNotNull { link ->
+            val label = listOf(
+                link.text(),
+                link.attr("title"),
+                link.attr("aria-label"),
+            ).joinToString(" ").lowercase(Locale.ROOT)
+            val mentionsSeriesPage =
+                label.contains("dizi sayfasına gidin") ||
+                label.contains("dizi sayfasina gidin")
+            if (!mentionsSeriesPage) return@mapNotNull null
+            absoluteUrl(link.attr("href"), document.location())
+        }.distinct()
+
+        for (target in seriesTargets) {
+            val targetKey = target.substringBefore("#").trimEnd('/').substringBefore("?")
+            for (link in links) {
+                val href = absoluteUrl(link.attr("href"), document.location()) ?: continue
+                val hrefKey = href.substringBefore("#").trimEnd('/').substringBefore("?")
+                if (!hrefKey.equals(targetKey, ignoreCase = true)) continue
+
+                posterFromElement(link)?.let { return it }
+                link.select(posterSelector).forEach { image ->
+                    posterFromElement(image)?.let { return it }
+                }
+                var parent: Element? = link.parent()
+                repeat(3) {
+                    val node = parent ?: return@repeat
+                    node.select(posterSelector).forEach { image ->
+                        posterFromElement(image)?.let { return it }
+                    }
+                    parent = node.parent()
+                }
+            }
+        }
+        return null
+    }
+
     private fun posterFromDocument(document: Document): String? {
+        // Episode pages link to the series page using text such as
+        // "The Agency izle Dizi sayfasına gidin". The artwork is often in a
+        // separate anchor with the same target URL, outside normal article tags.
+        posterFromSeriesLink(document)?.let { return it }
+
         val metaSelectors = listOf(
             "meta[property=og:image]",
             "meta[property=og:image:secure_url]",
@@ -421,6 +471,7 @@ class DiziBoxLive : MainAPI() {
 
         return newTvSeriesLoadResponse(title, normalized, TvType.TvSeries, episodeList) {
             posterUrl = poster
+            posterHeaders = this@DiziBoxLive.posterRequestHeaders
             plot = document.selectFirst("meta[name=description]")?.attr("content").cleanText()
                 .takeIf { it.isNotBlank() }
                 ?: document.selectFirst(".description, .summary, .entry-content p")?.text().cleanText()
