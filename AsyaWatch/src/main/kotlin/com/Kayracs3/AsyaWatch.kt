@@ -184,7 +184,7 @@ class AsyaWatch : MainAPI() {
 
         // Some API poster fields contain the Macellan host but omit the URL scheme.
         // Without this, the host is incorrectly appended to the AsyaWatch origin.
-        if (Regex("""(?i)^(?:[a-z0-9-]+\\.)*macellan\\.online(?=[:/?#]|$)""").containsMatchIn(value)) {
+        if (Regex("""(?i)^(?:[a-z0-9-]+\.)*macellan\.online(?=[:/?#]|$)""").containsMatchIn(value)) {
             value = "https://$value"
         }
 
