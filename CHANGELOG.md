@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:1f44019cbadd17e1d8bf27ac9be598059e1c767c -->
+### Bump AsyaWatch version for VTT subtitle playlist fallback
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [1f44019](https://github.com/Kayracs3/Kayra/commit/1f44019cbadd17e1d8bf27ac9be598059e1c767c)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:34c8426ccf3e201bb631e35ff95416dd91b3865d -->
 ### Resolve AsyaWatch single-segment HLS subtitles to WebVTT
 
