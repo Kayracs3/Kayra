@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:b4e6000b8dd2c94eb0347fc2baf4368f15a233b7 -->
+### Correct Macellan poster path regex
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [b4e6000](https://github.com/Kayracs3/Kayra/commit/b4e6000b8dd2c94eb0347fc2baf4368f15a233b7)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:5233dc1d0227ffb72cc1dcc3bad55422431f33ef -->
 ### Improve AsyaWatch Macellan poster fallback parsing
 
