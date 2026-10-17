@@ -400,6 +400,7 @@ class DiziLife : MainAPI() {
         }
         val seenPages = LinkedHashSet<String>()
         val seenCandidates = LinkedHashSet<String>()
+        val seenScripts = LinkedHashSet<String>()
         val pages = ArrayDeque<Pair<String, Document>>()
         pages.add(episodeUrl to first.document)
         var found = false
@@ -413,7 +414,29 @@ class DiziLife : MainAPI() {
                 if (seenCandidates.add(media) && emitMedia(media, pageUrl, callback)) found = true
             }
 
-            val candidates = playerCandidates(document, rawText, pageUrl)
+            // Player sayfasının akış adresini çalıştırılan JavaScript/API içinden alması yaygın.
+            // Harici JS dosyalarını da kontrollü biçimde indirip içlerindeki kaynak/API adreslerini tara.
+            val scriptCandidates = LinkedHashSet<String>()
+            scriptUrls(document, pageUrl).take(8).forEach scriptLoop@ { scriptUrl ->
+                if (seenScripts.size >= 16 || !seenScripts.add(scriptUrl)) return@scriptLoop
+                val scriptResponse = runCatching {
+                    app.get(
+                        scriptUrl,
+                        headers = headers + ("Referer" to pageUrl),
+                        referer = pageUrl,
+                        allowRedirects = true
+                    )
+                }.getOrNull() ?: return@scriptLoop
+                if (!scriptResponse.isSuccessful || scriptResponse.text.isBlank()) return@scriptLoop
+
+                val scriptText = decodeEmbedded(scriptResponse.text)
+                scanMedia(scriptText, scriptUrl).forEach { media ->
+                    if (seenCandidates.add(media) && emitMedia(media, pageUrl, callback)) found = true
+                }
+                textPlayerCandidates(scriptText, scriptUrl).forEach(scriptCandidates::add)
+            }
+
+            val candidates = (playerCandidates(document, rawText, pageUrl) + scriptCandidates).distinct()
             candidates.forEach candidateLoop@ { candidate ->
                 if (!seenCandidates.add(candidate)) return@candidateLoop
                 if (isMedia(candidate)) {
@@ -481,8 +504,52 @@ class DiziLife : MainAPI() {
         return out.toList()
     }
 
+    private fun scriptUrls(document: Document, base: String): List<String> {
+        val out = LinkedHashSet<String>()
+        document.select("script[src],link[rel=preload][as=script][href]").forEach { element ->
+            val raw = if (element.tagName() == "script") element.attr("src") else element.attr("href")
+            val url = abs(raw, base) ?: return@forEach
+            val lower = url.lowercase(Locale.ROOT)
+            if (isIgnoredResource(url)) return@forEach
+            if (lower.contains(".js") || lower.contains(".mjs") || lower.contains("script")) out.add(url)
+        }
+        return out.toList()
+    }
+
+    private fun textPlayerCandidates(raw: String, base: String): List<String> {
+        val text = decodeEmbedded(raw)
+        val out = LinkedHashSet<String>()
+        val patterns = listOf(
+            Regex("""(?i)(?:src|file|source|url|embed|player|hls|playlist|videoUrl|streamUrl|manifest|mediaUrl|apiUrl|endpoint|requestUrl)["']?\\s*[:=]\\s*["']([^"'<>]{4,1800})["']"""),
+            Regex("""(?i)(?:fetch|axios\\.(?:get|post)|\\.open|\\.get|\\.post)\\s*\\(\\s*["']([^"'<>]{4,1800})["']"""),
+            Regex("""(?i)["']((?:https?:)?//[^"'\\\\\\s<>]{8,1800}|/(?:api|ajax|player|video|stream|source|playlist|embed|resolve|v[0-9]+)/[^"'\\\\\\s<>]{1,1800})["']""")
+        )
+        patterns.forEach { pattern ->
+            pattern.findAll(text).forEach { match ->
+                val rawUrl = match.groupValues.getOrNull(1).orEmpty()
+                    .trimEnd(')', ']', '}', ';', ',')
+                val url = abs(rawUrl, base) ?: return@forEach
+                if (playerCandidate(url, match.value.take(160))) out.add(url)
+            }
+        }
+        return out.toList()
+    }
+
+    private fun isIgnoredResource(url: String): Boolean {
+        val lowerHost = host(url)
+        val lower = url.lowercase(Locale.ROOT)
+        return lowerHost in setOf(
+            "static.cloudflareinsights.com",
+            "google-analytics.com",
+            "www.google-analytics.com",
+            "googletagmanager.com",
+            "connect.facebook.net",
+            "doubleclick.net"
+        ) || lower.contains("/beacon.min.js") || lower.contains("/analytics.")
+    }
+
     private fun playerCandidate(url: String, context: String): Boolean {
-        if (!url.startsWith("http", true)) return false
+        if (!url.startsWith("http", true) || isIgnoredResource(url)) return false
         val lower = url.lowercase(Locale.ROOT)
         if (listOf(".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".woff", ".woff2").any { lower.endsWith(it) } ||
             listOf("favicon", "logo", "avatar", "placeholder").any { lower.contains(it) }
@@ -491,10 +558,12 @@ class DiziLife : MainAPI() {
         if (onSite(url)) {
             val p = path(url)
             if (isItem(url) || p == "/" || p == "/diziler" || p == "/filmler" || p == "/son-eklenenler") return false
-            return Regex("""(?i)(play|player|video|embed|watch|stream|source|izle|bolum|episode|media)""").containsMatchIn(p) ||
-                Regex("""(?i)(player|video|embed|stream|watch|source)""").containsMatchIn(context)
+            return Regex("""(?i)(play|player|video|embed|watch|stream|source|izle|bolum|episode|media|api|resolve|manifest|playlist|hls)""").containsMatchIn(p) ||
+                Regex("""(?i)(player|video|embed|stream|watch|source|api|playlist|hls)""").containsMatchIn(context)
         }
-        return true
+        return Regex("""(?i)(player|embed|video|stream|source|hls|m3u8|playlist|manifest|resolve|watch|api|media|file)""")
+            .containsMatchIn(path(url)) ||
+            Regex("""(?i)(player|video|embed|stream|source|playlist|manifest)""").containsMatchIn(context)
     }
 
     private fun isMedia(url: String): Boolean =
