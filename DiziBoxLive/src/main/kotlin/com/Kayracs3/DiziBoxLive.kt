@@ -348,6 +348,32 @@ class DiziBoxLive : MainAPI() {
                 posterFromElement(element)?.let { return it }
             }
         }
+
+        // DiziBOX episode pages often put the show's poster in a separate
+        // linked image next to the text "Dizi sayfasına gidin", outside article,
+        // main and conventional WordPress image classes. Scan every image-like
+        // element as the final fallback rather than silently returning null.
+        document.select(posterSelector).forEach { element ->
+            val candidate = posterFromElement(element) ?: return@forEach
+            val label = listOf(
+                element.attr("alt"),
+                element.attr("title"),
+                element.attr("aria-label"),
+                element.parent()?.attr("href").orEmpty(),
+                element.parent()?.text().orEmpty(),
+            ).joinToString(" ").lowercase(Locale.ROOT)
+            if (label.contains("dizi sayfasına gidin") ||
+                label.contains("dizi sayfasina gidin") ||
+                label.contains("dizi izle") ||
+                label.contains("series")
+            ) return candidate
+        }
+
+        // If the image has no useful label, still return the first genuine
+        // image after logo/avatar/placeholder filtering in posterFromElement.
+        document.select(posterSelector).forEach { element ->
+            posterFromElement(element)?.let { return it }
+        }
         return null
     }
 
