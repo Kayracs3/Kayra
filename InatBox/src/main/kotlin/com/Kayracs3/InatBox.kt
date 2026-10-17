@@ -1150,6 +1150,12 @@ class InatBox : MainAPI() {
         val name = item.optString("diziName")
         val url = item.optString("diziUrl")
         val plot = item.optString("diziDetay", "")
+        val catalogSourceUrl = item.optString("__inat_source_url").takeIf { it.isNotBlank() } ?: url
+        val seriesPosterUrl = posterUrlFrom(
+            item,
+            catalogSourceUrl,
+            listOf("diziImg", "diziImage", "poster", "posterUrl", "image")
+        ).orEmpty()
 
         if (name.isBlank() || url.isBlank()) return null
 
@@ -1169,6 +1175,11 @@ class InatBox : MainAPI() {
                 )
 
                 val seasonUrl = seasonItem.optString("diziUrl")
+                val seasonPosterUrl = posterUrlFrom(
+                    seasonItem,
+                    seasonUrl.ifBlank { url },
+                    listOf("diziImg", "diziImage", "chImg", "chImage", "poster", "posterUrl", "image")
+                ) ?: seriesPosterUrl
                 if (seasonUrl.isBlank()) continue
 
                 val episodeResponse = makeInatPostRequest(seasonUrl) ?: continue
@@ -1178,7 +1189,17 @@ class InatBox : MainAPI() {
                     try {
                         val episodeItem = episodeArray.getJSONObject(j)
                         val episodeName = episodeItem.optString("chName", "Bölüm ${j + 1}")
-                        val episodePoster = posterUrlFrom(episodeItem, seasonUrl, listOf("chImg", "chImage", "image", "poster")) ?: ""
+                        // Prefer episode-specific artwork, then inherit season/show artwork.
+                        // Many InatBox season endpoints return names and playback URLs only.
+                        val episodePoster = posterUrlFrom(
+                            episodeItem,
+                            seasonUrl,
+                            listOf("chImg", "chImage", "ch_image", "image", "imageUrl", "poster", "posterUrl")
+                        ) ?: posterUrlFrom(
+                            episodeItem,
+                            url,
+                            listOf("chImg", "chImage", "image", "poster", "posterUrl")
+                        ) ?: seasonPosterUrl
 
                         episodes
                             .getOrPut(DubStatus.None) { mutableListOf() }
@@ -1195,15 +1216,17 @@ class InatBox : MainAPI() {
                 }
             }
 
-            val posterUrl = if (jsonArray.length() > 0) {
-                posterUrlFrom(
-                    jsonArray.getJSONObject(0),
-                    url,
-                    listOf("diziImg", "diziImage", "poster", "posterUrl", "image")
-                ) ?: posterUrlFrom(item, url) ?: ""
-            } else {
-                posterUrlFrom(item, url) ?: ""
-            }
+            val posterUrl = (0 until jsonArray.length())
+                .asSequence()
+                .mapNotNull { index ->
+                    posterUrlFrom(
+                        jsonArray.optJSONObject(index),
+                        url,
+                        listOf("diziImg", "diziImage", "poster", "posterUrl", "image")
+                    )
+                }
+                .firstOrNull()
+                ?: seriesPosterUrl
 
             newAnimeLoadResponse(
                 name = name,
