@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:ae7138e9a5fd0848099d05f7dbe5d345a7ec15ea -->
+### Add DiziLife series and movie provider
+
+- Etkilenen alanlar: DiziLife
+- Commit: [ae7138e](https://github.com/Kayracs3/Kayra/commit/ae7138e9a5fd0848099d05f7dbe5d345a7ec15ea)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:da59e1132e90a625803eb70f263aacc839d094ca -->
 ### Fix FilmModu search result parsing and relevance
 
