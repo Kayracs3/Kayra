@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:b3a4218010968e22c8e4551b6ca53032573ec097 -->
+### Bump AsyaWatch version for subtitle fix
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [b3a4218](https://github.com/Kayracs3/Kayra/commit/b3a4218010968e22c8e4551b6ca53032573ec097)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:5239bb09650f97dd23887b9fe25db50c9afc93e5 -->
 ### Improve AsyaWatch PlayerJS subtitle extraction
 
