@@ -478,6 +478,11 @@ class AsyaWatch : MainAPI() {
         return titleFromUrl(pageUrl)
     }
 
+    private fun normalizedImageTitle(value: String): String =
+        value.lowercase()
+            .replace("&amp;", "and")
+            .replace(Regex("""[^\p{L}\p{N}]"""), "")
+
     private fun detailPoster(content: JSONObject?, document: Document): String? {
         // Structured API data first: it usually points to the exact poster used in cards.
         imageFromJson(content)?.let { return it }
@@ -494,6 +499,51 @@ class AsyaWatch : MainAPI() {
         for (selector in metadataSelectors) {
             val element = document.selectFirst(selector) ?: continue
             imageFromElement(element, mainUrl)?.let { return it }
+        }
+
+        // AsyaWatch poster cards often use generic classes such as "lazyload w-full";
+        // the reliable identifiers are the image alt text and the Macellan URL itself.
+        // Match the page's actual title first so a logo, avatar, or unrelated image is
+        // not accidentally returned as this film's poster.
+        val expectedTitles = listOfNotNull(
+            field(content, "original_title", "originalTitle", "title", "object_name", "name"),
+            field(content, "culture_title", "cultureTitle"),
+            document.selectFirst("h1")?.text(),
+            document.selectFirst("meta[property=og:title]")?.attr("content"),
+            document.title()
+        ).map(::normalizedImageTitle).filter { it.length >= 4 }.distinct()
+
+        val pageImages = document.select("img, picture source, [style*=background]")
+        val titleMatchedImages = pageImages.filter { element ->
+            val labels = listOf(
+                element.attr("alt"),
+                element.attr("title"),
+                element.attr("aria-label"),
+                element.attr("data-title"),
+                element.parent()?.attr("title").orEmpty(),
+                element.parent()?.attr("aria-label").orEmpty()
+            ).map(::normalizedImageTitle).filter { it.length >= 4 }
+            labels.any { label ->
+                expectedTitles.any { title ->
+                    label == title || label.contains(title) || title.contains(label)
+                }
+            }
+        }
+        for (element in titleMatchedImages) {
+            imageFromElement(element, mainUrl)?.let { return it }
+        }
+
+        // If titles are missing from the markup, prefer Macellan's known poster filename
+        // pattern (for example .../tt39328047-poster-1791557492.jpg?v=4) to generic images.
+        for (element in pageImages) {
+            val candidate = imageFromElement(element, mainUrl) ?: continue
+            val path = runCatching { URI(candidate).path.orEmpty() }
+                .getOrDefault(candidate.substringBefore('?'))
+            if (Regex("""(?i)/(?:images/\d+/\d+/\d+/{1,2})?tt\d+-poster-\d+\.(?:jpe?g|png|webp)$""")
+                    .containsMatchIn(path) ||
+                path.contains("/poster/", true) ||
+                path.contains("-poster.", true)
+            ) return candidate
         }
 
         // Prefer image elements that are explicitly labelled as poster/cover artwork.
