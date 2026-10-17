@@ -350,19 +350,19 @@
     },
     {
         "iconUrl": "https://www.filmmodu.one/favicon.ico",
-        "fileHash": "sha256-0fb52ff123faa3dbe8e5c153897eac62091a5b7e9962e69960de66d73554d3c5",
+        "fileHash": "sha256-8514416fd973cdd53d893cdcbf6592ecba205ed58c587d20c24e9ced52172d26",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 36539,
+        "fileSize": 38176,
         "status": 1,
         "language": "tr",
         "authors": [
-            "neoncs3"
+            "Kayracs3"
         ],
         "tvTypes": [
             "Movie"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "FilmModu",
         "description": "FilmModu film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmModu.cs3",
