@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "Web Drama Turkey Kore, Çin ve Asya dizileri sağlayıcısı"
@@ -6,5 +6,5 @@ cloudstream {
     status = 1
     tvTypes = listOf("AsianDrama", "Movie", "Anime", "Others")
     language = "tr"
-    iconUrl = "https://www.google.com/s2/favicons?domain=https://webdramaturkey2.com&sz=%size%"
+    iconUrl = "https://www.google.com/s2/favicons?domain=webdramaturkey2.com&sz=%size%"
 }

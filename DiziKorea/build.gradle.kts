@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "DiziPal Türkiye katalog ve bölüm sağlayıcısı"
@@ -6,7 +6,7 @@ cloudstream {
     status = 1
     tvTypes = listOf("TvSeries")
     language = "tr"
-    iconUrl = "https://dizikorea3.com//favicon.ico"
+    iconUrl = "https://dizikorea3.com/favicon.ico"
 }
 
 android {

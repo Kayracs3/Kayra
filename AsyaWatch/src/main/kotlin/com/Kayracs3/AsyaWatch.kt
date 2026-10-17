@@ -1,0 +1,614 @@
+package com.Kayracs3
+
+import com.lagradost.cloudstream3.Actor
+import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
+import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.Score
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.base64Decode
+import com.lagradost.cloudstream3.mainPageOf
+import com.lagradost.cloudstream3.newEpisode
+import com.lagradost.cloudstream3.newHomePageResponse
+import com.lagradost.cloudstream3.newMovieLoadResponse
+import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newTvSeriesLoadResponse
+import com.lagradost.cloudstream3.newTvSeriesSearchResponse
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
+import org.json.JSONArray
+import org.json.JSONObject
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import java.net.URI
+import java.net.URLEncoder
+import java.util.Calendar
+
+/**
+ * AsyaWatch sağlayıcısı. API yanıtları, detay metadatası, bölüm listeleri ve
+ * oynatıcı kaynakları ayrı ele alınır. Kaynak yoksa sahte bir oynatma bağlantısı
+ * üretilmez; bir player başarısız olduğunda kalan kaynaklar yine denenir.
+ */
+class AsyaWatch : MainAPI() {
+    override var mainUrl = "https://asyawatch.com"
+    override var name = "AsyaWatch"
+    override var lang = "tr"
+    override val hasMainPage = true
+    override val hasQuickSearch = true
+    override val hasChromecastSupport = true
+    override val hasDownloadSupport = true
+    override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
+
+    override val mainPage = mainPageOf(
+        "" to "Yeni Eklenen Filmler",
+        "49" to "Aile Film",
+        "44" to "Animasyon Film",
+        "59" to "Aksiyon Film",
+        "66" to "Bilim Kurgu Film",
+        "48" to "Dram Film",
+        "61" to "Fantastik Film",
+        "68" to "Gerilim Film",
+        "51" to "Gizem Film",
+        "63" to "Korku Film",
+        "45" to "Komedi Film",
+        "65" to "Romantik Film",
+        "46" to "Suç Film",
+        "69" to "Savaş Film",
+        "78" to "Western Film",
+        "" to "Yeni Eklenen Diziler",
+        "15" to "Aile Dizi",
+        "17" to "Animasyon Dizi",
+        "9" to "Aksiyon Dizi",
+        "5" to "Bilim Kurgu Dizi",
+        "2" to "Dram Dizi",
+        "12" to "Fantastik Dizi",
+        "18" to "Gerilim Dizi",
+        "3" to "Gizem Dizi",
+        "8" to "Korku Dizi",
+        "4" to "Komedi Dizi",
+        "7" to "Romantik Dizi",
+        "1" to "Suç Dizi",
+        "26" to "Savaş Dizi",
+        "11" to "Western Dizi"
+    )
+
+    private val siteHeaders = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    )
+
+    private val apiHeaders = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+        "Accept" to "application/json, text/plain, */*",
+        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "X-Requested-With" to "XMLHttpRequest",
+        "Sec-Fetch-Site" to "same-origin",
+        "Sec-Fetch-Mode" to "cors",
+        "Sec-Fetch-Dest" to "empty",
+        "Origin" to mainUrl,
+        "Referer" to "$mainUrl/"
+    )
+
+    private data class PageData(val document: Document, val secureData: JSONObject?)
+    private data class SourceItem(val raw: String, val quality: String)
+
+    private fun field(obj: JSONObject?, vararg keys: String): String? {
+        if (obj == null) return null
+        for (key in keys) {
+            val raw = obj.opt(key) ?: continue
+            if (raw == JSONObject.NULL) continue
+            val value = raw.toString().trim()
+            if (value.isNotEmpty() && !value.equals("null", true)) return value
+        }
+        return null
+    }
+
+    private fun objectField(obj: JSONObject?, vararg keys: String): JSONObject? {
+        if (obj == null) return null
+        for (key in keys) obj.optJSONObject(key)?.let { return it }
+        return null
+    }
+
+    private fun arrayField(obj: JSONObject?, vararg keys: String): JSONArray? {
+        if (obj == null) return null
+        for (key in keys) obj.optJSONArray(key)?.let { return it }
+        return null
+    }
+
+    private fun parseObject(raw: String?): JSONObject? =
+        if (raw.isNullOrBlank()) null else runCatching { JSONObject(raw) }.getOrNull()
+
+    private fun decodeBase64Text(raw: String): String? {
+        val value = raw.trim().removeSurrounding("\"")
+        if (value.isBlank()) return null
+        return runCatching {
+            val decoded = base64Decode(value)
+            String(decoded.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)
+        }.getOrNull()
+    }
+
+    private fun decodeApiResponse(raw: String): JSONObject? {
+        val envelope = parseObject(raw) ?: return null
+        val encodedResponse = field(envelope, "response") ?: return envelope
+        val decoded = decodeBase64Text(encodedResponse)
+        return parseObject(decoded) ?: envelope
+    }
+
+    private fun absoluteUrl(raw: String?, base: String = mainUrl): String? {
+        var value = raw?.trim().orEmpty()
+        if (value.isBlank()) return null
+        value = value.replace("\\/", "/").replace("&amp;", "&").trim()
+        if (value.startsWith("javascript:", true) ||
+            value.startsWith("data:", true) ||
+            value.startsWith("about:", true)
+        ) return null
+
+        val absolute = when {
+            value.startsWith("https://", true) || value.startsWith("http://", true) -> value
+            value.startsWith("//") -> "https:$value"
+            value.startsWith("/") -> {
+                val origin = runCatching {
+                    val uri = URI(base)
+                    "${uri.scheme}://${uri.authority}"
+                }.getOrDefault(mainUrl)
+                origin + value
+            }
+            else -> base.trimEnd('/') + "/" + value.trimStart('/')
+        }
+        return absolute.takeIf {
+            it.startsWith("https://", true) || it.startsWith("http://", true)
+        }
+    }
+
+    private fun imageUrl(raw: String?): String? {
+        var value = raw?.trim().orEmpty()
+        if (value.isBlank()) return null
+        val marker = "images-macellan-online.cdn.ampproject.org/i/s/"
+        val markerIndex = value.indexOf(marker, ignoreCase = true)
+        if (markerIndex >= 0) {
+            val tail = value.substring(markerIndex + marker.length).trimStart('/')
+            value = if (tail.startsWith("http://", true) || tail.startsWith("https://", true)) {
+                tail
+            } else {
+                "https://$tail"
+            }
+        }
+        return absoluteUrl(value)
+    }
+
+    private fun scoreFrom(raw: String?): Score? {
+        val number = raw?.replace(',', '.')?.toDoubleOrNull() ?: return null
+        if (number !in 0.0..10.0) return null
+        return Score.from10(number.toString())
+    }
+
+    private fun pageSecureData(document: Document): JSONObject? {
+        val script = document.selectFirst("script#__NEXT_DATA__")?.data()
+            ?.takeIf { it.isNotBlank() }
+            ?: document.selectFirst("script#__NEXT_DATA__")?.html()?.takeIf { it.isNotBlank() }
+            ?: return null
+        val pageProps = objectField(parseObject(script)?.optJSONObject("props"), "pageProps")
+            ?: return null
+        val secure = pageProps.opt("secureData")
+        if (secure is JSONObject) return secure
+        val raw = secure?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return parseObject(decodeBase64Text(raw)) ?: parseObject(raw)
+    }
+
+    private suspend fun getPageData(url: String): PageData {
+        val response = app.get(
+            url,
+            headers = siteHeaders,
+            referer = "$mainUrl/",
+            allowRedirects = true
+        )
+        val document = response.document
+        return PageData(document, pageSecureData(document))
+    }
+
+    private suspend fun postJson(url: String): JSONObject? {
+        val body = runCatching {
+            app.post(url, headers = apiHeaders, referer = "$mainUrl/").text
+        }.getOrNull() ?: return null
+        return decodeApiResponse(body)
+    }
+
+    private fun searchResponseFrom(item: JSONObject, forceSeries: Boolean = false): SearchResponse? {
+        val rawUrl = field(item, "used_slug", "slug", "url") ?: return null
+        val url = absoluteUrl(rawUrl) ?: return null
+        val originalTitle = field(item, "original_title", "object_name", "title", "name") ?: return null
+        val cultureTitle = field(item, "culture_title", "cultureTitle")
+        val title = if (!cultureTitle.isNullOrBlank() && !cultureTitle.equals(originalTitle, true)) {
+            "$originalTitle - $cultureTitle"
+        } else originalTitle
+        val poster = imageUrl(field(item, "poster_url", "object_poster_url", "poster", "posterUrl"))
+        val score = scoreFrom(field(item, "imdb_point", "imdbPoint", "score", "rating"))
+        val type = field(item, "used_type", "type", "content_type").orEmpty()
+        val isSeries = when {
+            type.contains("movie", true) || type.contains("film", true) -> false
+            type.contains("series", true) || type.contains("dizi", true) || type.contains("tv", true) -> true
+            else -> forceSeries || url.contains("/dizi/", true)
+        }
+
+        return if (isSeries) {
+            newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
+                posterUrl = poster
+                this.score = score
+            }
+        } else {
+            newMovieSearchResponse(title, url, TvType.Movie) {
+                posterUrl = poster
+                this.score = score
+            }
+        }
+    }
+
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
+        val isSeries = request.name.contains("Dizi", true)
+        val endpoint = if (isSeries) "findSeries" else "findMovies"
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        val category = URLEncoder.encode(request.data, "UTF-8")
+        val endpointUrl = "$mainUrl/api/bg/$endpoint" +
+            "?releaseYearStart=1900&releaseYearEnd=$year" +
+            "&imdbPointMin=1&imdbPointMax=10" +
+            "&categoryIdsComma=$category&countryIdsComma=" +
+            "&orderType=date_desc&languageId=-1" +
+            "&currentPage=$page&currentPageCount=12" +
+            "&queryStr=&categorySlugsComma=&countryCodesComma="
+
+        val root = postJson(endpointUrl)
+            ?: return newHomePageResponse(request, emptyList(), hasNext = false)
+        val items = arrayField(root, "result")
+        val results = ArrayList<SearchResponse>()
+        val seen = HashSet<String>()
+        if (items != null) {
+            for (index in 0 until items.length()) {
+                val item = items.optJSONObject(index) ?: continue
+                val response = searchResponseFrom(item, isSeries) ?: continue
+                if (seen.add(response.url)) results.add(response)
+            }
+        }
+        return newHomePageResponse(request, results, hasNext = results.isNotEmpty())
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val encoded = URLEncoder.encode(query.trim(), "UTF-8")
+        val root = postJson("$mainUrl/api/bg/searchcontent?searchterm=$encoded")
+            ?: return emptyList()
+        val items = arrayField(root, "result") ?: return emptyList()
+        val results = ArrayList<SearchResponse>()
+        val seen = HashSet<String>()
+        for (index in 0 until items.length()) {
+            val item = items.optJSONObject(index) ?: continue
+            val response = searchResponseFrom(item) ?: continue
+            if (seen.add(response.url)) results.add(response)
+        }
+        return results
+    }
+
+    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
+
+    private fun detailTitle(content: JSONObject?, document: Document): String {
+        val original = field(content, "original_title", "originalTitle", "title")
+        val culture = field(content, "culture_title", "cultureTitle")
+        if (!original.isNullOrBlank()) {
+            return if (!culture.isNullOrBlank() && !culture.equals(original, true)) {
+                "$original - $culture"
+            } else original
+        }
+        return document.selectFirst("h1")?.text()?.trim()?.takeIf { it.isNotBlank() }
+            ?: document.selectFirst("meta[property=og:title]")?.attr("content")
+                ?.trim()?.takeIf { it.isNotBlank() }
+            ?: document.title().trim().ifBlank { "AsyaWatch içeriği" }
+    }
+
+    private fun detailPoster(content: JSONObject?, document: Document): String? {
+        return imageUrl(field(content, "poster_url", "posterUrl", "object_poster_url"))
+            ?: imageUrl(document.selectFirst("meta[property=og:image]")?.attr("content"))
+            ?: imageUrl(document.selectFirst("meta[name=twitter:image]")?.attr("content"))
+            ?: imageUrl(document.selectFirst("img[data-src], img[data-lazy-src], img[src]")?.let {
+                it.attr("data-src").ifBlank { it.attr("data-lazy-src") }.ifBlank { it.attr("src") }
+            })
+    }
+
+    private fun detailYear(content: JSONObject?, document: Document): Int? {
+        field(content, "release_year", "releaseYear", "year")?.toIntOrNull()?.let { return it }
+        return Regex("""\b(?:19|20)\d{2}\b""")
+            .find(document.selectFirst("body")?.text().orEmpty())?.value?.toIntOrNull()
+    }
+
+    private fun detailTags(content: JSONObject?): List<String>? {
+        val raw = field(content, "categories", "tags", "genres") ?: return null
+        val tags = raw.removePrefix("[").removeSuffix("]")
+            .split(',', '|')
+            .map { it.trim().trim('"', '\'') }
+            .filter { it.isNotBlank() && !it.equals("null", true) }
+            .distinct()
+        return tags.takeIf { it.isNotEmpty() }
+    }
+
+    private fun detailActors(related: JSONObject?): List<Actor> {
+        val cast = objectField(related, "getMovieCastsById", "getContentCastsById") ?: return emptyList()
+        val rows = arrayField(cast, "result") ?: return emptyList()
+        val actors = ArrayList<Actor>()
+        val seen = HashSet<String>()
+        for (index in 0 until rows.length()) {
+            val item = rows.optJSONObject(index) ?: continue
+            val actorName = field(item, "name", "actor_name", "title") ?: continue
+            if (seen.add(actorName)) {
+                actors.add(Actor(actorName, imageUrl(field(item, "cast_image", "castImage", "image", "poster"))))
+            }
+        }
+        return actors
+    }
+
+    private fun detailTrailer(related: JSONObject?): String? {
+        val trailers = objectField(related, "getContentTrailers", "getTrailers") ?: return null
+        val rows = arrayField(trailers, "result") ?: return null
+        for (index in 0 until rows.length()) {
+            val item = rows.optJSONObject(index) ?: continue
+            val raw = field(item, "raw_url", "rawUrl", "url", "raw") ?: continue
+            absoluteUrl(raw)?.let { return it }
+        }
+        return null
+    }
+
+    private fun parseEpisodes(related: JSONObject?, poster: String?): List<Episode> {
+        val seasonData = objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons")
+            ?: return emptyList()
+        val seasons = arrayField(seasonData, "result", "seasons") ?: return emptyList()
+        val result = ArrayList<Episode>()
+        val seen = HashSet<String>()
+
+        for (seasonIndex in 0 until seasons.length()) {
+            val seasonObject = seasons.optJSONObject(seasonIndex) ?: continue
+            val seasonNumber = field(seasonObject, "season_no", "seasonNo", "season")?.toIntOrNull()
+                ?: (seasonIndex + 1)
+            val episodes = arrayField(seasonObject, "episodes", "episodeList") ?: continue
+            for (episodeIndex in 0 until episodes.length()) {
+                val episodeObject = episodes.optJSONObject(episodeIndex) ?: continue
+                val rawUrl = field(episodeObject, "used_slug", "slug", "url", "episode_url") ?: continue
+                val url = absoluteUrl(rawUrl) ?: continue
+                if (!seen.add(url)) continue
+                val episodeText = field(episodeObject, "episode_text", "epText", "title", "name").orEmpty()
+                val episodeNumber = field(episodeObject, "episode_no", "episodeNo", "episode")?.toIntOrNull()
+                    ?: Regex("""\d+""").find(episodeText)?.value?.toIntOrNull()
+                    ?: (episodeIndex + 1)
+                result.add(newEpisode(url) {
+                    name = episodeText.ifBlank { "Bölüm $episodeNumber" }
+                    season = seasonNumber
+                    episode = episodeNumber
+                    posterUrl = poster
+                })
+            }
+        }
+        return result.sortedWith(compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 })
+    }
+
+    override suspend fun load(url: String): LoadResponse {
+        val page = getPageData(url)
+        val root = page.secureData
+        val content = objectField(root, "contentItem", "content_item") ?: JSONObject()
+        val related = objectField(root, "RelatedResults", "relatedResults")
+        val title = detailTitle(content, page.document)
+        val poster = detailPoster(content, page.document)
+        val description = field(content, "description", "plot", "overview")
+            ?: page.document.selectFirst("meta[name=description]")?.attr("content")
+            ?: page.document.selectFirst("meta[property=og:description]")?.attr("content")
+        val year = detailYear(content, page.document)
+        val score = scoreFrom(field(content, "imdb_point", "imdbPoint", "score", "rating"))
+        val tags = detailTags(content)
+        val actors = detailActors(related)
+        val trailer = detailTrailer(related)
+        val duration = field(content, "total_minutes", "totalMinutes", "duration")?.toIntOrNull()
+        val episodes = parseEpisodes(related, poster)
+        val isSeries = url.contains("/dizi/", true) ||
+            field(content, "used_slug", "usedSlug")?.contains("/dizi/", true) == true ||
+            objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
+
+        return if (isSeries) {
+            newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
+                posterUrl = poster
+                plot = description
+                this.year = year
+                this.tags = tags
+                this.score = score
+                addActors(actors)
+                addTrailer(trailer)
+            }
+        } else {
+            newMovieLoadResponse(title, url, TvType.Movie, url) {
+                posterUrl = poster
+                plot = description
+                this.year = year
+                this.tags = tags
+                this.score = score
+                this.duration = duration
+                addActors(actors)
+                addTrailer(trailer)
+            }
+        }
+    }
+
+    private fun sourceItems(root: JSONObject?, isSeries: Boolean): List<SourceItem> {
+        if (root == null) return emptyList()
+        val related = objectField(root, "RelatedResults", "relatedResults") ?: return emptyList()
+        val result = ArrayList<SourceItem>()
+
+        fun collect(holder: JSONObject?) {
+            val rows = arrayField(holder, "result", "sources") ?: return
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONObject(index) ?: continue
+                val raw = field(row, "source_content", "sourceContent", "url", "link") ?: continue
+                val quality = field(row, "quality_name", "qualityName", "quality").orEmpty()
+                result.add(SourceItem(raw, quality))
+            }
+        }
+
+        if (isSeries) {
+            collect(objectField(related, "getEpisodeSources", "getEpisodeSource"))
+        } else {
+            val parts = arrayField(objectField(related, "getMoviePartsById", "getMovieParts"), "result", "parts")
+            if (parts != null) {
+                for (index in 0 until parts.length()) {
+                    val part = parts.optJSONObject(index) ?: continue
+                    val id = field(part, "id", "part_id", "partId") ?: continue
+                    val key = "getMoviePartSourcesById_$id"
+                    collect(objectField(related, key) ?: objectField(root, key))
+                }
+            }
+            collect(objectField(related, "getMoviePartSourcesById", "getMovieSources"))
+        }
+        return result.distinctBy { it.raw to it.quality }
+    }
+
+    private fun looksLikePlayer(url: String): Boolean {
+        val value = url.lowercase()
+        return Regex("""\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(value) ||
+            listOf(
+                "embed", "player", "video", "stream", "watch", "iframe", "hls",
+                "filemoon", "vidmoly", "youtube", "youtu.be", "vimeo", "dood",
+                "streamwish", "voe.sx", "ok.ru", "sibnet", "mixdrop", "uqload",
+                "mp4upload", "asianload", "googlevideo", "/e/"
+            ).any { value.contains(it) }
+    }
+
+    private fun extractCandidates(raw: String, base: String): List<String> {
+        val result = LinkedHashSet<String>()
+        val normalized = raw.replace("\\/", "/")
+            .replace("\\u0026", "&")
+            .replace("&amp;", "&")
+            .replace("\\u003d", "=")
+        val document = runCatching { Jsoup.parse(normalized, base) }.getOrNull()
+        val attributes = listOf(
+            "src", "data-src", "data-lazy-src", "data-url", "data-embed",
+            "data-player", "data-video", "data-file", "data-iframe", "href"
+        )
+
+        document?.select("iframe, video, source, embed")?.forEach { element ->
+            for (attribute in attributes) {
+                val candidate = absoluteUrl(element.attr(attribute), base) ?: continue
+                result.add(candidate)
+            }
+        }
+        document?.select("[data-src], [data-lazy-src], [data-url], [data-embed], [data-player], [data-video], [data-file], [data-iframe]")?.forEach { element ->
+            for (attribute in attributes) {
+                val candidate = absoluteUrl(element.attr(attribute), base) ?: continue
+                if (looksLikePlayer(candidate)) result.add(candidate)
+            }
+        }
+
+        val trimmed = normalized.trim().trim('"', '\'')
+        absoluteUrl(trimmed, base)?.let { candidate ->
+            if (looksLikePlayer(candidate) || trimmed.startsWith("http", true) || trimmed.startsWith("//")) {
+                result.add(candidate)
+            }
+        }
+        Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+""").findAll(normalized).forEach { match ->
+            val candidate = absoluteUrl(match.value.trimEnd('\\', ')', ']', ',', ';'), base) ?: return@forEach
+            if (looksLikePlayer(candidate)) result.add(candidate)
+        }
+        Regex("""(?i)(?:src|url|file|source)\s*[:=]\s*["']([^"']+)["']""").findAll(normalized).forEach { match ->
+            val candidate = absoluteUrl(match.groupValues[1], base) ?: return@forEach
+            if (looksLikePlayer(candidate)) result.add(candidate)
+        }
+        return result.toList()
+    }
+
+    private fun isDirectMedia(url: String): Boolean =
+        Regex("""(?i)\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(url)
+
+    private fun qualityValue(label: String, url: String): Int {
+        val quality = Regex("""(?i)(2160|1080|720|480|360|240|4k)""")
+            .find("$label $url")?.value?.lowercase() ?: return Qualities.Unknown.value
+        return when (quality) {
+            "2160", "4k" -> Qualities.P2160.value
+            "1080" -> Qualities.P1080.value
+            "720" -> Qualities.P720.value
+            "480" -> Qualities.P480.value
+            "360" -> Qualities.P360.value
+            "240" -> Qualities.P240.value
+            else -> Qualities.Unknown.value
+        }
+    }
+
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        var found = false
+        val emittedUrls = HashSet<String>()
+        val seenCandidates = HashSet<String>()
+
+        suspend fun processCandidate(raw: String, referer: String, quality: String) {
+            val candidate = absoluteUrl(raw, referer) ?: return
+            if (!seenCandidates.add(candidate)) return
+            if (isDirectMedia(candidate)) {
+                if (emittedUrls.add(candidate)) {
+                    val type = if (candidate.contains(".m3u8", true)) {
+                        ExtractorLinkType.M3U8
+                    } else {
+                        ExtractorLinkType.VIDEO
+                    }
+                    val label = name + " " + quality.ifBlank { "Kaynak" }
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = label,
+                            url = candidate,
+                            type = type
+                        ) {
+                            this.referer = referer
+                            this.quality = qualityValue(quality, candidate)
+                        }
+                    )
+                    found = true
+                }
+                return
+            }
+            try {
+                loadExtractor(candidate, referer, subtitleCallback) { link ->
+                    if (emittedUrls.add(link.url)) callback(link)
+                    found = true
+                }
+            } catch (_: Exception) {
+                // Bir oynatıcı başarısız olduğunda kalan kaynaklar denenmeye devam eder.
+            }
+        }
+
+        if (isDirectMedia(data)) processCandidate(data, "$mainUrl/", "")
+
+        val page = runCatching { getPageData(data) }.getOrNull()
+        val root = page?.secureData
+        val related = objectField(root, "RelatedResults", "relatedResults")
+        val isSeries = data.contains("/dizi/", true) ||
+            objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
+
+        if (page != null) {
+            for (source in sourceItems(root, isSeries)) {
+                for (candidate in extractCandidates(source.raw, data)) {
+                    processCandidate(candidate, data, source.quality)
+                }
+            }
+            // Player URL'leri bazı sürümlerde secureData yerine HTML'de tutuluyor.
+            for (candidate in extractCandidates(page.document.html(), data)) {
+                processCandidate(candidate, data, "")
+            }
+            if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
+        }
+        return found
+    }
+}

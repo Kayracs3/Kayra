@@ -1,4 +1,4 @@
-version = 2
+version = 3
 
 cloudstream {
     description = "DiziPal Türkiye katalog ve bölüm sağlayıcısı"
@@ -6,7 +6,7 @@ cloudstream {
     status = 1
     tvTypes = listOf("TvSeries")
     language = "tr"
-    iconUrl = "https://dizipal1583.com/favicon.ico"
+    iconUrl = "https://www.google.com/s2/favicons?domain=filmmakinesi.to&sz=%size%"
 }
 
 android {
