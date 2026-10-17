@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:34c8426ccf3e201bb631e35ff95416dd91b3865d -->
+### Resolve AsyaWatch single-segment HLS subtitles to WebVTT
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [34c8426](https://github.com/Kayracs3/Kayra/commit/34c8426ccf3e201bb631e35ff95416dd91b3865d)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:4da21ebf2eca24f6c2eb6f667f81c7b5339cb608 -->
 ### Bump AsyaWatch version for inline subtitle parsing fix
 
