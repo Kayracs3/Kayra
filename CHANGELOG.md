@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:c1dd5ec650e32916ac996e5d5ea34c773f99492a -->
+### Parse PlayerJS subtitle language lists and limit poster fallbacks
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [c1dd5ec](https://github.com/Kayracs3/Kayra/commit/c1dd5ec650e32916ac996e5d5ea34c773f99492a)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:0865961a5545bef89e9685891a7b63c68d3bd533 -->
 ### Handle AsyaWatch Cloudflare rate limits gracefully
 
