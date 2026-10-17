@@ -821,8 +821,21 @@ class AsyaWatch : MainAPI() {
         // Explicit player/HLS track label always wins.
         explicitSubtitleLanguage(label)?.let { return it }
 
-        // Only infer from the filename, never from parent folders. A shared path such as
-        // /sub_turkish/subtitles.m3u8 can contain an English rendition too.
+        // Some subtitle playlists have a generic filename but an explicit language
+        // directory, such as /sub_turkish/subtitles.m3u8 or /sub_english/subtitles.m3u8.
+        // Read only directories explicitly prefixed with "sub_", not arbitrary URL text.
+        val parentDirectories = runCatching {
+            URI(url).path.orEmpty().split('/').dropLast(1)
+        }.getOrDefault(emptyList())
+        for (directory in parentDirectories.asReversed()) {
+            val languageDirectory = when {
+                directory.startsWith("sub_", ignoreCase = true) -> directory.substring(4)
+                directory.startsWith("sub-", ignoreCase = true) -> directory.substring(4)
+                else -> continue
+            }
+            explicitSubtitleLanguage(languageDirectory)?.let { return it }
+        }
+
         val fileName = runCatching {
             URI(url).path.orEmpty().substringAfterLast('/')
         }.getOrDefault(url.substringBefore('?').substringAfterLast('/'))
