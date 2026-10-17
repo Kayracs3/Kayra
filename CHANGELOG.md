@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:25ac69442dc10dc4a30eeea8157a9faf04436576 -->
+### Support AsyaWatch HLS subtitle playlists
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [25ac694](https://github.com/Kayracs3/Kayra/commit/25ac69442dc10dc4a30eeea8157a9faf04436576)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:a6dab66899d2edcb306e7d78cd3252f0edf80cb3 -->
 ### Bump AsyaWatch plugin version to 6
 
