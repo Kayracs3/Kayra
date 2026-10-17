@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:c278885d204781388fd794f7371134572022520a -->
+### Restore legacy InatBox poster fields without reverting later fixes
+
+- Etkilenen alanlar: InatBox
+- Commit: [c278885](https://github.com/Kayracs3/Kayra/commit/c278885d204781388fd794f7371134572022520a)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:74717ebe06c041cdbfc5a142bda894906a2248b4 -->
 ### Revert InatBox poster URL parsing changes
 
