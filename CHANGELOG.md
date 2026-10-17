@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:d379d3bd217bb37b9f0455f15a97edf802d34529 -->
+### AsyaWatch afiş ayrıştırması ve eksik afiş yedeği
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [d379d3b](https://github.com/Kayracs3/Kayra/commit/d379d3bd217bb37b9f0455f15a97edf802d34529)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:4fbb2e501fc62ac062bb47b75d864158f4672385 -->
 ### AsyaWatch eklentisini ekle ve eksik ikon ayarlarını düzelt
 
