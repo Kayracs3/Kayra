@@ -655,7 +655,24 @@ class DiziLife : MainAPI() {
         val mediaHeaders = mapOf("User-Agent" to USER_AGENT, "Referer" to referer, "Accept" to "*/*")
         when {
             url.contains(".m3u8", true) || url.contains("/hls/", true) -> {
-                val generated = runCatching { M3u8Helper.generateM3u8(name, url, referer, null, mediaHeaders) }.getOrDefault(emptyList())
+                // master.m3u8 birden fazla varyant ve ayrı bir AUDIO grubu içerebilir.
+                // M3u8Helper kalite varyantlarını ayrı linklere böldüğünde bazı varyantlar
+                // harici ses playlist'ini kaybedip sessiz oynayabilir. Ana HLS manifestini
+                // olduğu gibi vermek, ExoPlayer'ın video ve ses parçalarını beraber seçmesini sağlar.
+                val keepMasterPlaylist = url.contains("master.m3u8", ignoreCase = true) ||
+                    host(url) == host(knownStreamOrigin)
+                if (keepMasterPlaylist) {
+                    callback(newExtractorLink(name, "DiziLife HLS (sesli uyarlanabilir)", url, ExtractorLinkType.M3U8) {
+                        this.referer = referer
+                        this.headers = mediaHeaders
+                        this.quality = Qualities.Unknown.value
+                    })
+                    return true
+                }
+
+                val generated = runCatching {
+                    M3u8Helper.generateM3u8(name, url, referer, null, mediaHeaders)
+                }.getOrDefault(emptyList())
                 if (generated.isNotEmpty()) generated.forEach(callback)
                 else callback(newExtractorLink(name, "DiziLife HLS", url, ExtractorLinkType.M3U8) {
                     this.referer = referer
