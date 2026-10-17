@@ -50,6 +50,11 @@ class AsyaWatch : MainAPI() {
     override val hasDownloadSupport = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
+    // Kategori isteklerini paralel göndermek Cloudflare 1015 riskini artırıyor.
+    override var sequentialMainPage = true
+    override var sequentialMainPageDelay = 350L
+    override var sequentialMainPageScrollDelay = 250L
+
     override val mainPage = mainPageOf(
         "" to "Yeni Eklenen Filmler",
         "49" to "Aile Film",
@@ -762,6 +767,33 @@ class AsyaWatch : MainAPI() {
             value.endsWith("/caption") || value.endsWith("/captions")
     }
 
+    private fun normalizeSubtitleText(text: String): String {
+        var value = text
+            .replace("\\/", "/")
+            .replace("\\u0026", "&", ignoreCase = true)
+            .replace("\\u003d", "=", ignoreCase = true)
+            .replace("\\u003a", ":", ignoreCase = true)
+            .replace("\\u002f", "/", ignoreCase = true)
+            .replace("\\x3a", ":", ignoreCase = true)
+            .replace("\\x2f", "/", ignoreCase = true)
+            .replace("&amp;", "&", ignoreCase = true)
+            .replace("&quot;", "\"", ignoreCase = true)
+            .replace("&#39;", "'", ignoreCase = true)
+            .replace("&#x2f;", "/", ignoreCase = true)
+
+        value = Regex("""\\u([0-9a-fA-F]{4})""").replace(value) { match ->
+            match.groupValues[1].toInt(16).toChar().toString()
+        }
+        value = Regex("""\\x([0-9a-fA-F]{2})""").replace(value) { match ->
+            match.groupValues[1].toInt(16).toChar().toString()
+        }
+
+        // Yalnızca URL'nin başındaki yüzde-kaçışlı şemayı aç; imzalı query değerlerini bozma.
+        value = value.replace(Regex("""(?i)^https%3a%2f%2f"""), "https://")
+            .replace(Regex("""(?i)^http%3a%2f%2f"""), "http://")
+        return value
+    }
+
     private fun subtitleLanguage(label: String, url: String = ""): String {
         val value = (label + " " + url).lowercase()
             .replace("_", "-")
@@ -780,14 +812,9 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun resolveSubtitleUrl(raw: String?, baseUrl: String): String? {
-        var value = raw?.trim().orEmpty()
+        var value = normalizeSubtitleText(raw?.trim().orEmpty())
         if (value.isBlank()) return null
-        value = value.replace("\\/", "/")
-            .replace("\\u0026", "&")
-            .replace("\\u003d", "=")
-            .replace("&amp;", "&")
-            .trim()
-            .trim('"', '\'')
+        value = value.trim().trim('"', '\'')
 
         if (value.startsWith("data:", true) || value.startsWith("javascript:", true)) return null
         return runCatching {
@@ -798,17 +825,14 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun subtitleUrls(text: String, baseUrl: String): List<Pair<String, String>> {
-        val body = text.replace("\\/", "/")
-            .replace("\\u0026", "&")
-            .replace("\\u003d", "=")
-            .replace("&amp;", "&")
+        val body = normalizeSubtitleText(text)
         val result = LinkedHashMap<String, String>()
 
-        fun add(raw: String?, label: String = "") {
+        fun add(raw: String?, label: String = "", forceSubtitle: Boolean = false) {
             if (raw.isNullOrBlank()) return
-            val cleaned = raw.trim().trim('"', '\'', '<', '>', ',', ';', '\\')
+            val cleaned = raw.trim().trim('"', '\'', '<', '>', ',', ';', '\\').trimEnd(')', ']', '}')
             val url = resolveSubtitleUrl(cleaned, baseUrl) ?: return
-            if (looksLikeSubtitle(url)) {
+            if (looksLikeSubtitle(url) || (forceSubtitle && label.isNotBlank())) {
                 val language = subtitleLanguage(label, url)
                 val previous = result[url]
                 if (previous == null || (label.isNotBlank() && previous == "Altyazı")) {
@@ -829,7 +853,7 @@ class AsyaWatch : MainAPI() {
                 """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s"']+|/[^,\s"']+|\.\.?/[^,\s"']+|[^,\s"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s"']*)?)"""
             )
             val entries = tagged.findAll(config).toList()
-            for (entry in entries) add(entry.groupValues[2], entry.groupValues[1])
+            for (entry in entries) add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
         }
 
         // Handle object-shaped player track definitions such as
@@ -838,7 +862,7 @@ class AsyaWatch : MainAPI() {
             """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["'][\s\S]{0,500}?["']?(?:file|src|url|subtitle)["']?\s*[:=]\s*["']([^"']{1,1200})["']"""
         )
         objectTrack.findAll(body).forEach { match ->
-            add(match.groupValues[2], match.groupValues[1])
+            add(match.groupValues[2], match.groupValues[1], forceSubtitle = true)
         }
 
         Regex(
@@ -868,7 +892,7 @@ class AsyaWatch : MainAPI() {
                     .find(line)?.groupValues?.getOrNull(1) ?: return@forEach
                 val label = Regex("""(?i)\b(?:NAME|LANGUAGE)\s*=\s*["']([^"']+)["']""")
                     .find(line)?.groupValues?.getOrNull(1).orEmpty()
-                add(uri, label)
+                add(uri, label, forceSubtitle = true)
             }
 
         return result.map { it.key to it.value }
@@ -882,9 +906,6 @@ class AsyaWatch : MainAPI() {
         referer: String = baseUrl
     ) {
         fun emit(url: String, label: String) {
-            // SubtitleFile in the CloudStream snapshot used by this repo only
-            // exposes language and URL; authentication/referrer headers belong
-            // to ExtractorLink, so avoid a helper API that is not available here.
             callback(
                 SubtitleFile(
                     lang = subtitleLanguage(label, url),
@@ -893,22 +914,44 @@ class AsyaWatch : MainAPI() {
             )
         }
 
-        subtitleUrls(text, baseUrl).forEach { (url, label) ->
-            if (seen.add(url)) emit(url, label)
+        val variants = LinkedHashSet<String>()
+        val normalized = normalizeSubtitleText(text)
+        variants.add(normalized)
+
+        // Bazı API'ler source_content alanını tek parça Base64 olarak döndürüyor.
+        val compact = normalized.filterNot { it.isWhitespace() }.trim('"', '\'')
+        if (compact.length in 80..200000 &&
+            Regex("""^[A-Za-z0-9+/]+={0,2}$""").matches(compact)
+        ) {
+            val decoded = decodeBase64Text(compact)
+            if (!decoded.isNullOrBlank() &&
+                Regex("""(?is)(subtitle|caption|playerjs|\.vtt|\.srt|\.m3u8|https?://)""").containsMatchIn(decoded)
+            ) {
+                variants.add(normalizeSubtitleText(decoded))
+            }
         }
 
-        val document = runCatching { Jsoup.parse(text, baseUrl) }.getOrNull() ?: return
-        document.select("track[src], track[data-src], track[data-url]").forEach { track ->
-            val raw = track.attr("src")
-                .ifBlank { track.attr("data-src") }
-                .ifBlank { track.attr("data-url") }
-            val url = resolveSubtitleUrl(raw, baseUrl) ?: return@forEach
-            if (!looksLikeSubtitle(url) || !seen.add(url)) return@forEach
-            val label = track.attr("label")
-                .ifBlank { track.attr("srclang") }
-                .ifBlank { track.attr("data-lang") }
-                .ifBlank { "Altyazı" }
-            emit(url, label)
+        for (payload in variants) {
+            subtitleUrls(payload, baseUrl).forEach { (url, label) ->
+                if (seen.add(url)) emit(url, label)
+            }
+
+            val document = runCatching { Jsoup.parse(payload, baseUrl) }.getOrNull() ?: continue
+            document.select("track[src], track[data-src], track[data-url]").forEach { track ->
+                val raw = track.attr("src")
+                    .ifBlank { track.attr("data-src") }
+                    .ifBlank { track.attr("data-url") }
+                val url = resolveSubtitleUrl(raw, baseUrl) ?: return@forEach
+                val label = track.attr("label")
+                    .ifBlank { track.attr("srclang") }
+                    .ifBlank { track.attr("data-lang") }
+                    .ifBlank { "Altyazı" }
+                val explicitTrack = label != "Altyazı" ||
+                    track.attr("kind").equals("subtitles", true) ||
+                    track.attr("kind").equals("captions", true)
+                if ((!looksLikeSubtitle(url) && !explicitTrack) || !seen.add(url)) return@forEach
+                emit(url, label)
+            }
         }
     }
 
