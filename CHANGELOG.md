@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:b8e7868fdfd351be4464d2785d4b96cdf986767b -->
+### Bump AsyaWatch version for poster fallback fix
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [b8e7868](https://github.com/Kayracs3/Kayra/commit/b8e7868fdfd351be4464d2785d4b96cdf986767b)
+
+## 2026-10-17
+
+<!-- kayra-commit:abd4a832e99903c95e46b5853eb0c3447996ce41 -->
+### Fix AsyaWatch poster fallback cache iteration
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [abd4a83](https://github.com/Kayracs3/Kayra/commit/abd4a832e99903c95e46b5853eb0c3447996ce41)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:dd6156067dd25d7e1cee5d2896e03d22445e6d86 -->
 ### Bump AsyaWatch version for subtitle selection fix
 
