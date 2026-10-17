@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:f173b7d42f076fb7bdb58278ca02bda07fa9a51b -->
+### Fix DiziLife suspend media link compilation
+
+- Etkilenen alanlar: DiziLife
+- Commit: [f173b7d](https://github.com/Kayracs3/Kayra/commit/f173b7d42f076fb7bdb58278ca02bda07fa9a51b)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:ae7138e9a5fd0848099d05f7dbe5d345a7ec15ea -->
 ### Add DiziLife series and movie provider
 
