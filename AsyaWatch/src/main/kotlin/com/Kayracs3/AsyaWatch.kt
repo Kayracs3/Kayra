@@ -188,6 +188,17 @@ class AsyaWatch : MainAPI() {
             value = "https://$value"
         }
 
+        // The Macellan CDN sometimes stores a poster path without its hostname.
+        // Only apply this CDN rule to its recognizable IMDb-poster path shape.
+        val macellanPosterPath = Regex(
+            """(?i)^/?images/\\d+/\\d+/\\d+/{1,2}tt\\d+-poster-\\d+\\.(?:jpe?g|png|webp)(?:[?#].*)?$"""
+        )
+        if (!value.startsWith("http://", true) && !value.startsWith("https://", true) &&
+            macellanPosterPath.matches(value)
+        ) {
+            value = "https://file.macellan.online/${value.trimStart('/')}"
+        }
+
         // Some cards return an AMP image proxy rather than the original image URL.
         val marker = "images-macellan-online.cdn.ampproject.org/i/s/"
         val markerIndex = value.indexOf(marker, ignoreCase = true)
@@ -214,9 +225,11 @@ class AsyaWatch : MainAPI() {
         if (value == null || depth > 5) return null
         val imageKeys = listOf(
             "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
+            "object_poster", "objectPoster", "poster_image", "posterImage",
             "poster", "poster_path", "posterPath", "image_url", "imageUrl",
-            "thumbnail_url", "thumbnailUrl", "thumbnail", "cover_url", "coverUrl",
-            "cover", "image", "thumb", "src"
+            "image_path", "imagePath", "thumbnail_url", "thumbnailUrl",
+            "thumbnail_path", "thumbnailPath", "thumbnail", "cover_url", "coverUrl",
+            "cover_image", "coverImage", "cover", "image", "thumb", "picture", "photo", "src"
         )
 
         if (value is JSONObject) {
@@ -230,7 +243,14 @@ class AsyaWatch : MainAPI() {
             }
             val keys = value.keys()
             while (keys.hasNext()) {
-                val child = value.opt(keys.next()) ?: continue
+                val key = keys.next()
+                val child = value.opt(key) ?: continue
+                val normalizedKey = key.lowercase()
+                val isImageField = listOf("poster", "image", "thumbnail", "thumb", "cover", "picture", "photo")
+                    .any { normalizedKey.contains(it) }
+                if (isImageField && child is String) {
+                    imageUrl(child)?.let { return it }
+                }
                 if (child is JSONObject || child is JSONArray) {
                     imageFromJson(child, depth + 1)?.let { return it }
                 }
