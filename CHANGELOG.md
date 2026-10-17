@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:6e3330f8516a77186bd505181a011705540d46d8 -->
+### Bump AsyaWatch plugin version to 3
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [6e3330f](https://github.com/Kayracs3/Kayra/commit/6e3330f8516a77186bd505181a011705540d46d8)
+
+## 2026-10-17
+
+<!-- kayra-commit:1ea29c40c9e480c120250b13512a441440269711 -->
+### Fix scheme-less Macellan poster URLs
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [1ea29c4](https://github.com/Kayracs3/Kayra/commit/1ea29c40c9e480c120250b13512a441440269711)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:e93e9d1ace5b895d14b419e164d589fe97074ea2 -->
 ### AsyaWatch afiş URL ayrıştırması düzeltmesi
 
