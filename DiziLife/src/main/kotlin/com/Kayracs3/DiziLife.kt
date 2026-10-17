@@ -35,6 +35,10 @@ class DiziLife : MainAPI() {
         "Referer" to "$mainUrl/"
     )
     private val posterHeaders = headers + ("Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+    private val browserUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Öne Çıkanlar",
         "$mainUrl/son-eklenenler" to "Son Eklenenler",
@@ -77,7 +81,7 @@ class DiziLife : MainAPI() {
     private fun norm(value: String): String = value.lowercase(Locale.ROOT)
         .replace('ı', 'i').replace('ş', 's').replace('ğ', 'g')
         .replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')
-        .replace(Regex("""[^a-z0-9]+"""), " ").trim().replace(Regex("""\s+"""), " ")
+        .replace(Regex("""[^\p{L}\p{N}]+"""), " ").trim().replace(Regex("""\s+"""), " ")
 
     private fun cleanTitle(raw: String?): String = raw.orEmpty()
         .replace(Regex("""(?i)\s*[-|:]\s*Dizi\.?life.*$"""), "")
@@ -86,13 +90,39 @@ class DiziLife : MainAPI() {
         .replace(Regex("""(?i)\s+(?:star|IMDb|IMDB)\s*[:★]?\s*\d+(?:[.,]\d+)?(?:\s+IMDb)?\s*.*$"""), "")
         .replace(Regex("""\s+"""), " ").trim(' ', '-', '|', ':', '•')
 
-    private fun validTitle(title: String): Boolean {
+    private fun looksLikeTechnicalTitle(title: String): Boolean {
         val value = norm(title)
-        return value.length >= 2 && value !in setOf(
-            "ana sayfa", "tum diziler", "tum filmler", "diziler", "filmler",
-            "son eklenenler", "tumunu gor", "dizi life", "dizilife",
-            "film izle", "dizi izle", "fragmani izle", "oynat", "indir", "poster"
-        )
+        if (Regex("""^(?:icerik|content)\s+[a-z0-9]{4,}$""").matches(value)) return true
+
+        // Avoid exposing compact player/database IDs as if they were titles.
+        // Genuine Han/Hangul/Kana names are not tested against this Latin-ID rule.
+        val hasAsianScript = title.any { c ->
+            c in '\u3040'..'\u30ff' || c in '\u3400'..'\u9fff' || c in '\uac00'..'\ud7af'
+        }
+        if (hasAsianScript) return false
+
+        val compact = value.replace(" ", "")
+        val latinLetters = title.count {
+            it in 'a'..'z' || it in 'A'..'Z'
+        }
+        val digits = title.count { it.isDigit() }
+        return value.split(' ').size == 1 &&
+            compact.length >= 7 &&
+            digits >= 2 &&
+            latinLetters <= 4
+    }
+
+    private fun validTitle(title: String): Boolean {
+        val cleaned = cleanTitle(title)
+        val value = norm(cleaned)
+        return value.length >= 2 &&
+            value !in setOf(
+                "ana sayfa", "tum diziler", "tum filmler", "diziler", "filmler",
+                "son eklenenler", "tumunu gor", "dizi life", "dizilife",
+                "film izle", "dizi izle", "fragmani izle", "oynat", "indir", "poster",
+                "icerik", "content", "unknown", "null"
+            ) &&
+            !looksLikeTechnicalTitle(cleaned)
     }
 
     private fun slugTitle(url: String): String =
@@ -247,6 +277,25 @@ class DiziLife : MainAPI() {
 
     private fun firstNonBlank(vararg values: String?): String? = values.firstOrNull { !it.isNullOrBlank() }?.trim()
 
+    private fun detailTitle(document: Document, pageUrl: String): String? {
+        val candidates = listOf(
+            document.selectFirst("h1")?.text(),
+            document.selectFirst("meta[property=og:title]")?.attr("content"),
+            document.selectFirst("meta[name=twitter:title]")?.attr("content"),
+            document.selectFirst("[itemprop=name]")?.text(),
+            document.title()
+        )
+
+        candidates.forEach { raw ->
+            val title = cleanTitle(raw)
+            if (validTitle(title)) return title
+        }
+
+        // A route such as /dizi/icerik-wpgovb is an internal ID, not a title.
+        // Only use a slug fallback when it really contains a human-readable name.
+        return slugTitle(pageUrl).takeIf { validTitle(it) }
+    }
+
     private fun extractActors(document: Document, text: String): List<Actor>? {
         val linked = document.select("a[href*='/oyuncu/'],a[href*='/actor/'],a[href*='/person/'],[class*=cast] a,[class*=actors] a")
             .map { it.text().trim() }.filter { it.isNotBlank() }.distinct()
@@ -290,17 +339,47 @@ class DiziLife : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         val pageUrl = abs(url, mainUrl) ?: return null
-        val response = runCatching { app.get(pageUrl, headers = headers, referer = "$mainUrl/") }
-            .onFailure { Log.w(tag, "İçerik sayfası alınamadı: $pageUrl", it) }.getOrNull() ?: return null
-        if (!response.isSuccessful) return null
+        if (!isItem(pageUrl)) {
+            Log.w(tag, "İçerik bağlantısı beklenen film/dizi biçiminde değil: $pageUrl")
+            return null
+        }
+
+        var response = runCatching {
+            app.get(pageUrl, headers = headers, referer = "$mainUrl/", allowRedirects = true)
+        }.onFailure {
+            Log.w(tag, "İçerik sayfası ilk istek başarısız: $pageUrl", it)
+        }.getOrNull()
+
+        // Some detail pages are visible in the browser but reject the default
+        // in-app user agent. Retry once with a normal browser request profile.
+        if (response == null || !response.isSuccessful) {
+            response = runCatching {
+                app.get(
+                    pageUrl,
+                    headers = headers + mapOf(
+                        "User-Agent" to browserUserAgent,
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    ),
+                    referer = "$mainUrl/",
+                    allowRedirects = true
+                )
+            }.onFailure {
+                Log.w(tag, "İçerik sayfası tarayıcı profiliyle de başarısız: $pageUrl", it)
+            }.getOrNull()
+        }
+
+        if (response == null) return null
+        if (!response.isSuccessful) {
+            Log.w(tag, "İçerik sayfası HTTP " + response.code + ": " + pageUrl)
+            return null
+        }
+
         val document = response.document
         val text = document.text()
-        val title = cleanTitle(firstNonBlank(
-            document.selectFirst("h1")?.text(),
-            document.selectFirst("meta[property=og:title]")?.attr("content"),
-            document.title()
-        )).ifBlank { slugTitle(pageUrl) }
-        if (!validTitle(title)) return null
+        val title = detailTitle(document, pageUrl) ?: run {
+            Log.w(tag, "Okunabilir içerik başlığı bulunamadı: $pageUrl")
+            return null
+        }
         val poster = posterFromPage(document, pageUrl)
         val description = firstNonBlank(
             document.selectFirst("meta[name=description]")?.attr("content"),
