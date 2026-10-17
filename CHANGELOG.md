@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:a6dab66899d2edcb306e7d78cd3252f0edf80cb3 -->
+### Bump AsyaWatch plugin version to 6
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [a6dab66](https://github.com/Kayracs3/Kayra/commit/a6dab66899d2edcb306e7d78cd3252f0edf80cb3)
+
+## 2026-10-17
+
+<!-- kayra-commit:88d627a5a7d7ae3710b6b06b8122740560a0a4c5 -->
+### Use supported SubtitleFile constructor in AsyaWatch
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [88d627a](https://github.com/Kayracs3/Kayra/commit/88d627a5a7d7ae3710b6b06b8122740560a0a4c5)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:57ef24b10d0b23c0e43e641805f76b6bdd70e862 -->
 ### Bump AsyaWatch plugin version to 5
 
