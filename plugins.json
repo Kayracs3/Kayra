@@ -433,10 +433,10 @@
     },
     {
         "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
-        "fileHash": "sha256-e9fc3edbba9717ec0f7c080640856c25fecea91a4ada080871a69d9c4597f611",
+        "fileHash": "sha256-b28531bbc83a42df6b5e4d9402fa33c3593732c001e47225430a40d8f58f1604",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 81756,
+        "fileSize": 77909,
         "status": 3,
         "language": "tr",
         "authors": [
