@@ -180,7 +180,7 @@ class AsyaWatch : MainAPI() {
             .replace("\\u0026", "&")
             .replace("\\u003d", "=")
             .trim()
-            .trim('"', '\\'')
+            .trim('"', '\'')
 
         // Some cards return an AMP image proxy rather than the original image URL.
         val marker = "images-macellan-online.cdn.ampproject.org/i/s/"
@@ -243,7 +243,7 @@ class AsyaWatch : MainAPI() {
         val attributes = listOf(
             "data-poster", "data-cover", "data-thumbnail", "data-thumb",
             "data-original", "data-original-src", "data-lazy-src", "data-src",
-            "data-srcset", "srcset", "content", "src"
+            "data-srcset", "srcset", "content", "href", "src"
         )
         for (attribute in attributes) {
             val raw = element.attr(attribute).trim()
@@ -253,7 +253,7 @@ class AsyaWatch : MainAPI() {
             imageUrl(first)?.let { return it }
         }
         val style = element.attr("style")
-        val cssUrl = Regex("""(?i)url\\(['"]?([^)'"]+)""").find(style)?.groupValues?.getOrNull(1)
+        val cssUrl = Regex("""(?i)url\(['"]?([^)'"]+)""").find(style)?.groupValues?.getOrNull(1)
         return imageUrl(cssUrl)
     }
 
