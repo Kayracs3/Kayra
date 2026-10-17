@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:59eceb857995cd50480090fd31b6f6336cff8993 -->
+### Restore InatBox poster URL parsing fallbacks
+
+- Etkilenen alanlar: InatBox
+- Commit: [59eceb8](https://github.com/Kayracs3/Kayra/commit/59eceb857995cd50480090fd31b6f6336cff8993)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:b4e6000b8dd2c94eb0347fc2baf4368f15a233b7 -->
 ### Correct Macellan poster path regex
 
