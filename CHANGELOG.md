@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:74717ebe06c041cdbfc5a142bda894906a2248b4 -->
+### Revert InatBox poster URL parsing changes
+
+- Etkilenen alanlar: InatBox
+- Commit: [74717eb](https://github.com/Kayracs3/Kayra/commit/74717ebe06c041cdbfc5a142bda894906a2248b4)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:cf512ec507fcfe7ac96410fda9f49b9045cbc257 -->
 ### InatBox: inherit show posters on episodes
 
