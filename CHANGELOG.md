@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:f3bce49fd42fb088205c31a55a179bc41be8c6f2 -->
+### Revert InatBox artwork URL normalization changes
+
+- Etkilenen alanlar: InatBox
+- Commit: [f3bce49](https://github.com/Kayracs3/Kayra/commit/f3bce49fd42fb088205c31a55a179bc41be8c6f2)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:c278885d204781388fd794f7371134572022520a -->
 ### Restore legacy InatBox poster fields without reverting later fixes
 
