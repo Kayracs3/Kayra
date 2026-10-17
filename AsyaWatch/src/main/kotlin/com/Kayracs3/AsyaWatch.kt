@@ -794,35 +794,34 @@ class AsyaWatch : MainAPI() {
         return value
     }
 
-    private fun subtitleLanguage(label: String, url: String = ""): String {
-        // Player/HLS label is authoritative. The URL may live under a shared path
-        // such as /sub_turkish/ even when that particular track is English.
-        fun languageFrom(value: String): String? {
-            val normalized = value.lowercase()
-                .replace("_", "-")
-                .trim()
-            return when {
-                normalized.contains("turk") || normalized.contains("türk") ||
-                    Regex("""(?:^|[^a-z])(?:tr|tur|turkish|turkce)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Türkçe"
-                normalized.contains("english") || normalized.contains("ingiliz") ||
-                    Regex("""(?:^|[^a-z])(?:en|eng)(?:$|[^a-z])""").containsMatchIn(normalized) -> "English"
-                normalized.contains("korean") || normalized.contains("korece") ||
-                    Regex("""(?:^|[^a-z])ko(?:$|[^a-z])""").containsMatchIn(normalized) -> "Korean"
-                normalized.contains("japanese") || normalized.contains("japonca") ||
-                    Regex("""(?:^|[^a-z])ja(?:$|[^a-z])""").containsMatchIn(normalized) -> "Japanese"
-                normalized.contains("spanish") || normalized.contains("español") ||
-                    Regex("""(?:^|[^a-z])(?:es|spa)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Spanish"
-                normalized.contains("french") || normalized.contains("français") ||
-                    Regex("""(?:^|[^a-z])(?:fr|fra)(?:$|[^a-z])""").containsMatchIn(normalized) -> "French"
-                normalized.contains("german") || normalized.contains("deutsch") ||
-                    Regex("""(?:^|[^a-z])(?:de|deu)(?:$|[^a-z])""").containsMatchIn(normalized) -> "German"
-                else -> null
-            }
+    private fun explicitSubtitleLanguage(value: String): String? {
+        val normalized = value.lowercase()
+            .replace("_", "-")
+            .trim()
+        return when {
+            normalized.contains("turk") || normalized.contains("türk") ||
+                Regex("""(?:^|[^a-z])(?:tr|tur|turkish|turkce)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Türkçe"
+            normalized.contains("english") || normalized.contains("ingiliz") ||
+                Regex("""(?:^|[^a-z])(?:en|eng)(?:$|[^a-z])""").containsMatchIn(normalized) -> "English"
+            normalized.contains("korean") || normalized.contains("korece") ||
+                Regex("""(?:^|[^a-z])ko(?:$|[^a-z])""").containsMatchIn(normalized) -> "Korean"
+            normalized.contains("japanese") || normalized.contains("japonca") ||
+                Regex("""(?:^|[^a-z])ja(?:$|[^a-z])""").containsMatchIn(normalized) -> "Japanese"
+            normalized.contains("spanish") || normalized.contains("español") ||
+                Regex("""(?:^|[^a-z])(?:es|spa)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Spanish"
+            normalized.contains("french") || normalized.contains("français") ||
+                Regex("""(?:^|[^a-z])(?:fr|fra)(?:$|[^a-z])""").containsMatchIn(normalized) -> "French"
+            normalized.contains("german") || normalized.contains("deutsch") ||
+                Regex("""(?:^|[^a-z])(?:de|deu)(?:$|[^a-z])""").containsMatchIn(normalized) -> "German"
+            else -> null
         }
+    }
 
-        // Never let words in the URL override an explicit track language.
-        languageFrom(label)?.let { return it }
-        languageFrom(url)?.let { return it }
+    private fun subtitleLanguage(label: String, url: String = ""): String {
+        // Player/HLS language metadata must win over the URL path. An English track
+        // can still have a URL containing /sub_turkish/ because players share paths.
+        explicitSubtitleLanguage(label)?.let { return it }
+        explicitSubtitleLanguage(url)?.let { return it }
 
         val cleanLabel = label.trim()
         val genericLabels = setOf(
@@ -853,14 +852,25 @@ class AsyaWatch : MainAPI() {
         val body = normalizeSubtitleText(text)
         val result = LinkedHashMap<String, String>()
 
+        val explicitlyLabeledUrls = HashSet<String>()
+
         fun add(raw: String?, label: String = "", forceSubtitle: Boolean = false) {
             if (raw.isNullOrBlank()) return
             val cleaned = raw.trim().trim('"', '\'', '<', '>', ',', ';', '\\').trimEnd(')', ']', '}')
             val url = resolveSubtitleUrl(cleaned, baseUrl) ?: return
             if (looksLikeSubtitle(url) || forceSubtitle) {
-                val language = subtitleLanguage(label, url)
+                val explicitLanguage = explicitSubtitleLanguage(label)
+                val language = explicitLanguage ?: subtitleLanguage(label, url)
                 val previous = result[url]
-                if (previous == null || (label.isNotBlank() && previous == "Altyazı")) {
+
+                // A later, explicitly named HLS/PlayerJS track must replace any
+                // language guessed earlier from the URL's folder or filename.
+                if (explicitLanguage != null) {
+                    result[url] = explicitLanguage
+                    explicitlyLabeledUrls.add(url)
+                } else if (!explicitlyLabeledUrls.contains(url) &&
+                    (previous == null || previous == "Altyazı")
+                ) {
                     result[url] = language
                 }
             }
