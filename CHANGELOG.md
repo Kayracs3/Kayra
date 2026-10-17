@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:90c2441bd1ecd2901be9cac2a4b7378b699b42ee -->
+### Restore AsyaFilmIzle metadata
+
+- Etkilenen alanlar: AsyaFilmIzle
+- Commit: [90c2441](https://github.com/Kayracs3/Kayra/commit/90c2441bd1ecd2901be9cac2a4b7378b699b42ee)
+
+## 2026-10-17
+
+<!-- kayra-commit:7270dc6087c1621ce173ec9c92f64cee0841c476 -->
+### Revert unintended AsyaFilmIzle changes
+
+- Etkilenen alanlar: AsyaFilmIzle
+- Commit: [7270dc6](https://github.com/Kayracs3/Kayra/commit/7270dc6087c1621ce173ec9c92f64cee0841c476)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:c6ddebcebeac9b6b33c2bd2b10e5e4c1f4323d02 -->
 ### Bump DiziLife plugin version
 
