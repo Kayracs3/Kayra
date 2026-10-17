@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:e08445155626627eefddf15200ea543816d8f1fd -->
+### Bump AsyaWatch to version 8
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [e084451](https://github.com/Kayracs3/Kayra/commit/e08445155626627eefddf15200ea543816d8f1fd)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:c1dd5ec650e32916ac996e5d5ea34c773f99492a -->
 ### Parse PlayerJS subtitle language lists and limit poster fallbacks
 
