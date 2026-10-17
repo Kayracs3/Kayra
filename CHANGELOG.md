@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:57ef24b10d0b23c0e43e641805f76b6bdd70e862 -->
+### Bump AsyaWatch plugin version to 5
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [57ef24b](https://github.com/Kayracs3/Kayra/commit/57ef24b10d0b23c0e43e641805f76b6bdd70e862)
+
+## 2026-10-17
+
+<!-- kayra-commit:064ad635c4522e605ae4e680f12282dc9fb3afd1 -->
+### Fix AsyaWatch subtitle callback deduplication
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [064ad63](https://github.com/Kayracs3/Kayra/commit/064ad635c4522e605ae4e680f12282dc9fb3afd1)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:356444d9d41fb70551aa882312822269740280e9 -->
 ### Attach player headers and improve subtitle URL detection
 
