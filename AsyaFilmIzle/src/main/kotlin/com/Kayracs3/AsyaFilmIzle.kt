@@ -42,127 +42,13 @@ class AsyaFilmIzle : MainAPI() {
 
     private fun absolute(url: String?): String? {
         if (url.isNullOrBlank()) return null
-        val value = normalizeUrl(url.trim()).trim('"', '\'')
-        if (
-            value.isBlank() ||
-            value.startsWith("javascript:", true) ||
-            value.startsWith("data:", true) ||
-            value.startsWith("blob:", true) ||
-            value.startsWith("mailto:", true)
-        ) return null
-
+        val value = url.trim()
         return when {
             value.startsWith("http://", true) || value.startsWith("https://", true) -> value
             value.startsWith("//") -> "https:$value"
             value.startsWith("/") -> mainUrl + value
-            else -> mainUrl + "/" + value.trimStart('/')
+            else -> "$mainUrl/$value"
         }
-    }
-
-    private fun isSameSiteUrl(rawUrl: String?): Boolean {
-        val url = absolute(rawUrl) ?: return false
-        val uri = runCatching { URI(url) }.getOrNull() ?: return false
-        val host = uri.host?.lowercase(java.util.Locale.ROOT)?.removePrefix("www.") ?: return false
-        val siteHost = runCatching { URI(mainUrl).host }
-            .getOrNull()?.lowercase(java.util.Locale.ROOT)?.removePrefix("www.")
-            ?: return false
-        return host == siteHost &&
-            (uri.scheme.equals("http", true) || uri.scheme.equals("https", true))
-    }
-
-    private fun pagePath(url: String): String =
-        runCatching { URI(url).path.orEmpty() }.getOrDefault("")
-
-    private fun isSeriesPage(rawUrl: String?): Boolean {
-        val url = absolute(rawUrl) ?: return false
-        return isSameSiteUrl(url) &&
-            Regex("""(?i)^/dizi/[^/]+/?$""").matches(pagePath(url))
-    }
-
-    private fun isMoviePage(rawUrl: String?): Boolean {
-        val url = absolute(rawUrl) ?: return false
-        return isSameSiteUrl(url) &&
-            Regex("""(?i)^/film/[^/]+/?$""").matches(pagePath(url))
-    }
-
-    private fun isContentPageUrl(rawUrl: String?): Boolean =
-        isSeriesPage(rawUrl) || isMoviePage(rawUrl)
-
-    private val eastAsianScriptRegex =
-        Regex("""[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]""")
-
-    private fun hasEastAsianScript(value: String): Boolean =
-        eastAsianScriptRegex.containsMatchIn(value)
-
-    private fun cleanDisplayTitle(raw: String?): String =
-        raw.orEmpty()
-            .replace("&nbsp;", " ", ignoreCase = true)
-            .replace(Regex("""(?i)\s*[-|:]?\s*AsyaFilm.?zle(?:\.com)?\s*$"""), "")
-            .replace(Regex("""(?i)\s+(?:(?:film|dizi)\s+)?izle\s*$"""), "")
-            .replace(Regex("""(?i)\s+AsyaFilm.?zle(?:\.com)?\s*$"""), "")
-            .replace(Regex("""\s+"""), " ")
-            .trim(' ', '-', '|', ':', '•')
-
-    private fun usableTitle(raw: String): Boolean {
-        val value = cleanDisplayTitle(raw)
-        if (value.length < 2 || value.count { it.isLetter() } < 2) return false
-        if (Regex("""(?i)^(image|poster|thumbnail|dizi|film|izle|fragman|ana sayfa)$""").matches(value)) {
-            return false
-        }
-
-        val latinLetters = Regex("""[A-Za-z]""").findAll(value).count()
-        if (hasEastAsianScript(value) && latinLetters < 3) return false
-
-        val compact = value.replace(Regex("""[^A-Za-z0-9]"""), "")
-        if (
-            value.split(Regex("""\s+""")).size == 1 &&
-            compact.length >= 7 &&
-            Regex("""(?i)^[a-z0-9]+$""").matches(compact) &&
-            Regex("""[A-Za-z]""").findAll(compact).count() <= 4 &&
-            Regex("""\d""").containsMatchIn(compact)
-        ) return false
-
-        return true
-    }
-
-    private fun titleFromSlug(url: String): String {
-        val pathPart = pagePath(url).trimEnd('/').substringAfterLast('/')
-        val decoded = runCatching { URLDecoder.decode(pathPart, "UTF-8") }.getOrDefault(pathPart)
-        val words = decoded.replace(Regex("""[-_]+"""), " ")
-            .split(Regex("""\s+""")).filter { it.isNotBlank() }
-        return cleanDisplayTitle(
-            words.joinToString(" ") { word ->
-                word.replaceFirstChar { it.titlecase(java.util.Locale.ROOT) }
-            }
-        )
-    }
-
-    private fun bestTitle(candidates: List<String?>, url: String): String? {
-        val cleaned = candidates.map(::cleanDisplayTitle)
-            .filter { it.isNotBlank() }.distinct()
-
-        cleaned.firstOrNull { usableTitle(it) && !hasEastAsianScript(it) }?.let { return it }
-
-        val slug = titleFromSlug(url)
-        if (usableTitle(slug) && !hasEastAsianScript(slug)) return slug
-
-        return cleaned.firstOrNull(::usableTitle) ?: cleaned.firstOrNull()
-    }
-
-    private fun titleFromCard(card: Element, link: Element, url: String): String? {
-        val image = link.selectFirst("img") ?: card.selectFirst("img")
-        return bestTitle(
-            listOf(
-                card.selectFirst("h1,h2,h3,h4,.title,.name,[class*=title],[class*=name]")?.text(),
-                card.selectFirst("[data-title]")?.attr("data-title"),
-                link.attr("title"),
-                link.attr("aria-label"),
-                link.text(),
-                image?.attr("title"),
-                image?.attr("alt")
-            ),
-            url
-        )
     }
 
     private fun posterFrom(element: Element): String? {
@@ -231,19 +117,26 @@ class AsyaFilmIzle : MainAPI() {
     }
 
     private fun parseSearchCard(card: Element): SearchResponse? {
-        val link = card.select("a[href]")
-            .firstOrNull { candidate ->
-                isContentPageUrl(absolute(candidate.attr("href")))
-            } ?: return null
+        val link = card.selectFirst("a[href*='/dizi/'], a[href*='/film/']")
+            ?: card.selectFirst("a[href]")
+            ?: return null
 
         val url = absolute(link.attr("href")) ?: return null
-        if (!isContentPageUrl(url)) return null
+        if (!url.contains("/dizi/", true) && !url.contains("/film/", true)) return null
 
-        val title = titleFromCard(card, link, url) ?: return null
+        val title = link.selectFirst("img")?.attr("alt")
+            ?.trim()
+            ?.removeSuffix(" izle")
+            ?.removeSuffix(" İzle")
+            ?.takeIf { it.isNotBlank() }
+            ?: card.selectFirst("h1,h2,h3,h4,.title,.name")?.text()?.trim()
+            ?: link.text().trim()
+
+        if (title.isBlank()) return null
+
         val poster = posterFrom(card)
         val score = scoreFrom(card.text())
-
-        return if (isMoviePage(url)) {
+        return if (url.contains("/film/", true)) {
             newMovieSearchResponse(title, url) {
                 posterUrl = poster
                 this.score = score
@@ -257,22 +150,29 @@ class AsyaFilmIzle : MainAPI() {
     }
 
     private fun parseListing(document: Document): List<SearchResponse> {
-        val results = LinkedHashMap<String, SearchResponse>()
+        val results = ArrayList<SearchResponse>()
+        val seen = HashSet<String>()
 
-        document.select("a[href]").forEach { link ->
+        document.select("a[href*='/dizi/'], a[href*='/film/']").forEach { link ->
             val href = absolute(link.attr("href")) ?: return@forEach
-            if (!isContentPageUrl(href)) return@forEach
+            if (!href.contains("/dizi/", true) && !href.contains("/film/", true)) return@forEach
+            if (!seen.add(href)) return@forEach
 
-            // Prefer card headings and link labels over poster alt text.
-            // Multiple links to the same item are merged to keep the best title/poster.
-            val card = link.closest("article, .item, .post, .card, .film, .dizi, li")
-                ?: link.closest("div")
-                ?: link
-            val title = titleFromCard(card, link, href) ?: return@forEach
+            val title = link.selectFirst("img")?.attr("alt")
+                ?.trim()
+                ?.removeSuffix(" izle")
+                ?.removeSuffix(" İzle")
+                ?.takeIf { it.isNotBlank() }
+                ?: link.selectFirst(".title,.name,h1,h2,h3,h4")?.text()?.trim()
+                ?: link.text().trim()
+
+            if (title.isBlank()) return@forEach
+
+            val card = link.closest("article, .item, .post, .card, .film, .dizi, li, div") ?: link
             val poster = posterFrom(card)
             val score = scoreFrom(card.text())
 
-            val item = if (isMoviePage(href)) {
+            results += if (href.contains("/film/", true)) {
                 newMovieSearchResponse(title, href) {
                     posterUrl = poster
                     this.score = score
@@ -283,18 +183,9 @@ class AsyaFilmIzle : MainAPI() {
                     this.score = score
                 }
             }
-
-            val previous = results[href]
-            if (
-                previous == null ||
-                (hasEastAsianScript(previous.name) && !hasEastAsianScript(title)) ||
-                (previous.posterUrl.isNullOrBlank() && !poster.isNullOrBlank())
-            ) {
-                results[href] = item
-            }
         }
 
-        return results.values.toList()
+        return results
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
@@ -454,8 +345,7 @@ class AsyaFilmIzle : MainAPI() {
             fallbackTitle: String? = null
         ) {
             val href = absolute(rawUrl) ?: return
-            if (!isSameSiteUrl(href)) return
-            if (!pagePath(href).contains("/bolum/", true)) return
+            if (!href.contains("/bolum/", true)) return
             if (!seen.add(href)) return
 
             val text = listOf(displayText, fallbackTitle, href)
@@ -658,49 +548,26 @@ class AsyaFilmIzle : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val pageUrl = absolute(url) ?: return null
-        if (!isContentPageUrl(pageUrl)) return null
+        val response = runCatching {
+            app.get(url, headers = siteHeaders, referer = mainUrl, allowRedirects = true)
+        }.getOrNull() ?: return null
 
-        var response = runCatching {
-            app.get(pageUrl, headers = siteHeaders, referer = "$mainUrl/", allowRedirects = true)
-        }.getOrNull()
-
-        // Retry blocked requests once with a browser user agent.
-        if (response == null || !response.isSuccessful) {
-            response = runCatching {
-                app.get(
-                    pageUrl,
-                    headers = siteHeaders + mapOf(
-                        "User-Agent" to chromeUserAgent,
-                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    ),
-                    referer = "$mainUrl/",
-                    allowRedirects = true
-                )
-            }.getOrNull()
-        }
-
-        if (response == null || !response.isSuccessful) return null
+        if (!response.isSuccessful) return null
 
         val document = response.document
-        val pageText = document.text()
-        val title = bestTitle(
-            listOf(
-                document.selectFirst("h1")?.text(),
-                document.selectFirst("meta[property='og:title']")?.attr("content"),
-                document.selectFirst("meta[name='twitter:title']")?.attr("content"),
-                document.title()
-            ),
-            pageUrl
-        ) ?: return null
+        val title = document.selectFirst("h1")?.text()?.trim()
+            ?.removeSuffix(" izle")
+            ?.removeSuffix(" İzle")
+            ?: return null
 
+        val pageText = document.text()
         val poster = document.select("img[src], img[data-src], img[data-lazy-src], img[data-original]")
             .mapNotNull {
                 absolute(
-                    it.attr("data-src")
+                    it.attr("src")
+                        .ifBlank { it.attr("data-src") }
                         .ifBlank { it.attr("data-lazy-src") }
                         .ifBlank { it.attr("data-original") }
-                        .ifBlank { it.attr("src") }
                 )
             }
             .firstOrNull { it.contains("image.tmdb.org", true) }
@@ -719,11 +586,11 @@ class AsyaFilmIzle : MainAPI() {
         val actors = collectActors(document)
         val directors = collectDirectors(document)
 
-        if (isSeriesPage(pageUrl)) {
-            val episodes = parseEpisodes(document, poster, pageUrl)
+        if (url.contains("/dizi/", true)) {
+            val episodes = parseEpisodes(document, poster, url)
             return newTvSeriesLoadResponse(
                 name = title,
-                url = pageUrl,
+                url = url,
                 type = TvType.TvSeries,
                 episodes = episodes
             ) {
@@ -748,9 +615,9 @@ class AsyaFilmIzle : MainAPI() {
 
         return newMovieLoadResponse(
             name = title,
-            url = pageUrl,
+            url = url,
             type = TvType.Movie,
-            dataUrl = pageUrl
+            dataUrl = url
         ) {
             posterUrl = poster
             this.year = year
