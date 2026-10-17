@@ -556,7 +556,7 @@ class DiziLife : MainAPI() {
         }
     }
 
-    private fun emitMedia(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun emitMedia(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
         val mediaHeaders = mapOf("User-Agent" to USER_AGENT, "Referer" to referer, "Accept" to "*/*")
         when {
             url.contains(".m3u8", true) || url.contains("/hls/", true) -> {
