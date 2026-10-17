@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:d04a6ee9698845d6a13e5f31a9e36a3271e4b58f -->
+### Restore AsyaWatch subtitle track extraction
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [d04a6ee](https://github.com/Kayracs3/Kayra/commit/d04a6ee9698845d6a13e5f31a9e36a3271e4b58f)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:ca938e96ad084a1e65ac42e3a212885a2f62b3a1 -->
 ### Bump InatBox plugin version for poster fix
 
