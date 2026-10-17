@@ -889,26 +889,32 @@ class DiziBoxLive : MainAPI() {
 
         var detailLookups = 0
         var posterProbes = 0
-        for ((response, hasCardContext) in selected) {
+        for ((response, _) in selected) {
             if (!response.posterUrl.isNullOrBlank()) continue
 
-            // DiziBOX afiş şablonu: /wp-content/uploads/afisler/{slug}-200x290.jpg
-            // Slug'dan türetilen adresi kullanmadan önce sunucudan doğrula.
+            // Ana sayfadaki kart HTML'i afişi saklıyor veya bağlantı başlıkla
+            // aynı öğede değilse, önce dizinin kendi detay sayfasındaki og:image
+            // ve lazy-load görsellerini oku. Kart sınıfı tanınmamış olsa da dene.
+            var detailPoster: String? = null
+            if (detailLookups < 24) {
+                detailLookups++
+                val detailDocument = requestDocument(response.url)
+                detailPoster = detailDocument?.let { posterOf(it) }
+                if (!detailPoster.isNullOrBlank()) {
+                    response.posterUrl = detailPoster
+                    continue
+                }
+            }
+
+            // Yedek: site afişleri slug tabanlı bir yol kullanıyorsa, URL'yi
+            // sadece gerçekten bir görsel döndüğü doğrulandıktan sonra ata.
             if (posterProbes < 24) {
                 posterProbes++
                 val generatedPoster = verifiedSeriesPoster(response.url)
                 if (!generatedPoster.isNullOrBlank()) {
                     response.posterUrl = generatedPoster
-                    continue
                 }
             }
-
-            if (!hasCardContext || detailLookups >= 20) continue
-            detailLookups++
-            val detailDocument = requestDocument(response.url)
-            val detailPoster = detailDocument?.let { posterOf(it) }
-                ?: verifiedSeriesPoster(response.url)
-            if (!detailPoster.isNullOrBlank()) response.posterUrl = detailPoster
         }
 
         return selected.map { it.first }.distinctBy { it.url }
@@ -934,30 +940,47 @@ class DiziBoxLive : MainAPI() {
     }
 
     private fun posterFromElement(element: Element): String? {
-        posterOfElement(element)?.let { return it }
-
-        element.select(
+        val posterSelector =
             "img, picture source, [data-poster], [data-thumbnail], [data-thumb], " +
-                "[data-image], [data-img], [style*=background]"
-        ).forEach { imageLike ->
+                "[data-image-url], [data-image], [data-img], [data-lazy-src], " +
+                "[data-original-src], [data-original], [data-src], [data-lazyload], " +
+                "[data-lazy], [data-cfsrc], [data-background], [data-bg], " +
+                "[data-srcset], [srcset], [style*=background]"
+
+        posterOfElement(element)?.let { return it }
+        element.select(posterSelector).forEach { imageLike ->
             posterOfElement(imageLike)?.let { return it }
         }
 
-        // Sadece aynı kartın kapsayıcılarını tara; sayfanın tüm üst bloklarından
-        // rastgele ilk görseli almak başka dizinin afişini bağlayabiliyor.
+        // Bazı şablonlarda başlık bağlantısı ile afiş bağlantısı aynı kartın
+        // içinde ama farklı <a> etiketlerindedir. Yalnızca aynı dizi URL'sine
+        // giden bağlantıların görsellerini eşleştir; komşu dizinin afişini alma.
+        val targetHref = fixUrlNull(element.attr("href"))
         var current: Element? = element.parent()
-        repeat(5) {
+        repeat(7) {
             val parent = current ?: return@repeat
+
+            if (!targetHref.isNullOrBlank()) {
+                val matchingLinks = parent.select("a[href]").filter { link ->
+                    samePosterTarget(link.attr("href"), targetHref)
+                }
+                matchingLinks.forEach { link ->
+                    posterOfElement(link)?.let { return it }
+                    link.select(posterSelector).forEach { imageLike ->
+                        posterOfElement(imageLike)?.let { return it }
+                    }
+                }
+            }
+
+            // Bazı temalar afişi anchor dışındaki background/data-* öğesinde
+            // tutar. Bu yedek yalnızca bir kartı andıran kapsayıcıda çalışır.
             val classAndId = (parent.className() + " " + parent.id()).lowercase()
             val hasCardHint = parent.tagName() == "article" ||
-                Regex("""(dizi|series|show|poster|entry|episode|film|movie|card|item|box|post|owl-item|swiper-slide)""")
+                Regex("""(dizi|series|show|poster|entry|episode|film|movie|card|item|box|post|owl-item|swiper-slide|thumbnail|thumb)""")
                     .containsMatchIn(classAndId)
 
             if (hasCardHint) {
-                parent.select(
-                    "img, picture source, [data-poster], [data-thumbnail], [data-thumb], " +
-                        "[data-image], [data-img], [style*=background]"
-                ).forEach { imageLike ->
+                parent.select(posterSelector).forEach { imageLike ->
                     posterOfElement(imageLike)?.let { return it }
                 }
                 posterOfElement(parent)?.let { return it }
@@ -966,6 +989,19 @@ class DiziBoxLive : MainAPI() {
         }
 
         return null
+    }
+
+    private fun samePosterTarget(rawHref: String, targetHref: String): Boolean {
+        fun key(raw: String): String {
+            return runCatching {
+                val uri = URI(fixUrl(raw))
+                val host = uri.host.orEmpty().removePrefix("www.").lowercase()
+                val path = uri.path.orEmpty().trimEnd('/').lowercase()
+                "$host$path"
+            }.getOrDefault(raw.substringBefore('?').trimEnd('/').lowercase())
+        }
+
+        return key(rawHref) == key(targetHref)
     }
 
     /**
