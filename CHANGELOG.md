@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:1bffaba5effa4b8c89885eeb38c5cec488250a24 -->
+### Bump DiziBoxLive to version 3 after provider rewrite
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [1bffaba](https://github.com/Kayracs3/Kayra/commit/1bffaba5effa4b8c89885eeb38c5cec488250a24)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:9fe130d66e0806013dd243cea005b8422ca959bf -->
 ### Rewrite DiziBoxLive provider from scratch
 
