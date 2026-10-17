@@ -191,7 +191,7 @@ class AsyaWatch : MainAPI() {
         // The Macellan CDN sometimes stores a poster path without its hostname.
         // Only apply this CDN rule to its recognizable IMDb-poster path shape.
         val macellanPosterPath = Regex(
-            """(?i)^/?images/\\d+/\\d+/\\d+/{1,2}tt\\d+-poster-\\d+\\.(?:jpe?g|png|webp)(?:[?#].*)?$"""
+            """(?i)^/?images/\d+/\d+/\d+/{1,2}tt\d+-poster-\d+\.(?:jpe?g|png|webp)(?:[?#].*)?$"""
         )
         if (!value.startsWith("http://", true) && !value.startsWith("https://", true) &&
             macellanPosterPath.matches(value)
