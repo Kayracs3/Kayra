@@ -93,6 +93,7 @@ class DiziLife : MainAPI() {
     private fun looksLikeTechnicalTitle(title: String): Boolean {
         val value = norm(title)
         if (Regex("""^(?:icerik|content)\s+[a-z0-9]{4,}$""").matches(value)) return true
+        if (Regex("""^(?:icerik|content)[a-z0-9]{4,}$""").matches(value.replace(" ", ""))) return true
 
         // Avoid exposing compact player/database IDs as if they were titles.
         // Genuine Han/Hangul/Kana names are not tested against this Latin-ID rule.
