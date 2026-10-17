@@ -223,18 +223,59 @@ class DiziBoxLive : MainAPI() {
             (value.contains("bolum") && value.contains("izle"))
     }
 
+    private fun isExplicitSeriesPageLink(anchor: Element): Boolean {
+        val label = listOf(
+            anchor.text(),
+            anchor.attr("title"),
+            anchor.attr("aria-label"),
+            anchor.selectFirst("img")?.attr("alt"),
+        ).joinToString(" ").lowercase(Locale.ROOT)
+            .replace('ı', 'i')
+        return label.contains("dizi sayfasina gidin") ||
+            label.contains("dizi sayfasina git") ||
+            label.contains("dizi izle")
+    }
+
     private fun findSeriesUrl(anchor: Element, currentUrl: String): String? {
         if (isSeriesUrl(currentUrl)) return currentUrl
+
+        // DiziBOX episode links can point to series routes such as
+        // /the-agency-izle/ rather than /diziler/the-agency/. Use its own
+        // explicit "Dizi sayfasına gidin" label first, not only URL patterns.
         var parent: Element? = anchor.parent()
-        repeat(6) {
+        repeat(8) {
             val node = parent ?: return@repeat
             node.select("a[href]").forEach { candidate ->
                 val href = absoluteUrl(candidate.attr("href"), currentUrl) ?: return@forEach
-                if (isSameSite(href) && isSeriesUrl(href)) return href
+                if (!isSameSite(href) || isEpisodeLink(href, candidate.text())) return@forEach
+                if (isExplicitSeriesPageLink(candidate) || isSeriesUrl(href)) return href
             }
             parent = node.parent()
         }
         return null
+    }
+
+    /**
+     * Finds the smallest nearby wrapper that contains both poster-like content
+     * and one or two links representing this card. Do not depend on CSS class
+     * names: DiziBOX's episode cards separate the episode-title link from the
+     * series-page/poster link and themes often rename wrapper classes.
+     */
+    private fun cardFor(anchor: Element): Element {
+        var node: Element? = anchor
+        repeat(8) {
+            val element = node ?: return anchor.parent() ?: anchor
+            val hasImage = element.selectFirst(posterSelector) != null
+            val contentLinks = element.select("a[href]").count { link ->
+                val href = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl })
+                    ?: return@count false
+                isSameSite(href) &&
+                    (isSeriesUrl(href) || isEpisodeLink(href, link.text()) || isExplicitSeriesPageLink(link))
+            }
+            if (hasImage && contentLinks in 1..3) return element
+            node = element.parent()
+        }
+        return anchor.parent() ?: anchor
     }
 
     // Poster extraction ----------------------------------------------------
@@ -247,21 +288,38 @@ class DiziBoxLive : MainAPI() {
 
     private fun posterFromCard(anchor: Element, title: String): String? {
         posterFromElement(anchor)?.let { return it }
-        var parent: Element? = anchor.parent()
-        repeat(8) {
-            val node = parent ?: return@repeat
-            val classNames = (node.className() + " " + node.id()).lowercase(Locale.ROOT)
-            val isCard = node.tagName() == "article" ||
-                Regex("""(card|item|episode|series|dizi|show|poster|thumb|entry|post|box|owl-item|swiper-slide|archive)""")
-                    .containsMatchIn(classNames)
-            if (isCard || it < 2) {
-                node.select(posterSelector).forEach { image ->
-                    posterFromElement(image)?.let { poster ->
-                        if (looksLikePoster(poster, title)) return poster
-                    }
+
+        val card = cardFor(anchor)
+        posterFromElement(card)?.let { if (looksLikePoster(it, title)) return it }
+
+        // The selected card can have separate anchors for its poster and title.
+        // Prefer the explicitly labelled link to the series page if it contains
+        // or neighbors the image; otherwise accept the first actual image-like
+        // URL in this compact card wrapper.
+        card.select("a[href]").forEach { link ->
+            if (isExplicitSeriesPageLink(link)) {
+                posterFromElement(link)?.let { return it }
+                link.select(posterSelector).forEach { image ->
+                    posterFromElement(image)?.let { return it }
                 }
-                posterFromElement(node)?.let { poster ->
-                    if (looksLikePoster(poster, title)) return poster
+            }
+        }
+        card.select(posterSelector).forEach { image ->
+            posterFromElement(image)?.let { poster ->
+                if (looksLikePoster(poster, title)) return poster
+            }
+        }
+
+        // A few themes place the poster in an adjacent wrapper rather than
+        // inside the link/card element.
+        var parent: Element? = card.parent()
+        repeat(2) {
+            val node = parent ?: return@repeat
+            val matching = node.select("a[href]").filter { isExplicitSeriesPageLink(it) }
+            matching.forEach { link ->
+                posterFromElement(link)?.let { return it }
+                link.select(posterSelector).forEach { image ->
+                    posterFromElement(image)?.let { return it }
                 }
             }
             parent = node.parent()
@@ -301,9 +359,13 @@ class DiziBoxLive : MainAPI() {
             value.endsWith(".svg")
         ) return false
         val path = runCatching { URI(url).path.orEmpty() }.getOrDefault("")
-        val hasImagePath = Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)$""").containsMatchIn(path) ||
-            value.contains("image") || value.contains("poster") || value.contains("afis")
-        return hasImagePath || title.isNotBlank()
+        val hasImagePath = Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)(?:$|/)""")
+            .containsMatchIn(path) || value.contains("image") || value.contains("poster") ||
+            value.contains("afis") || value.contains("thumbnail") || value.contains("uploads")
+        // Real poster CDN URLs do not always retain a conventional image suffix.
+        // Because this function receives a URL from an image/data-poster element,
+        // do not reject it merely because its path has no .jpg/.webp extension.
+        return hasImagePath || title.isNotBlank() || (path.isNotBlank() && path != "/")
     }
 
     private fun normalizeImage(raw: String?): String? {
