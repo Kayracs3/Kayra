@@ -795,19 +795,44 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun subtitleLanguage(label: String, url: String = ""): String {
-        val value = (label + " " + url).lowercase()
-            .replace("_", "-")
-        return when {
-            value.contains("turk") || value.contains("türk") || value.contains("turkce") ||
-                Regex("""(?:^|[/?.=&_-])tr(?:$|[/?.=&_-])""").containsMatchIn(value) -> "Türkçe"
-            value.contains("english") || value.contains("ingiliz") ||
-                Regex("""(?:^|[/?.=&_-])en(?:$|[/?.=&_-])""").containsMatchIn(value) -> "English"
-            value.contains("korean") || value.contains("korece") ||
-                Regex("""(?:^|[/?.=&_-])ko(?:$|[/?.=&_-])""").containsMatchIn(value) -> "Korean"
-            value.contains("japanese") || value.contains("japonca") ||
-                Regex("""(?:^|[/?.=&_-])ja(?:$|[/?.=&_-])""").containsMatchIn(value) -> "Japanese"
-            label.isNotBlank() && label.length < 40 -> label
-            else -> "Altyazı"
+        // Player/HLS label is authoritative. The URL may live under a shared path
+        // such as /sub_turkish/ even when that particular track is English.
+        fun languageFrom(value: String): String? {
+            val normalized = value.lowercase()
+                .replace("_", "-")
+                .trim()
+            return when {
+                normalized.contains("turk") || normalized.contains("türk") ||
+                    Regex("""(?:^|[^a-z])(?:tr|tur|turkish|turkce)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Türkçe"
+                normalized.contains("english") || normalized.contains("ingiliz") ||
+                    Regex("""(?:^|[^a-z])(?:en|eng)(?:$|[^a-z])""").containsMatchIn(normalized) -> "English"
+                normalized.contains("korean") || normalized.contains("korece") ||
+                    Regex("""(?:^|[^a-z])ko(?:$|[^a-z])""").containsMatchIn(normalized) -> "Korean"
+                normalized.contains("japanese") || normalized.contains("japonca") ||
+                    Regex("""(?:^|[^a-z])ja(?:$|[^a-z])""").containsMatchIn(normalized) -> "Japanese"
+                normalized.contains("spanish") || normalized.contains("español") ||
+                    Regex("""(?:^|[^a-z])(?:es|spa)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Spanish"
+                normalized.contains("french") || normalized.contains("français") ||
+                    Regex("""(?:^|[^a-z])(?:fr|fra)(?:$|[^a-z])""").containsMatchIn(normalized) -> "French"
+                normalized.contains("german") || normalized.contains("deutsch") ||
+                    Regex("""(?:^|[^a-z])(?:de|deu)(?:$|[^a-z])""").containsMatchIn(normalized) -> "German"
+                else -> null
+            }
+        }
+
+        // Never let words in the URL override an explicit track language.
+        languageFrom(label)?.let { return it }
+        languageFrom(url)?.let { return it }
+
+        val cleanLabel = label.trim()
+        val genericLabels = setOf(
+            "", "file", "src", "url", "track", "subtitle", "subtitles",
+            "caption", "captions", "default", "und", "unknown"
+        )
+        return if (cleanLabel.lowercase() !in genericLabels && cleanLabel.length < 40) {
+            cleanLabel
+        } else {
+            "Altyazı"
         }
     }
 
