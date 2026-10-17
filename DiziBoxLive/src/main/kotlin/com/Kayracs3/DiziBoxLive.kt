@@ -40,8 +40,16 @@ class DiziBoxLive : MainAPI() {
 
     // Cloudflare/hotlink-protected image hosts can reject CloudStream's image
     // loader unless poster requests carry the same browser headers.
+    private val posterBrowserUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+
     private val posterRequestHeaders = headers +
-        ("Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+        mapOf(
+            "User-Agent" to posterBrowserUserAgent,
+            "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            "Referer" to "$mainUrl/",
+        )
 
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Son Eklenenler",
