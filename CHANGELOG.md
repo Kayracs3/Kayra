@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:a45078298356bce666143466cb7839b543fcf95a -->
+### Bump DiziBoxLive plugin to version 2
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [a450782](https://github.com/Kayracs3/Kayra/commit/a45078298356bce666143466cb7839b543fcf95a)
+
+## 2026-10-17
+
+<!-- kayra-commit:04ec1125bdd385dd22977117d5405a7b137055aa -->
+### Fix DiziBoxLive homepage poster extraction
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [04ec112](https://github.com/Kayracs3/Kayra/commit/04ec1125bdd385dd22977117d5405a7b137055aa)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:f0e1955329397aeb3a1d774417b2a0a4f7457041 -->
 ### Publish AsyaFilmIzle as version 2
 
