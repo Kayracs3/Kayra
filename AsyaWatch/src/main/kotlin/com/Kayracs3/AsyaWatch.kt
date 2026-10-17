@@ -979,7 +979,69 @@ class AsyaWatch : MainAPI() {
         return result.map { it.key to it.value }
     }
 
-    private fun publishSubtitlesFromText(
+    /**
+     * CloudStream's external SubtitleFile loader expects one standalone VTT/SRT file.
+     * A subtitle-only HLS playlist (.m3u8) is not such a file and is interpreted as SubRip.
+     * Resolve simple one-segment HLS subtitle playlists to their actual WebVTT segment.
+     * Multi-segment playlists cannot safely be represented as one SubtitleFile URL.
+     */
+    private suspend fun resolvePlayableSubtitleUrl(
+        url: String,
+        referer: String
+    ): String? {
+        if (!url.contains(".m3u8", true)) return url
+
+        var current = url
+        val visited = HashSet<String>()
+
+        repeat(2) {
+            if (!visited.add(current)) return null
+
+            val response = runCatching {
+                app.get(
+                    current,
+                    headers = siteHeaders,
+                    referer = referer,
+                    allowRedirects = true
+                )
+            }.getOrNull() ?: return null
+            if (!response.isSuccessful) return null
+
+            val body = normalizeSubtitleText(response.text).trim()
+            if (body.startsWith("WEBVTT", true)) {
+                // The response is actually VTT despite the .m3u8 URL suffix. The fragment
+                // is not sent to the server, but lets CloudStream choose the VTT MIME type.
+                return "$current#subtitle.vtt"
+            }
+            if (!body.startsWith("#EXTM3U", true)) return null
+
+            val entries = body.lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotBlank() && !it.startsWith("#") }
+                .mapNotNull { resolveSubtitleUrl(it, current) }
+                .distinct()
+                .toList()
+
+            val vttEntries = entries.filter {
+                Regex("""(?i)\.(?:vtt|webvtt)(?:[?#].*)?$""").containsMatchIn(it)
+            }
+            if (entries.size == 1 && vttEntries.size == 1) {
+                return vttEntries.first()
+            }
+
+            // Follow a single nested playlist, but do not incorrectly publish only the
+            // first segment of a multi-segment subtitle track.
+            val nestedPlaylists = entries.filter { it.contains(".m3u8", true) }
+            if (entries.size == 1 && nestedPlaylists.size == 1) {
+                current = nestedPlaylists.first()
+            } else {
+                return null
+            }
+        }
+        return null
+    }
+
+    private suspend fun publishSubtitlesFromText(
         text: String,
         baseUrl: String,
         seen: MutableSet<String>,
@@ -1026,17 +1088,18 @@ class AsyaWatch : MainAPI() {
         }
 
         for (payload in variants) {
-            subtitleUrls(payload, baseUrl).forEach { (url, label) ->
+            for ((rawUrl, label) in subtitleUrls(payload, baseUrl)) {
+                val url = resolvePlayableSubtitleUrl(rawUrl, referer) ?: continue
                 seen.add(url)
                 emit(url, label)
             }
 
             val document = runCatching { Jsoup.parse(payload, baseUrl) }.getOrNull() ?: continue
-            document.select("track[src], track[data-src], track[data-url]").forEach { track ->
+            for (track in document.select("track[src], track[data-src], track[data-url]")) {
                 val raw = track.attr("src")
                     .ifBlank { track.attr("data-src") }
                     .ifBlank { track.attr("data-url") }
-                val url = resolveSubtitleUrl(raw, baseUrl) ?: return@forEach
+                val rawUrl = resolveSubtitleUrl(raw, baseUrl) ?: continue
                 val label = track.attr("label")
                     .ifBlank { track.attr("srclang") }
                     .ifBlank { track.attr("data-lang") }
@@ -1044,7 +1107,8 @@ class AsyaWatch : MainAPI() {
                 val explicitTrack = label != "Altyazı" ||
                     track.attr("kind").equals("subtitles", true) ||
                     track.attr("kind").equals("captions", true)
-                if (!looksLikeSubtitle(url) && !explicitTrack) return@forEach
+                if (!looksLikeSubtitle(rawUrl) && !explicitTrack) continue
+                val url = resolvePlayableSubtitleUrl(rawUrl, referer) ?: continue
                 seen.add(url)
                 emit(url, label)
             }
