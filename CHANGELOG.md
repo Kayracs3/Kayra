@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:2ef7db5e013df41f6b6f6e512c0d67ac9ebbc724 -->
+### Bump AsyaWatch version for Turkish subtitle fix
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [2ef7db5](https://github.com/Kayracs3/Kayra/commit/2ef7db5e013df41f6b6f6e512c0d67ac9ebbc724)
+
+## 2026-10-17
+
+<!-- kayra-commit:30d8693acbab53b9f0fe9576dedf3d7e5477d477 -->
+### Restore AsyaWatch Turkish subtitle language detection
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [30d8693](https://github.com/Kayracs3/Kayra/commit/30d8693acbab53b9f0fe9576dedf3d7e5477d477)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:e5b9e24ef8d736062bfd8f133815535cdbfefea2 -->
 ### Bump AsyaWatch version for subtitle track mapping fix
 
