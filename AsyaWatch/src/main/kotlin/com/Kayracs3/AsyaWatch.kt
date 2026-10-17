@@ -174,17 +174,87 @@ class AsyaWatch : MainAPI() {
     private fun imageUrl(raw: String?): String? {
         var value = raw?.trim().orEmpty()
         if (value.isBlank()) return null
+        value = value
+            .replace("\\/", "/")
+            .replace("&amp;", "&")
+            .replace("\\u0026", "&")
+            .replace("\\u003d", "=")
+            .trim()
+            .trim('"', '\\'')
+
+        // Some cards return an AMP image proxy rather than the original image URL.
         val marker = "images-macellan-online.cdn.ampproject.org/i/s/"
         val markerIndex = value.indexOf(marker, ignoreCase = true)
         if (markerIndex >= 0) {
             val tail = value.substring(markerIndex + marker.length).trimStart('/')
-            value = if (tail.startsWith("http://", true) || tail.startsWith("https://", true)) {
-                tail
-            } else {
-                "https://$tail"
+            value = when {
+                tail.startsWith("http://", true) || tail.startsWith("https://", true) -> tail
+                tail.startsWith("http%3A%2F%2F", true) -> tail.replaceFirst("http%3A%2F%2F", "http://", true)
+                tail.startsWith("https%3A%2F%2F", true) -> tail.replaceFirst("https%3A%2F%2F", "https://", true)
+                else -> "https://$tail"
             }
         }
+
+        // The API occasionally percent-encodes the scheme and slashes.
+        if (value.startsWith("https%3A%2F%2F", true)) {
+            value = value.replaceFirst("https%3A%2F%2F", "https://", true)
+        } else if (value.startsWith("http%3A%2F%2F", true)) {
+            value = value.replaceFirst("http%3A%2F%2F", "http://", true)
+        }
         return absoluteUrl(value)
+    }
+
+    private fun imageFromJson(value: Any?, depth: Int = 0): String? {
+        if (value == null || depth > 5) return null
+        val imageKeys = listOf(
+            "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
+            "poster", "poster_path", "posterPath", "image_url", "imageUrl",
+            "thumbnail_url", "thumbnailUrl", "thumbnail", "cover_url", "coverUrl",
+            "cover", "image", "thumb", "src"
+        )
+
+        if (value is JSONObject) {
+            for (key in imageKeys) {
+                val candidate = value.opt(key)
+                if (candidate is String) {
+                    imageUrl(candidate)?.let { return it }
+                } else if (candidate is JSONObject || candidate is JSONArray) {
+                    imageFromJson(candidate, depth + 1)?.let { return it }
+                }
+            }
+            val keys = value.keys()
+            while (keys.hasNext()) {
+                val child = value.opt(keys.next()) ?: continue
+                if (child is JSONObject || child is JSONArray) {
+                    imageFromJson(child, depth + 1)?.let { return it }
+                }
+            }
+        } else if (value is JSONArray) {
+            for (index in 0 until value.length()) {
+                imageFromJson(value.opt(index), depth + 1)?.let { return it }
+            }
+        } else if (value is String) {
+            return imageUrl(value)
+        }
+        return null
+    }
+
+    private fun imageFromElement(element: org.jsoup.nodes.Element, base: String): String? {
+        val attributes = listOf(
+            "data-poster", "data-cover", "data-thumbnail", "data-thumb",
+            "data-original", "data-original-src", "data-lazy-src", "data-src",
+            "data-srcset", "srcset", "content", "src"
+        )
+        for (attribute in attributes) {
+            val raw = element.attr(attribute).trim()
+            if (raw.isBlank()) continue
+            // srcset may contain multiple candidates, each followed by a width descriptor.
+            val first = raw.split(',').firstOrNull()?.trim()?.substringBefore(' ') ?: raw
+            imageUrl(first)?.let { return it }
+        }
+        val style = element.attr("style")
+        val cssUrl = Regex("""(?i)url\\(['"]?([^)'"]+)""").find(style)?.groupValues?.getOrNull(1)
+        return imageUrl(cssUrl)
     }
 
     private fun scoreFrom(raw: String?): Score? {
@@ -232,7 +302,12 @@ class AsyaWatch : MainAPI() {
         val title = if (!cultureTitle.isNullOrBlank() && !cultureTitle.equals(originalTitle, true)) {
             "$originalTitle - $cultureTitle"
         } else originalTitle
-        val poster = imageUrl(field(item, "poster_url", "object_poster_url", "poster", "posterUrl"))
+        val poster = imageFromJson(item)
+            ?: imageUrl(field(
+                item,
+                "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
+                "poster", "image_url", "imageUrl", "thumbnail", "thumbnail_url", "cover"
+            ))
         val score = scoreFrom(field(item, "imdb_point", "imdbPoint", "score", "rating"))
         val type = field(item, "used_type", "type", "content_type").orEmpty()
         val isSeries = when {
@@ -279,7 +354,8 @@ class AsyaWatch : MainAPI() {
                 if (seen.add(response.url)) results.add(response)
             }
         }
-        return newHomePageResponse(request, results, hasNext = results.isNotEmpty())
+        val completedResults = fillMissingPosters(results)
+        return newHomePageResponse(request, completedResults, hasNext = completedResults.isNotEmpty())
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -294,7 +370,7 @@ class AsyaWatch : MainAPI() {
             val response = searchResponseFrom(item) ?: continue
             if (seen.add(response.url)) results.add(response)
         }
-        return results
+        return fillMissingPosters(results)
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
@@ -314,12 +390,63 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun detailPoster(content: JSONObject?, document: Document): String? {
-        return imageUrl(field(content, "poster_url", "posterUrl", "object_poster_url"))
-            ?: imageUrl(document.selectFirst("meta[property=og:image]")?.attr("content"))
-            ?: imageUrl(document.selectFirst("meta[name=twitter:image]")?.attr("content"))
-            ?: imageUrl(document.selectFirst("img[data-src], img[data-lazy-src], img[src]")?.let {
-                it.attr("data-src").ifBlank { it.attr("data-lazy-src") }.ifBlank { it.attr("src") }
-            })
+        // Structured API data first: it usually points to the exact poster used in cards.
+        imageFromJson(content)?.let { return it }
+
+        val metadataSelectors = listOf(
+            "meta[property=og:image]",
+            "meta[property=og:image:url]",
+            "meta[property=og:image:secure_url]",
+            "meta[name=twitter:image]",
+            "meta[name=twitter:image:src]",
+            "meta[itemprop=image]",
+            "link[rel=image_src]"
+        )
+        for (selector in metadataSelectors) {
+            val element = document.selectFirst(selector) ?: continue
+            imageFromElement(element, mainUrl)?.let { return it }
+        }
+
+        // Prefer image elements that are explicitly labelled as poster/cover artwork.
+        val posterSelectors = listOf(
+            ".poster img", ".poster-image", ".movie-poster img", ".drama-poster img",
+            ".cover img", ".thumbnail img", "img[class*=poster]", "img[id*=poster]",
+            "img[data-poster]", "img[data-cover]", "img[data-thumbnail]"
+        )
+        for (selector in posterSelectors) {
+            for (element in document.select(selector)) {
+                imageFromElement(element, mainUrl)?.let { return it }
+            }
+        }
+
+        // The original site lazy-loads many images through data-* attributes.
+        for (element in document.select("img, picture source, [style*=background]")) {
+            imageFromElement(element, mainUrl)?.let { return it }
+        }
+
+        // JSON-LD often contains an image even when the card/API poster field is empty.
+        for (script in document.select("script[type=application/ld+json]")) {
+            val json = parseObject(script.data().ifBlank { script.html() })
+            imageFromJson(json)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * A small number of the site's API entries omit the poster even though the
+     * content page contains it. Repair only those results and do not replace
+     * a poster already supplied by the API.
+     */
+    private suspend fun fillMissingPosters(items: List<SearchResponse>): List<SearchResponse> {
+        val missing = items.filter { it.posterUrl.isNullOrBlank() }.take(8)
+        for (item in missing) {
+            val poster = runCatching {
+                val page = getPageData(item.url)
+                detailPoster(objectField(page.secureData, "contentItem", "content_item"), page.document)
+            }.getOrNull()
+            if (!poster.isNullOrBlank()) item.posterUrl = poster
+        }
+        return items
     }
 
     private fun detailYear(content: JSONObject?, document: Document): Int? {
