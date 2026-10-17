@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:eb7a8d916e037fd8b44b35c982ac15907dd0cb2f -->
+### Remove DiziBoxLive plugin after repeated poster failures
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [eb7a8d9](https://github.com/Kayracs3/Kayra/commit/eb7a8d916e037fd8b44b35c982ac15907dd0cb2f)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:70bbaf09949b38c37e4e55dfd1d376d0dcbd5b35 -->
 ### Bump DiziBoxLive to version 8 for poster header fix
 
