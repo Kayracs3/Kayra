@@ -818,10 +818,15 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun subtitleLanguage(label: String, url: String = ""): String {
-        // Player/HLS language metadata must win over the URL path. An English track
-        // can still have a URL containing /sub_turkish/ because players share paths.
+        // Explicit player/HLS track label always wins.
         explicitSubtitleLanguage(label)?.let { return it }
-        explicitSubtitleLanguage(url)?.let { return it }
+
+        // Only infer from the filename, never from parent folders. A shared path such as
+        // /sub_turkish/subtitles.m3u8 can contain an English rendition too.
+        val fileName = runCatching {
+            URI(url).path.orEmpty().substringAfterLast('/')
+        }.getOrDefault(url.substringBefore('?').substringAfterLast('/'))
+        explicitSubtitleLanguage(fileName)?.let { return it }
 
         val cleanLabel = label.trim()
         val genericLabels = setOf(
@@ -901,13 +906,19 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // Handle object-shaped player track definitions such as
-        // {label:"English", file:"...vtt"} or {lang:"tr", url:"...vtt"}.
-        val objectTrack = Regex(
-            """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["'][\s\S]{0,500}?["']?(?:file|src|url|subtitle)["']?\s*[:=]\s*["']([^"']{1,1200})["']"""
+        // Parse label + URL only inside the same object. A broad regex can accidentally
+        // pair a Turkish label with the next object's English URL.
+        val objectLabel = Regex(
+            """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["']"""
         )
-        objectTrack.findAll(body).forEach { match ->
-            add(match.groupValues[2], match.groupValues[1], forceSubtitle = true)
+        val objectUrl = Regex(
+            """(?is)["']?(?:file|src|url|subtitle)["']?\s*[:=]\s*["']([^"']{1,1200})["']"""
+        )
+        Regex("""(?is)\{[^{}]{2,2200}\}""").findAll(body).forEach { objectMatch ->
+            val trackObject = objectMatch.value
+            val label = objectLabel.find(trackObject)?.groupValues?.getOrNull(1) ?: return@forEach
+            val url = objectUrl.find(trackObject)?.groupValues?.getOrNull(1) ?: return@forEach
+            add(url, label, forceSubtitle = true)
         }
 
         Regex(
@@ -991,7 +1002,8 @@ class AsyaWatch : MainAPI() {
 
         for (payload in variants) {
             subtitleUrls(payload, baseUrl).forEach { (url, label) ->
-                if (seen.add(url)) emit(url, label)
+                seen.add(url)
+                emit(url, label)
             }
 
             val document = runCatching { Jsoup.parse(payload, baseUrl) }.getOrNull() ?: continue
@@ -1007,7 +1019,8 @@ class AsyaWatch : MainAPI() {
                 val explicitTrack = label != "Altyazı" ||
                     track.attr("kind").equals("subtitles", true) ||
                     track.attr("kind").equals("captions", true)
-                if ((!looksLikeSubtitle(url) && !explicitTrack) || !seen.add(url)) return@forEach
+                if (!looksLikeSubtitle(url) && !explicitTrack) return@forEach
+                seen.add(url)
                 emit(url, label)
             }
         }
@@ -1115,15 +1128,29 @@ class AsyaWatch : MainAPI() {
         val emittedUrls = HashSet<String>()
         val seenCandidates = HashSet<String>()
         val seenSubtitleUrls = LinkedHashSet<String>()
-        val emittedSubtitleUrls = LinkedHashSet<String>()
         val seenSubtitlePages = LinkedHashSet<String>()
         val seenSubtitleManifests = LinkedHashSet<String>()
+        val pendingSubtitles = LinkedHashMap<String, SubtitleFile>()
 
-        // Parsing helpers maintain their own discovered-URL set; keep a separate
-        // emitted set here so that a newly discovered subtitle is not filtered out
-        // a second time before it reaches CloudStream.
+        fun subtitleLabelPriority(language: String): Int {
+            val value = language.trim().lowercase()
+            return when {
+                value in setOf("", "altyazı", "subtitle", "subtitles", "und", "unknown") -> 0
+                explicitSubtitleLanguage(language) != null -> 3
+                else -> 1
+            }
+        }
+
+        // Collect all discovered tracks before sending callbacks. If an early generic
+        // URL scan finds a track before PlayerJS exposes its real language label, the
+        // explicit label can replace the provisional entry instead of being discarded.
         val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
-            if (emittedSubtitleUrls.add(subtitle.url)) subtitleCallback(subtitle)
+            val existing = pendingSubtitles[subtitle.url]
+            if (existing == null ||
+                subtitleLabelPriority(subtitle.lang) >= subtitleLabelPriority(existing.lang)
+            ) {
+                pendingSubtitles[subtitle.url] = subtitle
+            }
         }
 
         suspend fun processCandidate(raw: String, referer: String, quality: String) {
@@ -1198,6 +1225,7 @@ class AsyaWatch : MainAPI() {
             }
             if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
         }
+        pendingSubtitles.values.forEach { subtitleCallback(it) }
         return found
     }
 }
