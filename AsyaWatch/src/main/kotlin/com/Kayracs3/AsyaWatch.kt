@@ -817,11 +817,30 @@ class AsyaWatch : MainAPI() {
         }
     }
 
+    private fun subtitleUrlLanguage(url: String): String? {
+        val path = runCatching { URI(url).path.orEmpty() }
+            .getOrDefault(url.substringBefore('?'))
+        val segments = path.split('/').filter { it.isNotBlank() }
+
+        // A language-specific subtitle URL is stronger evidence than a label accidentally
+        // paired by a broad PlayerJS regex. Trust explicit sub_<language> folders and
+        // language-coded filenames only, not the hostname or query string.
+        for (directory in segments.dropLast(1).asReversed()) {
+            val language = when {
+                directory.startsWith("sub_", true) -> directory.substring(4)
+                directory.startsWith("sub-", true) -> directory.substring(4)
+                else -> continue
+            }
+            explicitSubtitleLanguage(language)?.let { return it }
+        }
+        return explicitSubtitleLanguage(segments.lastOrNull().orEmpty())
+    }
+
     private fun subtitleLanguage(label: String, url: String = ""): String {
-        // Player/HLS language metadata must win over the URL path. An English track
-        // can still have a URL containing /sub_turkish/ because players share paths.
+        // Prefer a clear language-specific URL over a mislabeled PlayerJS track, then
+        // use the player's language label when the URL itself is generic.
+        subtitleUrlLanguage(url)?.let { return it }
         explicitSubtitleLanguage(label)?.let { return it }
-        explicitSubtitleLanguage(url)?.let { return it }
 
         val cleanLabel = label.trim()
         val genericLabels = setOf(
@@ -859,14 +878,15 @@ class AsyaWatch : MainAPI() {
             val cleaned = raw.trim().trim('"', '\'', '<', '>', ',', ';', '\\').trimEnd(')', ']', '}')
             val url = resolveSubtitleUrl(cleaned, baseUrl) ?: return
             if (looksLikeSubtitle(url) || forceSubtitle) {
-                val explicitLanguage = explicitSubtitleLanguage(label)
-                val language = explicitLanguage ?: subtitleLanguage(label, url)
+                val language = subtitleLanguage(label, url)
+                val pathLanguage = subtitleUrlLanguage(url)
+                val explicitLanguage = pathLanguage ?: explicitSubtitleLanguage(label)
                 val previous = result[url]
 
-                // A later, explicitly named HLS/PlayerJS track must replace any
-                // language guessed earlier from the URL's folder or filename.
+                // Keep the URL's own explicit language when the player label has been
+                // attached to another track by a broad match.
                 if (explicitLanguage != null) {
-                    result[url] = explicitLanguage
+                    result[url] = language
                     explicitlyLabeledUrls.add(url)
                 } else if (!explicitlyLabeledUrls.contains(url) &&
                     (previous == null || previous == "Altyazı")
@@ -876,22 +896,21 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // PlayerJS configuration commonly stores both language tracks in one string:
-        // subtitle: "[Turkish]https://.../tr.vtt,[English]https://.../en.vtt"
-        // Extract the label along with each URL before generic URL scanning.
+        // PlayerJS stores tracks with commas or packed together as
+        // [English].../en.vtt[Turkish].../tr.vtt. Stop each URL before the next '['.
+        val taggedPlayerTrack = Regex(
+            """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s\[\]"']+|/[^,\s\[\]"']+|\.\.?/[^,\s\[\]"']+|[^,\s\[\]"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s\[\]"']*)?)"""
+        )
+
         val playerSubtitleField = Regex(
             """(?is)\b(?:subtitle|subtitles|captions?)\b\s*[:=]\s*["']([^"']{1,8000})["']"""
         )
         playerSubtitleField.findAll(body).forEach { match ->
             val config = match.groupValues[1]
-            val tagged = Regex(
-                """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s"']+|/[^,\s"']+|\.\.?/[^,\s"']+|[^,\s"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s"']*)?)"""
-            )
-            val entries = tagged.findAll(config).toList()
+            val entries = taggedPlayerTrack.findAll(config).toList()
             if (entries.isNotEmpty()) {
-                for (entry in entries) add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
+                entries.forEach { add(it.groupValues[2], it.groupValues[1], forceSubtitle = true) }
             } else {
-                // PlayerJS tek bir altyazı için sadece çıplak URL kullanabilir.
                 config.split(',').map { it.trim() }.filter { candidate ->
                     candidate.startsWith("http://", true) ||
                         candidate.startsWith("https://", true) ||
@@ -901,13 +920,27 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // Handle object-shaped player track definitions such as
-        // {label:"English", file:"...vtt"} or {lang:"tr", url:"...vtt"}.
-        val objectTrack = Regex(
-            """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["'][\s\S]{0,500}?["']?(?:file|src|url|subtitle)["']?\s*[:=]\s*["']([^"']{1,1200})["']"""
+        // Inline PlayerJS variant: file:"...m3u8(subtitle:[English]... [Turkish]...)"
+        Regex("""(?is)\(\s*subtitle(?:s)?\s*:\s*([^)]+)\)""")
+            .findAll(body)
+            .forEach { match ->
+                taggedPlayerTrack.findAll(match.groupValues[1]).forEach { entry ->
+                    add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
+                }
+            }
+
+        // Pair each label and URL only inside the same object to avoid cross-track pairing.
+        val objectLabel = Regex(
+            """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["']"""
         )
-        objectTrack.findAll(body).forEach { match ->
-            add(match.groupValues[2], match.groupValues[1], forceSubtitle = true)
+        val objectUrl = Regex(
+            """(?is)["']?(?:file|src|url|subtitle)["']?\s*[:=]\s*["']([^"']{1,1200})["']"""
+        )
+        Regex("""(?is)\{[^{}]{2,2200}\}""").findAll(body).forEach { objectMatch ->
+            val trackObject = objectMatch.value
+            val label = objectLabel.find(trackObject)?.groupValues?.getOrNull(1) ?: return@forEach
+            val url = objectUrl.find(trackObject)?.groupValues?.getOrNull(1) ?: return@forEach
+            add(url, label, forceSubtitle = true)
         }
 
         Regex(
