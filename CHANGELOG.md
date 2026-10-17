@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:d943a9d3cc58e746fd1b157998d78682d5342495 -->
+### Correct AsyaFilmIzle plugin metadata
+
+- Etkilenen alanlar: AsyaFilmIzle
+- Commit: [d943a9d](https://github.com/Kayracs3/Kayra/commit/d943a9d3cc58e746fd1b157998d78682d5342495)
+
+## 2026-10-17
+
+<!-- kayra-commit:19a6b3f5993c6388b7c338715cb13b49a5204e42 -->
+### Fix AsyaFilmIzle card links and Asian titles
+
+- Etkilenen alanlar: AsyaFilmIzle
+- Commit: [19a6b3f](https://github.com/Kayracs3/Kayra/commit/19a6b3f5993c6388b7c338715cb13b49a5204e42)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:cf10d0af8d3408db95005471bb868d905bd1cb8f -->
 ### Preserve HLS master playlist audio groups in DiziLife
 
