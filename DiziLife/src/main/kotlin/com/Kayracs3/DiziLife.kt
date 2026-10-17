@@ -401,6 +401,7 @@ class DiziLife : MainAPI() {
         val seenPages = LinkedHashSet<String>()
         val seenCandidates = LinkedHashSet<String>()
         val seenScripts = LinkedHashSet<String>()
+        val seenSubtitleUrls = LinkedHashSet<String>()
         val pages = ArrayDeque<Pair<String, Document>>()
         pages.add(episodeUrl to first.document)
         var found = false
@@ -439,6 +440,23 @@ class DiziLife : MainAPI() {
             val candidates = (playerCandidates(document, rawText, pageUrl) + scriptCandidates).distinct()
             candidates.forEach candidateLoop@ { candidate ->
                 if (!seenCandidates.add(candidate)) return@candidateLoop
+
+                // Bu site oynatıcı iframe'inde /player/{id} kullanıyor; medya ise
+                // ayrı CDN'de /{id}/master.m3u8 olarak sunulabiliyor.
+                val playerId = extractPlayerId(candidate)
+                if (playerId != null) {
+                    val directStream = "$knownStreamOrigin/$playerId/master.m3u8"
+                    if (seenCandidates.add(directStream) && emitMedia(directStream, candidate, callback)) {
+                        found = true
+                        Log.d(tag, "Oynatıcı kimliğinden HLS adresi üretildi: $playerId")
+                    }
+                    val turkishSubtitle = "$knownStreamOrigin/$playerId/sub_turkish/subtitles.m3u8"
+                    if (seenSubtitleUrls.add(turkishSubtitle)) {
+                        subtitleCallback(SubtitleFile(lang = "Turkish", url = turkishSubtitle))
+                        Log.d(tag, "Türkçe HLS altyazı adresi eklendi: $playerId")
+                    }
+                }
+
                 if (isMedia(candidate)) {
                     if (emitMedia(candidate, pageUrl, callback)) found = true
                     return@candidateLoop
@@ -472,6 +490,14 @@ class DiziLife : MainAPI() {
                 ": aday=" + candidates.size + ", bulunan=" + found)
         }
         return found
+    }
+
+    private val knownStreamOrigin = "https://one.makesomthingup.click"
+
+    private fun extractPlayerId(url: String): String? {
+        val decoded = url.replace("&amp;", "&").substringBefore('#')
+        return Regex("""(?i)/player/([a-z0-9_-]{12,80})(?:[/?#]|$)""")
+            .find(decoded)?.groupValues?.getOrNull(1)
     }
 
     private fun playerCandidates(document: Document, rawText: String, base: String): List<String> {
