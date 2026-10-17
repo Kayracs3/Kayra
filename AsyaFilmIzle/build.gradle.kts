@@ -1,12 +1,12 @@
-version = 2
+version = 1
 
 cloudstream {
-    description = "AsyaFilmİzle — Asya filmleri ve dizileri sağlayıcısı"
+    description = "DiziPal Türkiye katalog ve bölüm sağlayıcısı"
     authors = listOf("AsyaFilmIzle")
     status = 1
-    tvTypes = listOf("TvSeries", "Movie")
+    tvTypes = listOf("TvSeries")
     language = "tr"
-    iconUrl = "https://asyafilmizle.com/favicon.ico"
+    iconUrl = "https://asyafilmizle.com//favicon.ico"
 }
 
 android {
