@@ -31,6 +31,7 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.net.URI
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
@@ -830,14 +831,41 @@ class AsyaWatch : MainAPI() {
         }
     }
 
+    private fun subtitleUrlQueryLanguage(url: String): String? {
+        val query = runCatching { URI(url).rawQuery.orEmpty() }.getOrDefault("")
+        if (query.isBlank()) return null
+
+        // Only inspect parameters whose names explicitly indicate a subtitle language;
+        // unrelated signed token/query values must never determine the language.
+        val languageKeys = setOf(
+            "lang", "language", "locale", "srclang",
+            "sub_lang", "sub_language", "subtitle_lang", "subtitle_language",
+            "caption_lang", "caption_language"
+        )
+        for (part in query.split('&')) {
+            val rawKey = part.substringBefore('=', "")
+            if (rawKey.isBlank()) continue
+            val key = runCatching {
+                URLDecoder.decode(rawKey.replace("+", "%2B"), "UTF-8")
+            }.getOrDefault(rawKey).lowercase()
+            if (key !in languageKeys) continue
+
+            val rawValue = part.substringAfter('=', "")
+            val value = runCatching {
+                URLDecoder.decode(rawValue.replace("+", "%2B"), "UTF-8")
+            }.getOrDefault(rawValue)
+            explicitSubtitleLanguage(value)?.let { return it }
+        }
+        return null
+    }
+
     private fun subtitleUrlLanguage(url: String): String? {
         val path = runCatching { URI(url).path.orEmpty() }
             .getOrDefault(url.substringBefore('?'))
         val segments = path.split('/').filter { it.isNotBlank() }
 
-        // A language-specific subtitle URL is stronger evidence than a label accidentally
-        // paired by a broad PlayerJS regex. Trust explicit sub_<language> folders and
-        // language-coded filenames only, not the hostname or query string.
+        // Trust explicit language folders and file names first. Some providers instead
+        // put a language code in a query parameter such as ?lang=tr or ?language=turkish.
         for (directory in segments.dropLast(1).asReversed()) {
             val language = when {
                 directory.startsWith("sub_", true) -> directory.substring(4)
@@ -846,7 +874,8 @@ class AsyaWatch : MainAPI() {
             }
             explicitSubtitleLanguage(language)?.let { return it }
         }
-        return explicitSubtitleLanguage(segments.lastOrNull().orEmpty())
+        explicitSubtitleLanguage(segments.lastOrNull().orEmpty())?.let { return it }
+        return subtitleUrlQueryLanguage(url)
     }
 
     private fun subtitleLanguage(label: String, url: String = ""): String {
@@ -1037,7 +1066,15 @@ class AsyaWatch : MainAPI() {
 
         for (payload in variants) {
             subtitleUrls(payload, baseUrl).forEach { (url, label) ->
-                if (seen.add(url)) emit(url, label)
+                // A URL may first appear without a language label and later reappear
+                // correctly tagged as Turkish/English. Do not let the early generic
+                // discovery suppress the later, useful language metadata.
+                if (seen.add(url) ||
+                    subtitleUrlLanguage(url) != null ||
+                    explicitSubtitleLanguage(label) != null
+                ) {
+                    emit(url, label)
+                }
             }
 
             val document = runCatching { Jsoup.parse(payload, baseUrl) }.getOrNull() ?: continue
@@ -1053,7 +1090,15 @@ class AsyaWatch : MainAPI() {
                 val explicitTrack = label != "Altyazı" ||
                     track.attr("kind").equals("subtitles", true) ||
                     track.attr("kind").equals("captions", true)
-                if ((!looksLikeSubtitle(url) && !explicitTrack) || !seen.add(url)) return@forEach
+                if (!looksLikeSubtitle(url) && !explicitTrack) return@forEach
+
+                // As with parsed PlayerJS entries, allow a later explicit language
+                // label to refresh an URL that was first discovered generically.
+                val firstDiscovery = seen.add(url)
+                if (!firstDiscovery &&
+                    subtitleUrlLanguage(url) == null &&
+                    explicitSubtitleLanguage(label) == null
+                ) return@forEach
                 emit(url, label)
             }
         }
@@ -1170,6 +1215,7 @@ class AsyaWatch : MainAPI() {
                 .getOrDefault(subtitle.url.substringBefore('?'))
             val segments = path.split('/').filter { it.isNotBlank() }
             val detectedLanguage = subtitleUrlLanguage(subtitle.url)
+            val queryLanguage = subtitleUrlQueryLanguage(subtitle.url)
             val languageDirectory = segments.dropLast(1).any { directory ->
                 val value = when {
                     directory.startsWith("sub_", true) -> directory.substring(4)
@@ -1182,16 +1228,22 @@ class AsyaWatch : MainAPI() {
             val fileNameLanguage =
                 explicitSubtitleLanguage(segments.lastOrNull().orEmpty()) == detectedLanguage
             val isHlsSubtitlePlaylist = Regex("""(?i)\.m3u8$""").containsMatchIn(path)
+            val standaloneTextTrack = Regex(
+                """(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)$"""
+            ).containsMatchIn(path)
 
-            // The site's working subtitle endpoint is commonly
-            // sub_turkish/subtitles.m3u8 or sub_english/subtitles.m3u8.
-            // Prefer that explicit language folder over unrelated VTT links found later.
+            // Prefer the provider's language-specific folder/filename, then explicit
+            // language query metadata. Generic labels alone should be the weakest signal.
             return when {
-                detectedLanguage == null -> 0
+                detectedLanguage == null && explicitSubtitleLanguage(subtitle.lang) == null -> 0
                 languageDirectory && isHlsSubtitlePlaylist -> 12
                 languageDirectory -> 10
-                fileNameLanguage -> 7
-                else -> 3
+                fileNameLanguage -> 9
+                queryLanguage != null && queryLanguage == detectedLanguage -> 8
+                detectedLanguage != null -> 6
+                standaloneTextTrack -> 4
+                isHlsSubtitlePlaylist -> 2
+                else -> 1
             }
         }
 
