@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:f008eca9d1579065d3e8017bef77ea9404145d30 -->
+### Bump DiziBoxLive to version 7 for card poster fix
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [f008eca](https://github.com/Kayracs3/Kayra/commit/f008eca9d1579065d3e8017bef77ea9404145d30)
+
+## 2026-10-17
+
+<!-- kayra-commit:8484659dffc8f12ab83d819d12c093ea7457b888 -->
+### Fix DiziBox card image matching and series link discovery
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [8484659](https://github.com/Kayracs3/Kayra/commit/8484659dffc8f12ab83d819d12c093ea7457b888)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:d23d2bb43bfea28dd9a140faaf266eb977072143 -->
 ### Bump DiziBoxLive to version 6 with poster headers
 
