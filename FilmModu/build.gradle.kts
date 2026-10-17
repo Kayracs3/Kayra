@@ -1,8 +1,8 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "FilmModu film sağlayıcısı"
-    authors = listOf("neoncs3")
+    authors = listOf("Kayracs3")
     status = 1
     tvTypes = listOf("Movie")
     language = "tr"

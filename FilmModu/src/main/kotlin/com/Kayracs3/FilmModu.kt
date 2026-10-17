@@ -1,4 +1,4 @@
-package com.neoncs3
+package com.Kayracs3
 
 import android.util.Base64
 import android.util.Log
@@ -17,6 +17,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.net.URLEncoder
+import java.util.Locale
 
 class FilmModu : MainAPI() {
 
@@ -88,13 +89,16 @@ class FilmModu : MainAPI() {
         val href = normalizeUrl(raw, mainUrl)
         if (!href.startsWith("http", true)) return false
 
-        val path = runCatching { URI(href).path.orEmpty().lowercase() }.getOrDefault("")
-        if (path.isBlank()) return false
+        val uri = runCatching { URI(href) }.getOrNull() ?: return false
+        val host = uri.host?.lowercase(Locale.ROOT)?.removePrefix("www.") ?: return false
+        val siteHost = runCatching { URI(mainUrl).host?.lowercase(Locale.ROOT)?.removePrefix("www.") }
+            .getOrNull() ?: return false
+        if (host != siteHost) return false
 
-        // Real FilmModu film pages end with "-film-izle".
-        if (!path.endsWith("-film-izle")) return false
+        val path = uri.path.orEmpty().lowercase(Locale.ROOT)
+        if (path.isBlank() || !path.endsWith("-film-izle")) return false
 
-        // Exclude navigation/category/archive pages that also contain "-film-izle".
+        // Film pages only: exclude archive, category and navigation routes.
         val blocked = listOf(
             "/hd-film-kategori/",
             "/arsiv-filmler",
@@ -110,31 +114,85 @@ class FilmModu : MainAPI() {
         return blocked.none { path.contains(it) }
     }
 
+    private fun normalizeSearchText(value: String): String = value
+        .lowercase(Locale.ROOT)
+        .replace('ı', 'i')
+        .replace('ş', 's')
+        .replace('ğ', 'g')
+        .replace('ü', 'u')
+        .replace('ö', 'o')
+        .replace('ç', 'c')
+        .replace(Regex("[^a-z0-9]+"), " ")
+        .trim()
+        .replace(Regex("\\s+"), " ")
+
+    private fun searchSlug(result: SearchResponse): String = runCatching {
+        URI(result.url).path.orEmpty().substringAfterLast('/')
+            .replace(Regex("""(?i)(?:-hd)?-film-izle$"""), "")
+    }.getOrDefault("")
+
+    private fun matchesSearchQuery(query: String, result: SearchResponse): Boolean {
+        val normalizedQuery = normalizeSearchText(query)
+        if (normalizedQuery.isBlank()) return false
+
+        val title = normalizeSearchText(result.name)
+        val slug = normalizeSearchText(searchSlug(result))
+        val haystack = "$title $slug"
+
+        if (title.contains(normalizedQuery) || slug.contains(normalizedQuery)) return true
+
+        val stopWords = setOf("the", "a", "an", "of", "to", "and", "ve", "bir", "ile", "for", "in", "on")
+        val terms = normalizedQuery.split(" ").filter { it.length >= 2 && it !in stopWords }
+        return terms.isNotEmpty() && terms.all { haystack.contains(it) }
+    }
+
+    private fun searchRelevance(query: String, result: SearchResponse): Int {
+        val normalizedQuery = normalizeSearchText(query)
+        val title = normalizeSearchText(result.name)
+        val slug = normalizeSearchText(searchSlug(result))
+        if (title == normalizedQuery) return 1000
+        if (title.contains(normalizedQuery)) return 800
+        if (slug.contains(normalizedQuery)) return 700
+
+        val terms = normalizedQuery.split(" ").filter { it.length >= 2 }
+        val haystack = "$title $slug"
+        return terms.count { haystack.contains(it) } * 10
+    }
+
     private fun Element.toSearchResult(): SearchResponse? {
         val anchor = if (tagName().equals("a", true)) this else selectFirst("a[href]") ?: return null
 
         val href = normalizeUrl(anchor.attr("href"), mainUrl)
-        if (!href.startsWith("http", true)) return null
-
         if (!isFilmDetailLink(href)) return null
 
-        val image = sequence {
-            yield(anchor.selectFirst("img"))
-            var parent = anchor.parent()
-            repeat(6) {
-                if (parent == null) return@repeat
-                yield(parent.selectFirst("img"))
-                parent = parent.parent()
-            }
-        }.filterNotNull().firstOrNull()
+        // Parse data only from the matching movie card. Do not borrow metadata from nearby cards.
+        val card = if (tagName().equals("a", true)) {
+            generateSequence(this as Element?) { it.parent() }
+                .take(6)
+                .firstOrNull { it.hasClass("movie") } ?: this
+        } else {
+            this
+        }
 
-        val title = sequenceOf(
+        val titleSelector = ".turkish-name, .original-name, .movie-title, .title, h3, h2"
+        val imageSelector = "picture img, img[data-src], img[data-lazy-src], img[data-original], img[data-poster], img[data-image], img"
+
+        val image = anchor.selectFirst(imageSelector) ?: card.selectFirst(imageSelector)
+        val titleCandidates = listOf(
+            card.selectFirst(titleSelector)?.text(),
+            anchor.selectFirst(titleSelector)?.text(),
+            anchor.text(),
+            image?.attr("alt"),
+            card.attr("data-title"),
             anchor.attr("title"),
             anchor.attr("aria-label"),
-            anchor.selectFirst("h3, h2, .turkish-name, .original-name, .title, .movie-title")?.text(),
-            image?.attr("alt"),
-            anchor.text(),
-        ).firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
+        )
+
+        val ignoredTitles = setOf("film izle", "filmi izle", "izle", "fragman", "film modu")
+        val title = titleCandidates
+            .map { it.orEmpty().trim() }
+            .firstOrNull { it.isNotBlank() && normalizeSearchText(it) !in ignoredTitles && it.length >= 2 }
+            .orEmpty()
 
         if (title.isBlank()) return null
 
@@ -144,19 +202,12 @@ class FilmModu : MainAPI() {
             image?.attr("data-original"),
             image?.attr("data-poster"),
             image?.attr("data-image"),
+            image?.attr("data-litespeed-src"),
             image?.attr("src"),
         ).firstOrNull { !it.isNullOrBlank() && !it.startsWith("data:", true) }.orEmpty()
 
-        val poster = normalizeUrl(rawPoster, href)
-            .takeIf { it.startsWith("http", true) }
-
-        val ratingText = generateSequence(anchor as Element?) { it.parent() }
-            .take(7)
-            .map { it.text() }
-            .firstOrNull { Regex("""(?i)IMDb|rating|puan""").containsMatchIn(it) }
-            .orEmpty()
-
-        val rating = extractRating(ratingText.ifBlank { anchor.text() })
+        val poster = normalizeUrl(rawPoster, href).takeIf { it.startsWith("http", true) }
+        val rating = extractRating(card.text().ifBlank { anchor.text() })
 
         return newMovieSearchResponse(title, href, TvType.Movie) {
             posterUrl = poster
@@ -172,31 +223,28 @@ class FilmModu : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val q = query.trim()
         if (q.isBlank()) return emptyList()
+
+        // FilmModu's known search endpoint uses the "term" parameter.
+        // Fallback paths can silently return generic popular films instead of search hits.
         val encoded = URLEncoder.encode(q, "UTF-8")
-        val urls = listOf(
-            "$mainUrl/film-ara?term=$encoded",
-            "$mainUrl/film-ara?query=$encoded",
-            "$mainUrl/film-ara?q=$encoded",
-            "$mainUrl/?s=$encoded",
-            "$mainUrl/search?q=$encoded",
-            "$mainUrl/arama/$encoded",
-        ).distinct()
+        val url = "$mainUrl/film-ara?term=$encoded"
+        val document = runCatching {
+            app.get(url, headers = headers(), referer = "$mainUrl/", allowRedirects = true).document
+        }.onFailure {
+            Log.w(tag, "Arama isteği başarısız: $url", it)
+        }.getOrNull() ?: return emptyList()
 
-        for (url in urls) {
-            val document = runCatching {
-                app.get(url, headers = headers(), referer = "$mainUrl/", allowRedirects = true).document
-            }.onFailure {
-                android.util.Log.w("FilmModu", "Arama isteği başarısız: $url", it)
-            }.getOrNull() ?: continue
+        // The website uses div.movie result cards. Scanning every anchor also catches
+        // sidebar, footer, recommendations and unrelated films.
+        val cards = document.select("div.movie")
+        val results = cards
+            .mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
+            .filter { matchesSearchQuery(q, it) }
+            .sortedByDescending { searchRelevance(q, it) }
 
-            val results = document.select("a[href]")
-                .filter { isFilmDetailLink(it.attr("href")) }
-                .mapNotNull { it.toSearchResult() }
-                .distinctBy { it.url }
-            android.util.Log.d("FilmModu", "Arama: $url -> ${results.size} sonuç")
-            if (results.isNotEmpty()) return results
-        }
-        return emptyList()
+        Log.d(tag, "Arama: $url -> ${cards.size} kart, ${results.size} eşleşen sonuç")
+        return results
     }
 
     override suspend fun load(url: String): LoadResponse? {
