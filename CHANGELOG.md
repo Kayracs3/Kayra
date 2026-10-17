@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:356444d9d41fb70551aa882312822269740280e9 -->
+### Attach player headers and improve subtitle URL detection
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [356444d](https://github.com/Kayracs3/Kayra/commit/356444d9d41fb70551aa882312822269740280e9)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:d04a6ee9698845d6a13e5f31a9e36a3271e4b58f -->
 ### Restore AsyaWatch subtitle track extraction
 
