@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:97149d214e258bc00ab3e7ec9626965c3c37186d -->
+### Reject technical DiziLife content IDs as titles
+
+- Etkilenen alanlar: DiziLife
+- Commit: [97149d2](https://github.com/Kayracs3/Kayra/commit/97149d214e258bc00ab3e7ec9626965c3c37186d)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:90c2441bd1ecd2901be9cac2a4b7378b699b42ee -->
 ### Restore AsyaFilmIzle metadata
 
