@@ -526,26 +526,39 @@ class AsyaWatch : MainAPI() {
      * a poster already supplied by the API.
      */
     private suspend fun fillMissingPosters(items: List<SearchResponse>): List<SearchResponse> {
-        // Missing-poster recovery is deliberately limited: multiple extra page
-        // requests in one catalogue can trigger Cloudflare Error 1015.
-        val item = items.firstOrNull { it.posterUrl.isNullOrBlank() } ?: return items
-        val cached = posterFallbackCache[item.url]
-        if (cached != null) {
-            if (cached != noPosterSentinel) item.posterUrl = cached
-            return items
+        if (items.none { it.posterUrl.isNullOrBlank() }) return items
+
+        // Apply every cached result first. The old implementation returned as soon as
+        // it encountered the first cached item, so later missing posters in the same
+        // catalogue were never considered.
+        var attemptedPageRequest = false
+        for (item in items) {
+            if (!item.posterUrl.isNullOrBlank()) continue
+
+            val cached = posterFallbackCache[item.url]
+            if (cached != null) {
+                if (cached != noPosterSentinel) item.posterUrl = cached
+                continue
+            }
+
+            // Keep network fallback conservative: extra page requests in a catalogue
+            // can trigger Cloudflare Error 1015. Try at most one uncached detail page
+            // per call, while still applying cached posters to all other entries.
+            if (attemptedPageRequest || isCoolingDown()) continue
+            val now = System.currentTimeMillis()
+            if (now - lastPosterFallbackAt < 12 * 1000L) continue
+
+            attemptedPageRequest = true
+            lastPosterFallbackAt = now
+            val page = runCatching { getPageData(item.url) }.getOrNull() ?: continue
+            if (page.isRateLimited) continue
+
+            val poster = runCatching {
+                detailPoster(objectField(page.secureData, "contentItem", "content_item"), page.document)
+            }.getOrNull()
+            posterFallbackCache[item.url] = poster ?: noPosterSentinel
+            if (!poster.isNullOrBlank()) item.posterUrl = poster
         }
-
-        val now = System.currentTimeMillis()
-        if (isCoolingDown() || now - lastPosterFallbackAt < 12 * 1000L) return items
-        lastPosterFallbackAt = now
-
-        val page = runCatching { getPageData(item.url) }.getOrNull() ?: return items
-        if (page.isRateLimited) return items
-        val poster = runCatching {
-            detailPoster(objectField(page.secureData, "contentItem", "content_item"), page.document)
-        }.getOrNull()
-        posterFallbackCache[item.url] = poster ?: noPosterSentinel
-        if (!poster.isNullOrBlank()) item.posterUrl = poster
         return items
     }
 
