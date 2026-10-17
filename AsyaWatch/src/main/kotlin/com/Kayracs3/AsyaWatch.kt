@@ -916,12 +916,25 @@ class AsyaWatch : MainAPI() {
         referer: String = baseUrl
     ) {
         fun emit(url: String, label: String) {
-            callback(
-                SubtitleFile(
-                    lang = subtitleLanguage(label, url),
-                    url = url
-                )
+            val subtitle = SubtitleFile(
+                lang = subtitleLanguage(label, url),
+                url = url
             )
+            // Altyazı sunucuları çoğu zaman oynatıcıdaki UA/Referer olmadan isteği reddeder.
+            // SubtitleFile başlıklarını doldurmak, doğrudan VTT/SRT ve HLS altyazı URL'lerinde
+            // tarayıcı ile CloudStream arasındaki bu farkı azaltır.
+            val requestHeaders = siteHeaders.toMutableMap()
+            requestHeaders["Referer"] = referer
+            requestHeaders["Accept"] = "text/vtt, text/plain, */*"
+            val origin = runCatching {
+                val uri = URI(referer)
+                if (uri.scheme != null && uri.authority != null) {
+                    "${uri.scheme}://${uri.authority}"
+                } else null
+            }.getOrNull()
+            if (!origin.isNullOrBlank()) requestHeaders["Origin"] = origin
+            subtitle.headers = requestHeaders
+            callback(subtitle)
         }
 
         val variants = LinkedHashSet<String>()
