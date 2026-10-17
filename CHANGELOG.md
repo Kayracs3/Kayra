@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:f0e1955329397aeb3a1d774417b2a0a4f7457041 -->
+### Publish AsyaFilmIzle as version 2
+
+- Etkilenen alanlar: AsyaFilmIzle
+- Commit: [f0e1955](https://github.com/Kayracs3/Kayra/commit/f0e1955329397aeb3a1d774417b2a0a4f7457041)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:97149d214e258bc00ab3e7ec9626965c3c37186d -->
 ### Reject technical DiziLife content IDs as titles
 
