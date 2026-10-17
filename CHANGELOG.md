@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:a60a60e7a423e9ea3646a52421668163ada5299f -->
+### Resolve DiziLife HLS stream and Turkish subtitle from player ID
+
+- Etkilenen alanlar: DiziLife
+- Commit: [a60a60e](https://github.com/Kayracs3/Kayra/commit/a60a60e7a423e9ea3646a52421668163ada5299f)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:5ab9c455b843b27cf52096833366c9cceef06ff3 -->
 ### Correct DiziLife player URL matching regexes
 
