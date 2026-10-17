@@ -182,6 +182,12 @@ class AsyaWatch : MainAPI() {
             .trim()
             .trim('"', '\'')
 
+        // Some API poster fields contain the Macellan host but omit the URL scheme.
+        // Without this, the host is incorrectly appended to the AsyaWatch origin.
+        if (Regex("""(?i)^(?:[a-z0-9-]+\\.)*macellan\\.online(?=[:/?#]|$)""").containsMatchIn(value)) {
+            value = "https://$value"
+        }
+
         // Some cards return an AMP image proxy rather than the original image URL.
         val marker = "images-macellan-online.cdn.ampproject.org/i/s/"
         val markerIndex = value.indexOf(marker, ignoreCase = true)
