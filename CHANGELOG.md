@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:d58b65f394f53305051b975f15a0126f7e826e8c -->
+### Handle unlabelled PlayerJS subtitle URLs
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [d58b65f](https://github.com/Kayracs3/Kayra/commit/d58b65f394f53305051b975f15a0126f7e826e8c)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:b3a4218010968e22c8e4551b6ca53032573ec097 -->
 ### Bump AsyaWatch version for subtitle fix
 
