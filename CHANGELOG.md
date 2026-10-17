@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:70bbaf09949b38c37e4e55dfd1d376d0dcbd5b35 -->
+### Bump DiziBoxLive to version 8 for poster header fix
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [70bbaf0](https://github.com/Kayracs3/Kayra/commit/70bbaf09949b38c37e4e55dfd1d376d0dcbd5b35)
+
+## 2026-10-17
+
+<!-- kayra-commit:423ae8f6395c481220456ca5e77e4fa83205c2e8 -->
+### Use browser headers for DiziBox poster requests
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [423ae8f](https://github.com/Kayracs3/Kayra/commit/423ae8f6395c481220456ca5e77e4fa83205c2e8)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:f008eca9d1579065d3e8017bef77ea9404145d30 -->
 ### Bump DiziBoxLive to version 7 for card poster fix
 
