@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:5ab9c455b843b27cf52096833366c9cceef06ff3 -->
+### Correct DiziLife player URL matching regexes
+
+- Etkilenen alanlar: DiziLife
+- Commit: [5ab9c45](https://github.com/Kayracs3/Kayra/commit/5ab9c455b843b27cf52096833366c9cceef06ff3)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:9c496e100873dae0f2d4171f20ee301349b16f78 -->
 ### Improve DiziLife player script and API source scanning
 
