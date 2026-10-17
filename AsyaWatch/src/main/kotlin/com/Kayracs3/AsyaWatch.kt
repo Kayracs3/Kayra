@@ -449,18 +449,27 @@ class AsyaWatch : MainAPI() {
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
-    private fun detailTitle(content: JSONObject?, document: Document): String {
+    private fun detailTitle(content: JSONObject?, document: Document, pageUrl: String): String {
         val original = field(content, "original_title", "originalTitle", "title")
         val culture = field(content, "culture_title", "cultureTitle")
-        if (!original.isNullOrBlank()) {
+        if (!original.isNullOrBlank() && !original.contains("Error 1015", true)) {
             return if (!culture.isNullOrBlank() && !culture.equals(original, true)) {
                 "$original - $culture"
             } else original
         }
-        return document.selectFirst("h1")?.text()?.trim()?.takeIf { it.isNotBlank() }
-            ?: document.selectFirst("meta[property=og:title]")?.attr("content")
-                ?.trim()?.takeIf { it.isNotBlank() }
-            ?: document.title().trim().ifBlank { "AsyaWatch içeriği" }
+        val heading = document.selectFirst("h1")?.text()?.trim()
+            ?.takeIf { it.isNotBlank() && !it.contains("Error 1015", true) && !it.contains("rate limited", true) }
+        if (heading != null) return heading
+
+        val openGraph = document.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
+            ?.takeIf { it.isNotBlank() && !it.contains("Error 1015", true) && !it.contains("rate limited", true) }
+        if (openGraph != null) return openGraph
+
+        val pageTitle = document.title().trim()
+        if (pageTitle.isNotBlank() && !pageTitle.contains("Error 1015", true) &&
+            !pageTitle.contains("rate limited", true) && !pageTitle.contains("Just a moment", true)
+        ) return pageTitle
+        return titleFromUrl(pageUrl)
     }
 
     private fun detailPoster(content: JSONObject?, document: Document): String? {
@@ -512,14 +521,26 @@ class AsyaWatch : MainAPI() {
      * a poster already supplied by the API.
      */
     private suspend fun fillMissingPosters(items: List<SearchResponse>): List<SearchResponse> {
-        val missing = items.filter { it.posterUrl.isNullOrBlank() }.take(8)
-        for (item in missing) {
-            val poster = runCatching {
-                val page = getPageData(item.url)
-                detailPoster(objectField(page.secureData, "contentItem", "content_item"), page.document)
-            }.getOrNull()
-            if (!poster.isNullOrBlank()) item.posterUrl = poster
+        // Missing-poster recovery is deliberately limited: multiple extra page
+        // requests in one catalogue can trigger Cloudflare Error 1015.
+        val item = items.firstOrNull { it.posterUrl.isNullOrBlank() } ?: return items
+        val cached = posterFallbackCache[item.url]
+        if (cached != null) {
+            if (cached != noPosterSentinel) item.posterUrl = cached
+            return items
         }
+
+        val now = System.currentTimeMillis()
+        if (isCoolingDown() || now - lastPosterFallbackAt < 12 * 1000L) return items
+        lastPosterFallbackAt = now
+
+        val page = runCatching { getPageData(item.url) }.getOrNull() ?: return items
+        if (page.isRateLimited) return items
+        val poster = runCatching {
+            detailPoster(objectField(page.secureData, "contentItem", "content_item"), page.document)
+        }.getOrNull()
+        posterFallbackCache[item.url] = poster ?: noPosterSentinel
+        if (!poster.isNullOrBlank()) item.posterUrl = poster
         return items
     }
 
@@ -602,7 +623,7 @@ class AsyaWatch : MainAPI() {
         val root = page.secureData
         val content = objectField(root, "contentItem", "content_item") ?: JSONObject()
         val related = objectField(root, "RelatedResults", "relatedResults")
-        val title = detailTitle(content, page.document)
+        val title = detailTitle(content, page.document, url)
         val poster = detailPoster(content, page.document)
         val description = field(content, "description", "plot", "overview")
             ?: page.document.selectFirst("meta[name=description]")?.attr("content")
@@ -787,7 +808,37 @@ class AsyaWatch : MainAPI() {
             if (raw.isNullOrBlank()) return
             val cleaned = raw.trim().trim('"', '\'', '<', '>', ',', ';', '\\')
             val url = resolveSubtitleUrl(cleaned, baseUrl) ?: return
-            if (looksLikeSubtitle(url)) result.putIfAbsent(url, subtitleLanguage(label, url))
+            if (looksLikeSubtitle(url)) {
+                val language = subtitleLanguage(label, url)
+                val previous = result[url]
+                if (previous == null || (label.isNotBlank() && previous == "Altyazı")) {
+                    result[url] = language
+                }
+            }
+        }
+
+        // PlayerJS configuration commonly stores both language tracks in one string:
+        // subtitle: "[Turkish]https://.../tr.vtt,[English]https://.../en.vtt"
+        // Extract the label along with each URL before generic URL scanning.
+        val playerSubtitleField = Regex(
+            """(?is)\b(?:subtitle|subtitles|captions?)\b\s*[:=]\s*["']([^"']{1,8000})["']"""
+        )
+        playerSubtitleField.findAll(body).forEach { match ->
+            val config = match.groupValues[1]
+            val tagged = Regex(
+                """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s"']+|/[^,\s"']+|\.\.?/[^,\s"']+|[^,\s"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s"']*)?)"""
+            )
+            val entries = tagged.findAll(config).toList()
+            for (entry in entries) add(entry.groupValues[2], entry.groupValues[1])
+        }
+
+        // Handle object-shaped player track definitions such as
+        // {label:"English", file:"...vtt"} or {lang:"tr", url:"...vtt"}.
+        val objectTrack = Regex(
+            """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["'][\s\S]{0,500}?["']?(?:file|src|url|subtitle)["']?\s*[:=]\s*["']([^"']{1,1200})["']"""
+        )
+        objectTrack.findAll(body).forEach { match ->
+            add(match.groupValues[2], match.groupValues[1])
         }
 
         Regex(
@@ -801,10 +852,15 @@ class AsyaWatch : MainAPI() {
         Regex(
             """(?i)(subtitle|subtitles|caption|captions|subtitleUrl|subtitle_url|captionUrl|caption_url|track|file|src)\s*["']?\s*[:=]\s*["']([^"']+)["']"""
         ).findAll(body).forEach { match ->
-            add(match.groupValues[2], match.groupValues[1])
+            val value = match.groupValues[2]
+            val tagged = Regex("""(?i)\[\s*([^\]]{1,40})\s*\]\s*([^,\s]+)""").findAll(value).toList()
+            if (tagged.isNotEmpty()) {
+                tagged.forEach { add(it.groupValues[2], it.groupValues[1]) }
+            } else {
+                add(value, match.groupValues[1])
+            }
         }
 
-        // HLS master playlist subtitle renditions use EXT-X-MEDIA with TYPE=SUBTITLES.
         body.lineSequence()
             .filter { it.contains("TYPE=SUBTITLES", true) }
             .forEach { line ->
