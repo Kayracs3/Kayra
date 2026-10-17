@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:88698f61aa31cad2c98972722553fbc6904b9833 -->
+### Bump AsyaWatch version for title-matched posters
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [88698f6](https://github.com/Kayracs3/Kayra/commit/88698f61aa31cad2c98972722553fbc6904b9833)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:b55e7d6ffe7d598210df67864ba704b892e6e7a6 -->
 ### Match AsyaWatch posters by image alt text and CDN URL
 
