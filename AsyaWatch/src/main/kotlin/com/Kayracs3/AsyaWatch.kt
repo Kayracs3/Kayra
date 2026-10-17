@@ -683,10 +683,12 @@ class AsyaWatch : MainAPI() {
     private fun looksLikeSubtitle(url: String): Boolean {
         val value = url.lowercase()
         return Regex("""(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:[?#].*)?$""").containsMatchIn(value) ||
-            value.contains("/subtitle/") ||
-            value.contains("/subtitles/") ||
-            value.contains("/caption/") ||
-            value.contains("/captions/")
+            value.contains("/subtitle/") || value.contains("/subtitles/") ||
+            value.contains("/caption/") || value.contains("/captions/") ||
+            value.contains("/subtitle?") || value.contains("/subtitles?") ||
+            value.contains("/caption?") || value.contains("/captions?") ||
+            value.endsWith("/subtitle") || value.endsWith("/subtitles") ||
+            value.endsWith("/caption") || value.endsWith("/captions")
     }
 
     private fun subtitleLanguage(label: String, url: String = ""): String {
@@ -770,10 +772,22 @@ class AsyaWatch : MainAPI() {
         text: String,
         baseUrl: String,
         seen: MutableSet<String>,
-        callback: (SubtitleFile) -> Unit
+        callback: (SubtitleFile) -> Unit,
+        referer: String = baseUrl
     ) {
+        fun emit(url: String, label: String) {
+            callback(
+                newSubtitleFile(subtitleLanguage(label, url), url) {
+                    headers = mapOf(
+                        "User-Agent" to siteHeaders["User-Agent"].orEmpty(),
+                        "Referer" to referer
+                    )
+                }
+            )
+        }
+
         subtitleUrls(text, baseUrl).forEach { (url, label) ->
-            if (seen.add(url)) callback(SubtitleFile(label, url))
+            if (seen.add(url)) emit(url, label)
         }
 
         val document = runCatching { Jsoup.parse(text, baseUrl) }.getOrNull() ?: return
@@ -787,7 +801,7 @@ class AsyaWatch : MainAPI() {
                 .ifBlank { track.attr("srclang") }
                 .ifBlank { track.attr("data-lang") }
                 .ifBlank { "Altyazı" }
-            callback(SubtitleFile(subtitleLanguage(label, url), url))
+            emit(url, label)
         }
     }
 
@@ -810,7 +824,7 @@ class AsyaWatch : MainAPI() {
         }.getOrNull() ?: return
         if (!response.isSuccessful) return
 
-        publishSubtitlesFromText(response.text, manifestUrl, seen, callback)
+        publishSubtitlesFromText(response.text, manifestUrl, seen, callback, referer)
         if (depth >= 1) return
 
         val nested = response.text.lineSequence()
@@ -847,7 +861,7 @@ class AsyaWatch : MainAPI() {
         if (!response.isSuccessful) return
 
         val html = response.text
-        publishSubtitlesFromText(html, pageUrl, seen, callback)
+        publishSubtitlesFromText(html, pageUrl, seen, callback, pageUrl)
 
         Regex("""(?i)(?:https?:)?//[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""")
             .findAll(html)
