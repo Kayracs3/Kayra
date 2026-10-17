@@ -26,6 +26,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.newSubtitleFile
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -679,6 +680,187 @@ class AsyaWatch : MainAPI() {
         return result.toList()
     }
 
+    private fun looksLikeSubtitle(url: String): Boolean {
+        val value = url.lowercase()
+        return Regex("""(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:[?#].*)?$""").containsMatchIn(value) ||
+            value.contains("/subtitle/") ||
+            value.contains("/subtitles/") ||
+            value.contains("/caption/") ||
+            value.contains("/captions/")
+    }
+
+    private fun subtitleLanguage(label: String, url: String = ""): String {
+        val value = (label + " " + url).lowercase()
+            .replace("_", "-")
+        return when {
+            value.contains("turk") || value.contains("türk") || value.contains("turkce") ||
+                Regex("""(?:^|[/?.=&_-])tr(?:$|[/?.=&_-])""").containsMatchIn(value) -> "Türkçe"
+            value.contains("english") || value.contains("ingiliz") ||
+                Regex("""(?:^|[/?.=&_-])en(?:$|[/?.=&_-])""").containsMatchIn(value) -> "English"
+            value.contains("korean") || value.contains("korece") ||
+                Regex("""(?:^|[/?.=&_-])ko(?:$|[/?.=&_-])""").containsMatchIn(value) -> "Korean"
+            value.contains("japanese") || value.contains("japonca") ||
+                Regex("""(?:^|[/?.=&_-])ja(?:$|[/?.=&_-])""").containsMatchIn(value) -> "Japanese"
+            label.isNotBlank() && label.length < 40 -> label
+            else -> "Altyazı"
+        }
+    }
+
+    private fun resolveSubtitleUrl(raw: String?, baseUrl: String): String? {
+        var value = raw?.trim().orEmpty()
+        if (value.isBlank()) return null
+        value = value.replace("\\/", "/")
+            .replace("\\u0026", "&")
+            .replace("\\u003d", "=")
+            .replace("&amp;", "&")
+            .trim()
+            .trim('"', '\'')
+
+        if (value.startsWith("data:", true) || value.startsWith("javascript:", true)) return null
+        return runCatching {
+            val uri = URI(value)
+            if (uri.isAbsolute) uri.toString()
+            else URI(baseUrl).resolve(value).toString()
+        }.getOrNull()?.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+    }
+
+    private fun subtitleUrls(text: String, baseUrl: String): List<Pair<String, String>> {
+        val body = text.replace("\\/", "/")
+            .replace("\\u0026", "&")
+            .replace("\\u003d", "=")
+            .replace("&amp;", "&")
+        val result = LinkedHashMap<String, String>()
+
+        fun add(raw: String?, label: String = "") {
+            if (raw.isNullOrBlank()) return
+            val cleaned = raw.trim().trim('"', '\'', '<', '>', ',', ';', '\\')
+            val url = resolveSubtitleUrl(cleaned, baseUrl) ?: return
+            if (looksLikeSubtitle(url)) result.putIfAbsent(url, subtitleLanguage(label, url))
+        }
+
+        Regex(
+            """(?i)(?:https?:)?//[^"'<>\s]+?\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:\?[^"'<>\s]*)?"""
+        ).findAll(body).forEach { add(it.value) }
+
+        Regex(
+            """(?i)["']((?:(?:https?:)?//|/|\.\.?/)?[^"'<>\s]{1,900}\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:\?[^"']*)?)["']"""
+        ).findAll(body).forEach { add(it.groupValues[1]) }
+
+        Regex(
+            """(?i)(subtitle|subtitles|caption|captions|subtitleUrl|subtitle_url|captionUrl|caption_url|track|file|src)\s*["']?\s*[:=]\s*["']([^"']+)["']"""
+        ).findAll(body).forEach { match ->
+            add(match.groupValues[2], match.groupValues[1])
+        }
+
+        // HLS master playlist subtitle renditions use EXT-X-MEDIA with TYPE=SUBTITLES.
+        body.lineSequence()
+            .filter { it.contains("TYPE=SUBTITLES", true) }
+            .forEach { line ->
+                val uri = Regex("""(?i)\bURI\s*=\s*["']([^"']+)["']""")
+                    .find(line)?.groupValues?.getOrNull(1) ?: return@forEach
+                val label = Regex("""(?i)\b(?:NAME|LANGUAGE)\s*=\s*["']([^"']+)["']""")
+                    .find(line)?.groupValues?.getOrNull(1).orEmpty()
+                add(uri, label)
+            }
+
+        return result.map { it.key to it.value }
+    }
+
+    private fun publishSubtitlesFromText(
+        text: String,
+        baseUrl: String,
+        seen: MutableSet<String>,
+        callback: (SubtitleFile) -> Unit
+    ) {
+        subtitleUrls(text, baseUrl).forEach { (url, label) ->
+            if (seen.add(url)) callback(SubtitleFile(label, url))
+        }
+
+        val document = runCatching { Jsoup.parse(text, baseUrl) }.getOrNull() ?: return
+        document.select("track[src], track[data-src], track[data-url]").forEach { track ->
+            val raw = track.attr("src")
+                .ifBlank { track.attr("data-src") }
+                .ifBlank { track.attr("data-url") }
+            val url = resolveSubtitleUrl(raw, baseUrl) ?: return@forEach
+            if (!looksLikeSubtitle(url) || !seen.add(url)) return@forEach
+            val label = track.attr("label")
+                .ifBlank { track.attr("srclang") }
+                .ifBlank { track.attr("data-lang") }
+                .ifBlank { "Altyazı" }
+            callback(SubtitleFile(subtitleLanguage(label, url), url))
+        }
+    }
+
+    private suspend fun extractSubtitlesFromManifest(
+        manifestUrl: String,
+        referer: String,
+        seen: MutableSet<String>,
+        seenManifests: MutableSet<String>,
+        callback: (SubtitleFile) -> Unit,
+        depth: Int = 0
+    ) {
+        if (depth > 1 || !manifestUrl.contains(".m3u8", true) || !seenManifests.add(manifestUrl)) return
+        val response = runCatching {
+            app.get(
+                manifestUrl,
+                headers = siteHeaders,
+                referer = referer,
+                allowRedirects = true
+            )
+        }.getOrNull() ?: return
+        if (!response.isSuccessful) return
+
+        publishSubtitlesFromText(response.text, manifestUrl, seen, callback)
+        if (depth >= 1) return
+
+        val nested = response.text.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("#") && it.contains(".m3u8", true) }
+            .mapNotNull { resolveSubtitleUrl(it, manifestUrl) }
+            .distinct()
+            .take(2)
+            .toList()
+        for (url in nested) {
+            extractSubtitlesFromManifest(
+                url, referer, seen, seenManifests, callback, depth + 1
+            )
+        }
+    }
+
+    private suspend fun extractSubtitlesFromPlayerPage(
+        pageUrl: String,
+        referer: String,
+        seen: MutableSet<String>,
+        seenPages: MutableSet<String>,
+        seenManifests: MutableSet<String>,
+        callback: (SubtitleFile) -> Unit
+    ) {
+        if (!seenPages.add(pageUrl) || isDirectMedia(pageUrl)) return
+        val response = runCatching {
+            app.get(
+                pageUrl,
+                headers = siteHeaders,
+                referer = referer,
+                allowRedirects = true
+            )
+        }.getOrNull() ?: return
+        if (!response.isSuccessful) return
+
+        val html = response.text
+        publishSubtitlesFromText(html, pageUrl, seen, callback)
+
+        Regex("""(?i)(?:https?:)?//[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""")
+            .findAll(html)
+            .mapNotNull { resolveSubtitleUrl(it.value, pageUrl) }
+            .distinct()
+            .take(3)
+            .forEach { manifest ->
+                extractSubtitlesFromManifest(
+                    manifest, pageUrl, seen, seenManifests, callback
+                )
+            }
+    }
+
     private fun isDirectMedia(url: String): Boolean =
         Regex("""(?i)\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(url)
 
@@ -705,11 +887,23 @@ class AsyaWatch : MainAPI() {
         var found = false
         val emittedUrls = HashSet<String>()
         val seenCandidates = HashSet<String>()
+        val seenSubtitleUrls = LinkedHashSet<String>()
+        val seenSubtitlePages = LinkedHashSet<String>()
+        val seenSubtitleManifests = LinkedHashSet<String>()
+
+        val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
+            if (seenSubtitleUrls.add(subtitle.url)) subtitleCallback(subtitle)
+        }
 
         suspend fun processCandidate(raw: String, referer: String, quality: String) {
             val candidate = absoluteUrl(raw, referer) ?: return
             if (!seenCandidates.add(candidate)) return
             if (isDirectMedia(candidate)) {
+                if (candidate.contains(".m3u8", true)) {
+                    extractSubtitlesFromManifest(
+                        candidate, referer, seenSubtitleUrls, seenSubtitleManifests, emitSubtitle
+                    )
+                }
                 if (emittedUrls.add(candidate)) {
                     val type = if (candidate.contains(".m3u8", true)) {
                         ExtractorLinkType.M3U8
@@ -732,8 +926,15 @@ class AsyaWatch : MainAPI() {
                 }
                 return
             }
+
+            // Player pages commonly contain their subtitle tracks outside secureData.
+            extractSubtitlesFromPlayerPage(
+                candidate, referer, seenSubtitleUrls, seenSubtitlePages,
+                seenSubtitleManifests, emitSubtitle
+            )
+
             try {
-                loadExtractor(candidate, referer, subtitleCallback) { link ->
+                loadExtractor(candidate, referer, emitSubtitle) { link ->
                     if (emittedUrls.add(link.url)) callback(link)
                     found = true
                 }
@@ -751,12 +952,16 @@ class AsyaWatch : MainAPI() {
             objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
 
         if (page != null) {
+            // Bazı sürümlerde altyazı adresleri source_content JSON alanının içinde tutuluyor.
+            publishSubtitlesFromText(root?.toString().orEmpty(), data, seenSubtitleUrls, emitSubtitle)
+            publishSubtitlesFromText(page.document.html(), data, seenSubtitleUrls, emitSubtitle)
+
             for (source in sourceItems(root, isSeries)) {
+                publishSubtitlesFromText(source.raw, data, seenSubtitleUrls, emitSubtitle)
                 for (candidate in extractCandidates(source.raw, data)) {
                     processCandidate(candidate, data, source.quality)
                 }
             }
-            // Player URL'leri bazı sürümlerde secureData yerine HTML'de tutuluyor.
             for (candidate in extractCandidates(page.document.html(), data)) {
                 processCandidate(candidate, data, "")
             }
