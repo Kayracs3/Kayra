@@ -902,11 +902,15 @@ class AsyaWatch : MainAPI() {
         val emittedUrls = HashSet<String>()
         val seenCandidates = HashSet<String>()
         val seenSubtitleUrls = LinkedHashSet<String>()
+        val emittedSubtitleUrls = LinkedHashSet<String>()
         val seenSubtitlePages = LinkedHashSet<String>()
         val seenSubtitleManifests = LinkedHashSet<String>()
 
+        // Parsing helpers maintain their own discovered-URL set; keep a separate
+        // emitted set here so that a newly discovered subtitle is not filtered out
+        // a second time before it reaches CloudStream.
         val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
-            if (seenSubtitleUrls.add(subtitle.url)) subtitleCallback(subtitle)
+            if (emittedSubtitleUrls.add(subtitle.url)) subtitleCallback(subtitle)
         }
 
         suspend fun processCandidate(raw: String, referer: String, quality: String) {
