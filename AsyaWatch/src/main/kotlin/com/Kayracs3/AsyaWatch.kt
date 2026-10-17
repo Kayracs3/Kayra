@@ -832,7 +832,7 @@ class AsyaWatch : MainAPI() {
             if (raw.isNullOrBlank()) return
             val cleaned = raw.trim().trim('"', '\'', '<', '>', ',', ';', '\\').trimEnd(')', ']', '}')
             val url = resolveSubtitleUrl(cleaned, baseUrl) ?: return
-            if (looksLikeSubtitle(url) || (forceSubtitle && label.isNotBlank())) {
+            if (looksLikeSubtitle(url) || forceSubtitle) {
                 val language = subtitleLanguage(label, url)
                 val previous = result[url]
                 if (previous == null || (label.isNotBlank() && previous == "Altyazı")) {
@@ -853,7 +853,17 @@ class AsyaWatch : MainAPI() {
                 """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s"']+|/[^,\s"']+|\.\.?/[^,\s"']+|[^,\s"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s"']*)?)"""
             )
             val entries = tagged.findAll(config).toList()
-            for (entry in entries) add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
+            if (entries.isNotEmpty()) {
+                for (entry in entries) add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
+            } else {
+                // PlayerJS tek bir altyazı için sadece çıplak URL kullanabilir.
+                config.split(',').map { it.trim() }.filter { candidate ->
+                    candidate.startsWith("http://", true) ||
+                        candidate.startsWith("https://", true) ||
+                        candidate.startsWith("//") ||
+                        candidate.startsWith("/")
+                }.forEach { add(it, "Altyazı", forceSubtitle = true) }
+            }
         }
 
         // Handle object-shaped player track definitions such as
