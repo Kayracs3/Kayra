@@ -26,7 +26,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.utils.newSubtitleFile
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -776,13 +775,14 @@ class AsyaWatch : MainAPI() {
         referer: String = baseUrl
     ) {
         fun emit(url: String, label: String) {
+            // SubtitleFile in the CloudStream snapshot used by this repo only
+            // exposes language and URL; authentication/referrer headers belong
+            // to ExtractorLink, so avoid a helper API that is not available here.
             callback(
-                newSubtitleFile(subtitleLanguage(label, url), url) {
-                    headers = mapOf(
-                        "User-Agent" to siteHeaders["User-Agent"].orEmpty(),
-                        "Referer" to referer
-                    )
-                }
+                SubtitleFile(
+                    lang = subtitleLanguage(label, url),
+                    url = url
+                )
             )
         }
 
