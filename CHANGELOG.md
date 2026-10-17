@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:e93e9d1ace5b895d14b419e164d589fe97074ea2 -->
+### AsyaWatch afiş URL ayrıştırması düzeltmesi
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [e93e9d1](https://github.com/Kayracs3/Kayra/commit/e93e9d1ace5b895d14b419e164d589fe97074ea2)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:d379d3bd217bb37b9f0455f15a97edf802d34529 -->
 ### AsyaWatch afiş ayrıştırması ve eksik afiş yedeği
 
