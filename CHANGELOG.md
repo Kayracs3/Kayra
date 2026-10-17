@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:9c496e100873dae0f2d4171f20ee301349b16f78 -->
+### Improve DiziLife player script and API source scanning
+
+- Etkilenen alanlar: DiziLife
+- Commit: [9c496e1](https://github.com/Kayracs3/Kayra/commit/9c496e100873dae0f2d4171f20ee301349b16f78)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:f173b7d42f076fb7bdb58278ca02bda07fa9a51b -->
 ### Fix DiziLife suspend media link compilation
 
