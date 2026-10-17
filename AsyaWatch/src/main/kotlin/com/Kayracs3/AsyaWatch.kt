@@ -756,9 +756,8 @@ class AsyaWatch : MainAPI() {
     private fun looksLikeSubtitle(url: String): Boolean {
         val value = url.lowercase()
         return Regex("""(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:[?#].*)?$""").containsMatchIn(value) ||
-            // Subtitle playlists may have different filenames (index.m3u8, playlist.m3u8,
-            // subtitles.m3u8) below a language-specific sub_* directory.
-            Regex("""(?i)/sub[_-][a-z0-9_-]+/[^?#]+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:[?#].*)?$""").containsMatchIn(value) ||
+            // Several players expose translated subtitles as a dedicated HLS playlist,
+            // for example /sub_turkish/subtitles.m3u8. This is not a video master playlist.
             Regex("""(?i)/(?:sub_[a-z0-9_-]+/)?(?:subtitles?|captions?)(?:\.m3u8?)?(?:[?#].*)?$""").containsMatchIn(value) ||
             value.contains("/subtitle/") || value.contains("/subtitles/") ||
             value.contains("/caption/") || value.contains("/captions/") ||
@@ -801,7 +800,7 @@ class AsyaWatch : MainAPI() {
             .trim()
         return when {
             normalized.contains("turk") || normalized.contains("türk") ||
-                Regex("""(?:^|[^a-z])(?:tr|tur|turkish|turkce)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Turkish"
+                Regex("""(?:^|[^a-z])(?:tr|tur|turkish|turkce)(?:$|[^a-z])""").containsMatchIn(normalized) -> "Türkçe"
             normalized.contains("english") || normalized.contains("ingiliz") ||
                 Regex("""(?:^|[^a-z])(?:en|eng)(?:$|[^a-z])""").containsMatchIn(normalized) -> "English"
             normalized.contains("korean") || normalized.contains("korece") ||
@@ -819,28 +818,10 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun subtitleLanguage(label: String, url: String = ""): String {
-        // Explicit player/HLS track label always wins.
+        // Player/HLS language metadata must win over the URL path. An English track
+        // can still have a URL containing /sub_turkish/ because players share paths.
         explicitSubtitleLanguage(label)?.let { return it }
-
-        // Some subtitle playlists have a generic filename but an explicit language
-        // directory, such as /sub_turkish/subtitles.m3u8 or /sub_english/subtitles.m3u8.
-        // Read only directories explicitly prefixed with "sub_", not arbitrary URL text.
-        val parentDirectories = runCatching {
-            URI(url).path.orEmpty().split('/').dropLast(1)
-        }.getOrDefault(emptyList())
-        for (directory in parentDirectories.asReversed()) {
-            val languageDirectory = when {
-                directory.startsWith("sub_", ignoreCase = true) -> directory.substring(4)
-                directory.startsWith("sub-", ignoreCase = true) -> directory.substring(4)
-                else -> continue
-            }
-            explicitSubtitleLanguage(languageDirectory)?.let { return it }
-        }
-
-        val fileName = runCatching {
-            URI(url).path.orEmpty().substringAfterLast('/')
-        }.getOrDefault(url.substringBefore('?').substringAfterLast('/'))
-        explicitSubtitleLanguage(fileName)?.let { return it }
+        explicitSubtitleLanguage(url)?.let { return it }
 
         val cleanLabel = label.trim()
         val genericLabels = setOf(
@@ -895,23 +876,22 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // PlayerJS accepts comma-separated subtitle lists and, in newer configurations,
-        // inline tracks inside file:"... (subtitle:[En]url[Tr]url)". Track URLs can touch
-        // the next [Language] marker with no comma, so the URL pattern must stop at '['.
-        val taggedPlayerTrack = Regex(
-            """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s\[\]"']+|/[^,\s\[\]"']+|\.\.?/[^,\s\[\]"']+|[^,\s\[\]"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s\[\]"']*)?)"""
-        )
-
-        // Standard PlayerJS subtitle/subtitles field.
+        // PlayerJS configuration commonly stores both language tracks in one string:
+        // subtitle: "[Turkish]https://.../tr.vtt,[English]https://.../en.vtt"
+        // Extract the label along with each URL before generic URL scanning.
         val playerSubtitleField = Regex(
             """(?is)\b(?:subtitle|subtitles|captions?)\b\s*[:=]\s*["']([^"']{1,8000})["']"""
         )
         playerSubtitleField.findAll(body).forEach { match ->
             val config = match.groupValues[1]
-            val entries = taggedPlayerTrack.findAll(config).toList()
+            val tagged = Regex(
+                """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s"']+|/[^,\s"']+|\.\.?/[^,\s"']+|[^,\s"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s"']*)?)"""
+            )
+            val entries = tagged.findAll(config).toList()
             if (entries.isNotEmpty()) {
-                entries.forEach { add(it.groupValues[2], it.groupValues[1], forceSubtitle = true) }
+                for (entry in entries) add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
             } else {
+                // PlayerJS tek bir altyazı için sadece çıplak URL kullanabilir.
                 config.split(',').map { it.trim() }.filter { candidate ->
                     candidate.startsWith("http://", true) ||
                         candidate.startsWith("https://", true) ||
@@ -921,29 +901,13 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // Newer PlayerJS format stores a playlist inline in a video URL:
-        // file:"...m3u8(subtitle:[English].../en.vtt[Turkish].../tr.vtt)".
-        Regex("""(?is)\(\s*subtitle(?:s)?\s*:\s*([^)]+)\)""")
-            .findAll(body)
-            .forEach { match ->
-                taggedPlayerTrack.findAll(match.groupValues[1]).forEach { entry ->
-                    add(entry.groupValues[2], entry.groupValues[1], forceSubtitle = true)
-                }
-            }
-
-        // Parse label + URL only inside the same object. A broad regex can accidentally
-        // pair a Turkish label with the next object's English URL.
-        val objectLabel = Regex(
-            """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["']"""
+        // Handle object-shaped player track definitions such as
+        // {label:"English", file:"...vtt"} or {lang:"tr", url:"...vtt"}.
+        val objectTrack = Regex(
+            """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["'][\s\S]{0,500}?["']?(?:file|src|url|subtitle)["']?\s*[:=]\s*["']([^"']{1,1200})["']"""
         )
-        val objectUrl = Regex(
-            """(?is)["']?(?:file|src|url|subtitle)["']?\s*[:=]\s*["']([^"']{1,1200})["']"""
-        )
-        Regex("""(?is)\{[^{}]{2,2200}\}""").findAll(body).forEach { objectMatch ->
-            val trackObject = objectMatch.value
-            val label = objectLabel.find(trackObject)?.groupValues?.getOrNull(1) ?: return@forEach
-            val url = objectUrl.find(trackObject)?.groupValues?.getOrNull(1) ?: return@forEach
-            add(url, label, forceSubtitle = true)
+        objectTrack.findAll(body).forEach { match ->
+            add(match.groupValues[2], match.groupValues[1], forceSubtitle = true)
         }
 
         Regex(
@@ -979,69 +943,7 @@ class AsyaWatch : MainAPI() {
         return result.map { it.key to it.value }
     }
 
-    /**
-     * CloudStream's external SubtitleFile loader expects one standalone VTT/SRT file.
-     * A subtitle-only HLS playlist (.m3u8) is not such a file and is interpreted as SubRip.
-     * Resolve simple one-segment HLS subtitle playlists to their actual WebVTT segment.
-     * Multi-segment playlists cannot safely be represented as one SubtitleFile URL.
-     */
-    private suspend fun resolvePlayableSubtitleUrl(
-        url: String,
-        referer: String
-    ): String? {
-        if (!url.contains(".m3u8", true)) return url
-
-        var current = url
-        val visited = HashSet<String>()
-
-        repeat(2) {
-            if (!visited.add(current)) return null
-
-            val response = runCatching {
-                app.get(
-                    current,
-                    headers = siteHeaders,
-                    referer = referer,
-                    allowRedirects = true
-                )
-            }.getOrNull() ?: return null
-            if (!response.isSuccessful) return null
-
-            val body = normalizeSubtitleText(response.text).trim()
-            if (body.startsWith("WEBVTT", true)) {
-                // The response is actually VTT despite the .m3u8 URL suffix. The fragment
-                // is not sent to the server, but lets CloudStream choose the VTT MIME type.
-                return "$current#subtitle.vtt"
-            }
-            if (!body.startsWith("#EXTM3U", true)) return null
-
-            val entries = body.lineSequence()
-                .map { it.trim() }
-                .filter { it.isNotBlank() && !it.startsWith("#") }
-                .mapNotNull { resolveSubtitleUrl(it, current) }
-                .distinct()
-                .toList()
-
-            val vttEntries = entries.filter {
-                Regex("""(?i)\.(?:vtt|webvtt)(?:[?#].*)?$""").containsMatchIn(it)
-            }
-            if (entries.size == 1 && vttEntries.size == 1) {
-                return vttEntries.first()
-            }
-
-            // Follow a single nested playlist, but do not incorrectly publish only the
-            // first segment of a multi-segment subtitle track.
-            val nestedPlaylists = entries.filter { it.contains(".m3u8", true) }
-            if (entries.size == 1 && nestedPlaylists.size == 1) {
-                current = nestedPlaylists.first()
-            } else {
-                return null
-            }
-        }
-        return null
-    }
-
-    private suspend fun publishSubtitlesFromText(
+    private fun publishSubtitlesFromText(
         text: String,
         baseUrl: String,
         seen: MutableSet<String>,
@@ -1088,18 +990,16 @@ class AsyaWatch : MainAPI() {
         }
 
         for (payload in variants) {
-            for ((rawUrl, label) in subtitleUrls(payload, baseUrl)) {
-                val url = resolvePlayableSubtitleUrl(rawUrl, referer) ?: continue
-                seen.add(url)
-                emit(url, label)
+            subtitleUrls(payload, baseUrl).forEach { (url, label) ->
+                if (seen.add(url)) emit(url, label)
             }
 
             val document = runCatching { Jsoup.parse(payload, baseUrl) }.getOrNull() ?: continue
-            for (track in document.select("track[src], track[data-src], track[data-url]")) {
+            document.select("track[src], track[data-src], track[data-url]").forEach { track ->
                 val raw = track.attr("src")
                     .ifBlank { track.attr("data-src") }
                     .ifBlank { track.attr("data-url") }
-                val rawUrl = resolveSubtitleUrl(raw, baseUrl) ?: continue
+                val url = resolveSubtitleUrl(raw, baseUrl) ?: return@forEach
                 val label = track.attr("label")
                     .ifBlank { track.attr("srclang") }
                     .ifBlank { track.attr("data-lang") }
@@ -1107,9 +1007,7 @@ class AsyaWatch : MainAPI() {
                 val explicitTrack = label != "Altyazı" ||
                     track.attr("kind").equals("subtitles", true) ||
                     track.attr("kind").equals("captions", true)
-                if (!looksLikeSubtitle(rawUrl) && !explicitTrack) continue
-                val url = resolvePlayableSubtitleUrl(rawUrl, referer) ?: continue
-                seen.add(url)
+                if ((!looksLikeSubtitle(url) && !explicitTrack) || !seen.add(url)) return@forEach
                 emit(url, label)
             }
         }
@@ -1217,29 +1115,15 @@ class AsyaWatch : MainAPI() {
         val emittedUrls = HashSet<String>()
         val seenCandidates = HashSet<String>()
         val seenSubtitleUrls = LinkedHashSet<String>()
+        val emittedSubtitleUrls = LinkedHashSet<String>()
         val seenSubtitlePages = LinkedHashSet<String>()
         val seenSubtitleManifests = LinkedHashSet<String>()
-        val pendingSubtitles = LinkedHashMap<String, SubtitleFile>()
 
-        fun subtitleLabelPriority(language: String): Int {
-            val value = language.trim().lowercase()
-            return when {
-                value in setOf("", "altyazı", "subtitle", "subtitles", "und", "unknown") -> 0
-                explicitSubtitleLanguage(language) != null -> 3
-                else -> 1
-            }
-        }
-
-        // Collect all discovered tracks before sending callbacks. If an early generic
-        // URL scan finds a track before PlayerJS exposes its real language label, the
-        // explicit label can replace the provisional entry instead of being discarded.
+        // Parsing helpers maintain their own discovered-URL set; keep a separate
+        // emitted set here so that a newly discovered subtitle is not filtered out
+        // a second time before it reaches CloudStream.
         val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
-            val existing = pendingSubtitles[subtitle.url]
-            if (existing == null ||
-                subtitleLabelPriority(subtitle.lang) >= subtitleLabelPriority(existing.lang)
-            ) {
-                pendingSubtitles[subtitle.url] = subtitle
-            }
+            if (emittedSubtitleUrls.add(subtitle.url)) subtitleCallback(subtitle)
         }
 
         suspend fun processCandidate(raw: String, referer: String, quality: String) {
@@ -1314,7 +1198,6 @@ class AsyaWatch : MainAPI() {
             }
             if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
         }
-        pendingSubtitles.values.forEach { subtitleCallback(it) }
         return found
     }
 }
