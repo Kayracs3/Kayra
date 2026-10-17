@@ -1153,14 +1153,33 @@ class AsyaWatch : MainAPI() {
         val chosenSubtitles = LinkedHashMap<String, SubtitleFile>()
 
         fun subtitleTrackPriority(subtitle: SubtitleFile): Int {
-            val pathLanguage = subtitleUrlLanguage(subtitle.url)
             val path = runCatching { URI(subtitle.url).path.orEmpty() }
                 .getOrDefault(subtitle.url.substringBefore('?'))
-            val standaloneTextTrack = Regex(
-                """(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:$|[?#])"""
-            ).containsMatchIn(path)
-            return (if (pathLanguage != null) 4 else 0) +
-                (if (standaloneTextTrack) 2 else 0)
+            val segments = path.split('/').filter { it.isNotBlank() }
+            val detectedLanguage = subtitleUrlLanguage(subtitle.url)
+            val languageDirectory = segments.dropLast(1).any { directory ->
+                val value = when {
+                    directory.startsWith("sub_", true) -> directory.substring(4)
+                    directory.startsWith("sub-", true) -> directory.substring(4)
+                    else -> ""
+                }
+                value.isNotBlank() &&
+                    explicitSubtitleLanguage(value) == detectedLanguage
+            }
+            val fileNameLanguage =
+                explicitSubtitleLanguage(segments.lastOrNull().orEmpty()) == detectedLanguage
+            val isHlsSubtitlePlaylist = Regex("""(?i)\.m3u8$""").containsMatchIn(path)
+
+            // The site's working subtitle endpoint is commonly
+            // sub_turkish/subtitles.m3u8 or sub_english/subtitles.m3u8.
+            // Prefer that explicit language folder over unrelated VTT links found later.
+            return when {
+                detectedLanguage == null -> 0
+                languageDirectory && isHlsSubtitlePlaylist -> 12
+                languageDirectory -> 10
+                fileNameLanguage -> 7
+                else -> 3
+            }
         }
 
         // Only expose one correctly identified track per supported language.
@@ -1172,8 +1191,10 @@ class AsyaWatch : MainAPI() {
                 ?: explicitSubtitleLanguage(subtitle.lang)
             if (language == "Türkçe" || language == "English") {
                 val existing = chosenSubtitles[language]
+                // Do not let later tracks of equal priority replace the first candidate.
+                // Replace only when the new URL carries stronger language/path evidence.
                 if (existing == null ||
-                    subtitleTrackPriority(subtitle) >= subtitleTrackPriority(existing)
+                    subtitleTrackPriority(subtitle) > subtitleTrackPriority(existing)
                 ) {
                     subtitle.lang = language
                     chosenSubtitles[language] = subtitle
