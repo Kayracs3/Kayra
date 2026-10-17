@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:4fbb2e501fc62ac062bb47b75d864158f4672385 -->
+### AsyaWatch eklentisini ekle ve eksik ikon ayarlarını düzelt
+
+- Etkilenen alanlar: AsyaWatch, DiziKorea, DiziPod, FilmMakinesi, WebDramaTurkey
+- Commit: [4fbb2e5](https://github.com/Kayracs3/Kayra/commit/4fbb2e501fc62ac062bb47b75d864158f4672385)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:eb7a8d916e037fd8b44b35c982ac15907dd0cb2f -->
 ### Remove DiziBoxLive plugin after repeated poster failures
 
