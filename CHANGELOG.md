@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:d23d2bb43bfea28dd9a140faaf266eb977072143 -->
+### Bump DiziBoxLive to version 6 with poster headers
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [d23d2bb](https://github.com/Kayracs3/Kayra/commit/d23d2bb43bfea28dd9a140faaf266eb977072143)
+
+## 2026-10-17
+
+<!-- kayra-commit:3adfeab7d62733ca6f37ee38d33b9a65d208ca80 -->
+### Add DiziBox poster referer headers and series-link image lookup
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [3adfeab](https://github.com/Kayracs3/Kayra/commit/3adfeab7d62733ca6f37ee38d33b9a65d208ca80)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:8f11406d1f92c7253a851b66a6b6ea0a46b80bb0 -->
 ### Bump DiziBoxLive to version 5 for poster extraction fix
 
