@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:37c1d6f8e0a7c1a0fdff7814d6fbcb42ac856c73 -->
+### Bump AsyaWatch version for subtitle language mapping fix
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [37c1d6f](https://github.com/Kayracs3/Kayra/commit/37c1d6f8e0a7c1a0fdff7814d6fbcb42ac856c73)
+
+## 2026-10-17
+
+<!-- kayra-commit:694da5785b3158f36776efba6cd7602e46868894 -->
+### Prefer explicit subtitle labels over URL-derived languages
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [694da57](https://github.com/Kayracs3/Kayra/commit/694da5785b3158f36776efba6cd7602e46868894)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:83f33a54edc3d82cfd64f13c8412aefcf4319377 -->
 ### Bump AsyaWatch version for subtitle language label fix
 
