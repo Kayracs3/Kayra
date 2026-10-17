@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:cf512ec507fcfe7ac96410fda9f49b9045cbc257 -->
+### InatBox: inherit show posters on episodes
+
+- Etkilenen alanlar: InatBox
+- Commit: [cf512ec](https://github.com/Kayracs3/Kayra/commit/cf512ec507fcfe7ac96410fda9f49b9045cbc257)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:e08445155626627eefddf15200ea543816d8f1fd -->
 ### Bump AsyaWatch to version 8
 
