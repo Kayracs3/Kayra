@@ -1148,15 +1148,37 @@ class AsyaWatch : MainAPI() {
         val emittedUrls = HashSet<String>()
         val seenCandidates = HashSet<String>()
         val seenSubtitleUrls = LinkedHashSet<String>()
-        val emittedSubtitleUrls = LinkedHashSet<String>()
         val seenSubtitlePages = LinkedHashSet<String>()
         val seenSubtitleManifests = LinkedHashSet<String>()
+        val chosenSubtitles = LinkedHashMap<String, SubtitleFile>()
 
-        // Parsing helpers maintain their own discovered-URL set; keep a separate
-        // emitted set here so that a newly discovered subtitle is not filtered out
-        // a second time before it reaches CloudStream.
+        fun subtitleTrackPriority(subtitle: SubtitleFile): Int {
+            val pathLanguage = subtitleUrlLanguage(subtitle.url)
+            val path = runCatching { URI(subtitle.url).path.orEmpty() }
+                .getOrDefault(subtitle.url.substringBefore('?'))
+            val standaloneTextTrack = Regex(
+                """(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:$|[?#])"""
+            ).containsMatchIn(path)
+            return (if (pathLanguage != null) 4 else 0) +
+                (if (standaloneTextTrack) 2 else 0)
+        }
+
+        // Only expose one correctly identified track per supported language.
+        // URL language metadata takes precedence over a possibly mismatched label.
+        // If the same language is found more than once, prefer the URL that explicitly
+        // identifies its language, then a standalone VTT/SRT file.
         val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
-            if (emittedSubtitleUrls.add(subtitle.url)) subtitleCallback(subtitle)
+            val language = subtitleUrlLanguage(subtitle.url)
+                ?: explicitSubtitleLanguage(subtitle.lang)
+            if (language == "Türkçe" || language == "English") {
+                val existing = chosenSubtitles[language]
+                if (existing == null ||
+                    subtitleTrackPriority(subtitle) >= subtitleTrackPriority(existing)
+                ) {
+                    subtitle.lang = language
+                    chosenSubtitles[language] = subtitle
+                }
+            }
         }
 
         suspend fun processCandidate(raw: String, referer: String, quality: String) {
@@ -1231,6 +1253,9 @@ class AsyaWatch : MainAPI() {
             }
             if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
         }
+
+        // Keep the list limited to one Turkish and one English option.
+        chosenSubtitles.values.forEach { subtitleCallback(it) }
         return found
     }
 }
