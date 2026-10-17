@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:83f33a54edc3d82cfd64f13c8412aefcf4319377 -->
+### Bump AsyaWatch version for subtitle language label fix
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [83f33a5](https://github.com/Kayracs3/Kayra/commit/83f33a54edc3d82cfd64f13c8412aefcf4319377)
+
+## 2026-10-17
+
+<!-- kayra-commit:b585e1767a9e80f0178143d590b95ce7751d2ba8 -->
+### Prioritize explicit subtitle language labels in AsyaWatch
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [b585e17](https://github.com/Kayracs3/Kayra/commit/b585e1767a9e80f0178143d590b95ce7751d2ba8)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:307e2db3897e1047791212399ea156ef7fd37cdc -->
 ### Bump AsyaWatch version for subtitle request headers
 
