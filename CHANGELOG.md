@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:c6ddebcebeac9b6b33c2bd2b10e5e4c1f4323d02 -->
+### Bump DiziLife plugin version
+
+- Etkilenen alanlar: DiziLife
+- Commit: [c6ddebc](https://github.com/Kayracs3/Kayra/commit/c6ddebcebeac9b6b33c2bd2b10e5e4c1f4323d02)
+
+## 2026-10-17
+
+<!-- kayra-commit:2c6bb8a2ee35c26e6109cb8f99606dbb3006f47e -->
+### Fix DiziLife Asian titles and detail page loading
+
+- Etkilenen alanlar: DiziLife
+- Commit: [2c6bb8a](https://github.com/Kayracs3/Kayra/commit/2c6bb8a2ee35c26e6109cb8f99606dbb3006f47e)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:d943a9d3cc58e746fd1b157998d78682d5342495 -->
 ### Correct AsyaFilmIzle plugin metadata
 
