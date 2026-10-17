@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:5233dc1d0227ffb72cc1dcc3bad55422431f33ef -->
+### Improve AsyaWatch Macellan poster fallback parsing
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [5233dc1](https://github.com/Kayracs3/Kayra/commit/5233dc1d0227ffb72cc1dcc3bad55422431f33ef)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:eee4ca56c8d2cf633c71e172cfde79b070f921ea -->
 ### Bump AsyaWatch plugin version to 4
 
