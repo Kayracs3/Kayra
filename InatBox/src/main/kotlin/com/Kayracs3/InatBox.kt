@@ -1150,12 +1150,7 @@ class InatBox : MainAPI() {
         val name = item.optString("diziName")
         val url = item.optString("diziUrl")
         val plot = item.optString("diziDetay", "")
-        val catalogSourceUrl = item.optString("__inat_source_url").takeIf { it.isNotBlank() } ?: url
-        val seriesPosterUrl = posterUrlFrom(
-            item,
-            catalogSourceUrl,
-            listOf("diziImg", "diziImage", "poster", "posterUrl", "image")
-        ).orEmpty()
+        val seriesPosterUrl = item.optString("diziImg", "")
 
         if (name.isBlank() || url.isBlank()) return null
 
@@ -1175,11 +1170,7 @@ class InatBox : MainAPI() {
                 )
 
                 val seasonUrl = seasonItem.optString("diziUrl")
-                val seasonPosterUrl = posterUrlFrom(
-                    seasonItem,
-                    seasonUrl.ifBlank { url },
-                    listOf("diziImg", "diziImage", "chImg", "chImage", "poster", "posterUrl", "image")
-                ) ?: seriesPosterUrl
+                val seasonPosterUrl = seasonItem.optString("diziImg", "").ifBlank { seriesPosterUrl }
                 if (seasonUrl.isBlank()) continue
 
                 val episodeResponse = makeInatPostRequest(seasonUrl) ?: continue
@@ -1191,15 +1182,7 @@ class InatBox : MainAPI() {
                         val episodeName = episodeItem.optString("chName", "Bölüm ${j + 1}")
                         // Prefer episode-specific artwork, then inherit season/show artwork.
                         // Many InatBox season endpoints return names and playback URLs only.
-                        val episodePoster = posterUrlFrom(
-                            episodeItem,
-                            seasonUrl,
-                            listOf("chImg", "chImage", "ch_image", "image", "imageUrl", "poster", "posterUrl")
-                        ) ?: posterUrlFrom(
-                            episodeItem,
-                            url,
-                            listOf("chImg", "chImage", "image", "poster", "posterUrl")
-                        ) ?: seasonPosterUrl
+                        val episodePoster = episodeItem.optString("chImg", "").ifBlank { seasonPosterUrl }
 
                         episodes
                             .getOrPut(DubStatus.None) { mutableListOf() }
@@ -1219,11 +1202,9 @@ class InatBox : MainAPI() {
             val posterUrl = (0 until jsonArray.length())
                 .asSequence()
                 .mapNotNull { index ->
-                    posterUrlFrom(
-                        jsonArray.optJSONObject(index),
-                        url,
-                        listOf("diziImg", "diziImage", "poster", "posterUrl", "image")
-                    )
+                    jsonArray.optJSONObject(index)
+                        ?.optString("diziImg", "")
+                        ?.takeIf { it.isNotBlank() }
                 }
                 .firstOrNull()
                 ?: seriesPosterUrl
@@ -1989,134 +1970,6 @@ class InatBox : MainAPI() {
             )
             copy.toString()
         }.getOrElse { item.toString() }
-    }
-
-    /**
-     * The catalog API has used several names for the same artwork fields over time.
-     * Normalize artwork URLs for CloudStream without changing playback metadata.
-     */
-    private fun normalizePosterUrl(raw: String?, sourceUrl: String? = null): String? {
-        var value = raw?.trim().orEmpty()
-        if (value.isBlank() || value.equals("null", true) || value == "0") return null
-
-        value = value
-            .replace("\\/", "/")
-            .replace("\\u0026", "&", ignoreCase = true)
-            .replace("\\u003a", ":", ignoreCase = true)
-            .replace("\\u002f", "/", ignoreCase = true)
-            .replace("&amp;", "&")
-            .trim()
-            .trim('"', '\'')
-
-        if (value.isBlank() || value.equals("null", true) ||
-            value.startsWith("data:", true) ||
-            value.startsWith("javascript:", true) ||
-            value.startsWith("about:", true)
-        ) return null
-
-        if (value.startsWith("//")) return "https:" + value
-        if (value.startsWith("https://", true) || value.startsWith("http://", true)) {
-            return value
-        }
-
-        // A CDN host may be returned without its URL scheme.
-        if (Regex("""(?i)^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?/""").containsMatchIn(value)) {
-            return "https://" + value
-        }
-
-        val sourceUri = runCatching { URI(sourceUrl.orEmpty()) }.getOrNull()
-        val origin = if (sourceUri?.scheme != null && sourceUri.authority != null) {
-            sourceUri.scheme + "://" + sourceUri.authority
-        } else {
-            null
-        }
-
-        if (value.startsWith("/") && origin != null) {
-            return origin + value
-        }
-
-        if ((value.startsWith("./") || value.startsWith("../")) && sourceUri != null) {
-            return runCatching { sourceUri.resolve(value).toString() }.getOrNull()
-        }
-
-        // For relative image paths, use the catalog host only as a final fallback.
-        if (origin != null && !value.contains("://")) {
-            return origin + "/" + value.trimStart('/')
-        }
-
-        return null
-    }
-
-    private fun isArtworkField(key: String): Boolean {
-        val normalized = key.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
-        return normalized in setOf(
-            "diziimg", "diziimage", "diziimageurl", "diziposter", "diziposterurl",
-            "chimg", "chimage", "chimageurl", "poster", "posterurl", "posterpath",
-            "posterimage", "image", "imageurl", "imagepath", "img", "imgurl",
-            "thumbnail", "thumbnailurl", "thumb", "thumburl", "cover", "coverurl",
-            "coverimage", "afis", "afisurl", "logo", "logourl", "picture", "photourl"
-        ) || listOf("poster", "thumbnail", "cover", "afis").any { normalized.contains(it) }
-    }
-
-    private fun posterCandidate(value: Any?, sourceUrl: String?, depth: Int = 0): String? {
-        if (value == null || depth > 4) return null
-
-        when (value) {
-            is String -> return normalizePosterUrl(value, sourceUrl)
-            is JSONArray -> {
-                for (index in 0 until value.length()) {
-                    posterCandidate(value.opt(index), sourceUrl, depth + 1)?.let { return it }
-                }
-            }
-            is JSONObject -> {
-                val keys = value.keys().asSequence().toList()
-                val preferred = listOf("url", "src", "href", "path", "original", "large", "full", "image", "poster")
-                for (name in preferred) {
-                    val key = keys.firstOrNull { it.equals(name, true) } ?: continue
-                    posterCandidate(value.opt(key), sourceUrl, depth + 1)?.let { return it }
-                }
-                for (key in keys) {
-                    val child = value.opt(key) ?: continue
-                    if (isArtworkField(key) || key.equals("url", true) ||
-                        key.equals("src", true) || key.equals("path", true)
-                    ) {
-                        posterCandidate(child, sourceUrl, depth + 1)?.let { return it }
-                    }
-                }
-            }
-        }
-        return null
-    }
-
-    private fun posterUrlFrom(
-        item: JSONObject?,
-        sourceUrl: String? = null,
-        preferredKeys: List<String> = emptyList()
-    ): String? {
-        if (item == null) return null
-        val source = sourceUrl?.takeIf { it.isNotBlank() }
-            ?: item.optString("__inat_source_url").takeIf { it.isNotBlank() }
-        val knownKeys = (preferredKeys + listOf(
-            "diziImg", "diziImage", "dizi_image", "dizi_image_url", "diziPoster", "diziPosterUrl",
-            "chImg", "chImage", "ch_image", "ch_image_url", "poster", "posterUrl", "poster_url",
-            "posterPath", "poster_path", "posterImage", "poster_image",
-            "image", "imageUrl", "image_url", "imagePath", "image_path",
-            "img", "imgUrl", "thumbnail", "thumbnailUrl", "thumbnail_url",
-            "thumb", "thumbUrl", "cover", "coverUrl", "cover_image", "afis", "afisUrl", "logo"
-        )).distinct()
-
-        for (knownKey in knownKeys) {
-            val key = item.keys().asSequence().firstOrNull { it.equals(knownKey, true) } ?: continue
-            posterCandidate(item.opt(key), source)?.let { return it }
-        }
-
-        val keys = item.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            if (!isArtworkField(key)) continue
-            posterCandidate(item.opt(key), source)?.let { return it }
-        }
-        return null
     }
 
     private fun enrichInatItem(
