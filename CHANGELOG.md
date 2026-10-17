@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:5239bb09650f97dd23887b9fe25db50c9afc93e5 -->
+### Improve AsyaWatch PlayerJS subtitle extraction
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [5239bb0](https://github.com/Kayracs3/Kayra/commit/5239bb09650f97dd23887b9fe25db50c9afc93e5)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:f3bce49fd42fb088205c31a55a179bc41be8c6f2 -->
 ### Revert InatBox artwork URL normalization changes
 
