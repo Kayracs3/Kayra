@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:eee4ca56c8d2cf633c71e172cfde79b070f921ea -->
+### Bump AsyaWatch plugin version to 4
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [eee4ca5](https://github.com/Kayracs3/Kayra/commit/eee4ca56c8d2cf633c71e172cfde79b070f921ea)
+
+## 2026-10-17
+
+<!-- kayra-commit:19cd62340a3d65396034b5a5a1049144c478f343 -->
+### Correct Macellan poster host matcher
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [19cd623](https://github.com/Kayracs3/Kayra/commit/19cd62340a3d65396034b5a5a1049144c478f343)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:6e3330f8516a77186bd505181a011705540d46d8 -->
 ### Bump AsyaWatch plugin version to 3
 
