@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:107a0ffee8e0b46023866e94d8db2148376e1a41 -->
+### Bump AsyaWatch version after restoring v12 subtitles
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [107a0ff](https://github.com/Kayracs3/Kayra/commit/107a0ffee8e0b46023866e94d8db2148376e1a41)
+
+## 2026-10-17
+
+<!-- kayra-commit:daf31a82670a08b75c91f2f024345b99b2bd9892 -->
+### Restore proven AsyaWatch v12 subtitle extraction
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [daf31a8](https://github.com/Kayracs3/Kayra/commit/daf31a82670a08b75c91f2f024345b99b2bd9892)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:1f44019cbadd17e1d8bf27ac9be598059e1c767c -->
 ### Bump AsyaWatch version for VTT subtitle playlist fallback
 
