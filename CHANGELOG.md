@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:da59e1132e90a625803eb70f263aacc839d094ca -->
+### Fix FilmModu search result parsing and relevance
+
+- Etkilenen alanlar: FilmModu
+- Commit: [da59e11](https://github.com/Kayracs3/Kayra/commit/da59e1132e90a625803eb70f263aacc839d094ca)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:0418594b20d7ff12b82464940ccc31eea5336801 -->
 ### Add DiziDad CloudStream provider for Kayra
 
