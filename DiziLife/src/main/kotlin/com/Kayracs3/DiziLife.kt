@@ -520,15 +520,15 @@ class DiziLife : MainAPI() {
         val text = decodeEmbedded(raw)
         val out = LinkedHashSet<String>()
         val patterns = listOf(
-            Regex("""(?i)(?:src|file|source|url|embed|player|hls|playlist|videoUrl|streamUrl|manifest|mediaUrl|apiUrl|endpoint|requestUrl)["']?\\s*[:=]\\s*["']([^"'<>]{4,1800})["']"""),
-            Regex("""(?i)(?:fetch|axios\\.(?:get|post)|\\.open|\\.get|\\.post)\\s*\\(\\s*["']([^"'<>]{4,1800})["']"""),
-            Regex("""(?i)["']((?:https?:)?//[^"'\\\\\\s<>]{8,1800}|/(?:api|ajax|player|video|stream|source|playlist|embed|resolve|v[0-9]+)/[^"'\\\\\\s<>]{1,1800})["']""")
+            Regex("""(?i)(?:src|file|source|url|embed|player|hls|playlist|videoUrl|streamUrl|manifest|mediaUrl|apiUrl|endpoint|requestUrl)["']?\s*[:=]\s*["']([^"'<>]{4,1800})["']"""),
+            Regex("""(?i)(?:fetch|axios\.(?:get|post)|\.open|\.get|\.post)\s*\(\s*["']([^"'<>]{4,1800})["']"""),
+            Regex("""(?i)["']((?:https?:)?//[^"'\\\s<>]{8,1800}|/(?:api|ajax|player|video|stream|source|playlist|embed|resolve|v[0-9]+)/[^"'\\\s<>]{1,1800})["']""")
         )
         patterns.forEach { pattern ->
-            pattern.findAll(text).forEach { match ->
+            pattern.findAll(text).forEach matchLoop@ { match ->
                 val rawUrl = match.groupValues.getOrNull(1).orEmpty()
                     .trimEnd(')', ']', '}', ';', ',')
-                val url = abs(rawUrl, base) ?: return@forEach
+                val url = abs(rawUrl, base) ?: return@matchLoop
                 if (playerCandidate(url, match.value.take(160))) out.add(url)
             }
         }
