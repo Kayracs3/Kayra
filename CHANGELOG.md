@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:8f11406d1f92c7253a851b66a6b6ea0a46b80bb0 -->
+### Bump DiziBoxLive to version 5 for poster extraction fix
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [8f11406](https://github.com/Kayracs3/Kayra/commit/8f11406d1f92c7253a851b66a6b6ea0a46b80bb0)
+
+## 2026-10-17
+
+<!-- kayra-commit:ede0719a9d139867636cce954ab5d692c4840c84 -->
+### Fix DiziBoxLive poster fallback for episode cards
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [ede0719](https://github.com/Kayracs3/Kayra/commit/ede0719a9d139867636cce954ab5d692c4840c84)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:8face6b42e13fbbfa806de3a71b6a681779fc28a -->
 ### Bump DiziBoxLive to version 4 after compile fix
 
