@@ -2,6 +2,15 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:b55e7d6ffe7d598210df67864ba704b892e6e7a6 -->
+### Match AsyaWatch posters by image alt text and CDN URL
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [b55e7d6](https://github.com/Kayracs3/Kayra/commit/b55e7d6ffe7d598210df67864ba704b892e6e7a6)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:98ed57ec63df83acae8c03b2b5200cb2591c1dd5 -->
 ### Bump AsyaWatch version for Turkish subtitle fix
 
