@@ -87,10 +87,10 @@
     },
     {
         "iconUrl": "https://www.dizibox.live/favicon.ico",
-        "fileHash": "sha256-f33f2a74332aa6be25a490aa44324906562236c9b2e2a208a420217e8684a635",
+        "fileHash": "sha256-168df2e4193c7c3199c31eaa6f9f3e334dcfc654b6719e3d10f2d09ff04d5188",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 52539,
+        "fileSize": 52952,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -99,7 +99,7 @@
         "tvTypes": [
             "TvSeries"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "DiziBoxLive",
         "description": "DiziBOX Live yabanc\u0131 dizi katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziBoxLive.cs3",
