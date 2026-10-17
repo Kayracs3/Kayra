@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:4da21ebf2eca24f6c2eb6f667f81c7b5339cb608 -->
+### Bump AsyaWatch version for inline subtitle parsing fix
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [4da21eb](https://github.com/Kayracs3/Kayra/commit/4da21ebf2eca24f6c2eb6f667f81c7b5339cb608)
+
+## 2026-10-17
+
+<!-- kayra-commit:f37c68d17cbcb97f921aed4b9663a156159f7890 -->
+### Fix AsyaWatch inline PlayerJS subtitle track parsing
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [f37c68d](https://github.com/Kayracs3/Kayra/commit/f37c68d17cbcb97f921aed4b9663a156159f7890)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:2ef7db5e013df41f6b6f6e512c0d67ac9ebbc724 -->
 ### Bump AsyaWatch version for Turkish subtitle fix
 
