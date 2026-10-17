@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:98ed57ec63df83acae8c03b2b5200cb2591c1dd5 -->
+### Bump AsyaWatch version for Turkish subtitle fix
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [98ed57e](https://github.com/Kayracs3/Kayra/commit/98ed57ec63df83acae8c03b2b5200cb2591c1dd5)
+
+## 2026-10-17
+
+<!-- kayra-commit:2eef80961912920551936321aeb3a476cb1d6f09 -->
+### Fix AsyaWatch Turkish subtitle fallback matching
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [2eef809](https://github.com/Kayracs3/Kayra/commit/2eef80961912920551936321aeb3a476cb1d6f09)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:b8e7868fdfd351be4464d2785d4b96cdf986767b -->
 ### Bump AsyaWatch version for poster fallback fix
 
