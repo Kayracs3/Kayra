@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-17
+
+<!-- kayra-commit:0418594b20d7ff12b82464940ccc31eea5336801 -->
+### Add DiziDad CloudStream provider for Kayra
+
+- Etkilenen alanlar: DiziDad
+- Commit: [0418594](https://github.com/Kayracs3/Kayra/commit/0418594b20d7ff12b82464940ccc31eea5336801)
+
+
 ## 2026-10-15
 
 <!-- kayra-commit:8bb1845376b0a76c1876c9db81049b1180f2c591 -->
