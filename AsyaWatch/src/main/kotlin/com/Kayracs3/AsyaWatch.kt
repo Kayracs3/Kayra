@@ -682,6 +682,9 @@ class AsyaWatch : MainAPI() {
     private fun looksLikeSubtitle(url: String): Boolean {
         val value = url.lowercase()
         return Regex("""(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:[?#].*)?$""").containsMatchIn(value) ||
+            // Several players expose translated subtitles as a dedicated HLS playlist,
+            // for example /sub_turkish/subtitles.m3u8. This is not a video master playlist.
+            Regex("""(?i)/(?:sub_[a-z0-9_-]+/)?(?:subtitles?|captions?)(?:\.m3u8?)?(?:[?#].*)?$""").containsMatchIn(value) ||
             value.contains("/subtitle/") || value.contains("/subtitles/") ||
             value.contains("/caption/") || value.contains("/captions/") ||
             value.contains("/subtitle?") || value.contains("/subtitles?") ||
@@ -740,11 +743,11 @@ class AsyaWatch : MainAPI() {
         }
 
         Regex(
-            """(?i)(?:https?:)?//[^"'<>\s]+?\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:\?[^"'<>\s]*)?"""
+            """(?i)(?:https?:)?//[^"'<>\s]+?\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^"'<>\s]*)?"""
         ).findAll(body).forEach { add(it.value) }
 
         Regex(
-            """(?i)["']((?:(?:https?:)?//|/|\.\.?/)?[^"'<>\s]{1,900}\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:\?[^"']*)?)["']"""
+            """(?i)["']((?:(?:https?:)?//|/|\.\.?/)?[^"'<>\s]{1,900}\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^"']*)?)["']"""
         ).findAll(body).forEach { add(it.groupValues[1]) }
 
         Regex(
@@ -863,12 +866,17 @@ class AsyaWatch : MainAPI() {
         val html = response.text
         publishSubtitlesFromText(html, pageUrl, seen, callback, pageUrl)
 
+        val manifests = LinkedHashSet<String>()
         Regex("""(?i)(?:https?:)?//[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""")
             .findAll(html)
             .mapNotNull { resolveSubtitleUrl(it.value, pageUrl) }
-            .distinct()
-            .take(3)
-            .forEach { manifest ->
+            .forEach { manifests.add(it) }
+        Regex("""(?i)["']((?:(?:https?:)?//|/|\.\.?/)?[^"'<>\s]{1,1000}\.m3u8(?:\?[^"']*)?)["']""")
+            .findAll(html)
+            .mapNotNull { resolveSubtitleUrl(it.groupValues[1], pageUrl) }
+            .forEach { manifests.add(it) }
+
+        manifests.take(3).forEach { manifest ->
                 extractSubtitlesFromManifest(
                     manifest, pageUrl, seen, seenManifests, callback
                 )
