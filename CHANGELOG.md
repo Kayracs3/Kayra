@@ -2,6 +2,23 @@
 
 ## 2026-10-17
 
+<!-- kayra-commit:8face6b42e13fbbfa806de3a71b6a681779fc28a -->
+### Bump DiziBoxLive to version 4 after compile fix
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [8face6b](https://github.com/Kayracs3/Kayra/commit/8face6b42e13fbbfa806de3a71b6a681779fc28a)
+
+## 2026-10-17
+
+<!-- kayra-commit:ff755c61df31e90c489b947e031e0f9c146cf711 -->
+### Fix suspend calls in DiziBoxLive provider
+
+- Etkilenen alanlar: DiziBoxLive
+- Commit: [ff755c6](https://github.com/Kayracs3/Kayra/commit/ff755c61df31e90c489b947e031e0f9c146cf711)
+
+
+## 2026-10-17
+
 <!-- kayra-commit:1bffaba5effa4b8c89885eeb38c5cec488250a24 -->
 ### Bump DiziBoxLive to version 3 after provider rewrite
 
