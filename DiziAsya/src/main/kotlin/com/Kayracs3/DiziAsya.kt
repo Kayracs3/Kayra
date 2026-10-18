@@ -736,17 +736,39 @@ class DiziAsya : MainAPI() {
         Regex("""(?i)\.(?:m3u8|mp4|mpd|webm|m4v)(?:$|[?#])""").containsMatchIn(url) ||
             url.contains("/master.m3u8", true)
 
+    private fun isYoutubeVideoUrl(url: String): Boolean {
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        val host = uri.host.orEmpty().lowercase(Locale.ROOT)
+        val path = uri.path.orEmpty().lowercase(Locale.ROOT)
+        if (host == "youtu.be" || host.endsWith(".youtu.be")) {
+            return uri.path.orEmpty().trim('/').isNotBlank()
+        }
+        if (host != "youtube.com" && !host.endsWith(".youtube.com")) return false
+
+        val videoId = uri.rawQuery.orEmpty().split('&')
+            .firstOrNull { it.substringBefore('=').equals("v", true) }
+            ?.substringAfter('=', "")
+            .orEmpty()
+        return (path == "/watch" && videoId.isNotBlank()) ||
+            listOf("/embed/", "/shorts/", "/live/").any { prefix ->
+                path.startsWith(prefix) && path.removePrefix(prefix).trim('/').isNotBlank()
+            }
+    }
+
     private fun isKnownPlayer(url: String): Boolean {
         val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         val lower = url.lowercase(Locale.ROOT)
         if (host.isBlank()) return false
+        if (host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtu.be" || host.endsWith(".youtu.be")
+        ) return isYoutubeVideoUrl(url)
         if (host == "diziasya.com" || host.endsWith(".diziasya.com")) {
             return lower.contains("/embed/") || lower.contains("/player/") || lower.contains("/video/")
         }
         return listOf(
             "ok.ru", "odnoklassniki.ru", "vidmoly", "4me", "abyss", "abstr", "p2p", "lulu",
             "dracarys", "klaus", "vudeo", "dood", "filemoon", "streamwish", "mixdrop", "uqload", "voe",
-            "dailymotion", "youtube.com", "youtu.be", "drive.google", "vidoza", "vidsrc", "streamtape"
+            "dailymotion", "drive.google", "vidoza", "vidsrc", "streamtape"
         ).any { host.contains(it) } ||
             lower.contains("/embed/") || lower.contains("/player/")
     }
@@ -767,6 +789,7 @@ class DiziAsya : MainAPI() {
         val decoded = normalizeEmbeddedText(html)
         val players = LinkedHashSet<String>()
         val directMedia = LinkedHashSet<String>()
+        val directMediaReferers = LinkedHashMap<String, String>()
         val apiCandidates = LinkedHashSet<String>()
         val subtitles = LinkedHashMap<String, String>()
         val emitted = LinkedHashSet<String>()
@@ -781,6 +804,12 @@ class DiziAsya : MainAPI() {
 
         fun addCandidate(raw: String?, base: String, forcePlayer: Boolean = false, apiHint: Boolean = false) {
             val url = absoluteUrl(raw, base) ?: return
+            val urlHost = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+            if ((urlHost == "youtube.com" || urlHost.endsWith(".youtube.com") ||
+                    urlHost == "youtu.be" || urlHost.endsWith(".youtu.be")) &&
+                !isYoutubeVideoUrl(url)
+            ) return
+
             if (isSubtitleUrl(url)) {
                 val label = when {
                     url.contains("/en/", true) || url.contains("english", true) -> "English"
@@ -792,10 +821,11 @@ class DiziAsya : MainAPI() {
             }
             if (isDirectMedia(url)) {
                 directMedia.add(url)
+                directMediaReferers.putIfAbsent(url, pageUrl)
                 return
             }
 
-            val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+            val host = urlHost
             val sameSite = host == "diziasya.com" || host.endsWith(".diziasya.com")
             val lower = url.lowercase(Locale.ROOT)
             if (listOf(
@@ -1021,6 +1051,56 @@ class DiziAsya : MainAPI() {
             }
         }
 
+        // Resolve player pages ourselves before handing them to generic extractors. Some
+        // Vidmoly pages embed a valid HLS URL in a JavaScript object using single quotes
+        // (for example: { file: 'https://.../master.m3u8?...' }). The generic JW parser
+        // expects strict JSON and rejects that otherwise usable stream.
+        for (player in players.toList().take(20)) {
+            val playerResponse = runCatching {
+                app.get(
+                    player,
+                    headers = requestHeaders + ("Referer" to pageUrl),
+                    referer = pageUrl,
+                    allowRedirects = true
+                )
+            }.getOrNull()?.takeIf { it.isSuccessful } ?: continue
+            val playerHtml = normalizeEmbeddedText(playerResponse.text)
+            val playerDocument = playerResponse.document
+
+            fun harvestPlayerUrl(raw: String?) {
+                val resolved = absoluteUrl(raw, player) ?: return
+                if (isSubtitleUrl(resolved)) {
+                    val label = when {
+                        resolved.contains("/en/", true) || resolved.contains("english", true) -> "English"
+                        resolved.contains("/zh/", true) || resolved.contains("chinese", true) -> "Chinese"
+                        else -> "Türkçe"
+                    }
+                    subtitles.putIfAbsent(resolved, label)
+                } else if (isDirectMedia(resolved)) {
+                    directMedia.add(resolved)
+                    // The HLS host may require the embed page as its Referer.
+                    directMediaReferers[resolved] = player
+                } else {
+                    addCandidate(resolved, player)
+                }
+            }
+
+            urlRegex.findAll(playerHtml).forEach { match ->
+                harvestPlayerUrl(match.value.trimEnd(',', ';', ')', ']', '}', '\\'))
+            }
+            playerValueRegex.findAll(playerHtml).forEach { match ->
+                harvestPlayerUrl(match.groupValues.getOrNull(1))
+            }
+            playerDocument.select(
+                "video[src], source[src], track[src], iframe[src], iframe[data-src], " +
+                    "video[data-src], source[data-src], [data-file], [data-url]"
+            ).forEach { element ->
+                val raw = element.attr("src").ifBlank { element.attr("data-src") }
+                    .ifBlank { element.attr("data-file") }.ifBlank { element.attr("data-url") }
+                harvestPlayerUrl(raw)
+            }
+        }
+
         for (url in directMedia) {
             if (isSubtitleUrl(url)) continue
             val hls = url.contains(".m3u8", true)
@@ -1033,7 +1113,10 @@ class DiziAsya : MainAPI() {
                         type = if (hls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                     ) {
                         quality = qualityFrom(url)
-                        headers = mapOf("Referer" to pageUrl, "User-Agent" to browserUa)
+                        headers = mapOf(
+                            "Referer" to (directMediaReferers[url] ?: pageUrl),
+                            "User-Agent" to browserUa
+                        )
                     }
                 )
             }
