@@ -8,9 +8,11 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import org.json.JSONObject
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.text.Normalizer
 import java.util.Locale
@@ -328,14 +330,74 @@ class AsyaLuna : MainAPI() {
             .filter { it.isNotBlank() && it.length < 70 }.distinct().take(40)
     }
 
+    private fun isMetadataText(value: String): Boolean {
+        val normalized = normalize(value)
+        return normalized.startsWith("oyuncular") ||
+            normalized.startsWith("ulke") ||
+            normalized.startsWith("bolum sayisi") ||
+            normalized.startsWith("sure") ||
+            normalized.startsWith("durum") ||
+            normalized == "tur" ||
+            normalized.startsWith("tur ")
+    }
+
     private fun parsePlot(document: Document): String? {
-        document.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")
-            ?.trim()?.takeIf { it.length > 25 }?.let { return it }
-        return document.select("p, .description, .plot, .summary, .entry-content").asSequence()
+        // Prefer the real synopsis section under headings like "Dizi Konusu".
+        val headings = document.select("h1, h2, h3, h4, h5, h6, strong, b")
+            .filter { normalize(it.text()).contains("konusu") }
+
+        for (heading in headings) {
+            var current: Element? = heading
+            var depth = 0
+            while (current != null && depth < 4) {
+                var sibling = current.nextElementSibling()
+                var scanned = 0
+                val paragraphs = ArrayList<String>()
+                while (sibling != null && scanned < 10) {
+                    val text = cleanTitle(sibling.text())
+                    val normalized = normalize(text)
+                    if (isMetadataText(text) ||
+                        (sibling.tagName().matches(Regex("(?i)h[1-6]")) &&
+                            (normalized.contains("bolum") || normalized.contains("oyuncu") ||
+                                normalized.contains("benzer dizi")))
+                    ) break
+                    if (text.length >= 35 &&
+                        !normalized.contains("konusu") &&
+                        !text.contains("Sitemizde bulunan", true) &&
+                        !text.contains("Reklam engelleyici", true)
+                    ) paragraphs.add(text)
+                    sibling = sibling.nextElementSibling()
+                    scanned++
+                }
+                if (paragraphs.isNotEmpty()) return paragraphs.distinct().joinToString("\n\n").take(6000)
+                current = current.parent()
+                depth++
+            }
+        }
+
+        val articleText = document.select(
+            ".entry-content p, .post-content p, article p, main p, .description, .plot, .summary, p"
+        ).asSequence()
             .map { cleanTitle(it.text()) }
-            .firstOrNull {
-                it.length > 60 && !it.contains("Oyuncular:", true) &&
-                    !it.contains("Bölüm Sayısı:", true) && !it.contains("Sitemizde bulunan", true)
+            .filter { text ->
+                val normalized = normalize(text)
+                text.length in 60..6000 &&
+                    !isMetadataText(text) &&
+                    !normalized.contains("sitemizde bulunan") &&
+                    !normalized.contains("reklam engelleyici") &&
+                    !normalized.contains("yorum yap") &&
+                    !normalized.contains("benzer diziler")
+            }
+            .distinct()
+            .toList()
+        articleText.firstOrNull()?.let { return it }
+
+        return document.selectFirst("meta[property=og:description], meta[name=description]")
+            ?.attr("content")?.let(::cleanTitle)
+            ?.takeIf {
+                it.length > 40 &&
+                    !normalize(it).contains("asyaluna asya dizileri") &&
+                    !normalize(it).contains("konusu")
             }
     }
 
@@ -349,51 +411,81 @@ class AsyaLuna : MainAPI() {
             .firstOrNull { it.contains("youtube.com", true) || it.contains("youtu.be", true) }
 
     private fun parseEpisodes(document: Document, seriesUrl: String, poster: String?): List<Episode> {
-        val seriesSlug = pathOf(seriesUrl).removePrefix("/dizi/").trim('/').substringBefore('/')
+        val seriesSlug = pathOf(seriesUrl).trim('/').substringAfter("dizi/", "").substringBefore('/')
         if (seriesSlug.isBlank()) return emptyList()
 
         val groups = LinkedHashMap<String, String>()
-        for (link in document.select("a[href*='/bolum/']")) {
-            val raw = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: continue
-            val path = pathOf(raw)
+        for (link in document.select("a[href], [data-href], [data-url]")) {
+            val rawHref = link.attr("href").ifBlank {
+                link.attr("data-href").ifBlank { link.attr("data-url") }
+            }
+            val raw = absoluteUrl(rawHref, link.baseUri().ifBlank { mainUrl }) ?: continue
+            val path = pathOf(raw).trimEnd('/')
             if (!path.startsWith("/bolum/", true)) continue
-            val slug = path.removePrefix("/bolum/").trim('/').substringBefore('/')
-            if (!slug.startsWith(seriesSlug, true)) continue
+            val slug = path.substringAfter("/bolum/", "").substringBefore('/')
+            if (slug.isBlank() || !slug.startsWith(seriesSlug, true)) continue
             val groupUrl = "$mainUrl/bolum/$slug/"
-            groups.putIfAbsent(groupUrl, cleanTitle(link.text() + " " + link.attr("title")))
+            val label = cleanTitle(link.text() + " " + link.attr("title") + " " + link.attr("aria-label"))
+            groups.putIfAbsent(groupUrl, label)
         }
 
         val episodes = ArrayList<Episode>()
+        val rangePattern = Regex("""(?i)(?<!\d)(\d{1,3})\s*[-–]\s*(\d{1,3})(?!\d)""")
+        val seasonPattern = Regex("""(?i)\b(?:sezon|season)\s*[-_.:]?\s*(\d{1,2})\b""")
         for ((groupUrl, linkText) in groups) {
-            val slug = pathOf(groupUrl).removePrefix("/bolum/").trim('/')
-            val range = Regex("""(?i)(\d{1,3})\s*[-–]\s*(\d{1,3})""").find("$linkText $slug")
+            val slug = pathOf(groupUrl).substringAfter("/bolum/", "").trim('/')
+            val sourceText = "$linkText $slug"
+            val range = rangePattern.find(linkText) ?: rangePattern.find(slug)
+            val season = seasonPattern.find(sourceText)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+
             if (range != null) {
                 val first = range.groupValues[1].toIntOrNull() ?: continue
                 val last = range.groupValues[2].toIntOrNull() ?: continue
-                if (first <= 0 || last < first) continue
+                if (first <= 0 || last < first || last - first > 100) continue
                 for (number in first..last) {
                     val offset = number - first + 1
                     val episodeUrl = if (offset == 1) groupUrl else groupUrl.trimEnd('/') + "/" + offset + "/"
-                    episodes += newEpisode(episodeUrl) {
+                    episodes.add(newEpisode(episodeUrl) {
                         name = "$number. Bölüm"
-                        season = 1
+                        this.season = season
                         episode = number
                         this.posterUrl = poster
-                    }
+                    })
                 }
             } else {
                 val number = Regex("""(?i)(?:bolum|bölüm|episode)[-_.\s]*(\d{1,3})""")
-                    .find("$linkText $slug")?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
-                episodes += newEpisode(groupUrl) {
+                    .find(sourceText)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
+                episodes.add(newEpisode(groupUrl) {
                     name = if (linkText.isNotBlank()) linkText else "$number. Bölüm"
-                    season = 1
+                    this.season = season
                     episode = number
                     this.posterUrl = poster
-                }
+                })
             }
         }
-        return episodes.distinctBy { it.data }
-            .sortedWith(compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: 0 })
+
+        // Some site versions expose individual episode links directly as well.
+        for (link in document.select("a[href*='/bolum/']")) {
+            val raw = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: continue
+            val path = pathOf(raw).trimEnd('/')
+            val parts = path.substringAfter("/bolum/", "").split('/')
+            if (parts.size < 2 || !parts[0].startsWith(seriesSlug, true)) continue
+            val number = Regex("""(?i)(?:^|[/.-])(\d{1,3})$""")
+                .find(path)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
+            if (number !in 1..1000) continue
+            val season = seasonPattern.find(link.text() + " " + path)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+            val episodeUrl = raw.trimEnd('/') + "/"
+            episodes.add(newEpisode(episodeUrl) {
+                name = cleanTitle(link.text()).ifBlank { "$number. Bölüm" }
+                this.season = season
+                episode = number
+                this.posterUrl = poster
+            })
+        }
+
+        return episodes.distinctBy {
+            (it.season ?: 1).toString() + "-" + (it.episode ?: 0).toString()
+        }.sortedWith(compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: 0 })
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -437,6 +529,116 @@ class AsyaLuna : MainAPI() {
         }
     }
 
+    private fun okRuVideoId(url: String): String? =
+        Regex("""(?i)/(?:video|videoembed)/(\d+)""")
+            .find(url)?.groupValues?.getOrNull(1)
+
+    private suspend fun extractOkRuStreams(
+        rawUrl: String,
+        pageReferer: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val id = okRuVideoId(rawUrl) ?: return false
+        val videoUrl = "https://ok.ru/video/$id"
+        val embedUrl = "https://ok.ru/videoembed/$id"
+        val okHeaders = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+            "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Origin" to "https://ok.ru",
+            "Referer" to videoUrl
+        )
+        var metadata: JSONObject? = null
+
+        fun parseJson(raw: String?): JSONObject? {
+            if (raw.isNullOrBlank()) return null
+            val cleaned = raw.trim().replace("&quot;", "\"").replace("&amp;", "&")
+            return runCatching { JSONObject(cleaned) }.getOrNull()
+        }
+
+        for (candidate in listOf(embedUrl, videoUrl)) {
+            val page = runCatching {
+                app.get(candidate, headers = okHeaders, referer = pageReferer, allowRedirects = true)
+            }.getOrNull() ?: continue
+            if (!page.isSuccessful) continue
+            val optionsText = page.document.selectFirst("[data-options]")?.attr("data-options")
+            val options = parseJson(optionsText)
+            val flashvars = options?.optJSONObject("flashvars")
+            metadata = parseJson(flashvars?.opt("metadata")?.toString())
+
+            if (metadata == null) {
+                val metadataUrl = flashvars?.optString("metadataUrl").orEmpty()
+                if (metadataUrl.isNotBlank() && metadataUrl != "null") {
+                    val decoded = runCatching { URLDecoder.decode(metadataUrl, "UTF-8") }.getOrDefault(metadataUrl)
+                    val resolved = absoluteUrl(decoded, candidate) ?: decoded
+                    val metadataResponse = runCatching {
+                        app.get(
+                            resolved,
+                            headers = okHeaders + ("Referer" to candidate),
+                            referer = candidate,
+                            allowRedirects = true
+                        )
+                    }.getOrNull()
+                    metadata = metadataResponse?.takeIf { it.isSuccessful }?.text?.let(::parseJson)
+                }
+            }
+            if (metadata != null) break
+        }
+
+        if (metadata == null) {
+            val response = runCatching {
+                app.post(
+                    "https://www.ok.ru/dk?cmd=videoPlayerMetadata",
+                    headers = okHeaders,
+                    data = mapOf("mid" to id),
+                    referer = videoUrl
+                )
+            }.getOrNull()
+            metadata = response?.takeIf { it.isSuccessful }?.text?.let(::parseJson)
+        }
+
+        val root = metadata?.optJSONObject("data") ?: metadata ?: return false
+        var emitted = false
+        fun emit(url: String?, label: String, forceHls: Boolean = false) {
+            val mediaUrl = url?.trim().orEmpty()
+            if (!mediaUrl.startsWith("http://", true) && !mediaUrl.startsWith("https://", true)) return
+            if (isSubtitleUrl(mediaUrl)) return
+            val hls = forceHls || mediaUrl.contains(".m3u8", true) || mediaUrl.contains(".m3u", true)
+            runCatching {
+                callback(
+                    newExtractorLink(
+                        source = "OK.ru",
+                        name = if (label.isBlank()) "OK.ru" else "OK.ru $label",
+                        url = mediaUrl,
+                        type = if (hls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    ) {
+                        quality = qualityFrom("$label $mediaUrl")
+                        headers = mapOf(
+                            "User-Agent" to okHeaders.getValue("User-Agent"),
+                            "Referer" to videoUrl,
+                            "Origin" to "https://ok.ru"
+                        )
+                    }
+                )
+                emitted = true
+            }
+        }
+        for (key in listOf("hlsMasterPlaylistUrl", "hlsManifestUrl", "hlsUrl", "hls_url")) {
+            val url = root.optString(key).orEmpty()
+            if (url.startsWith("http", true) && url != "null") emit(url, "HLS", forceHls = true)
+        }
+        val videos = root.optJSONArray("videos") ?: root.optJSONObject("movie")?.optJSONArray("videos")
+        if (videos != null) {
+            for (i in 0 until videos.length()) {
+                val item = videos.optJSONObject(i) ?: continue
+                val url = item.optString("url").orEmpty()
+                val label = item.optString("name").orEmpty().ifBlank { item.optString("quality").orEmpty() }
+                emit(url, label)
+            }
+        }
+        return emitted
+    }
+
     private fun normalizeRaw(text: String): String =
         text.replace("\\/", "/")
             .replace("\\u002F", "/", ignoreCase = true)
@@ -466,76 +668,118 @@ class AsyaLuna : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val response = runCatching {
-            app.get(data, headers = siteHeaders, referer = "$mainUrl/", allowRedirects = true)
-        }.getOrNull() ?: return false
-        if (!response.isSuccessful) return false
-
-        val document = response.document
-        val body = normalizeRaw(response.text)
         val players = LinkedHashSet<String>()
-        var found = false
-
-        document.select("iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], iframe[data-embed]").forEach { frame ->
-            val raw = frame.attr("src").ifBlank { frame.attr("data-src") }
-                .ifBlank { frame.attr("data-lazy-src") }.ifBlank { frame.attr("data-url") }
-                .ifBlank { frame.attr("data-embed") }
-            absoluteUrl(raw, data)?.let(players::add)
-        }
-
-        document.select("[data-player], [data-video], [data-embed], [data-url]").forEach { element ->
-            listOf(element.attr("data-player"), element.attr("data-video"), element.attr("data-embed"), element.attr("data-url"))
-                .forEach { raw -> absoluteUrl(raw, data)?.let(players::add) }
-        }
-
-        Regex("""(?i)(?:https?:)?//[^"'<>\s]+(?:ok\.ru/videoembed/|odnoklassniki\.ru/videoembed/)[^"'<>\s]*""")
-            .findAll(body).forEach { match -> absoluteUrl(match.value, data)?.let(players::add) }
-
         val directMedia = LinkedHashSet<String>()
-        Regex("""(?i)(?:https?:)?//[^"'<>\s]+?\.(?:m3u8|mp4)(?:\?[^"'<>\s]*)?""")
-            .findAll(body).forEach { match -> absoluteUrl(match.value, data)?.let(directMedia::add) }
+        val subtitleUrls = LinkedHashMap<String, String>()
+        val emittedUrls = LinkedHashSet<String>()
+        var found = false
+        val chromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        val requestHeaders = siteHeaders + ("User-Agent" to chromeUa)
 
-        document.select("video[src], source[src]").forEach { element ->
-            absoluteUrl(element.attr("src"), data)?.let { candidate ->
-                if (candidate.contains(".m3u8", true) || candidate.contains(".mp4", true)) directMedia.add(candidate)
-            }
-        }
-
-        for (mediaUrl in directMedia) {
-            if (isSubtitleUrl(mediaUrl)) continue
-            runCatching {
-                callback(newExtractorLink(
-                    source = "AsyaLuna",
-                    name = if (mediaUrl.contains(".m3u8", true)) "AsyaLuna HLS" else "AsyaLuna MP4",
-                    url = mediaUrl,
-                    type = mediaType(mediaUrl)
-                ) {
-                    quality = qualityFrom(mediaUrl)
-                    headers = mapOf("Referer" to data, "User-Agent" to USER_AGENT)
-                })
+        fun emitLink(link: ExtractorLink) {
+            if (emittedUrls.add(link.url)) {
+                callback(link)
                 found = true
             }
         }
 
-        document.select("track[src]").forEach { track ->
-            val subtitleUrl = absoluteUrl(track.attr("src"), data) ?: return@forEach
-            if (!isSubtitleUrl(subtitleUrl)) return@forEach
-            val label = track.attr("label").ifBlank { track.attr("srclang") }.ifBlank { "Türkçe" }
-            runCatching { subtitleCallback(SubtitleFile(label, subtitleUrl)) }
+        fun addPlayer(raw: String?, base: String) {
+            if (raw.isNullOrBlank()) return
+            val url = absoluteUrl(raw, base) ?: return
+            val id = okRuVideoId(url)
+            if (id != null) {
+                players.add("https://ok.ru/video/$id")
+                players.add("https://ok.ru/videoembed/$id")
+            } else {
+                players.add(url)
+            }
+        }
+
+        addPlayer(data, data)
+        val response = runCatching {
+            app.get(data, headers = requestHeaders, referer = "$mainUrl/", allowRedirects = true)
+        }.getOrNull()
+        val document = response?.takeIf { it.isSuccessful }?.document
+        val body = response?.takeIf { it.isSuccessful }?.text?.let(::normalizeRaw).orEmpty()
+
+        if (document != null) {
+            document.select("iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], iframe[data-embed]").forEach { frame ->
+                val raw = frame.attr("src")
+                    .ifBlank { frame.attr("data-src") }
+                    .ifBlank { frame.attr("data-lazy-src") }
+                    .ifBlank { frame.attr("data-url") }
+                    .ifBlank { frame.attr("data-embed") }
+                addPlayer(raw, data)
+            }
+            document.select("[data-player], [data-video], [data-embed], [data-url], [data-href]").forEach { element ->
+                listOf(
+                    element.attr("data-player"), element.attr("data-video"), element.attr("data-embed"),
+                    element.attr("data-url"), element.attr("data-href")
+                ).forEach { raw -> addPlayer(raw, data) }
+            }
+
+            document.select("a[href], source[src], video[src]").forEach { element ->
+                val raw = if (element.hasAttr("href")) element.attr("href") else element.attr("src")
+                val url = absoluteUrl(raw, data) ?: return@forEach
+                if (okRuVideoId(url) != null) addPlayer(url, data)
+                if (url.contains(".m3u8", true) || url.contains(".mp4", true)) directMedia.add(url)
+                if (isSubtitleUrl(url)) {
+                    val label = element.attr("label").ifBlank { element.attr("srclang") }
+                        .ifBlank { if (url.contains("/en/", true) || url.contains("english", true)) "English" else "Türkçe" }
+                    subtitleUrls.putIfAbsent(url, label)
+                }
+            }
+            document.select("track[src]").forEach { track ->
+                val url = absoluteUrl(track.attr("src"), data) ?: return@forEach
+                if (isSubtitleUrl(url)) {
+                    val label = track.attr("label").ifBlank { track.attr("srclang") }.ifBlank { "Türkçe" }
+                    subtitleUrls.putIfAbsent(url, label)
+                }
+            }
+        }
+
+        Regex("""(?i)(?:https?:)?//(?:www\.)?(?:ok\.ru|odnoklassniki\.ru)/(?:video|videoembed)/\d+[^"'<>\s]*""")
+            .findAll(body).forEach { addPlayer(it.value, data) }
+        Regex("""(?i)(?:https?:)?//[^"'<>\s]+?\.(?:m3u8|mp4)(?:\?[^"'<>\s]*)?""")
+            .findAll(body).forEach { match -> absoluteUrl(match.value, data)?.let(directMedia::add) }
+
+        for (mediaUrl in directMedia) {
+            if (isSubtitleUrl(mediaUrl)) continue
+            val hls = mediaUrl.contains(".m3u8", true) || mediaUrl.contains(".m3u", true)
+            runCatching {
+                emitLink(
+                    newExtractorLink(
+                        source = "AsyaLuna",
+                        name = if (hls) "AsyaLuna HLS" else "AsyaLuna MP4",
+                        url = mediaUrl,
+                        type = if (hls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    ) {
+                        quality = qualityFrom(mediaUrl)
+                        headers = mapOf("Referer" to data, "User-Agent" to chromeUa)
+                    }
+                )
+            }
         }
 
         Regex("""(?i)(?:https?:)?//[^"'<>\s]+\.(?:vtt|srt|ass|ssa)(?:\?[^"'<>\s]*)?""")
             .findAll(body).forEach { match ->
-                val subtitleUrl = absoluteUrl(match.value, data) ?: return@forEach
-                val label = if (subtitleUrl.contains("/en/", true) || subtitleUrl.contains("english", true)) "English" else "Türkçe"
-                runCatching { subtitleCallback(SubtitleFile(label, subtitleUrl)) }
+                val url = absoluteUrl(match.value, data) ?: return@forEach
+                val label = if (url.contains("/en/", true) || url.contains("english", true)) "English" else "Türkçe"
+                subtitleUrls.putIfAbsent(url, label)
             }
+        for ((url, label) in subtitleUrls) {
+            runCatching { subtitleCallback(SubtitleFile(label, url)) }
+        }
 
+        val okIdsHandled = HashSet<String>()
         for (playerUrl in players.distinct()) {
-            runCatching {
-                if (loadExtractor(playerUrl, data, subtitleCallback, callback)) found = true
+            val id = okRuVideoId(playerUrl)
+            if (id != null && okIdsHandled.add(id)) {
+                runCatching { extractOkRuStreams(playerUrl, data, ::emitLink) }
             }
+            runCatching { loadExtractor(playerUrl, data, subtitleCallback, ::emitLink) }
         }
         return found
     }
+
 }
