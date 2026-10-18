@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:489220f31000cd7e650157b41f31ce7293db2814 -->
+### AsyaLuna OK.ru suspend çıkarıcı derleme hatasını düzelt
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [489220f](https://github.com/Kayracs3/Kayra/commit/489220f31000cd7e650157b41f31ce7293db2814)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:ac73f69421646a027dcbec2c7dcb571cc7c1e5ce -->
 ### AsyaLuna konusu, bölümleri ve OK.ru oynatımını düzelt
 
