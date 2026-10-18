@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:8ba5857f071a8361e6bc156d3b9ea0714b0d3dd9 -->
+### Refactor mainPage entries for films and series
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [8ba5857](https://github.com/Kayracs3/Kayra/commit/8ba5857f071a8361e6bc156d3b9ea0714b0d3dd9)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:acfbde3ab41ddaf9b674eddce981621eb14ac0ea -->
 ### Update AsyaWatch.kt
 
