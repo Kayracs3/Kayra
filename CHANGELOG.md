@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:75158042d68353d5d9b543300bfcc034b6ee2eed -->
+### Speed up DiziAsya source resolution and skip duplicate extractors
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [7515804](https://github.com/Kayracs3/Kayra/commit/75158042d68353d5d9b543300bfcc034b6ee2eed)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:1ab79137d160961b81842a4e2c184a219fd2988e -->
 ### Remove redundant mapping for 'Programlar'
 
