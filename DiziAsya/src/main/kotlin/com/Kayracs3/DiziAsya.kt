@@ -588,7 +588,49 @@ class DiziAsya : MainAPI() {
         val document = response?.takeIf { it.isSuccessful }?.document
             ?: return newHomePageResponse(request.name, emptyList<SearchResponse>(), hasNext = false)
 
-        val items = parseCards(document).map { it.toSearchResponse() }.distinctBy { it.url }
+        val parsedItems = parseCards(document)
+
+        // Temporary diagnostic, limited to page 1 of the reported science-fiction category.
+        // Compare the extracted R2 URL with the site's optimizer and log response status/MIME.
+        if (page == 1 && requestedUrl.contains("category=bilim-kurgu", true)) {
+            val sample = parsedItems.firstOrNull {
+                normalize(it.title).contains("all of us are dead")
+            }
+            println(
+                "DiziAsyaPosterDiag|page=1|parsed=${parsedItems.size}|" +
+                    "sampleFound=${sample != null}|titles=" +
+                    parsedItems.joinToString(";") { it.title }
+            )
+            if (sample != null) {
+                val directPoster = sample.poster
+                println("DiziAsyaPosterDiag|title=${sample.title}|poster=${directPoster ?: "NULL"}")
+                if (directPoster != null) {
+                    val directHost = runCatching { URI(directPoster).host.orEmpty().lowercase(Locale.ROOT) }
+                        .getOrDefault("")
+                    if (directHost == "pub-bf3eef1e30be4acfbce23813331496bb.r2.dev") {
+                        val optimizerPoster =
+                            "$mainUrl/_next/image?url=${URLEncoder.encode(directPoster, "UTF-8")}&w=256&q=75"
+                        for ((kind, imageUrl) in listOf("direct" to directPoster, "proxy" to optimizerPoster)) {
+                            val imageResponse = runCatching {
+                                app.get(
+                                    imageUrl,
+                                    headers = posterRequestHeaders + ("Referer" to requestedUrl),
+                                    referer = requestedUrl,
+                                    allowRedirects = true
+                                )
+                            }.getOrNull()
+                            println(
+                                "DiziAsyaPosterDiag|$kind|success=${imageResponse?.isSuccessful}|" +
+                                    "code=${imageResponse?.code ?: -1}|" +
+                                    "contentType=${imageResponse?.headers?.get("content-type").orEmpty()}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        val items = parsedItems.map { it.toSearchResponse() }.distinctBy { it.url }
         val hasMore = hasNextPage(document, page, items.size)
         return newHomePageResponse(request.name, items, hasNext = hasMore)
     }
