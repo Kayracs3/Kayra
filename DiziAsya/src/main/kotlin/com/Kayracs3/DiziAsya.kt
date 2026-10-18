@@ -156,13 +156,16 @@ class DiziAsya : MainAPI() {
         ) || n.matches(Regex("\\d{1,4}"))
     }
 
-    private fun normalizeImageUrl(raw: String?, base: String = mainUrl): String? {
+    private fun isR2PosterHost(host: String): Boolean {
+        val normalizedHost = host.lowercase(Locale.ROOT)
+        return normalizedHost == "r2.dev" || normalizedHost.endsWith(".r2.dev")
+    }
+
+    private fun originalImageUrl(raw: String, base: String): String? {
         val resolved = absoluteUrl(raw, base) ?: return null
-        val uri = runCatching { URI(resolved) }.getOrNull() ?: return resolved
+        val uri = runCatching { URI(resolved) }.getOrNull() ?: return null
         if (!uri.path.orEmpty().contains("/_next/image")) return resolved
 
-        // Extract the real source URL from Next.js' image optimizer endpoint. If extraction
-        // fails, reject the optimizer URL rather than letting CloudStream display a blank card.
         val encodedImage = uri.rawQuery.orEmpty().split('&')
             .firstOrNull { it.substringBefore('=').equals("url", true) }
             ?.substringAfter('=', "")
@@ -172,10 +175,35 @@ class DiziAsya : MainAPI() {
         val imageUrl = absoluteUrl(decodedImage, base) ?: return null
         val imageUri = runCatching { URI(imageUrl) }.getOrNull() ?: return null
         if (imageUri.host.isNullOrBlank() || imageUri.path.isNullOrBlank()) return null
-
-        // Use the real image URL, not the site's /_next/image optimizer endpoint.
-        // CloudStream can leave some optimizer URLs blank even when their source image is valid.
         return imageUrl
+    }
+
+    private fun r2PosterProxyUrl(imageUrl: String): String =
+        "$mainUrl/_next/image?url=${URLEncoder.encode(imageUrl, "UTF-8")}&w=256&q=75"
+
+    private fun isNextImageProxyForR2(url: String): Boolean {
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        if (!uri.path.orEmpty().endsWith("/_next/image")) return false
+        val encodedImage = uri.rawQuery.orEmpty().split('&')
+            .firstOrNull { it.substringBefore('=').equals("url", true) }
+            ?.substringAfter('=', "")
+            ?.takeIf { it.isNotBlank() } ?: return false
+        val decodedImage = runCatching { URLDecoder.decode(encodedImage, "UTF-8") }
+            .getOrNull() ?: return false
+        val host = runCatching { URI(decodedImage).host.orEmpty() }.getOrDefault("")
+        return isR2PosterHost(host)
+    }
+
+    private fun normalizeImageUrl(raw: String?, base: String = mainUrl): String? {
+        val resolved = absoluteUrl(raw, base) ?: return null
+        val imageUrl = originalImageUrl(resolved, base) ?: return null
+        val imageUri = runCatching { URI(imageUrl) }.getOrNull() ?: return null
+        val host = imageUri.host.orEmpty()
+
+        // Coil on the user's Samsung device reports "Unable to parse TLS packet header"
+        // for direct public R2 URLs. Load those through DiziAsya's HTTPS image optimizer.
+        // Other sources continue to use their original image URL.
+        return if (isR2PosterHost(host)) r2PosterProxyUrl(imageUrl) else imageUrl
     }
 
     private fun bestSrcsetUrl(raw: String): String? {
@@ -215,8 +243,8 @@ class DiziAsya : MainAPI() {
         val uri = runCatching { URI(url) }.getOrNull() ?: return false
         val path = uri.path.orEmpty().lowercase(Locale.ROOT)
         val file = path.substringAfterLast('/')
-        // Do not accept a Next.js optimizer endpoint as the final poster URL.
-        if (path.endsWith("/_next/image")) return false
+        // The site optimizer is a valid final URL only for known public R2 poster URLs.
+        if (path.endsWith("/_next/image")) return isNextImageProxyForR2(url)
         if (file.endsWith(".svg") || file.endsWith(".gif") || file.endsWith(".ico")) return false
         if (Regex("""(?i)(logo|avatar|placeholder|no[-_]?image|transparent|blank|favicon|pixel|spacer)""")
                 .containsMatchIn(file)
@@ -589,46 +617,6 @@ class DiziAsya : MainAPI() {
             ?: return newHomePageResponse(request.name, emptyList<SearchResponse>(), hasNext = false)
 
         val parsedItems = parseCards(document)
-
-        // Temporary diagnostic, limited to page 1 of the reported science-fiction category.
-        // Compare the extracted R2 URL with the site's optimizer and log response status/MIME.
-        if (page == 1 && requestedUrl.contains("category=bilim-kurgu", true)) {
-            val sample = parsedItems.firstOrNull {
-                normalize(it.title).contains("all of us are dead")
-            }
-            println(
-                "DiziAsyaPosterDiag|page=1|parsed=${parsedItems.size}|" +
-                    "sampleFound=${sample != null}|titles=" +
-                    parsedItems.joinToString(";") { it.title }
-            )
-            if (sample != null) {
-                val directPoster = sample.poster
-                println("DiziAsyaPosterDiag|title=${sample.title}|poster=${directPoster ?: "NULL"}")
-                if (directPoster != null) {
-                    val directHost = runCatching { URI(directPoster).host.orEmpty().lowercase(Locale.ROOT) }
-                        .getOrDefault("")
-                    if (directHost == "pub-bf3eef1e30be4acfbce23813331496bb.r2.dev") {
-                        val optimizerPoster =
-                            "$mainUrl/_next/image?url=${URLEncoder.encode(directPoster, "UTF-8")}&w=256&q=75"
-                        for ((kind, imageUrl) in listOf("direct" to directPoster, "proxy" to optimizerPoster)) {
-                            val imageResponse = runCatching {
-                                app.get(
-                                    imageUrl,
-                                    headers = posterRequestHeaders + ("Referer" to requestedUrl),
-                                    referer = requestedUrl,
-                                    allowRedirects = true
-                                )
-                            }.getOrNull()
-                            println(
-                                "DiziAsyaPosterDiag|$kind|success=${imageResponse?.isSuccessful}|" +
-                                    "code=${imageResponse?.code ?: -1}|" +
-                                    "contentType=${imageResponse?.headers?.get("content-type").orEmpty()}"
-                            )
-                        }
-                    }
-                }
-            }
-        }
 
         val items = parsedItems.map { it.toSearchResponse() }.distinctBy { it.url }
         val hasMore = hasNextPage(document, page, items.size)
