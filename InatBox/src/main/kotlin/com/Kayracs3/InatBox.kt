@@ -2172,7 +2172,7 @@ class InatBox : MainAPI() {
             return value
         }
 
-        if (Regex("""(?i)^[a-z0-9.-]+\\.[a-z]{2,}(?::\\d+)?/""").containsMatchIn(value)) {
+        if (Regex("""(?i)^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?/""").containsMatchIn(value)) {
             return "https://$value"
         }
 
