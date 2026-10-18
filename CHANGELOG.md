@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:a2100fa9afe73c9f1ad53ccde1a36b3a59674452 -->
+### Fix DiziAsya titles using each item's own URL slug
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [a2100fa](https://github.com/Kayracs3/Kayra/commit/a2100fa9afe73c9f1ad53ccde1a36b3a59674452)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:cbc6101052aded768dc21312a91e6e662bf11bc9 -->
 ### Bump DiziAsya version for catalog title fix
 
