@@ -919,7 +919,7 @@ class DiziAsya : MainAPI() {
         val relativeMediaRegex = Regex(
             """(?i)["']((?:/|\.{1,2}/)[^"'<> ]{3,1000})["']"""
         )
-        val providerLabels = listOf("DiziAsya", "Klaus", "OKRU", "Vidmoly", "Abyss", "4Me", "EV", "P2P", "ABStr", "LULU", "Vudeo", "Dracarys")
+        val providerLabels = listOf("DiziAsya2", "Klaus", "OKRU", "Vidmoly", "Abyss", "4Me", "EV", "P2P", "ABStr", "LULU", "Vudeo", "Dracarys")
 
         for (source in sources) {
             urlRegex.findAll(source).forEach { match ->
