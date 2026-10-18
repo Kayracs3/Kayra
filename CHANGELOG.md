@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:a364f8bf6580c74ec603fea1ca0f7e9af47393db -->
+### Bump DiziAsya version for poster request diagnostics
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [a364f8b](https://github.com/Kayracs3/Kayra/commit/a364f8bf6580c74ec603fea1ca0f7e9af47393db)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:493741fa097ffcfdf191a40f7dc8622b4c0fd43f -->
 ### Diagnose DiziAsya blank poster requests
 
