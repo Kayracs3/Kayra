@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:8b79611ffc8932e6f1a0ebdacc20c4307e5c75db -->
+### Bump DiziAsya plugin version for fixes
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [8b79611](https://github.com/Kayracs3/Kayra/commit/8b79611ffc8932e6f1a0ebdacc20c4307e5c75db)
+
+## 2026-10-18
+
+<!-- kayra-commit:0e693e3512974cbaf65f2ebfc674911170bbc5fa -->
+### Refine DiziAsya provider label matching
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [0e693e3](https://github.com/Kayracs3/Kayra/commit/0e693e3512974cbaf65f2ebfc674911170bbc5fa)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:260c0df4fcdff09f682d2c19ef0499eda33aee21 -->
 ### Fix DiziAsya synopsis parsing and source discovery
 
