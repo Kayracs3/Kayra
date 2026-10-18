@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:45405b9d2fb4c6a6706279045d3f25938f7953dd -->
+### Resolve InatBox film and series JSON to playback links
+
+- Etkilenen alanlar: InatBox
+- Commit: [45405b9](https://github.com/Kayracs3/Kayra/commit/45405b9d2fb4c6a6706279045d3f25938f7953dd)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:8ba5857f071a8361e6bc156d3b9ea0714b0d3dd9 -->
 ### Refactor mainPage entries for films and series
 
