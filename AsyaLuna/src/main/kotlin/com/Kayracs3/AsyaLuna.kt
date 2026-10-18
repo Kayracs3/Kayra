@@ -121,71 +121,55 @@ class AsyaLuna : MainAPI() {
             }
     }
 
-    private fun isSeriesUrl(url: String) = pathOf(url).lowercase(Locale.ROOT).startsWith("/dizi/")
+    private fun isSeriesUrl(url: String): Boolean {
+        val path = pathOf(url).lowercase(Locale.ROOT).trimEnd('/')
+        val parts = path.split('/').filter { it.isNotBlank() }
+        if (parts.size != 2 || parts[0] != "dizi") return false
+
+        // Archive pagination URLs (for example /dizi/page/2/) are navigation,
+        // not show details. Reserved pagination labels must never become titles.
+        val slug = parts[1]
+        if (slug in setOf(
+                "page", "paged", "sayfa", "pagination", "page-numbers",
+                "ilk", "son", "onceki", "önceki", "previous", "prev",
+                "next", "sonraki", "first", "last"
+            )
+        ) return false
+        return true
+    }
+
     private fun isEpisodeUrl(url: String) = pathOf(url).lowercase(Locale.ROOT).startsWith("/bolum/")
 
-    private fun isUsablePoster(url: String): Boolean {
-        if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) return false
-        val file = pathOf(url).substringAfterLast('/').lowercase(Locale.ROOT)
-        if (file.endsWith(".svg")) return false
-        if (Regex("(logo|avatar|placeholder|no[-_]?image|transparent|blank)").containsMatchIn(file)) return false
-        return file.contains('.') || url.contains("image")
-    }
-
-    private fun posterFrom(element: Element?): String? {
-        if (element == null) return null
-        val nodes = listOf(element) + element.select("img, [data-poster], [data-background], [data-bg], [style*=background]")
-        for (node in nodes.distinct()) {
-            for (attr in listOf("data-poster", "data-original", "data-lazy-src", "data-src", "data-srcset", "srcset", "src", "content")) {
-                val raw = node.attr(attr).trim()
-                if (raw.isBlank() || raw.startsWith("data:", true)) continue
-                val candidate = if (attr.contains("srcset")) raw.substringBefore(',').trim().substringBefore(' ') else raw
-                val image = absoluteUrl(candidate, node.baseUri().ifBlank { mainUrl })
-                if (image != null && isUsablePoster(image)) return image
-            }
-            val background = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
-                .find(node.attr("style"))?.groupValues?.getOrNull(1)
-            val image = absoluteUrl(background, node.baseUri().ifBlank { mainUrl })
-            if (image != null && isUsablePoster(image)) return image
-        }
-        return null
-    }
-
-    private fun scoreFrom(text: String?): Score? {
-        val value = Regex("""(?i)(?:IMDb|İMDb|IMDB)\s*(?:Puanı)?\s*[:：]?\s*(\d{1,2}(?:[.,]\d+)?)""")
-            .find(text.orEmpty())?.groupValues?.getOrNull(1)
-            ?.replace(',', '.')?.toDoubleOrNull()?.takeIf { it in 0.0..10.0 }
-            ?: return null
-        return Score.from10(value.toString())
-    }
-
-    private fun yearFrom(text: String?): Int? =
-        text?.let { Regex("""\b(?:19|20|21)\d{2}\b""").find(it)?.value?.toIntOrNull() }
-
-    private fun seriesUrlFromEpisode(rawUrl: String): String? {
-        val path = pathOf(rawUrl)
-        if (!path.startsWith("/bolum/", true)) return null
-        val slug = path.removePrefix("/bolum/").trim('/').substringBefore('/')
-        if (slug.isBlank()) return null
-        val seriesSlug = slug.replace(
-            Regex("""(?i)-(?:\d{1,3}-\d{1,3}-bolum(?:-final)?|\d{1,3}-bolum(?:-final)?)$"""),
-            ""
+    private fun isPaginationLink(link: Element): Boolean {
+        val label = normalize(
+            listOf(link.text(), link.attr("title"), link.attr("aria-label"), link.attr("rel"))
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
         )
-        if (seriesSlug.isBlank() || seriesSlug == slug) return null
-        return "$mainUrl/dizi/$seriesSlug/"
-    }
+        val classes = (link.className() + " " + link.parent()?.className().orEmpty())
+            .lowercase(Locale.ROOT)
+        val hrefPath = pathOf(absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }).orEmpty())
+            .lowercase(Locale.ROOT)
 
-    private fun cardTitle(link: Element, card: Element, url: String): String {
-        val image = link.selectFirst("img")?.let { it.attr("alt").ifBlank { it.attr("title") } }.orEmpty()
-        return listOf(
-            link.attr("title"), image,
-            card.selectFirst("h1,h2,h3,h4,.title,.name")?.text().orEmpty(),
-            link.text()
-        ).asSequence().map(::cleanTitle)
-            .firstOrNull { it.isNotBlank() && normalize(it) !in setOf("incele", "devami", "devamini oku") }
-            ?: titleFromUrl(url)
-    }
+        val paginationContainer = link.closest(
+            ".pagination, .page-numbers, .nav-links, .page-nav, .wp-pagenavi, " +
+                "[class*=pagination], [aria-label*=pagination], [aria-label*=Pagination]"
+        ) != null
+        val paginationClass = Regex("""(?i)(?:^|\s)(?:page-numbers?|pagination|paginate|nav-links|wp-pagenavi)(?:\s|$)""")
+            .containsMatchIn(classes)
+        val navigationLabel = label in setOf(
+            "ilk", "ilk sayfa", "onceki", "onceki sayfa", "geri", "previous", "previous page", "prev",
+            "son", "son sayfa", "sonraki", "sonraki sayfa", "ileri", "next", "next page", "first", "first page",
+            "last", "last page"
+        )
+        val pageNumberLabel = label.matches(Regex("""\d{1,4}""")) ||
+            label.matches(Regex("""(?:sayfa|page)\s*\d{1,4}"""))
+        val paginationPath = Regex("""/(?:page|sayfa)/\d+(?:/|$)""").containsMatchIn(hrefPath)
 
+        return paginationContainer || paginationClass ||
+            (navigationLabel && (link.attr("href").isNotBlank() || link.attr("rel").isNotBlank())) ||
+            ((pageNumberLabel || paginationPath) && (paginationContainer || paginationClass || paginationPath))
+    }
     private fun parseCards(document: Document, includeEpisodeCards: Boolean): List<CatalogItem> {
         val results = LinkedHashMap<String, CatalogItem>()
         for (link in document.select("a[href]")) {
@@ -200,37 +184,51 @@ class AsyaLuna : MainAPI() {
                 seriesUrlFromEpisode(linkedUrl) ?: continue
             }
             val card = link.closest("article, .post, .item, .movie, .dizi, .film, li") ?: link
+            val title = cleanTitle(if (series) cardTi    private fun parseCards(document: Document, includeEpisodeCards: Boolean): List<CatalogItem> {
+        val results = LinkedHashMap<String, CatalogItem>()
+        for (link in document.select("a[href]")) {
+            // Pagination links can sit inside <li> elements near movie cards; filtering
+            // before finding the card prevents "İlk", "Son" and page numbers from
+            // inheriting a neighbouring poster or being shown as catalogue items.
+            if (isPaginationLink(link)) continue
+
+            val linkedUrl = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: continue
+            val series = isSeriesUrl(linkedUrl)
+            val episode = isEpisodeUrl(linkedUrl)
+            if (!series && !(includeEpisodeCards && episode)) continue
+
+            val resultUrl = if (series) {
+                linkedUrl.substringBefore('#').substringBefore('?')
+            } else {
+                seriesUrlFromEpisode(linkedUrl) ?: continue
+            }
+            val card = link.closest("article, .post, .item, .movie, .dizi, .film, li") ?: link
             val title = cleanTitle(if (series) cardTitle(link, card, resultUrl) else titleFromUrl(resultUrl))
             if (title.isBlank() || normalize(title).length < 2) continue
 
+            // Defensive filter for themes whose pagination anchors have nonstandard classes.
+            if (normalize(title) in setOf(
+                    "ilk", "ilk sayfa", "son", "son sayfa", "onceki", "onceki sayfa",
+                    "sonraki", "sonraki sayfa", "previous", "previous page", "next", "next page",
+                    "first", "first page", "last", "last page"
+                ) || normalize(title).matches(Regex("""\d{1,4}"""))
+            ) continue
+
             results.putIfAbsent(
                 resultUrl,
-                CatalogItem(title, resultUrl, posterFrom(link) ?: posterFrom(card), scoreFrom(card.text()),
-                    yearFrom(title) ?: yearFrom(card.text()))
+                CatalogItem(
+                    title,
+                    resultUrl,
+                    posterFrom(link) ?: posterFrom(card),
+                    scoreFrom(card.text()),
+                    yearFrom(title) ?: yearFrom(card.text())
+                )
             )
         }
         return results.values.toList()
     }
 
-    private fun CatalogItem.toSearchResponse(): SearchResponse =
-        newTvSeriesSearchResponse(title, url) {
-            posterUrl = this@toSearchResponse.poster
-            score = this@toSearchResponse.score
-            year = this@toSearchResponse.year
-        }
-
-    private fun paginationPageNumber(rawUrl: String): Int? {
-        val url = absoluteUrl(rawUrl, mainUrl) ?: return null
-        val pathNumber = Regex("""(?i)/page/(\d+)/?$""")
-            .find(pathOf(url))?.groupValues?.getOrNull(1)?.toIntOrNull()
-        if (pathNumber != null) return pathNumber
-
-        val query = runCatching { URI(url).rawQuery.orEmpty() }.getOrDefault("")
-        return Regex("""(?i)(?:^|&)(?:paged|page)=(\d+)(?:&|$)""")
-            .find(query)?.groupValues?.getOrNull(1)?.toIntOrNull()
-    }
-
-    private fun hasNextPage(document: Document, page: Int): Boolean {
+ument, page: Int): Boolean {
         val nextPage = page + 1
         val links = document.select("a[href]")
 
