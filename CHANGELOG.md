@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:7f04f7f93785d99d73a3fc79305a82b3fc00946d -->
+### AsyaLuna konu ayrıştırıcısındaki eski kod artığını temizle
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [7f04f7f](https://github.com/Kayracs3/Kayra/commit/7f04f7f93785d99d73a3fc79305a82b3fc00946d)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:1a895f82b0d0db6436d4b56ee3f21fbf1e0bf3d1 -->
 ### AsyaLuna bölüm ayrıştırıcısında değişken adını netleştir
 
