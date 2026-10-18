@@ -472,13 +472,13 @@ class AsyaLuna : MainAPI() {
 
             val cleanedLabel = cleanTitle(label)
             val episodeName = cleanedLabel.ifBlank { "$number. Bölüm" }
-            val episode = newEpisode(episodeUrl) {
+            val episodeItem = newEpisode(episodeUrl) {
                 name = episodeName
                 this.season = season
                 episode = number
                 this.posterUrl = poster
             }
-            episodeRows[key] = episode to priority
+            episodeRows[key] = episodeItem to priority
         }
 
         for (link in document.select("a[href], [data-href], [data-url], [data-episode]")) {
