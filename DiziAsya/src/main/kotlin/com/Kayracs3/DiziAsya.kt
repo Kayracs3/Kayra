@@ -214,15 +214,32 @@ class DiziAsya : MainAPI() {
 
     private fun cardTitle(link: Element, card: Element, url: String): String {
         if (isEpisodeUrl(url)) return titleFromUrl(url)
-        val imageTitle = card.selectFirst("img[alt], img[title]")
+
+        // The category pages can wrap several poster links in a shared container. Reading
+        // the first title-like element from that container caused every result to inherit
+        // the same title even while the poster and URL changed. Use the item's own slug
+        // first; DiziAsya uses readable slugs such as /dizi/sacred-jewel.
+        val slugTitle = titleFromUrl(url)
+        val normalizedSlug = normalize(slugTitle)
+        val slugIsUseful = !isGenericTitle(slugTitle) &&
+            !normalizedSlug.matches(Regex("""\\d{4,}""")) &&
+            !normalizedSlug.matches(Regex("""[a-f0-9]{12,}"""))
+        if (slugIsUseful) return slugTitle
+
+        // Only inspect elements scoped to this individual anchor as a fallback; never
+        // take a heading from a potentially shared parent card/list container.
+        val imageTitle = link.selectFirst("img[alt], img[title]")
             ?.let { it.attr("alt").ifBlank { it.attr("title") } }.orEmpty()
         return listOf(
+            imageTitle,
+            link.attr("aria-label"),
             link.attr("title"),
-            card.selectFirst("h1,h2,h3,h4,h5,[class*=title],[class*=name]")?.text().orEmpty(),
-            imageTitle, link.ownText(), link.text()
+            link.selectFirst("h1,h2,h3,h4,h5,[class*=title],[class*=name]")?.text().orEmpty(),
+            link.ownText(),
+            link.text()
         ).asSequence().map { cleanTitle(it) }
             .firstOrNull { it.isNotBlank() && !isGenericTitle(it) }
-            ?: titleFromUrl(url)
+            ?: slugTitle
     }
 
     private fun parseCards(document: Document): List<CatalogItem> {
