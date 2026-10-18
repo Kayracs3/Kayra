@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:f6a1b09c6e3260f8b4e37702efd6742a90e689e1 -->
+### Bump DiziAsya version for poster srcset fix
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [f6a1b09](https://github.com/Kayracs3/Kayra/commit/f6a1b09c6e3260f8b4e37702efd6742a90e689e1)
+
+## 2026-10-18
+
+<!-- kayra-commit:0ba7dbfa0d0de7cfe92ea96b9628550ea1e0df79 -->
+### Improve DiziAsya poster srcset and optimizer parsing
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [0ba7dbf](https://github.com/Kayracs3/Kayra/commit/0ba7dbfa0d0de7cfe92ea96b9628550ea1e0df79)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:27556c104862cc7f2a0eaa2260281f532b291749 -->
 ### Bump DiziAsya to version 12 for poster fix
 
