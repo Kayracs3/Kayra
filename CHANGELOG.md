@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:1cce797019cd496c909695f084c24a39926e9f89 -->
+### Bump InatBox version for film and series playback fix
+
+- Etkilenen alanlar: InatBox
+- Commit: [1cce797](https://github.com/Kayracs3/Kayra/commit/1cce797019cd496c909695f084c24a39926e9f89)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:45405b9d2fb4c6a6706279045d3f25938f7953dd -->
 ### Resolve InatBox film and series JSON to playback links
 
