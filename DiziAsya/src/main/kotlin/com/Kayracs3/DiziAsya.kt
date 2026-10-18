@@ -489,9 +489,30 @@ class DiziAsya : MainAPI() {
             var section: Element? = heading.parent()
             repeat(5) {
                 val current = section ?: return@repeat
+                val base = document.location().ifBlank { mainUrl }
                 val cards = current.select("a[href], [role=link]")
                     .filter { it.selectFirst("img") != null }
-                cards.forEach { addActorCard(it, document.location().ifBlank { mainUrl }) }
+                cards.forEach { addActorCard(it, base) }
+
+                // Some profile cards are non-clickable divs. Resolve one portrait per card
+                // rather than parsing the entire actor section as a single name.
+                for (img in current.select("img")) {
+                    val linkedCard = img.closest("a[href], [role=link]")
+                    if (linkedCard != null) continue
+                    var parent: Element? = img.parent()
+                    var card: Element? = null
+                    repeat(5) {
+                        val candidate = parent ?: return@repeat
+                        if (candidate.select("img").size == 1 &&
+                            candidate.text().trim().length in 2..140
+                        ) {
+                            card = candidate
+                            return@repeat
+                        }
+                        parent = candidate.parent()
+                    }
+                    card?.let { addActorCard(it, base) }
+                }
                 if (actors.size >= 3) return actors.values.take(50)
                 section = current.parent()
             }
