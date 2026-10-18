@@ -393,60 +393,97 @@ class DiziAsya : MainAPI() {
         }
 
     private fun pageUrl(base: String, page: Int): String {
-        if (page <= 1) return base.substringBefore('#')
         val clean = base.substringBefore('#')
+        if (page <= 1) return clean
+
+        // The live site uses /diziler?page=2, ?page=3, etc.
+        // Preserve category filters such as ?category=romantizm and replace only page.
         val path = clean.substringBefore('?')
         val query = clean.substringAfter('?', "")
-        val params = query.split('&')
-            .filter { it.isNotBlank() && !it.substringBefore('=').equals("page", true) }
+        val params = query.split('&').filter {
+            it.isNotBlank() && !it.substringBefore('=').equals("page", true)
+        }
         return path + "?" + (params + "page=$page").joinToString("&")
     }
 
     private fun pageNumberFromUrl(rawUrl: String): Int? {
         val url = absoluteUrl(rawUrl, mainUrl) ?: return null
         val query = runCatching { URI(url).rawQuery.orEmpty() }.getOrDefault("")
-        val queryPage = query.split('&').firstNotNullOfOrNull { part ->
-            if (!part.substringBefore('=').equals("page", true)) null
-            else part.substringAfter('=', "").toIntOrNull()
+        for (part in query.split('&')) {
+            if (part.substringBefore('=').equals("page", true)) {
+                part.substringAfter('=', "").toIntOrNull()?.let { if (it > 0) return it }
+            }
         }
-        if (queryPage != null) return queryPage
         return Regex("""(?i)/(?:page|sayfa)/(\d+)/?$""")
             .find(pathOf(url))?.groupValues?.getOrNull(1)?.toIntOrNull()
     }
 
     private fun totalItemCount(document: Document): Int? {
-        val raw = Regex("""(?i)\b([\d., ]+)\s+icerik\b""")
-            .find(document.text())?.groupValues?.getOrNull(1) ?: return null
-        return raw.replace(Regex("""[.,\s]"""), "").toIntOrNull()
+        // Normalize Turkish characters first: the site writes "399 içerik".
+        val text = normalize(document.text())
+        val raw = Regex("""\b([\d., ]+)\s+icerik\b""")
+            .find(text)?.groupValues?.getOrNull(1) ?: return null
+        return raw.filter { it.isDigit() }.toIntOrNull()
     }
 
     private fun hasNextPage(document: Document, page: Int, itemCount: Int): Boolean {
         if (itemCount <= 0 || page >= 250) return false
+
         val links = document.select("a[href]")
-        val pageNumbers = links.mapNotNull { link ->
-            val fullUrl = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: return@mapNotNull null
-            pageNumberFromUrl(fullUrl)
-        }.distinct()
+        val paginationNumbers = LinkedHashSet<Int>()
 
-        if (pageNumbers.any { it > page }) return true
+        for (link in links) {
+            val rawHref = link.attr("href").trim()
+            if (rawHref.isBlank()) continue
+            val url = absoluteUrl(rawHref, link.baseUri().ifBlank { mainUrl }) ?: continue
+            val pageNumber = pageNumberFromUrl(url) ?: continue
 
-        if (links.any { link ->
-                val fullUrl = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: return@any false
-                val label = normalize(link.text() + " " + link.attr("aria-label") + " " +
-                    link.attr("title") + " " + link.attr("rel"))
-                val isNextControl = link.attr("rel").equals("next", true) ||
-                    link.classNames().any { it.equals("next", true) } ||
-                    label.contains("sonraki") || label == "next"
-                isNextControl && (pageNumberFromUrl(fullUrl)?.let { it > page } ?: true)
-            }) return true
+            val label = normalize(
+                link.text() + " " + link.attr("aria-label") + " " +
+                    link.attr("title") + " " + link.attr("rel")
+            )
+            val parentClasses = (link.className() + " " + link.parent()?.className().orEmpty())
+                .lowercase(Locale.ROOT)
+            val paginationContainer = link.closest(
+                "nav, [role=navigation], [class*=pagination], [class*=pager], " +
+                    "[class*=page-number], [aria-label*=pagination]"
+            ) != null
+            val numericLabel = link.text().trim().matches(Regex("""\d{1,3}"""))
+            val pageQuery = url.contains("?page=", true) || url.contains("&page=", true)
+            val pagePath = Regex("""(?i)/(?:page|sayfa)/\d+/?(?:\?|$)""")
+                .containsMatchIn(url)
+            val paginationClass = Regex("""(?i)(pagination|pager|page-number|page-numbers)""")
+                .containsMatchIn(parentClasses)
 
-        // The current site defaults to 18 items per page. Its page count is shown in the
-        // HTML, so still permit scrolling if numeric pagination controls are re-rendered.
-        val total = totalItemCount(document)
-        if (total != null) return page < (total + 17) / 18
+            if (paginationContainer || numericLabel || pageQuery || pagePath || paginationClass) {
+                paginationNumbers.add(pageNumber)
+            }
+        }
 
-        // Final fallback: let CloudStream request the next URL; an empty response stops it.
-        return true
+        // If the site's numbered navigation provides the last visible page, only continue
+        // while that target is ahead of the current page. This prevents endless empty loads.
+        val lastLinkedPage = paginationNumbers.maxOrNull()
+        if (lastLinkedPage != null) return lastLinkedPage > page
+
+        // Some responsive layouts show only a Next control, without page numbers.
+        val nextLink = links.firstOrNull { link ->
+            val url = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: return@firstOrNull false
+            val label = normalize(
+                link.text() + " " + link.attr("aria-label") + " " +
+                    link.attr("title") + " " + link.attr("rel") + " " + link.className()
+            )
+            val isNext = link.attr("rel").equals("next", true) ||
+                label.contains("sonraki") || label == "next" ||
+                Regex("""(^|\s)next(\s|$)""").containsMatchIn(label)
+            isNext && (pageNumberFromUrl(url)?.let { it > page } ?: true)
+        }
+        if (nextLink != null) return true
+
+        // Last fallback for pages whose nav links are hidden in a responsive shell.
+        // The catalogue reports a total count and uses 18 cards per page.
+        val total = totalItemCount(document) ?: return false
+        val totalPages = (total + 17) / 18
+        return page < totalPages
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -456,12 +493,10 @@ class DiziAsya : MainAPI() {
         }.getOrNull()
         val document = response?.takeIf { it.isSuccessful }?.document
             ?: return newHomePageResponse(request.name, emptyList<SearchResponse>(), hasNext = false)
+
         val items = parseCards(document).map { it.toSearchResponse() }.distinctBy { it.url }
-        return newHomePageResponse(
-            request.name,
-            items,
-            hasNext = hasNextPage(document, page, items.size)
-        )
+        val hasMore = hasNextPage(document, page, items.size)
+        return newHomePageResponse(request.name, items, hasNext = hasMore)
     }
 
     private fun titleMatches(query: String, title: String): Boolean {
@@ -818,7 +853,6 @@ class DiziAsya : MainAPI() {
                     this.season = season
                     episode = number
                     this.posterUrl = poster
-                    this.posterHeaders = posterRequestHeaders
                 }
             }
         }
@@ -885,7 +919,6 @@ class DiziAsya : MainAPI() {
                     this.season = season
                     episode = number
                     this.posterUrl = poster
-                    this.posterHeaders = posterRequestHeaders
                 }
             }
         }
