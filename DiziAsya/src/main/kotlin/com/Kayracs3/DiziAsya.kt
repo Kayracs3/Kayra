@@ -185,7 +185,7 @@ class DiziAsya : MainAPI() {
     }
 
     private fun r2PosterProxyUrl(imageUrl: String): String =
-        "$mainUrl/_next/image?url=${URLEncoder.encode(imageUrl, "UTF-8")}&w=256&q=75"
+        "https://wsrv.nl/?url=${URLEncoder.encode(imageUrl, "UTF-8")}&w=384&output=webp&q=80"
 
     private fun isNextImageProxyForR2(url: String): Boolean {
         val uri = runCatching { URI(url) }.getOrNull() ?: return false
@@ -1071,9 +1071,12 @@ class DiziAsya : MainAPI() {
                 ?: document.title()
         ).ifBlank { titleFromUrl(targetUrl) }
         val pageText = document.text()
+        // Normalize Open Graph posters too: many detail pages expose the raw R2 image
+        // here, bypassing the card image normalizer and triggering TLS errors in CloudStream.
         val poster = document.selectFirst(
             "meta[property=og:image], meta[property=og:image:secure_url], meta[name=twitter:image]"
-        )?.attr("content")?.let { absoluteUrl(it, targetUrl) }?.takeIf { isUsablePoster(it) }
+        )?.attr("content")?.let { normalizeImageUrl(it, targetUrl) }
+            ?.takeIf { isImageCandidateUrl(it) }
             ?: posterFrom(document.selectFirst("main img, article img, [class*=poster] img, img[alt*=cover]"))
             ?: posterFrom(document.selectFirst("img[alt*=cover], img[alt*=poster]"))
         val plot = parsePlot(document)
