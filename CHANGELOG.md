@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:daef7ab77b3acecd93fd75d1c545e50ebbd0419e -->
+### Prefer WebP for DiziAsya poster requests
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [daef7ab](https://github.com/Kayracs3/Kayra/commit/daef7ab77b3acecd93fd75d1c545e50ebbd0419e)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:e8373909956596bf7e5cd33d07cf975899f58d59 -->
 ### Bump DiziAsya version for R2 image proxy fix
 
