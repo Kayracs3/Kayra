@@ -426,10 +426,6 @@ class AsyaLuna : MainAPI() {
             }
     }
 
-     !normalize(it).contains("konusu")
-            }
-    }
-
     private fun parseTrailer(document: Document): String? =
         document.select("a[href]").asSequence()
             .filter {
