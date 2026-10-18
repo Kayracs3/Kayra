@@ -1,4 +1,4 @@
-version = 8
+version = 9
 cloudstream {
     description = "DiziAsya — Kore, Çin, Japon dizileri ve animeler"
     authors = listOf("Kayracs3")
