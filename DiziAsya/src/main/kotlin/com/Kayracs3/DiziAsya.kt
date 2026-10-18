@@ -42,7 +42,7 @@ class DiziAsya : MainAPI() {
 
     private val posterRequestHeaders = mapOf(
         "User-Agent" to browserUa,
-        "Accept" to "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Accept" to "image/webp,image/png,image/jpeg,image/*,*/*;q=0.8",
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
         "Referer" to "$mainUrl/"
     )
