@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:473ff901f22ff6ff4c3d55431ff71ce08e75dfc1 -->
+### DiziAsya CloudStream eklenti kaydını ekle
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [473ff90](https://github.com/Kayracs3/Kayra/commit/473ff901f22ff6ff4c3d55431ff71ce08e75dfc1)
+
+## 2026-10-18
+
+<!-- kayra-commit:976078a1c135ef9ea971940153851a7f7193c37e -->
+### DiziAsya eklentisi için modül yapılandırmasını ekle
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [976078a](https://github.com/Kayracs3/Kayra/commit/976078a1c135ef9ea971940153851a7f7193c37e)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:68f7e469d8713fe05a44e8f852318fb76e40a340 -->
 ### AsyaLuna katalogunda sayfalama bağlantılarını filtrele
 
