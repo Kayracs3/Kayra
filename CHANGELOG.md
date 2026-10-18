@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:6f3a9dbd163c3752df0fe122fb683bc6dedf0ad8 -->
+### Restore resilient InatBox episode poster fallbacks
+
+- Etkilenen alanlar: InatBox
+- Commit: [6f3a9db](https://github.com/Kayracs3/Kayra/commit/6f3a9dbd163c3752df0fe122fb683bc6dedf0ad8)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:1cce797019cd496c909695f084c24a39926e9f89 -->
 ### Bump InatBox version for film and series playback fix
 
