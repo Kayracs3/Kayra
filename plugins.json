@@ -129,10 +129,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=diziasya.com&sz=%size%",
-        "fileHash": "sha256-302b75dab12d2e998666d889521e06a277574592b9e724daf00b3ee8abfdfeb3",
+        "fileHash": "sha256-b614e32371850015b2b168b7ec013a0c5ca646fe07969729bcd879ccd238fc78",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 66897,
+        "fileSize": 66875,
         "status": 1,
         "language": "tr",
         "authors": [
