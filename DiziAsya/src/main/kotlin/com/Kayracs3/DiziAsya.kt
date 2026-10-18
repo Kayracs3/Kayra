@@ -993,6 +993,86 @@ class DiziAsya : MainAPI() {
         )
         val providerLabels = listOf("DiziAsya2", "Klaus", "OKRU", "Vidmoly", "Abyss", "4Me", "EV", "P2P", "ABStr", "LULU", "Vudeo", "Dracarys")
 
+        val visitedPlayerPages = LinkedHashSet<String>()
+        var playerPagesRead = 0
+
+        fun providerKey(url: String): String {
+            val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }
+                .getOrDefault("")
+            return when {
+                host == "ok.ru" || host.endsWith(".ok.ru") || host.contains("odnoklassniki") -> "okru"
+                host.contains("vidmoly") -> "vidmoly"
+                host.contains("vmpx") -> "vmpx"
+                host.contains("vkuser.net") -> "vk"
+                else -> host
+            }
+        }
+
+        suspend fun harvestPlayerPage(player: String) {
+            if (playerPagesRead >= 6 || !visitedPlayerPages.add(player)) return
+            playerPagesRead++
+
+            val playerResponse = runCatching {
+                app.get(
+                    player,
+                    headers = requestHeaders + ("Referer" to pageUrl),
+                    referer = pageUrl,
+                    allowRedirects = true
+                )
+            }.getOrNull()?.takeIf { it.isSuccessful } ?: return
+            val playerHtml = normalizeEmbeddedText(playerResponse.text)
+            if (playerHtml.isBlank()) return
+            val playerDocument = playerResponse.document
+
+            fun harvestPlayerUrl(raw: String?) {
+                val resolved = absoluteUrl(raw, player) ?: return
+                val host = runCatching { URI(resolved).host.orEmpty().lowercase(Locale.ROOT) }
+                    .getOrDefault("")
+                if ((host == "youtube.com" || host.endsWith(".youtube.com") ||
+                        host == "youtu.be" || host.endsWith(".youtu.be")) &&
+                    !isYoutubeVideoUrl(resolved)
+                ) return
+
+                if (isSubtitleUrl(resolved)) {
+                    val label = when {
+                        resolved.contains("/en/", true) || resolved.contains("english", true) -> "English"
+                        resolved.contains("/zh/", true) || resolved.contains("chinese", true) -> "Chinese"
+                        else -> "Türkçe"
+                    }
+                    subtitles.putIfAbsent(resolved, label)
+                } else if (isDirectMedia(resolved)) {
+                    directMedia.add(resolved)
+                    directMediaReferers[resolved] = player
+                    resolvedPlayerPages.add(player)
+                    emitDirectMedia(resolved)
+                } else {
+                    addCandidate(resolved, player)
+                }
+            }
+
+            urlRegex.findAll(playerHtml).forEach { match ->
+                harvestPlayerUrl(match.value.trimEnd(',', ';', ')', ']', '}', '\\'))
+            }
+            playerValueRegex.findAll(playerHtml).forEach { match ->
+                harvestPlayerUrl(match.groupValues.getOrNull(1))
+            }
+            playerDocument.select(
+                "video[src], source[src], track[src], iframe[src], iframe[data-src], " +
+                    "video[data-src], source[data-src], [data-file], [data-url]"
+            ).forEach { element ->
+                val raw = element.attr("src").ifBlank { element.attr("data-src") }
+                    .ifBlank { element.attr("data-file") }.ifBlank { element.attr("data-url") }
+                harvestPlayerUrl(raw)
+            }
+        }
+
+        fun publishSubtitles() {
+            for ((url, label) in subtitles) {
+                runCatching { subtitleCallback(SubtitleFile(label, url)) }
+            }
+        }
+
+
         for (source in sources) {
             urlRegex.findAll(source).forEach { match ->
                 val value = match.value.trimEnd(',', ';', ')', ']', '}', '\\')
@@ -1037,18 +1117,44 @@ class DiziAsya : MainAPI() {
             }
         }
 
+        // Fast path: explicit player buttons are more useful than crawling every Next.js
+        // chunk. Try a few distinct providers first, prioritizing hosts with parsable embeds.
+        val fastPlayers = players.toList()
+            .filter { isKnownPlayer(it) }
+            .distinctBy { providerKey(it) }
+            .sortedBy { player ->
+                val key = providerKey(player)
+                when (key) {
+                    "vidmoly", "vmpx" -> 0
+                    "okru", "vk" -> 1
+                    else -> 2
+                }
+            }
+            .take(4)
+        for (player in fastPlayers) {
+            harvestPlayerPage(player)
+            if (resolvedPlayerPages.size >= 2) break
+        }
+        if (directMedia.isNotEmpty()) {
+            for (url in directMedia) emitDirectMedia(url)
+            publishSubtitles()
+            return found
+        }
+
         // Only inspect a small number of page-specific Next.js chunks. Some current pages
         // keep server selection data in the route chunk rather than the initial HTML.
-        val scriptUrls = document?.select("script[src]")?.mapNotNull {
-            absoluteUrl(it.attr("src"), pageUrl)
-        }?.distinct()?.filter {
-            it.contains("/_next/static/", true) && it.endsWith(".js", true)
-        }?.sortedBy { script ->
-            // Route chunks are more likely to contain the source-button handlers than
-            // unrelated shared chunks. Keep a small cap to avoid serial network delays.
-            if (listOf("/dizi/", "/anime/", "/film/", "/watch/", "page-")
-                    .any { script.contains(it, true) }) 0 else 1
-        }?.take(8).orEmpty()
+        val scriptUrls = if (directMedia.isEmpty()) {
+            document?.select("script[src]")?.mapNotNull {
+                absoluteUrl(it.attr("src"), pageUrl)
+            }?.distinct()?.filter {
+                it.contains("/_next/static/", true) && it.endsWith(".js", true)
+            }?.sortedBy { script ->
+                // Route chunks are more likely to contain the source-button handlers than
+                // unrelated shared chunks. Keep a small cap to avoid serial network delays.
+                if (listOf("/dizi/", "/anime/", "/film/", "/watch/", "page-")
+                        .any { script.contains(it, true) }) 0 else 1
+            }?.take(8).orEmpty()
+        } else emptyList()
         for (scriptUrl in scriptUrls) {
             val script = runCatching {
                 app.get(scriptUrl, headers = requestHeaders + ("Referer" to pageUrl), referer = pageUrl)
@@ -1072,13 +1178,29 @@ class DiziAsya : MainAPI() {
             }
         }
 
-        // If source buttons point to a same-site API route, request that route and parse its
-        // response for iframe, embed, HLS, MP4, subtitle and JSON URL fields.
+        // The HTML fast path did not find a direct stream. Retry any player URLs discovered
+        // in the route chunks, still with a strict total page-fetch cap.
+        for (player in players.toList().take(12)) {
+            if (playerPagesRead >= 6 || resolvedPlayerPages.size >= 2) break
+            harvestPlayerPage(player)
+        }
+        if (directMedia.isNotEmpty()) {
+            for (url in directMedia) emitDirectMedia(url)
+            publishSubtitles()
+            return found
+        }
+
+        // Last resort: query only a few same-site source/API endpoints when player pages failed.
         val visitedApi = HashSet<String>()
-        for (endpoint in apiCandidates.take(4)) {
+        for (endpoint in apiCandidates.take(3)) {
             if (!visitedApi.add(endpoint)) continue
             val apiResponse = runCatching {
-                app.get(endpoint, headers = requestHeaders + ("Referer" to pageUrl), referer = pageUrl, allowRedirects = true)
+                app.get(
+                    endpoint,
+                    headers = requestHeaders + ("Referer" to pageUrl),
+                    referer = pageUrl,
+                    allowRedirects = true
+                )
             }.getOrNull()?.takeIf { it.isSuccessful } ?: continue
             val body = normalizeEmbeddedText(apiResponse.text)
             urlRegex.findAll(body).forEach { match ->
@@ -1094,76 +1216,25 @@ class DiziAsya : MainAPI() {
                 }
             }
         }
-
-        // Resolve player pages ourselves before handing them to generic extractors. Some
-        // Vidmoly pages embed a valid HLS URL in a JavaScript object using single quotes
-        // (for example: { file: 'https://.../master.m3u8?...' }). The generic JW parser
-        // expects strict JSON and rejects that otherwise usable stream.
-        for (player in players.toList().take(6)) {
-            val playerResponse = runCatching {
-                app.get(
-                    player,
-                    headers = requestHeaders + ("Referer" to pageUrl),
-                    referer = pageUrl,
-                    allowRedirects = true
-                )
-            }.getOrNull()?.takeIf { it.isSuccessful } ?: continue
-            val playerHtml = normalizeEmbeddedText(playerResponse.text)
-            val playerDocument = playerResponse.document
-
-            fun harvestPlayerUrl(raw: String?) {
-                val resolved = absoluteUrl(raw, player) ?: return
-                if (isSubtitleUrl(resolved)) {
-                    val label = when {
-                        resolved.contains("/en/", true) || resolved.contains("english", true) -> "English"
-                        resolved.contains("/zh/", true) || resolved.contains("chinese", true) -> "Chinese"
-                        else -> "Türkçe"
-                    }
-                    subtitles.putIfAbsent(resolved, label)
-                } else if (isDirectMedia(resolved)) {
-                    directMedia.add(resolved)
-                    // The HLS host may require the embed page as its Referer.
-                    directMediaReferers[resolved] = player
-                    resolvedPlayerPages.add(player)
-                    emitDirectMedia(resolved)
-                } else {
-                    addCandidate(resolved, player)
-                }
-            }
-
-            urlRegex.findAll(playerHtml).forEach { match ->
-                harvestPlayerUrl(match.value.trimEnd(',', ';', ')', ']', '}', '\\'))
-            }
-            playerValueRegex.findAll(playerHtml).forEach { match ->
-                harvestPlayerUrl(match.groupValues.getOrNull(1))
-            }
-            playerDocument.select(
-                "video[src], source[src], track[src], iframe[src], iframe[data-src], " +
-                    "video[data-src], source[data-src], [data-file], [data-url]"
-            ).forEach { element ->
-                val raw = element.attr("src").ifBlank { element.attr("data-src") }
-                    .ifBlank { element.attr("data-file") }.ifBlank { element.attr("data-url") }
-                harvestPlayerUrl(raw)
-            }
+        if (directMedia.isNotEmpty()) {
+            for (url in directMedia) emitDirectMedia(url)
+            publishSubtitles()
+            return found
         }
 
-        // Re-emit is safe because emit() deduplicates by URL; it also catches streams
-        // discovered before the callback helper was able to publish their final metadata.
-        for (url in directMedia) emitDirectMedia(url)
+        publishSubtitles()
 
-        for ((url, label) in subtitles) runCatching { subtitleCallback(SubtitleFile(label, url)) }
-
-        // Avoid running a second extractor pass over player pages that already yielded a
-        // direct HLS/MP4 URL. This skips slow/error-prone generic parsing of Vidmoly's
-        // non-standard single-quoted JSON and repeated dead OKRU candidates.
-        for (player in players.distinct().take(6)) {
-            if (player in resolvedPlayerPages) continue
+        // Final fallback only after direct URL scraping failed. Deduplicate by provider host
+        // so dead alternate URLs from the same OKRU/Vidmoly provider are not tried in a row.
+        val fallbackPlayers = players.distinct()
+            .filter { it !in visitedPlayerPages }
+            .distinctBy { providerKey(it) }
+            .take(4)
+        for (player in fallbackPlayers) {
             runCatching { loadExtractor(player, pageUrl, subtitleCallback, ::emit) }
         }
-
-        // Keep only a few true same-site source/API endpoints as a fallback.
-        for (endpoint in apiCandidates.distinct().take(4)) {
-            if (endpoint in players || directMedia.isNotEmpty()) continue
+        for (endpoint in apiCandidates.distinct().take(2)) {
+            if (endpoint in players) continue
             runCatching { loadExtractor(endpoint, pageUrl, subtitleCallback, ::emit) }
         }
         return found
