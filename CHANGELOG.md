@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:27556c104862cc7f2a0eaa2260281f532b291749 -->
+### Bump DiziAsya to version 12 for poster fix
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [27556c1](https://github.com/Kayracs3/Kayra/commit/27556c104862cc7f2a0eaa2260281f532b291749)
+
+## 2026-10-18
+
+<!-- kayra-commit:cef09629cf2eddfe5a93db75c7c53e01165364d6 -->
+### Fix DiziAsya poster image URL extraction
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [cef0962](https://github.com/Kayracs3/Kayra/commit/cef09629cf2eddfe5a93db75c7c53e01165364d6)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:3432f09712993fb7dc5da31f7b5e8e38f9d9c5ba -->
 ### Fix DiziAsya automatic catalogue pagination
 
