@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:ed6aae2827bf9debe2f057be8e5422b23d9ec938 -->
+### AsyaLuna kategori başlıklarını ve sayfalama kontrolünü düzelt
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [ed6aae2](https://github.com/Kayracs3/Kayra/commit/ed6aae2827bf9debe2f057be8e5422b23d9ec938)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:0790460d38587f80e8af6d3fe67485655ae9a872 -->
 ### AsyaLuna eklenti kayıt sınıfını ekle
 
