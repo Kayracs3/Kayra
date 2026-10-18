@@ -217,12 +217,12 @@ class AsyaLuna : MainAPI() {
 
     private fun paginationPageNumber(rawUrl: String): Int? {
         val url = absoluteUrl(rawUrl, mainUrl) ?: return null
-        val pathNumber = Regex("""(?i)/page/(\\d+)/?$""")
+        val pathNumber = Regex("""(?i)/page/(\d+)/?$""")
             .find(pathOf(url))?.groupValues?.getOrNull(1)?.toIntOrNull()
         if (pathNumber != null) return pathNumber
 
         val query = runCatching { URI(url).rawQuery.orEmpty() }.getOrDefault("")
-        return Regex("""(?i)(?:^|&)(?:paged|page)=(\\d+)(?:&|$)""")
+        return Regex("""(?i)(?:^|&)(?:paged|page)=(\d+)(?:&|$)""")
             .find(query)?.groupValues?.getOrNull(1)?.toIntOrNull()
     }
 
