@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:bc24705aefd19d2ae630e391c369a19bd7144550 -->
+### DiziAsya kaynak adaylarını filtrele ve dosya kapanışını düzelt
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [bc24705](https://github.com/Kayracs3/Kayra/commit/bc24705aefd19d2ae630e391c369a19bd7144550)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:0af43b812aa91d35f5cf138ac4f5f20bf9b41ef6 -->
 ### DiziAsya sürümünü 2 yap ve test kanalından çıkar
 
