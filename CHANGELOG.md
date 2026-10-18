@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:eb23b6a1fa33695981c7bd80e58e2484382c0491 -->
+### AsyaLuna CloudStream sağlayıcısını ekle
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [eb23b6a](https://github.com/Kayracs3/Kayra/commit/eb23b6a1fa33695981c7bd80e58e2484382c0491)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:72d98bb2dc1f7009dddac61d294485e52973be94 -->
 ### Add durable provider development rules and historical bug notes
 
