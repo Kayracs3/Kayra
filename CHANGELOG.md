@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:4b94de33a6ac17a106d2c6eabf236437533a2fef -->
+### AsyaLuna katalogunda sayfalama bağlantılarının afiş olarak algılanmasını engelle
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [4b94de3](https://github.com/Kayracs3/Kayra/commit/4b94de33a6ac17a106d2c6eabf236437533a2fef)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:5349e10b6871b7041492a7eb92c9538520a3de99 -->
 ### AsyaLuna metadata ve konu ayrıştırıcı bölümlerini sağlamlaştır
 
