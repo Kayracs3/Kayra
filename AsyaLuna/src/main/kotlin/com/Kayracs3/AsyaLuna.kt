@@ -38,9 +38,15 @@ class AsyaLuna : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Son Eklenen Diziler",
-        "$mainUrl/tum-diziler/" to "Tüm Diziler",
-        "$mainUrl/bolum/" to "Son Eklenen Bölümler"
+        "$mainUrl/dizi/" to "Son Eklenen Diziler",
+        "$mainUrl/diziler/aksiyon/" to "Aksiyon",
+        "$mainUrl/diziler/dogaustu/" to "Doğaüstü",
+        "$mainUrl/diziler/fantastik/" to "Fantastik",
+        "$mainUrl/diziler/gerilim/" to "Gerilim",
+        "$mainUrl/diziler/gizem/" to "Gizem",
+        "$mainUrl/diziler/korku/" to "Korku",
+        "$mainUrl/diziler/komedi/" to "Komedi",
+        "$mainUrl/diziler/romantik/" to "Romantik"
     )
 
     private data class CatalogItem(
@@ -209,14 +215,49 @@ class AsyaLuna : MainAPI() {
             year = this@toSearchResponse.year
         }
 
-    private fun hasNextPage(document: Document, page: Int): Boolean =
-        document.select("a[rel=next], a.next, .next a, .pagination a, .page-numbers").any { link ->
-            val label = link.text().trim().lowercase(Locale.ROOT)
-            val href = link.attr("href")
-            label.contains("son") || label.contains("ileri") ||
-                href.contains("/page/" + (page + 1) + "/") ||
-                href.contains("paged=" + (page + 1)) || link.attr("rel").equals("next", true)
+    private fun paginationPageNumber(rawUrl: String): Int? {
+        val url = absoluteUrl(rawUrl, mainUrl) ?: return null
+        val pathNumber = Regex("""(?i)/page/(\\d+)/?$""")
+            .find(pathOf(url))?.groupValues?.getOrNull(1)?.toIntOrNull()
+        if (pathNumber != null) return pathNumber
+
+        val query = runCatching { URI(url).rawQuery.orEmpty() }.getOrDefault("")
+        return Regex("""(?i)(?:^|&)(?:paged|page)=(\\d+)(?:&|$)""")
+            .find(query)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    }
+
+    private fun hasNextPage(document: Document, page: Int): Boolean {
+        val nextPage = page + 1
+        val links = document.select("a[href]")
+
+        // Prefer an explicit link to the exact next page. This works for both
+        // /dizi/page/2/ and /diziler/aksiyon/page/2/ archive layouts.
+        if (links.any { link ->
+                val href = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: return@any false
+                paginationPageNumber(href) == nextPage ||
+                    link.attr("rel").equals("next", true) ||
+                    link.classNames().any { it.equals("next", true) } ||
+                    link.attr("aria-label").contains("next", true) &&
+                        !link.attr("aria-label").contains("previous", true)
+            }) return true
+
+        // Some WordPress themes expose only a numbered range and a final "Son"
+        // link. Read its real target instead of treating "Son" as infinite pages.
+        val paginationLinks = document.select(
+            "a.page-numbers[href], .pagination a[href], .nav-links a[href], .page-nav a[href]"
+        )
+        val lastLink = paginationLinks.firstOrNull {
+            val label = normalize(it.text() + " " + it.attr("aria-label") + " " + it.attr("title"))
+            label == "son" || label.contains("son sayfa") || label.contains("last page")
         }
+        val lastPage = lastLink?.let { paginationPageNumber(it.attr("href")) }
+        if (lastPage != null) return page < lastPage
+
+        val numberedPages = paginationLinks.mapNotNull {
+            paginationPageNumber(it.attr("href"))
+        }.distinct()
+        return numberedPages.any { it > page }
+    }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val baseUrl = request.data
@@ -330,7 +371,7 @@ class AsyaLuna : MainAPI() {
                 val first = range.groupValues[1].toIntOrNull() ?: continue
                 val last = range.groupValues[2].toIntOrNull() ?: continue
                 if (first <= 0 || last < first) continue
-                for (number in first..minOf(last, first + 19)) {
+                for (number in first..last) {
                     val offset = number - first + 1
                     val episodeUrl = if (offset == 1) groupUrl else groupUrl.trimEnd('/') + "/" + offset + "/"
                     episodes += newEpisode(episodeUrl) {
