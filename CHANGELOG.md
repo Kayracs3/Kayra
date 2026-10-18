@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:5b8057468489ea0ec030a69d03a0d41ddda42871 -->
+### DiziAsya oyuncu listesi tip uyuşmazlığını düzelt
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [5b80574](https://github.com/Kayracs3/Kayra/commit/5b8057468489ea0ec030a69d03a0d41ddda42871)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:5705b951a2d29121c0680441c6f2bb4b466e61f3 -->
 ### DiziAsya tıklanabilir olmayan profil kartlarını da ayrıştır
 
