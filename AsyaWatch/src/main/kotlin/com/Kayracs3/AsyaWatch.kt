@@ -57,34 +57,24 @@ class AsyaWatch : MainAPI() {
     override var sequentialMainPageScrollDelay = 250L
 
     override val mainPage = mainPageOf(
-        "" to "Yeni Eklenen Filmler",
-        "49" to "Aile Film",
-        "44" to "Animasyon Film",
+        "" to "Yeni Eklenen Filmler",        
         "59" to "Aksiyon Film",
-        "66" to "Bilim Kurgu Film",
-        "48" to "Dram Film",
+        "66" to "Bilim Kurgu Film",        
         "61" to "Fantastik Film",
         "68" to "Gerilim Film",
         "51" to "Gizem Film",
         "63" to "Korku Film",
         "45" to "Komedi Film",
-        "65" to "Romantik Film",
-        "46" to "Suç Film",
-        "69" to "Savaş Film",
-        "78" to "Western Film",
-        "" to "Yeni Eklenen Diziler",
-        "15" to "Aile Dizi",
-        "17" to "Animasyon Dizi",
+        "65" to "Romantik Film",       
+        "" to "Yeni Eklenen Diziler",        
         "9" to "Aksiyon Dizi",
-        "5" to "Bilim Kurgu Dizi",
-        "2" to "Dram Dizi",
+        "5" to "Bilim Kurgu Dizi",        
         "12" to "Fantastik Dizi",
         "18" to "Gerilim Dizi",
         "3" to "Gizem Dizi",
         "8" to "Korku Dizi",
         "4" to "Komedi Dizi",
-        "7" to "Romantik Dizi",
-        "1" to "Suç Dizi"
+        "7" to "Romantik Dizi"        
     )
 
     private val siteHeaders = mapOf(
