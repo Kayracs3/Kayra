@@ -795,6 +795,7 @@ class DiziAsya : MainAPI() {
         val players = LinkedHashSet<String>()
         val directMedia = LinkedHashSet<String>()
         val directMediaReferers = LinkedHashMap<String, String>()
+        val resolvedPlayerPages = LinkedHashSet<String>()
         val apiCandidates = LinkedHashSet<String>()
         val subtitles = LinkedHashMap<String, String>()
         val emitted = LinkedHashSet<String>()
@@ -807,9 +808,43 @@ class DiziAsya : MainAPI() {
             }
         }
 
+        // Send direct streams to CloudStream as soon as they are found. Do not wait for
+        // every optional player/API request to finish before publishing the first playable URL.
+        fun emitDirectMedia(url: String) {
+            if (isSubtitleUrl(url)) return
+            val hls = url.contains(".m3u8", true)
+            val referer = directMediaReferers[url] ?: pageUrl
+            val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }
+                .getOrDefault("")
+            val sourceName = when {
+                host.contains("vkuser.net") || host == "ok.ru" || host.endsWith(".ok.ru") ->
+                    if (hls) "DiziAsya HLS (VK/OKRU)" else "DiziAsya Video (VK/OKRU)"
+                host.endsWith(".vmpx.online") || host.contains("vmpx") ->
+                    if (hls) "DiziAsya HLS (VMPX)" else "DiziAsya Video (VMPX)"
+                else -> {
+                    val shortHost = host.removePrefix("www.").substringBefore('.')
+                    if (hls) "DiziAsya HLS ($shortHost)" else "DiziAsya Video ($shortHost)"
+                }
+            }
+            runCatching {
+                emit(
+                    newExtractorLink(
+                        source = "DiziAsya",
+                        name = sourceName,
+                        url = url,
+                        type = if (hls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    ) {
+                        quality = qualityFrom(url)
+                        headers = mapOf("Referer" to referer, "User-Agent" to browserUa)
+                    }
+                )
+            }
+        }
+
         fun addCandidate(raw: String?, base: String, forcePlayer: Boolean = false, apiHint: Boolean = false) {
             val url = absoluteUrl(raw, base) ?: return
             val urlHost = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+            if (urlHost.isBlank() || urlHost == "root" || urlHost == "localhost") return
             if ((urlHost == "youtube.com" || urlHost.endsWith(".youtube.com") ||
                     urlHost == "youtu.be" || urlHost.endsWith(".youtu.be")) &&
                 !isYoutubeVideoUrl(url)
@@ -826,7 +861,9 @@ class DiziAsya : MainAPI() {
             }
             if (isDirectMedia(url)) {
                 directMedia.add(url)
-                directMediaReferers.putIfAbsent(url, pageUrl)
+                val referer = if (base.contains("/_next/static/", true)) pageUrl else base
+                directMediaReferers.putIfAbsent(url, referer)
+                emitDirectMedia(url)
                 return
             }
 
@@ -977,11 +1014,11 @@ class DiziAsya : MainAPI() {
             for (label in providerLabels) {
                 var offset = 0
                 var count = 0
-                while (count < 8) {
+                while (count < 3) {
                     val at = source.indexOf(label, offset, ignoreCase = true)
                     if (at < 0) break
-                    val start = (at - 500).coerceAtLeast(0)
-                    val end = (at + label.length + 900).coerceAtMost(source.length)
+                    val start = (at - 240).coerceAtLeast(0)
+                    val end = (at + label.length + 480).coerceAtMost(source.length)
                     val window = source.substring(start, end)
                     urlRegex.findAll(window).forEach { match ->
                         val value = match.value.trimEnd(',', ';', ')', ']', '}', '\\')
@@ -1005,11 +1042,13 @@ class DiziAsya : MainAPI() {
         val scriptUrls = document?.select("script[src]")?.mapNotNull {
             absoluteUrl(it.attr("src"), pageUrl)
         }?.distinct()?.filter {
-            // Server buttons are wired by Next.js chunks whose generated filenames do not
-            // necessarily contain words such as "dizi" or "video". Inspect route and shared
-            // chunks together so those handlers/API paths are discoverable.
             it.contains("/_next/static/", true) && it.endsWith(".js", true)
-        }?.take(24).orEmpty()
+        }?.sortedBy { script ->
+            // Route chunks are more likely to contain the source-button handlers than
+            // unrelated shared chunks. Keep a small cap to avoid serial network delays.
+            if (listOf("/dizi/", "/anime/", "/film/", "/watch/", "page-")
+                    .any { script.contains(it, true) }) 0 else 1
+        }?.take(8).orEmpty()
         for (scriptUrl in scriptUrls) {
             val script = runCatching {
                 app.get(scriptUrl, headers = requestHeaders + ("Referer" to pageUrl), referer = pageUrl)
@@ -1036,7 +1075,7 @@ class DiziAsya : MainAPI() {
         // If source buttons point to a same-site API route, request that route and parse its
         // response for iframe, embed, HLS, MP4, subtitle and JSON URL fields.
         val visitedApi = HashSet<String>()
-        for (endpoint in apiCandidates.take(12)) {
+        for (endpoint in apiCandidates.take(4)) {
             if (!visitedApi.add(endpoint)) continue
             val apiResponse = runCatching {
                 app.get(endpoint, headers = requestHeaders + ("Referer" to pageUrl), referer = pageUrl, allowRedirects = true)
@@ -1060,7 +1099,7 @@ class DiziAsya : MainAPI() {
         // Vidmoly pages embed a valid HLS URL in a JavaScript object using single quotes
         // (for example: { file: 'https://.../master.m3u8?...' }). The generic JW parser
         // expects strict JSON and rejects that otherwise usable stream.
-        for (player in players.toList().take(20)) {
+        for (player in players.toList().take(6)) {
             val playerResponse = runCatching {
                 app.get(
                     player,
@@ -1085,6 +1124,8 @@ class DiziAsya : MainAPI() {
                     directMedia.add(resolved)
                     // The HLS host may require the embed page as its Referer.
                     directMediaReferers[resolved] = player
+                    resolvedPlayerPages.add(player)
+                    emitDirectMedia(resolved)
                 } else {
                     addCandidate(resolved, player)
                 }
@@ -1106,34 +1147,23 @@ class DiziAsya : MainAPI() {
             }
         }
 
-        for (url in directMedia) {
-            if (isSubtitleUrl(url)) continue
-            val hls = url.contains(".m3u8", true)
-            runCatching {
-                emit(
-                    newExtractorLink(
-                        source = "DiziAsya",
-                        name = if (hls) "DiziAsya HLS" else "DiziAsya Direct",
-                        url = url,
-                        type = if (hls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                    ) {
-                        quality = qualityFrom(url)
-                        headers = mapOf(
-                            "Referer" to (directMediaReferers[url] ?: pageUrl),
-                            "User-Agent" to browserUa
-                        )
-                    }
-                )
-            }
-        }
+        // Re-emit is safe because emit() deduplicates by URL; it also catches streams
+        // discovered before the callback helper was able to publish their final metadata.
+        for (url in directMedia) emitDirectMedia(url)
 
         for ((url, label) in subtitles) runCatching { subtitleCallback(SubtitleFile(label, url)) }
-        for (player in players.distinct()) runCatching { loadExtractor(player, pageUrl, subtitleCallback, ::emit) }
 
-        // Resolve same-site source/player routes discovered in button state through extractors
-        // only after trying their JSON/HTML response above.
-        for (endpoint in apiCandidates.distinct().take(12)) {
-            if (endpoint in players) continue
+        // Avoid running a second extractor pass over player pages that already yielded a
+        // direct HLS/MP4 URL. This skips slow/error-prone generic parsing of Vidmoly's
+        // non-standard single-quoted JSON and repeated dead OKRU candidates.
+        for (player in players.distinct().take(6)) {
+            if (player in resolvedPlayerPages) continue
+            runCatching { loadExtractor(player, pageUrl, subtitleCallback, ::emit) }
+        }
+
+        // Keep only a few true same-site source/API endpoints as a fallback.
+        for (endpoint in apiCandidates.distinct().take(4)) {
+            if (endpoint in players || directMedia.isNotEmpty()) continue
             runCatching { loadExtractor(endpoint, pageUrl, subtitleCallback, ::emit) }
         }
         return found
