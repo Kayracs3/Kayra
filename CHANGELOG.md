@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:d9823666417745cb0cc6c37bc731444d9588bb5a -->
+### Bump InatBox version for poster fallback fix
+
+- Etkilenen alanlar: InatBox
+- Commit: [d982366](https://github.com/Kayracs3/Kayra/commit/d9823666417745cb0cc6c37bc731444d9588bb5a)
+
+## 2026-10-18
+
+<!-- kayra-commit:11bc05c2976944675dfcc3a127c99050dd2fc0b4 -->
+### Correct InatBox poster URL matching
+
+- Etkilenen alanlar: InatBox
+- Commit: [11bc05c](https://github.com/Kayracs3/Kayra/commit/11bc05c2976944675dfcc3a127c99050dd2fc0b4)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:6f3a9dbd163c3752df0fe122fb683bc6dedf0ad8 -->
 ### Restore resilient InatBox episode poster fallbacks
 
