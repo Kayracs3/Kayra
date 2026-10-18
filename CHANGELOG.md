@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:bc2a29b90ea37ce24a2f23234815edcd67b169bd -->
+### Avoid wildcard image formats for DiziAsya posters
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [bc2a29b](https://github.com/Kayracs3/Kayra/commit/bc2a29b90ea37ce24a2f23234815edcd67b169bd)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:8a7f84a7f9c33527b5f7f0ba25e30bcafef432ad -->
 ### Bump DiziAsya to version 20 for poster fixes
 
