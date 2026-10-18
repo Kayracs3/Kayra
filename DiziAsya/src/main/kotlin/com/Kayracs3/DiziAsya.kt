@@ -489,7 +489,7 @@ class DiziAsya : MainAPI() {
             var section: Element? = heading.parent()
             repeat(5) {
                 val current = section ?: return@repeat
-                val cards = current.select("a[href], [role=link], [class*=group]")
+                val cards = current.select("a[href], [role=link]")
                     .filter { it.selectFirst("img") != null }
                 cards.forEach { addActorCard(it, document.location().ifBlank { mainUrl }) }
                 if (actors.size >= 3) return actors.values.take(50)
@@ -750,7 +750,9 @@ class DiziAsya : MainAPI() {
                 "/server/", "/iframe/", "videoid=", "video_id=", "file=", "url="
             ).any { lower.contains(it) }
             if (forcePlayer || isKnownPlayer(url)) {
-                if (!sameSite && (knownHost || playerPath)) players.add(url)
+                // A server button/iframe is explicit evidence that this URL is a player.
+                // Keep unknown player hosts too; they need not contain "embed" in their path.
+                if (!sameSite && (forcePlayer || knownHost || playerPath)) players.add(url)
                 else if (sameSite && isApi && apiHint) apiCandidates.add(url)
                 else if (sameSite && isKnownPlayer(url)) players.add(url)
             }
