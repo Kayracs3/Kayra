@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:cbc6101052aded768dc21312a91e6e662bf11bc9 -->
+### Bump DiziAsya version for catalog title fix
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [cbc6101](https://github.com/Kayracs3/Kayra/commit/cbc6101052aded768dc21312a91e6e662bf11bc9)
+
+## 2026-10-18
+
+<!-- kayra-commit:e907387579a0c58780582d6ac96ad8c4cdef6791 -->
+### Prevent episode titles polluting DiziAsya catalog and fix suspend publishing
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [e907387](https://github.com/Kayracs3/Kayra/commit/e907387579a0c58780582d6ac96ad8c4cdef6791)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:82f472811dd9bc1b1f7a747d509a7ac5d184868b -->
 ### Return first playable DiziAsya stream without waiting on alternatives
 
