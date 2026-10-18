@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:2fc04c7244a84c6e7f874ddd80004c150cdfa068 -->
+### Fix DiziAsya Vidmoly HLS parsing and reject YouTube channel links
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [2fc04c7](https://github.com/Kayracs3/Kayra/commit/2fc04c7244a84c6e7f874ddd80004c150cdfa068)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:8b79611ffc8932e6f1a0ebdacc20c4307e5c75db -->
 ### Bump DiziAsya plugin version for fixes
 
