@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:72d98bb2dc1f7009dddac61d294485e52973be94 -->
+### Add durable provider development rules and historical bug notes
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [72d98bb](https://github.com/Kayracs3/Kayra/commit/72d98bb2dc1f7009dddac61d294485e52973be94)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:d9823666417745cb0cc6c37bc731444d9588bb5a -->
 ### Bump InatBox version for poster fallback fix
 
