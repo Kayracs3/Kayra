@@ -14,6 +14,7 @@ import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 import java.net.URI
 import java.net.URLEncoder
+import java.net.URLDecoder
 import java.text.Normalizer
 import java.util.Locale
 
@@ -142,36 +143,55 @@ class DiziAsya : MainAPI() {
         ) || n.matches(Regex("\\d{1,4}"))
     }
 
+    private fun normalizeImageUrl(raw: String?, base: String = mainUrl): String? {
+        val resolved = absoluteUrl(raw, base) ?: return null
+        val uri = runCatching { URI(resolved) }.getOrNull() ?: return resolved
+        if (!uri.path.orEmpty().contains("/_next/image")) return resolved
+
+        val encodedImage = uri.rawQuery.orEmpty().split('&')
+            .firstOrNull { it.startsWith("url=", true) }
+            ?.substringAfter('=') ?: return resolved
+        val decodedImage = runCatching { URLDecoder.decode(encodedImage, "UTF-8") }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: return resolved
+        return absoluteUrl(decodedImage, base) ?: absoluteUrl(decodedImage, resolved) ?: resolved
+    }
+
     private fun isUsablePoster(url: String): Boolean {
         if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) return false
-        val file = pathOf(url).substringAfterLast('/').lowercase(Locale.ROOT)
-        return !file.endsWith(".svg") &&
-            !Regex("""(?i)(logo|avatar|placeholder|no[-_]?image|transparent|blank|favicon|pixel)""")
-                .containsMatchIn(file) &&
-            (file.contains('.') || url.contains("/images/", true))
+        val uri = runCatching { URI(url) }.getOrNull()
+        val path = uri?.path.orEmpty().lowercase(Locale.ROOT)
+        val file = path.substringAfterLast('/')
+        val isNextImage = path.endsWith("/_next/image") &&
+            uri?.rawQuery.orEmpty().contains("url=", true)
+        if (file.endsWith(".svg")) return false
+        if (Regex("""(?i)(logo|placeholder|no[-_]?image|transparent|blank|favicon|pixel)""")
+                .containsMatchIn(file)
+        ) return false
+        return isNextImage || file.contains('.') ||
+            url.contains("/images/", true) || url.contains("/uploads/", true)
     }
 
     private fun posterFrom(element: Element?): String? {
         if (element == null) return null
         val nodes = listOf(element) + element.select(
-            "img, [data-poster], [data-background], [data-bg], [style*=background]"
+            "img, picture img, [data-poster], [data-background], [data-bg], [style*=background]"
         )
         for (node in nodes.distinct()) {
             for (attr in listOf(
                 "data-poster", "data-original", "data-lazy-src", "data-src",
-                "data-srcset", "srcset", "data-image", "src", "content"
+                "data-srcset", "srcset", "data-image", "data-nimg", "src", "content"
             )) {
                 val raw = node.attr(attr).trim()
                 if (raw.isBlank() || raw.startsWith("data:", true)) continue
                 val candidate = if (attr.contains("srcset")) {
                     raw.substringBefore(',').trim().substringBefore(' ')
                 } else raw
-                val url = absoluteUrl(candidate, node.baseUri().ifBlank { mainUrl }) ?: continue
+                val url = normalizeImageUrl(candidate, node.baseUri().ifBlank { mainUrl }) ?: continue
                 if (isUsablePoster(url)) return url
             }
             val bg = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
                 .find(node.attr("style"))?.groupValues?.getOrNull(1)
-            val bgUrl = absoluteUrl(bg, node.baseUri().ifBlank { mainUrl })
+            val bgUrl = normalizeImageUrl(bg, node.baseUri().ifBlank { mainUrl })
             if (bgUrl != null && isUsablePoster(bgUrl)) return bgUrl
         }
         return null
@@ -354,40 +374,161 @@ class DiziAsya : MainAPI() {
 
     private fun parseGenres(document: Document): List<String> {
         val result = LinkedHashMap<String, String>()
-        val selectors = listOf(
-            "a[href*='/tur/']", "a[href*='/genre/']", "a[href*='/kategori/']",
-            "a[href*='genre=']", "a[href*='tur=']", ".genres a", ".genre a", "[class*=tag] a"
+        val generic = setOf(
+            "dizi", "diziler", "film", "filmler", "anime", "animeler", "program", "programlar",
+            "kore", "cin", "japon", "tayland", "turkiye", "turk", "mdL".lowercase(Locale.ROOT),
+            "izle", "tumu", "tumunu gor", "oyuncular", "oyuncu", "yonetmen"
         )
-        for (selector in selectors) {
-            for (link in document.select(selector)) {
-                val text = cleanTitle(link.text())
-                if (text.isNotBlank() && text.length <= 40 &&
-                    normalize(text) !in setOf("diziler", "filmler", "animeler", "programlar", "tumu")
-                ) result.putIfAbsent(normalize(text), text)
+        fun addGenre(raw: String) {
+            val text = cleanTitle(raw)
+            val normalized = normalize(text)
+            if (text.isBlank() || text.length > 40 || normalized in generic) return
+            if (normalized.matches(Regex("""\d{1,4}(?:\.\d+)?"""))) return
+            if (Regex("""(?i)^(?:19|20|21)\d{2}$""").matches(text)) return
+            if (Regex("""(?i)^\d+\s*(?:dk|dakika|saat|h|m|min)$""").matches(text)) return
+            result.putIfAbsent(normalized, text)
+        }
+
+        // DiziAsya detail metadata row shown under:
+        // <div class="-ml-3 flex flex-wrap items-center text-xs">...</div>
+        val metadataRows = document.select(
+            "div[class*='-ml-3'][class*='flex-wrap'][class*='text-xs'], " +
+                "div[class*='flex-wrap'][class*='text-xs']"
+        )
+        for (row in metadataRows.take(8)) {
+            for (link in row.select("a[href]")) {
+                val href = link.attr("href").lowercase(Locale.ROOT)
+                val text = link.text().trim()
+                val genreHref = listOf("/genre/", "/genres/", "/tur/", "/turler/", "/kategori/", "/tag/")
+                    .any { href.contains(it) } || listOf("genre=", "tur=", "category=", "tag=")
+                    .any { href.contains(it) }
+                if (genreHref) addGenre(text)
             }
         }
+
+        // Fallback for theme changes where genre tags do not use predictable href paths.
         if (result.isEmpty()) {
-            val match = Regex("""(?is)(?:Türler|Tür|Genres?)\s*:?\s*(.{1,180}?)(?=Oyuncular|Bölümler|Yapım|Ülke|$)""")
-                .find(document.text())?.groupValues?.getOrNull(1)
-            match?.split(Regex("[,|•]"))?.map { cleanTitle(it) }
-                ?.filter { it.isNotBlank() && it.length <= 40 }
-                ?.forEach { result.putIfAbsent(normalize(it), it) }
+            val text = document.select(
+                "div[class*='-ml-3'][class*='flex-wrap'][class*='text-xs'] a, " +
+                    ".genres a, .genre a, [class*=genre] a, [class*=genres] a, [class*=tag] a"
+            )
+            for (link in text) {
+                val label = link.text().trim()
+                val href = link.attr("href").lowercase(Locale.ROOT)
+                if (href.contains("/dizi/") || href.contains("/anime/") ||
+                    href.contains("/film/") || href.contains("/program/")
+                ) continue
+                addGenre(label)
+            }
         }
+
+        if (result.isEmpty()) {
+            val pageText = document.text()
+            val match = Regex(
+                """(?is)(?:Türler|Tür|Genres?)\s*:?\s*(.{1,180}?)(?=Oyuncular|Bölümler|Yapım|Ülke|$)"""
+            ).find(pageText)?.groupValues?.getOrNull(1)
+            match?.split(Regex("[,|•·]"))?.map { cleanTitle(it) }?.forEach(::addGenre)
+        }
+
         return result.values.take(20)
     }
 
-    private fun parseActors(document: Document): List<String> {
-        val links = document.select(
-            "a[href*='/oyuncu/'], a[href*='/oyuncular/'], a[href*='/cast/'], a[href*='/person/']"
-        ).map { cleanTitle(it.text()) }
-            .filter { it.isNotBlank() && it.length < 70 && !isGenericTitle(it) }
-            .distinct()
-        if (links.isNotEmpty()) return links.take(50)
-        val raw = Regex("""(?is)Oyuncular\s*\(\d+\)\s*(.*?)(?=Benzer Diziler|Sık Sorulan Sorular|Yorum|$)""")
-            .find(document.text())?.groupValues?.getOrNull(1).orEmpty()
-        return raw.split(Regex("\\s{2,}"))
-            .map { cleanTitle(it) }.filter { it.length in 2..70 && !isGenericTitle(it) }
-            .distinct().take(50)
+    private fun parseActors(document: Document): List<ActorData> {
+        val actors = LinkedHashMap<String, ActorData>()
+
+        fun imageForActor(img: Element?, base: String): String? {
+            if (img == null) return null
+            for (attr in listOf("data-src", "data-lazy-src", "data-original", "data-image", "srcset", "src")) {
+                val raw = img.attr(attr).trim()
+                if (raw.isBlank() || raw.startsWith("data:", true)) continue
+                val candidate = if (attr.contains("srcset")) raw.substringBefore(',').trim().substringBefore(' ') else raw
+                val url = normalizeImageUrl(candidate, base) ?: continue
+                val path = pathOf(url).lowercase(Locale.ROOT)
+                if (path.endsWith("/_next/image") || Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)(?:$|[?#])""")
+                        .containsMatchIn(url) || url.contains("/images/", true) || url.contains("/uploads/", true)
+                ) return url
+            }
+            return null
+        }
+
+        fun addActorCard(card: Element, base: String) {
+            val img = card.selectFirst("img")
+            val childName = card.selectFirst(
+                "h3, h4, [class*=font-semibold], [class*=font-medium], [class*=actor-name], [class*=person-name]"
+            )?.text().orEmpty()
+            val imgName = img?.attr("alt").orEmpty().ifBlank { img?.attr("title").orEmpty() }
+            val linkName = card.attr("title").ifBlank { card.attr("aria-label") }
+            val rawName = listOf(imgName, childName, linkName, card.ownText(), card.text())
+                .map { cleanTitle(it) }
+                .firstOrNull {
+                    it.isNotBlank() && it.length <= 70 && !isGenericTitle(it) &&
+                        normalize(it) != "oyuncular" && !normalize(it).contains("tumunu gor")
+                } ?: return
+
+            // Profile cards may include the role after the actor name; prefer the image alt/title
+            // or a dedicated heading so that "Bae Min Tae" is not appended to the actor's name.
+            val name = cleanTitle(
+                imgName.takeIf { it.isNotBlank() }
+                    ?: childName.takeIf { it.isNotBlank() }
+                    ?: linkName.takeIf { it.isNotBlank() }
+                    ?: rawName
+            )
+            if (name.isBlank() || isGenericTitle(name)) return
+            val photo = imageForActor(img, img?.baseUri()?.ifBlank { base } ?: base)
+            val key = normalize(name)
+            actors.putIfAbsent(key, ActorData(Actor(name, photo)))
+        }
+
+        val heading = document.select("h2").firstOrNull {
+            normalize(it.text()) == "oyuncular"
+        } ?: document.select("h2").firstOrNull {
+            normalize(it.text()).startsWith("oyuncular")
+        }
+
+        if (heading != null) {
+            var section: Element? = heading.parent()
+            repeat(5) {
+                val current = section ?: return@repeat
+                val cards = current.select("a[href], [role=link], [class*=group]")
+                    .filter { it.selectFirst("img") != null }
+                cards.forEach { addActorCard(it, document.location().ifBlank { mainUrl }) }
+                if (actors.size >= 3) return actors.values.take(50)
+                section = current.parent()
+            }
+            if (actors.isNotEmpty()) return actors.values.take(50)
+        }
+
+        // Fallback: actor-profile routes with portrait images may exist without the heading block.
+        for (link in document.select(
+            "a[href*='/oyuncu/'], a[href*='/oyuncular/'], a[href*='/actor/'], " +
+                "a[href*='/actors/'], a[href*='/person/'], a[href*='/cast/']"
+        )) {
+            if (link.selectFirst("img") != null) {
+                addActorCard(link, document.location().ifBlank { mainUrl })
+            } else {
+                val name = cleanTitle(link.text())
+                if (name.isNotBlank() && name.length <= 70 && !isGenericTitle(name)) {
+                    actors.putIfAbsent(normalize(name), ActorData(Actor(name)))
+                }
+            }
+        }
+
+        // JSON-LD is a final fallback; never replace portrait data already found in the page.
+        if (actors.isEmpty()) {
+            val raw = document.select("script[type=application/ld+json]").joinToString("\n") { it.data() }
+            val actorObjects = Regex(
+                """"@type"\s*:\s*"Person".{0,500}?"name"\s*:\s*"([^"]+)" """
+                    .trim(),
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+            )
+            actorObjects.findAll(raw).forEach { match ->
+                val name = cleanTitle(match.groupValues.getOrNull(1))
+                if (name.isNotBlank() && !isGenericTitle(name)) {
+                    actors.putIfAbsent(normalize(name), ActorData(Actor(name)))
+                }
+            }
+        }
+        return actors.values.take(50)
     }
 
     private fun parseTrailer(document: Document, pageUrl: String): String? {
@@ -541,18 +682,15 @@ class DiziAsya : MainAPI() {
     ): Boolean {
         val pageUrl = absoluteUrl(data) ?: return false
         val response = runCatching {
-            app.get(
-                pageUrl,
-                headers = requestHeaders + ("Referer" to pageUrl),
-                referer = "$mainUrl/",
-                allowRedirects = true
-            )
+            app.get(pageUrl, headers = requestHeaders + ("Referer" to pageUrl), referer = "$mainUrl/", allowRedirects = true)
         }.getOrNull()
         val document = response?.takeIf { it.isSuccessful }?.document
         val html = response?.takeIf { it.isSuccessful }?.text.orEmpty()
+        if (html.isBlank()) return false
         val decoded = normalizeEmbeddedText(html)
         val players = LinkedHashSet<String>()
         val directMedia = LinkedHashSet<String>()
+        val apiCandidates = LinkedHashSet<String>()
         val subtitles = LinkedHashMap<String, String>()
         val emitted = LinkedHashSet<String>()
         var found = false
@@ -564,7 +702,7 @@ class DiziAsya : MainAPI() {
             }
         }
 
-        fun addCandidate(raw: String?, base: String, forcePlayer: Boolean = false) {
+        fun addCandidate(raw: String?, base: String, forcePlayer: Boolean = false, apiHint: Boolean = false) {
             val url = absoluteUrl(raw, base) ?: return
             if (isSubtitleUrl(url)) {
                 val label = when {
@@ -573,52 +711,209 @@ class DiziAsya : MainAPI() {
                     else -> "Türkçe"
                 }
                 subtitles.putIfAbsent(url, label)
-            } else if (isDirectMedia(url)) {
+                return
+            }
+            if (isDirectMedia(url)) {
                 directMedia.add(url)
-            } else if (forcePlayer || isKnownPlayer(url)) {
-                val host = runCatching { URI(url).host.orEmpty() }.getOrDefault("")
-                if (host.isNotBlank() &&
-                    (!host.equals("diziasya.com", true) && !host.endsWith(".diziasya.com", true) ||
-                        isKnownPlayer(url))
-                ) players.add(url)
+                return
+            }
+
+            val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+            val sameSite = host == "diziasya.com" || host.endsWith(".diziasya.com")
+            val isApi = sameSite && (
+                url.contains("/api/", true) || url.contains("/source", true) ||
+                    url.contains("/server", true) || url.contains("/watch/", true) ||
+                    url.contains("/embed/", true) || url.contains("/player/", true)
+                )
+            if (isApi && apiHint) apiCandidates.add(url)
+            if (forcePlayer || isKnownPlayer(url)) {
+                if (!sameSite || isKnownPlayer(url)) players.add(url)
+                else if (apiHint) apiCandidates.add(url)
             }
         }
 
+        val candidateAttrs = listOf(
+            "src", "href", "data-src", "data-lazy-src", "data-url", "data-href",
+            "data-embed", "data-embed-url", "data-iframe", "data-iframe-src",
+            "data-player", "data-player-url", "data-video", "data-video-url",
+            "data-server", "data-server-url", "data-source", "data-source-url",
+            "data-stream", "data-file", "data-link", "data-id"
+        )
+
         if (document != null) {
             document.select(
-                "iframe[src], iframe[data-src], iframe[data-lazy-src], iframe[data-url], iframe[data-embed], " +
-                    "video[src], source[src], source[data-src], [data-player], [data-video], [data-embed], [data-url]"
+                "iframe, video, source, embed, [data-src], [data-url], [data-embed], [data-iframe], " +
+                    "[data-player], [data-video], [data-server], [data-source], [data-provider], button, [role=button]"
             ).forEach { element ->
-                val raw = element.attr("src")
-                    .ifBlank { element.attr("data-src") }
-                    .ifBlank { element.attr("data-lazy-src") }
-                    .ifBlank { element.attr("data-url") }
-                    .ifBlank { element.attr("data-embed") }
-                    .ifBlank { element.attr("data-player") }
-                    .ifBlank { element.attr("data-video") }
-                addCandidate(raw, pageUrl, forcePlayer = element.tagName().equals("iframe", true))
+                val label = normalize(
+                    element.text() + " " + element.attr("aria-label") + " " +
+                        element.attr("title") + " " + element.attr("data-provider") + " " +
+                        element.attr("data-server") + " " + element.attr("data-source")
+                )
+                val sourceButton = listOf(
+                    "diziasya2", "okru", "vidmoly", "abyss", "4me", "ev", "p2p", "abstr", "lulu"
+                ).any { label.contains(it) }
+                for (attr in candidateAttrs) {
+                    if (!element.hasAttr(attr)) continue
+                    val raw = element.attr(attr).trim()
+                    // Source ids such as "okru" are not URLs; only follow URL-shaped values.
+                    if (raw.isBlank() || !(raw.startsWith("http", true) || raw.startsWith("//") ||
+                            raw.startsWith("/") || raw.contains("://"))
+                    ) continue
+                    addCandidate(
+                        raw,
+                        element.baseUri().ifBlank { pageUrl },
+                        forcePlayer = element.tagName().equals("iframe", true) ||
+                            element.tagName().equals("source", true) ||
+                            sourceButton,
+                        apiHint = sourceButton || element.hasAttr("data-server") ||
+                            element.hasAttr("data-provider") || element.hasAttr("data-source")
+                    )
+                }
+
+                // A URL can be embedded in onclick or another inline attribute even when
+                // the visible text is only "OKRU", "Vidmoly", "Abyss", etc.
+                for (attr in element.attributes().asList()) {
+                    val value = attr.value
+                    if (!value.contains("http", true) && !value.contains("/api/", true) &&
+                        !value.contains("/embed/", true) && !value.contains("/player/", true)
+                    ) continue
+                    Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+|/(?:api|embed|player|watch|source|server)/[^"'<>\\\s]+""")
+                        .findAll(normalizeEmbeddedText(value))
+                        .forEach { addCandidate(it.value, pageUrl, forcePlayer = sourceButton, apiHint = sourceButton) }
+                }
             }
 
             document.select("track[src], track[data-src]").forEach { track ->
                 val raw = track.attr("src").ifBlank { track.attr("data-src") }
                 val sub = absoluteUrl(raw, pageUrl) ?: return@forEach
                 if (isSubtitleUrl(sub)) {
-                    subtitles.putIfAbsent(
-                        sub, track.attr("label").ifBlank { track.attr("srclang").ifBlank { "Türkçe" } }
-                    )
+                    subtitles.putIfAbsent(sub, track.attr("label").ifBlank { track.attr("srclang").ifBlank { "Türkçe" } })
                 }
             }
 
-            document.select("a[href], source[src], video[src]").forEach { element ->
-                val raw = if (element.hasAttr("href")) element.attr("href") else element.attr("src")
-                addCandidate(raw, pageUrl)
+            document.select("a[href], source[src], video[src], iframe[src]").forEach { element ->
+                val raw = element.attr("href").ifBlank { element.attr("src") }
+                addCandidate(raw, pageUrl, forcePlayer = element.tagName().equals("iframe", true))
             }
         }
 
-        // Source URLs can be embedded in the server-rendered Next.js data payload.
-        Regex("""(?i)https?://[^"'<>\\\s]+""").findAll(decoded).forEach { match ->
-            val url = match.value.trimEnd(',', ';', ')', ']', '}')
-            addCandidate(url, pageUrl)
+        // Extract URLs from serialized React/Next.js state and JS object fields. Search source
+        // labels too, because the site renders provider buttons but may keep their URLs in data.
+        val sources = buildList {
+            add(decoded)
+            if (document != null) {
+                document.select("script").forEach { script ->
+                    add(normalizeEmbeddedText(script.data() + "\n" + script.html()))
+                }
+            }
+        }
+        val playerValueRegex = Regex(
+            """(?is)["']?(?:src|file|url|href|iframe|embed|player|stream|video|source|server|media)(?:Url|URL|_url)?["']?\s*[:=]\s*["']([^"'<>]{5,1800})["']"""
+        )
+        val urlRegex = Regex("""(?i)(?:https?:)?//[^"'<>\\\s]{6,1200}""")
+        val relativeMediaRegex = Regex(
+            """(?i)["']((?:/|\.{1,2}/)[^"'<> ]{3,1000})["']"""
+        )
+        val providerLabels = listOf("Diziasya2", "OKRU", "Vidmoly", "Abyss", "4Me", "EV", "P2P", "ABStr", "LULU")
+
+        for (source in sources) {
+            urlRegex.findAll(source).forEach { match ->
+                val value = match.value.trimEnd(',', ';', ')', ']', '}', '\\')
+                addCandidate(value, pageUrl)
+            }
+            playerValueRegex.findAll(source).forEach { match ->
+                val value = match.groupValues.getOrNull(1).orEmpty().trim()
+                val prefix = source.substring((match.range.first - 240).coerceAtLeast(0), match.range.first)
+                val sourceHint = providerLabels.any { prefix.contains(it, true) } ||
+                    providerLabels.any { source.substring(match.range.last.coerceAtMost(source.length),
+                        (match.range.last + 240).coerceAtMost(source.length)).contains(it, true) }
+                addCandidate(value, pageUrl, forcePlayer = sourceHint, apiHint = sourceHint)
+            }
+        }
+
+        // Buttons sometimes carry only a provider name in server-rendered data.
+        // Inspect the text window around each label to associate it with serialized URLs.
+        for (source in sources) {
+            for (label in providerLabels) {
+                var offset = 0
+                var count = 0
+                while (count < 8) {
+                    val at = source.indexOf(label, offset, ignoreCase = true)
+                    if (at < 0) break
+                    val start = (at - 500).coerceAtLeast(0)
+                    val end = (at + label.length + 900).coerceAtMost(source.length)
+                    val window = source.substring(start, end)
+                    urlRegex.findAll(window).forEach { match ->
+                        val value = match.value.trimEnd(',', ';', ')', ']', '}', '\\')
+                        addCandidate(value, pageUrl, forcePlayer = true, apiHint = true)
+                    }
+                    relativeMediaRegex.findAll(window).forEach { match ->
+                        val value = match.groupValues.getOrNull(1).orEmpty()
+                        if (value.contains("/api/", true) || value.contains("/embed/", true) ||
+                            value.contains("/player/", true) || value.contains("/watch/", true) ||
+                            value.contains("/source", true) || value.contains("/server", true)
+                        ) addCandidate(value, pageUrl, forcePlayer = true, apiHint = true)
+                    }
+                    offset = at + label.length
+                    count++
+                }
+            }
+        }
+
+        // Only inspect a small number of page-specific Next.js chunks. Some current pages
+        // keep server selection data in the route chunk rather than the initial HTML.
+        val scriptUrls = document?.select("script[src]")?.mapNotNull {
+            absoluteUrl(it.attr("src"), pageUrl)
+        }?.distinct()?.filter {
+            it.contains("/_next/static/", true) && it.endsWith(".js", true) &&
+                (it.contains("dizi", true) || it.contains("video", true) ||
+                    it.contains("watch", true) || it.contains("page-", true))
+        }?.take(8).orEmpty()
+        for (scriptUrl in scriptUrls) {
+            val script = runCatching {
+                app.get(scriptUrl, headers = requestHeaders + ("Referer" to pageUrl), referer = pageUrl)
+            }.getOrNull()?.takeIf { it.isSuccessful }?.text ?: continue
+            if (script.length > 2_000_000) continue
+            urlRegex.findAll(normalizeEmbeddedText(script)).forEach { match ->
+                val value = match.value.trimEnd(',', ';', ')', ']', '}', '\\')
+                addCandidate(value, scriptUrl)
+            }
+            playerValueRegex.findAll(normalizeEmbeddedText(script)).forEach { match ->
+                addCandidate(match.groupValues.getOrNull(1), scriptUrl, forcePlayer = false)
+            }
+            for (label in providerLabels) {
+                val at = script.indexOf(label, ignoreCase = true)
+                if (at < 0) continue
+                val window = script.substring((at - 300).coerceAtLeast(0), (at + 1100).coerceAtMost(script.length))
+                urlRegex.findAll(window).forEach { match ->
+                    addCandidate(match.value.trimEnd(',', ';', ')', ']', '}', '\\'), scriptUrl,
+                        forcePlayer = true, apiHint = true)
+                }
+            }
+        }
+
+        // If source buttons point to a same-site API route, request that route and parse its
+        // response for iframe, embed, HLS, MP4, subtitle and JSON URL fields.
+        val visitedApi = HashSet<String>()
+        for (endpoint in apiCandidates.take(12)) {
+            if (!visitedApi.add(endpoint)) continue
+            val apiResponse = runCatching {
+                app.get(endpoint, headers = requestHeaders + ("Referer" to pageUrl), referer = pageUrl, allowRedirects = true)
+            }.getOrNull()?.takeIf { it.isSuccessful } ?: continue
+            val body = normalizeEmbeddedText(apiResponse.text)
+            urlRegex.findAll(body).forEach { match ->
+                addCandidate(match.value.trimEnd(',', ';', ')', ']', '}', '\\'), endpoint, forcePlayer = true)
+            }
+            playerValueRegex.findAll(body).forEach { match ->
+                addCandidate(match.groupValues.getOrNull(1), endpoint, forcePlayer = true)
+            }
+            val apiDoc = apiResponse.document
+            apiDoc.select("iframe, video, source, embed, [data-src], [data-url], [data-embed]").forEach { element ->
+                for (attr in candidateAttrs) {
+                    if (element.hasAttr(attr)) addCandidate(element.attr(attr), endpoint, forcePlayer = true)
+                }
+            }
         }
 
         for (url in directMedia) {
@@ -639,12 +934,17 @@ class DiziAsya : MainAPI() {
             }
         }
 
-        for ((url, label) in subtitles) {
-            runCatching { subtitleCallback(SubtitleFile(label, url)) }
-        }
-        for (player in players.distinct()) {
-            runCatching { loadExtractor(player, pageUrl, subtitleCallback, ::emit) }
+        for ((url, label) in subtitles) runCatching { subtitleCallback(SubtitleFile(label, url)) }
+        for (player in players.distinct()) runCatching { loadExtractor(player, pageUrl, subtitleCallback, ::emit) }
+
+        // Resolve same-site source/player routes discovered in button state through extractors
+        // only after trying their JSON/HTML response above.
+        for (endpoint in apiCandidates.distinct().take(12)) {
+            if (endpoint in players) continue
+            runCatching { loadExtractor(endpoint, pageUrl, subtitleCallback, ::emit) }
         }
         return found
     }
+}
+
 }
