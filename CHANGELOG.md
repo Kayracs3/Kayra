@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:82f472811dd9bc1b1f7a747d509a7ac5d184868b -->
+### Return first playable DiziAsya stream without waiting on alternatives
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [82f4728](https://github.com/Kayracs3/Kayra/commit/82f472811dd9bc1b1f7a747d509a7ac5d184868b)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:c637d5ecfcb065081287cc51ef685c527f92c686 -->
 ### Bump DiziAsya plugin version for faster playback
 
