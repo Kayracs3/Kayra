@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:0790460d38587f80e8af6d3fe67485655ae9a872 -->
+### AsyaLuna eklenti kayıt sınıfını ekle
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [0790460](https://github.com/Kayracs3/Kayra/commit/0790460d38587f80e8af6d3fe67485655ae9a872)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:eb23b6a1fa33695981c7bd80e58e2484382c0491 -->
 ### AsyaLuna CloudStream sağlayıcısını ekle
 
