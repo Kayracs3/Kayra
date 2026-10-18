@@ -35,6 +35,12 @@ These instructions record the maintainer's established preferences and lessons f
 - Treat empty strings, `null`, and `0` as missing artwork values rather than URLs.
 - For episode artwork, prefer episode-specific image fields, then season artwork, then series artwork. Do not overwrite a valid poster with an empty or malformed value.
 - Do not guess an image from an unrelated field if it could return a logo, avatar, or banner.
+- Normalize every artwork URL through the same provider-specific normalization helper, including `img src`, `srcset`, lazy-load attributes, Open Graph `og:image`, and Twitter card metadata. Do not let one metadata/fallback path bypass normalization.
+- When posters fail, inspect the actual URLs and CloudStream/Coil logs before guessing. Distinguish TLS/network errors from decode errors such as invalid image input or a HEIF decoder failure.
+- Check the image response's actual content type and format where practical. A site's image optimizer or CDN may return AVIF/HEIC even when the URL looks like a normal image; do not assume that CloudStream can decode it.
+- Prefer an explicitly supported output format (WebP, JPEG, or PNG as appropriate) when a proxy/conversion service is needed. Avoid relying on an optimizer that keeps returning an incompatible format. Verify the converted URL/format before calling the issue fixed.
+- Audit fallback branches after normalization: a fallback must not reintroduce a raw URL that was deliberately rejected or converted. In particular, do not fall back to a direct object-storage/R2 image URL when that URL is known to fail in CloudStream.
+- DiziAsya's poster issue was resolved by normalizing Open Graph artwork, avoiding a raw R2 fallback, and using a proxy URL with an explicit WebP output. Reuse the debugging approach, not blindly the site-specific URL, on other providers.
 
 ## Subtitle behavior
 - Keep language detection tied to each actual subtitle URL/track; a nearby label can belong to a different URL.
