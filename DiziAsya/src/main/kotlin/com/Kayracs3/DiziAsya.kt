@@ -720,15 +720,39 @@ class DiziAsya : MainAPI() {
 
             val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
             val sameSite = host == "diziasya.com" || host.endsWith(".diziasya.com")
+            val lower = url.lowercase(Locale.ROOT)
+            if (listOf(
+                    "google-analytics", "googletagmanager", "doubleclick", "adservice",
+                    "facebook.com", "twitter.com", "whatsapp", "hotjar", "clarity.ms"
+                ).any { lower.contains(it) }
+            ) return
+            if (Regex("""(?i)\.(?:css|js|mjs|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf)(?:$|[?#])""")
+                    .containsMatchIn(url)
+            ) return
+
+            val path = pathOf(url).lowercase(Locale.ROOT)
             val isApi = sameSite && (
-                url.contains("/api/", true) || url.contains("/source", true) ||
-                    url.contains("/server", true) || url.contains("/watch/", true) ||
-                    url.contains("/embed/", true) || url.contains("/player/", true)
+                path.contains("/api/") || path.contains("/source") ||
+                    path.contains("/server") || path.contains("/watch/") ||
+                    path.contains("/embed/") || path.contains("/player/")
                 )
             if (isApi && apiHint) apiCandidates.add(url)
+
+            // Do not turn arbitrary nearby page assets into video choices. Forced URLs
+            // must resemble a player path unless the hostname identifies a known video host.
+            val knownHost = listOf(
+                "ok.ru", "odnoklassniki.ru", "vidmoly", "abyss", "4me", "p2p", "abstr",
+                "lulu", "streamwish", "filemoon", "dood", "mixdrop", "uqload", "voe",
+                "dailymotion", "youtube.com", "youtu.be", "streamtape", "vidoza"
+            ).any { host.contains(it) }
+            val playerPath = listOf(
+                "/embed/", "/player/", "/video/", "/watch/", "/stream/", "/source/",
+                "/server/", "/iframe/", "videoid=", "video_id=", "file=", "url="
+            ).any { lower.contains(it) }
             if (forcePlayer || isKnownPlayer(url)) {
-                if (!sameSite || isKnownPlayer(url)) players.add(url)
-                else if (apiHint) apiCandidates.add(url)
+                if (!sameSite && (knownHost || playerPath)) players.add(url)
+                else if (sameSite && isApi && apiHint) apiCandidates.add(url)
+                else if (sameSite && isKnownPlayer(url)) players.add(url)
             }
         }
 
@@ -945,6 +969,4 @@ class DiziAsya : MainAPI() {
         }
         return found
     }
-}
-
 }
