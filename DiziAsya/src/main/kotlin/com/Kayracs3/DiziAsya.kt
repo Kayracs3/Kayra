@@ -161,6 +161,12 @@ class DiziAsya : MainAPI() {
         return normalizedHost == "r2.dev" || normalizedHost.endsWith(".r2.dev")
     }
 
+    private fun isDirectR2ImageUrl(url: String): Boolean {
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        if (uri.path.orEmpty().contains("/_next/image")) return false
+        return isR2PosterHost(uri.host.orEmpty())
+    }
+
     private fun originalImageUrl(raw: String, base: String): String? {
         val resolved = absoluteUrl(raw, base) ?: return null
         val uri = runCatching { URI(resolved) }.getOrNull() ?: return null
@@ -279,7 +285,7 @@ class DiziAsya : MainAPI() {
                 // Use the original API/CDN image URL embedded in its "url" query parameter.
                 val normalized = normalizeImageUrl(rawUrl, base)
                 if (normalized != null && isImageCandidateUrl(normalized)) return normalized
-                if (isImageCandidateUrl(rawUrl)) return rawUrl
+                if (isImageCandidateUrl(rawUrl) && !isDirectR2ImageUrl(rawUrl)) return rawUrl
             }
             val base = node.baseUri().ifBlank { mainUrl }
             val bg = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
@@ -287,7 +293,7 @@ class DiziAsya : MainAPI() {
             val rawBgUrl = absoluteUrl(bg, base)
             val normalizedBg = normalizeImageUrl(rawBgUrl, base)
             if (normalizedBg != null && isImageCandidateUrl(normalizedBg)) return normalizedBg
-            if (rawBgUrl != null && isImageCandidateUrl(rawBgUrl)) return rawBgUrl
+            if (rawBgUrl != null && isImageCandidateUrl(rawBgUrl) && !isDirectR2ImageUrl(rawBgUrl)) return rawBgUrl
         }
         return null
     }
