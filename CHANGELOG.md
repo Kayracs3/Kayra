@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:29aabf78a88ab3b7730f267055b7a6ee881e84ad -->
+### Add new series categories to mainPage
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [29aabf7](https://github.com/Kayracs3/Kayra/commit/29aabf78a88ab3b7730f267055b7a6ee881e84ad)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:1494ea7acbe225926bda604af314905069f7481b -->
 ### Bump DiziAsya version for playback fixes
 
