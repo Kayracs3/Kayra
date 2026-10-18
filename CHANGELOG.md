@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:58639a461b020b8c747798a8258b245e8e2c1c6c -->
+### Fix DiziAsya poster headers and catalog pagination
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [58639a4](https://github.com/Kayracs3/Kayra/commit/58639a461b020b8c747798a8258b245e8e2c1c6c)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:5dbe93e2414a6540c9fa502fe502059e69150b50 -->
 ### Bump DiziAsya version to 9
 
