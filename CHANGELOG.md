@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:832c20d98202ca9529ac03659f4301e1e3064273 -->
+### Update mainPage by removing 'Son Eklenenler' entry
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [832c20d](https://github.com/Kayracs3/Kayra/commit/832c20d98202ca9529ac03659f4301e1e3064273)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:4b82392dd545a410f3821a66af914328edabdc8e -->
 ### Bump DiziAsya to version 7 for card-title fix
 
