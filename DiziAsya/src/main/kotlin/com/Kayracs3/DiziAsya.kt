@@ -173,24 +173,9 @@ class DiziAsya : MainAPI() {
         val imageUri = runCatching { URI(imageUrl) }.getOrNull() ?: return null
         if (imageUri.host.isNullOrBlank() || imageUri.path.isNullOrBlank()) return null
 
-        // Cloudflare R2 poster URLs are not consistently reachable directly from clients.
-        // Keep the site's own optimizer for R2 only; use the original URL for other CDNs.
-        val host = imageUri.host.orEmpty().lowercase(Locale.ROOT)
-        return if (host == "r2.dev" || host.endsWith(".r2.dev")) resolved else imageUrl
-    }
-
-    private fun isNextImageProxyForR2(url: String): Boolean {
-        val uri = runCatching { URI(url) }.getOrNull() ?: return false
-        if (!uri.path.orEmpty().endsWith("/_next/image")) return false
-        val encodedImage = uri.rawQuery.orEmpty().split('&')
-            .firstOrNull { it.substringBefore('=').equals("url", true) }
-            ?.substringAfter('=', "")
-            ?.takeIf { it.isNotBlank() } ?: return false
-        val decodedImage = runCatching { URLDecoder.decode(encodedImage, "UTF-8") }
-            .getOrNull() ?: return false
-        val host = runCatching { URI(decodedImage).host.orEmpty().lowercase(Locale.ROOT) }
-            .getOrDefault("")
-        return host == "r2.dev" || host.endsWith(".r2.dev")
+        // Use the real image URL, not the site's /_next/image optimizer endpoint.
+        // CloudStream can leave some optimizer URLs blank even when their source image is valid.
+        return imageUrl
     }
 
     private fun bestSrcsetUrl(raw: String): String? {
@@ -230,8 +215,8 @@ class DiziAsya : MainAPI() {
         val uri = runCatching { URI(url) }.getOrNull() ?: return false
         val path = uri.path.orEmpty().lowercase(Locale.ROOT)
         val file = path.substringAfterLast('/')
-        // Accept an optimizer endpoint only when it wraps a verified public R2 image.
-        if (path.endsWith("/_next/image")) return isNextImageProxyForR2(url)
+        // Do not accept a Next.js optimizer endpoint as the final poster URL.
+        if (path.endsWith("/_next/image")) return false
         if (file.endsWith(".svg") || file.endsWith(".gif") || file.endsWith(".ico")) return false
         if (Regex("""(?i)(logo|avatar|placeholder|no[-_]?image|transparent|blank|favicon|pixel|spacer)""")
                 .containsMatchIn(file)
@@ -265,9 +250,7 @@ class DiziAsya : MainAPI() {
                 // Next.js' image optimizer URL can render as a blank poster in CloudStream.
                 // Use the original API/CDN image URL embedded in its "url" query parameter.
                 val normalized = normalizeImageUrl(rawUrl, base)
-                if (normalized != null &&
-                    (isImageCandidateUrl(normalized) || isNextImageProxyForR2(normalized))
-                ) return normalized
+                if (normalized != null && isImageCandidateUrl(normalized)) return normalized
                 if (isImageCandidateUrl(rawUrl)) return rawUrl
             }
             val base = node.baseUri().ifBlank { mainUrl }
@@ -275,9 +258,7 @@ class DiziAsya : MainAPI() {
                 .find(node.attr("style"))?.groupValues?.getOrNull(1)?.trim()
             val rawBgUrl = absoluteUrl(bg, base)
             val normalizedBg = normalizeImageUrl(rawBgUrl, base)
-            if (normalizedBg != null &&
-                (isImageCandidateUrl(normalizedBg) || isNextImageProxyForR2(normalizedBg))
-            ) return normalizedBg
+            if (normalizedBg != null && isImageCandidateUrl(normalizedBg)) return normalizedBg
             if (rawBgUrl != null && isImageCandidateUrl(rawBgUrl)) return rawBgUrl
         }
         return null
