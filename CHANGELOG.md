@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:5705b951a2d29121c0680441c6f2bb4b466e61f3 -->
+### DiziAsya tıklanabilir olmayan profil kartlarını da ayrıştır
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [5705b95](https://github.com/Kayracs3/Kayra/commit/5705b951a2d29121c0680441c6f2bb4b466e61f3)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:856a328bd1663f9d7ce14bbd803c4a3e3a2e0165 -->
 ### DiziAsya portre kartlarını ve alternatif oynatıcı hostlarını düzelt
 
