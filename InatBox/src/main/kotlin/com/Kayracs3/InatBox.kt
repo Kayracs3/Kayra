@@ -1091,6 +1091,156 @@ class InatBox : MainAPI() {
         }
     }
 
+    private data class InatPlaybackTraversalState(
+        val visitedEndpoints: MutableSet<String> = HashSet(),
+        var apiRequests: Int = 0
+    )
+
+    /**
+     * Resolve InatBox catalogue/series JSON into actual chUrl playback entries.
+     * Some catalog items are sent to the player as JSON containing diziUrl; that
+     * endpoint must be POSTed and its seasons/episodes followed before a link exists.
+     */
+    private suspend fun loadInatPlaybackPayload(
+        raw: String,
+        sourceUrl: String?,
+        depth: Int,
+        state: InatPlaybackTraversalState,
+        fallbackName: String,
+        fallbackImage: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (raw.isBlank() || depth > 4) return false
+        val trimmed = raw.trim()
+
+        if (trimmed.startsWith("[")) {
+            val array = runCatching { JSONArray(trimmed) }.getOrNull() ?: return false
+            var loaded = false
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val found = loadInatPlaybackItem(
+                    item, sourceUrl, depth, state, fallbackName, fallbackImage,
+                    subtitleCallback, callback
+                )
+                if (found) loaded = true
+            }
+            return loaded
+        }
+
+        if (trimmed.startsWith("{")) {
+            val item = runCatching { JSONObject(trimmed) }.getOrNull() ?: return false
+            return loadInatPlaybackItem(
+                item, sourceUrl, depth, state, fallbackName, fallbackImage,
+                subtitleCallback, callback
+            )
+        }
+
+        // Some source endpoints return a plain media URL rather than a JSON payload.
+        if (trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true)) {
+            if (!isDirectStream(trimmed)) return false
+            return emitDirectOrRawStream(
+                name = fallbackName.ifBlank { "InatBox" },
+                url = trimmed,
+                headers = emptyMap(),
+                subtitleCallback = subtitleCallback,
+                callback = callback
+            )
+        }
+
+        // Tolerate a short prefix/suffix around a JSON response without treating
+        // arbitrary page text as a playback URL.
+        val extracted = extractJsonPayload(trimmed)
+        if (!extracted.isNullOrBlank() && extracted != trimmed &&
+            (extracted.startsWith("[") || extracted.startsWith("{"))
+        ) {
+            return loadInatPlaybackPayload(
+                extracted, sourceUrl, depth + 1, state, fallbackName, fallbackImage,
+                subtitleCallback, callback
+            )
+        }
+        return false
+    }
+
+    private suspend fun loadInatPlaybackItem(
+        item: JSONObject,
+        sourceUrl: String?,
+        depth: Int,
+        state: InatPlaybackTraversalState,
+        fallbackName: String,
+        fallbackImage: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        // Actual stream records use chUrl. Preserve source metadata so temporary URLs
+        // can still be refreshed by the existing InatHlsProxy logic.
+        val streamUrl = item.optString("chUrl").trim()
+        if (streamUrl.isNotBlank() && !streamUrl.equals("null", true)) {
+            val enriched = runCatching {
+                JSONObject(item.toString()).apply {
+                    if (optString("chName").isBlank() && fallbackName.isNotBlank()) {
+                        put("chName", fallbackName)
+                    }
+                    if (optString("chImg").isBlank() && fallbackImage.isNotBlank()) {
+                        put("chImg", fallbackImage)
+                    }
+                }
+            }.getOrElse { item }
+
+            val withSource = if (!sourceUrl.isNullOrBlank()) {
+                enrichInatItem(enriched, sourceUrl)
+            } else {
+                enriched
+            }
+            return loadInatChContentLinks(
+                parseToInatChContent(withSource),
+                subtitleCallback,
+                callback
+            )
+        }
+
+        val endpoint = item.optString("diziUrl").trim()
+            .takeIf { it.isNotBlank() && !it.equals("null", true) }
+
+        if (endpoint != null && depth < 4 && state.apiRequests < 24 &&
+            state.visitedEndpoints.add(endpoint)
+        ) {
+            state.apiRequests++
+            val response = makeInatPostRequest(endpoint)
+            if (!response.isNullOrBlank()) {
+                val name = item.optString("diziName").ifBlank { fallbackName }
+                val image = item.optString("diziImg").ifBlank { fallbackImage }
+                if (loadInatPlaybackPayload(
+                        response, endpoint, depth + 1, state, name, image,
+                        subtitleCallback, callback
+                    )
+                ) return true
+            }
+        }
+
+        // Handle API wrappers such as {"result":[...]} without mistaking the wrapper
+        // itself for a playable item.
+        val arrayKeys = listOf("result", "data", "results", "items", "sources", "episodes", "seasons")
+        for (key in arrayKeys) {
+            val array = item.optJSONArray(key) ?: continue
+            if (loadInatPlaybackPayload(
+                    array.toString(), sourceUrl, depth + 1, state,
+                    fallbackName, fallbackImage, subtitleCallback, callback
+                )
+            ) return true
+        }
+        val objectKeys = listOf("result", "data", "item", "source", "stream")
+        for (key in objectKeys) {
+            val nested = item.optJSONObject(key) ?: continue
+            if (loadInatPlaybackItem(
+                    nested, sourceUrl, depth + 1, state,
+                    fallbackName, fallbackImage, subtitleCallback, callback
+                )
+            ) return true
+        }
+        return false
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -1098,32 +1248,24 @@ class InatBox : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         return try {
-            var loaded = false
             val trimmed = data.trim()
-
             when {
-                trimmed.startsWith("[") -> {
-                    val jsonArray = JSONArray(trimmed)
-                    for (i in 0 until jsonArray.length()) {
-                        val item = jsonArray.optJSONObject(i) ?: continue
-                        if (loadInatChContentLinks(parseToInatChContent(item), subtitleCallback, callback)) {
-                            loaded = true
-                        }
-                    }
-                }
-
-                trimmed.startsWith("{") -> {
-                    val item = JSONObject(trimmed)
-                    loaded = loadInatChContentLinks(
-                        parseToInatChContent(item),
-                        subtitleCallback,
-                        callback
+                trimmed.startsWith("[") || trimmed.startsWith("{") -> {
+                    loadInatPlaybackPayload(
+                        raw = trimmed,
+                        sourceUrl = null,
+                        depth = 0,
+                        state = InatPlaybackTraversalState(),
+                        fallbackName = "InatBox",
+                        fallbackImage = "",
+                        subtitleCallback = subtitleCallback,
+                        callback = callback
                     )
                 }
 
                 trimmed.startsWith("http://", ignoreCase = true) ||
                     trimmed.startsWith("https://", ignoreCase = true) -> {
-                    loaded = emitDirectOrRawStream(
+                    emitDirectOrRawStream(
                         name = "InatBox",
                         url = trimmed,
                         headers = emptyMap(),
@@ -1131,9 +1273,9 @@ class InatBox : MainAPI() {
                         callback = callback
                     )
                 }
-            }
 
-            loaded
+                else -> false
+            }
         } catch (e: Exception) {
             Log.e("InatBox", "Error on loadLinks: ${e::class.simpleName} - ${e.message}", e)
             false
@@ -1187,7 +1329,9 @@ class InatBox : MainAPI() {
                         episodes
                             .getOrPut(DubStatus.None) { mutableListOf() }
                             .add(
-                                newEpisode(buildFreshLoadData(episodeItem)) {
+                                newEpisode(
+                                    buildFreshLoadData(enrichInatItem(episodeItem, seasonUrl))
+                                ) {
                                     this.name = episodeName
                                     this.posterUrl = episodePoster
                                     this.season = i + 1
