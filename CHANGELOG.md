@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:8a7f84a7f9c33527b5f7f0ba25e30bcafef432ad -->
+### Bump DiziAsya to version 20 for poster fixes
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [8a7f84a](https://github.com/Kayracs3/Kayra/commit/8a7f84a7f9c33527b5f7f0ba25e30bcafef432ad)
+
+## 2026-10-18
+
+<!-- kayra-commit:adb3056db39419314ec69b5b9c36d1cb9c3cd8a4 -->
+### Avoid direct R2 URLs in DiziAsya poster fallbacks
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [adb3056](https://github.com/Kayracs3/Kayra/commit/adb3056db39419314ec69b5b9c36d1cb9c3cd8a4)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:daef7ab77b3acecd93fd75d1c545e50ebbd0419e -->
 ### Prefer WebP for DiziAsya poster requests
 
