@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:493741fa097ffcfdf191a40f7dc8622b4c0fd43f -->
+### Diagnose DiziAsya blank poster requests
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [493741f](https://github.com/Kayracs3/Kayra/commit/493741fa097ffcfdf191a40f7dc8622b4c0fd43f)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:d3f93bac791a38460cda7feea179ca5410fbef07 -->
 ### Bump DiziAsya version for poster title fallback fix
 
