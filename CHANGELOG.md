@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:1ab79137d160961b81842a4e2c184a219fd2988e -->
+### Remove redundant mapping for 'Programlar'
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [1ab7913](https://github.com/Kayracs3/Kayra/commit/1ab79137d160961b81842a4e2c184a219fd2988e)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:29aabf78a88ab3b7730f267055b7a6ee881e84ad -->
 ### Add new series categories to mainPage
 
