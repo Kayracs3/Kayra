@@ -636,7 +636,7 @@ class DiziAsya : MainAPI() {
                 this.score = score
                 tags = genres
                 if (trailer != null) addTrailer(trailer)
-                if (actors.isNotEmpty()) addActors(actors)
+                if (actors.isNotEmpty()) addActors(actors.map { it.actor })
             }
         }
 
@@ -649,7 +649,7 @@ class DiziAsya : MainAPI() {
             this.score = score
             tags = genres
             if (trailer != null) addTrailer(trailer)
-            if (actors.isNotEmpty()) addActors(actors)
+            if (actors.isNotEmpty()) addActors(actors.map { it.actor })
         }
     }
 
