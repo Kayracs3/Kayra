@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:68f7e469d8713fe05a44e8f852318fb76e40a340 -->
+### AsyaLuna katalogunda sayfalama bağlantılarını filtrele
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [68f7e46](https://github.com/Kayracs3/Kayra/commit/68f7e469d8713fe05a44e8f852318fb76e40a340)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:4b94de33a6ac17a106d2c6eabf236437533a2fef -->
 ### AsyaLuna katalogunda sayfalama bağlantılarının afiş olarak algılanmasını engelle
 
