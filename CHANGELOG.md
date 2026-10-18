@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:b4856d71cbfff3aef6b9b62591989dfe23dee696 -->
+### Bump DiziAsya version for poster card mapping
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [b4856d7](https://github.com/Kayracs3/Kayra/commit/b4856d71cbfff3aef6b9b62591989dfe23dee696)
+
+## 2026-10-18
+
+<!-- kayra-commit:cbe5b1ee2287d504993b22a22d9a67aea61eac10 -->
+### Index DiziAsya poster images by card URL
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [cbe5b1e](https://github.com/Kayracs3/Kayra/commit/cbe5b1ee2287d504993b22a22d9a67aea61eac10)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:a8ab087742ba8c188651cd3e54efee1e5a45bbed -->
 ### Bump DiziAsya version for direct poster URL fix
 
