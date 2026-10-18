@@ -11,6 +11,8 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONObject
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
+import org.jsoup.nodes.TextNode
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -337,46 +339,68 @@ class AsyaLuna : MainAPI() {
             normalized.startsWith("bolum sayisi") ||
             normalized.startsWith("sure") ||
             normalized.startsWith("durum") ||
-            normalized == "tur" ||
-            normalized.startsWith("tur ")
-    }
-
-    private fun parsePlot(document: Document): String? {
-        // Prefer the real synopsis section under headings like "Dizi Konusu".
+            normalized =    private fun parsePlot(document: Document): String? {
+        // The synopsis may be plain text immediately after a heading such as:
+        // <h2><span style="color:#FFCC00;">Merry Berry Love 2026 Japon Konusu:</span></h2>
+        // Read element siblings and raw text siblings, because it is not always wrapped in <p>.
         val headings = document.select("h1, h2, h3, h4, h5, h6, strong, b")
             .filter { normalize(it.text()).contains("konusu") }
 
         for (heading in headings) {
-            var current: Element? = heading
+            var branch: Node? = heading
             var depth = 0
-            while (current != null && depth < 4) {
-                var sibling = current.nextElementSibling()
+            while (branch != null && depth < 6) {
+                var sibling: Node? = branch.nextSibling()
                 var scanned = 0
                 val paragraphs = ArrayList<String>()
-                while (sibling != null && scanned < 10) {
-                    val text = cleanTitle(sibling.text())
-                    val normalized = normalize(text)
-                    if (isMetadataText(text) ||
-                        (sibling.tagName().matches(Regex("(?i)h[1-6]")) &&
-                            (normalized.contains("bolum") || normalized.contains("oyuncu") ||
-                                normalized.contains("benzer dizi")))
-                    ) break
-                    if (text.length >= 35 &&
-                        !normalized.contains("konusu") &&
-                        !text.contains("Sitemizde bulunan", true) &&
-                        !text.contains("Reklam engelleyici", true)
-                    ) paragraphs.add(text)
-                    sibling = sibling.nextElementSibling()
+
+                while (sibling != null && scanned < 24) {
+                    if (sibling is Element) {
+                        val element = sibling
+                        val text = cleanTitle(element.text())
+                        val normalized = normalize(text)
+                        if (element.tagName().matches(Regex("(?i)h[1-6]"))) break
+                        if (isMetadataText(text) ||
+                            normalized.startsWith("durum") ||
+                            normalized.contains("bolum sayisi") ||
+                            normalized.startsWith("benzer diziler") ||
+                            normalized.startsWith("yorum alani") ||
+                            normalized.contains("reklam engelleyici")
+                        ) break
+
+                        if (text.length >= 35 &&
+                            !normalized.contains("konusu") &&
+                            !text.contains("Sitemizde bulunan", true) &&
+                            !text.contains("Reklam engelleyici", true)
+                        ) paragraphs.add(text)
+                    } else if (sibling is TextNode) {
+                        val text = cleanTitle(sibling.text())
+                        val normalized = normalize(text)
+                        if (text.length >= 35 &&
+                            !isMetadataText(text) &&
+                            !normalized.contains("konusu") &&
+                            !normalized.contains("bolum sayisi") &&
+                            !text.contains("Sitemizde bulunan", true) &&
+                            !text.contains("Reklam engelleyici", true)
+                        ) paragraphs.add(text)
+                    }
+
+                    sibling = sibling.nextSibling()
                     scanned++
                 }
-                if (paragraphs.isNotEmpty()) return paragraphs.distinct().joinToString("\n\n").take(6000)
-                current = current.parent()
+
+                if (paragraphs.isNotEmpty()) {
+                    return paragraphs.distinct().joinToString("\n\n").take(6000)
+                }
+                branch = branch.parent()
                 depth++
             }
         }
 
+        // Fallback for themes that use a description container without a "Konusu" heading.
         val articleText = document.select(
-            ".entry-content p, .post-content p, article p, main p, .description, .plot, .summary, p"
+            ".entry-content p, .post-content p, article p, main p, " +
+                ".description, .plot, .summary, [class*=synopsis], [class*=description], p"
         ).asSequence()
             .map { cleanTitle(it.text()) }
             .filter { text ->
@@ -386,7 +410,8 @@ class AsyaLuna : MainAPI() {
                     !normalized.contains("sitemizde bulunan") &&
                     !normalized.contains("reklam engelleyici") &&
                     !normalized.contains("yorum yap") &&
-                    !normalized.contains("benzer diziler")
+                    !normalized.contains("benzer diziler") &&
+                    !normalized.contains("bolum sayisi")
             }
             .distinct()
             .toList()
@@ -401,6 +426,10 @@ class AsyaLuna : MainAPI() {
             }
     }
 
+     !normalize(it).contains("konusu")
+            }
+    }
+
     private fun parseTrailer(document: Document): String? =
         document.select("a[href]").asSequence()
             .filter {
@@ -410,82 +439,107 @@ class AsyaLuna : MainAPI() {
             .mapNotNull { absoluteUrl(it.attr("href"), it.baseUri().ifBlank { mainUrl }) }
             .firstOrNull { it.contains("youtube.com", true) || it.contains("youtu.be", true) }
 
+    private fun episodeNumberFrom(value: String): Int? {
+        val patterns = listOf(
+            Regex("""(?i)(?:^|[^a-z])(?:episode|ep|bolum|bölüm)\s*[-_.:#]*\s*(\d{1,3})(?:\b|$)"""),
+            Regex("""(?i)(?:^|[\s._/-])(\d{1,3})\s*\.?\s*(?:bolum|bölüm|episode)(?:\b|$)"""),
+            Regex("""(?i)-(\d{1,3})-bolum(?:-final)?$""")
+        )
+        for (pattern in patterns) {
+            val number = pattern.find(value)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            if (number != null && number in 1..1000) return number
+        }
+        return null
+    }
+
     private fun parseEpisodes(document: Document, seriesUrl: String, poster: String?): List<Episode> {
         val seriesSlug = pathOf(seriesUrl).trim('/').substringAfter("dizi/", "").substringBefore('/')
         if (seriesSlug.isBlank()) return emptyList()
 
-        val groups = LinkedHashMap<String, String>()
-        for (link in document.select("a[href], [data-href], [data-url]")) {
-            val rawHref = link.attr("href").ifBlank {
-                link.attr("data-href").ifBlank { link.attr("data-url") }
-            }
-            val raw = absoluteUrl(rawHref, link.baseUri().ifBlank { mainUrl }) ?: continue
-            val path = pathOf(raw).trimEnd('/')
-            if (!path.startsWith("/bolum/", true)) continue
-            val slug = path.substringAfter("/bolum/", "").substringBefore('/')
-            if (slug.isBlank() || !slug.startsWith(seriesSlug, true)) continue
-            val groupUrl = "$mainUrl/bolum/$slug/"
-            val label = cleanTitle(link.text() + " " + link.attr("title") + " " + link.attr("aria-label"))
-            groups.putIfAbsent(groupUrl, label)
-        }
-
-        val episodes = ArrayList<Episode>()
-        val rangePattern = Regex("""(?i)(?<!\d)(\d{1,3})\s*[-–]\s*(\d{1,3})(?!\d)""")
+        val rangeSuffix = Regex("""(?i)-(\d{1,3})-(\d{1,3})-bolum(?:-final)?$""")
+        val rangeInLabel = Regex("""(?i)(\d{1,3})\s*[-–]\s*(\d{1,3})""")
         val seasonPattern = Regex("""(?i)\b(?:sezon|season)\s*[-_.:]?\s*(\d{1,2})\b""")
-        for ((groupUrl, linkText) in groups) {
-            val slug = pathOf(groupUrl).substringAfter("/bolum/", "").trim('/')
-            val sourceText = "$linkText $slug"
-            val range = rangePattern.find(linkText) ?: rangePattern.find(slug)
-            val season = seasonPattern.find(sourceText)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+        val episodeRows = LinkedHashMap<String, Pair<Episode, Int>>()
 
-            if (range != null) {
-                val first = range.groupValues[1].toIntOrNull() ?: continue
-                val last = range.groupValues[2].toIntOrNull() ?: continue
-                if (first <= 0 || last < first || last - first > 100) continue
-                for (number in first..last) {
-                    val offset = number - first + 1
-                    val episodeUrl = if (offset == 1) groupUrl else groupUrl.trimEnd('/') + "/" + offset + "/"
-                    episodes.add(newEpisode(episodeUrl) {
-                        name = "$number. Bölüm"
-                        this.season = season
-                        episode = number
-                        this.posterUrl = poster
-                    })
-                }
-            } else {
-                val number = Regex("""(?i)(?:bolum|bölüm|episode)[-_.\s]*(\d{1,3})""")
-                    .find(sourceText)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-                episodes.add(newEpisode(groupUrl) {
-                    name = if (linkText.isNotBlank()) linkText else "$number. Bölüm"
-                    this.season = season
-                    episode = number
-                    this.posterUrl = poster
-                })
-            }
-        }
+        fun addEpisode(rawUrl: String, label: String, season: Int, number: Int, priority: Int) {
+            if (number !in 1..1000 || season !in 1..99) return
+            val episodeUrl = absoluteUrl(rawUrl, seriesUrl)?.substringBefore('#') ?: return
+            if (!isEpisodeUrl(episodeUrl)) return
 
-        // Some site versions expose individual episode links directly as well.
-        for (link in document.select("a[href*='/bolum/']")) {
-            val raw = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: continue
-            val path = pathOf(raw).trimEnd('/')
-            val parts = path.substringAfter("/bolum/", "").split('/')
-            if (parts.size < 2 || !parts[0].startsWith(seriesSlug, true)) continue
-            val number = Regex("""(?i)(?:^|[/.-])(\d{1,3})$""")
-                .find(path)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-            if (number !in 1..1000) continue
-            val season = seasonPattern.find(link.text() + " " + path)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
-            val episodeUrl = raw.trimEnd('/') + "/"
-            episodes.add(newEpisode(episodeUrl) {
-                name = cleanTitle(link.text()).ifBlank { "$number. Bölüm" }
+            val key = "$season-$number"
+            val existing = episodeRows[key]
+            if (existing != null && existing.second > priority) return
+
+            val cleanedLabel = cleanTitle(label)
+            val episodeName = cleanedLabel.ifBlank { "$number. Bölüm" }
+            val episode = newEpisode(episodeUrl) {
+                name = episodeName
                 this.season = season
                 episode = number
                 this.posterUrl = poster
-            })
+            }
+            episodeRows[key] = episode to priority
         }
 
-        return episodes.distinctBy {
-            (it.season ?: 1).toString() + "-" + (it.episode ?: 0).toString()
-        }.sortedWith(compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: 0 })
+        for (link in document.select("a[href], [data-href], [data-url], [data-episode]")) {
+            val rawHref = link.attr("href")
+                .ifBlank { link.attr("data-href") }
+                .ifBlank { link.attr("data-url") }
+                .ifBlank { link.attr("data-episode") }
+            val rawUrl = absoluteUrl(rawHref, link.baseUri().ifBlank { mainUrl }) ?: continue
+            val path = pathOf(rawUrl).trimEnd('/')
+            if (!path.startsWith("/bolum/", true)) continue
+
+            val remainder = path.substringAfter("/bolum/", "")
+            val slug = remainder.substringBefore('/')
+            if (slug.isBlank() || !slug.startsWith(seriesSlug, true)) continue
+
+            val label = cleanTitle(
+                link.text() + " " + link.attr("title") + " " + link.attr("aria-label")
+            )
+            val normalizedLabel = normalize(label)
+            val groupLabel = normalizedLabel.contains("tum bolumler") ||
+                normalizedLabel.contains("all episodes")
+
+            val sourceText = "$label $path"
+            val season = seasonPattern.find(sourceText)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: Regex("""(?i)/sezon/(\d{1,2})(?:/|$)""").find(path)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: 1
+
+            val slugRange = rangeSuffix.find(slug)
+            val labelRange = if (!groupLabel && normalizedLabel.contains("bolum")) {
+                rangeInLabel.find(label)
+            } else null
+            val range = slugRange ?: labelRange
+            if (range != null) {
+                val first = range.groupValues.getOrNull(1)?.toIntOrNull() ?: continue
+                val last = range.groupValues.getOrNull(2)?.toIntOrNull() ?: continue
+                if (first <= 0 || last < first || last - first > 100) continue
+
+                for (number in first..last) {
+                    val offset = number - first + 1
+                    val episodeUrl = if (offset == 1) rawUrl else rawUrl.trimEnd('/') + "/$offset/"
+                    addEpisode(episodeUrl, "$number. Bölüm", season, number, priority = 1)
+                }
+                continue
+            }
+
+            // Individual episode pages often end in "...-1-bolum/".
+            val slugEpisode = Regex("""(?i)-(\d{1,3})-bolum(?:-final)?$""")
+                .find(slug)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val nestedEpisode = path.substringAfter("/bolum/$slug", "").trim('/').toIntOrNull()
+                ?.takeIf { it in 1..1000 }
+            val labelEpisode = if (groupLabel) null else episodeNumberFrom(label)
+            val number = slugEpisode ?: nestedEpisode ?: labelEpisode ?: continue
+
+            // Exact individual episode pages outrank URLs inferred from a range page.
+            val priority = if (slugEpisode != null || nestedEpisode != null) 3 else 2
+            addEpisode(rawUrl, label, season, number, priority)
+        }
+
+        return episodeRows.values.map { it.first }
+            .distinctBy { (it.season ?: 1).toString() + "-" + (it.episode ?: 0).toString() }
+            .sortedWith(compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: 0 })
     }
 
     override suspend fun load(url: String): LoadResponse? {
