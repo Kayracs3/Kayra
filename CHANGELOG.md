@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:c637d5ecfcb065081287cc51ef685c527f92c686 -->
+### Bump DiziAsya plugin version for faster playback
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [c637d5e](https://github.com/Kayracs3/Kayra/commit/c637d5ecfcb065081287cc51ef685c527f92c686)
+
+## 2026-10-18
+
+<!-- kayra-commit:c4a2b2713a22c11ab6bb89904cb1e36b7c2315ab -->
+### Prioritize direct DiziAsya streams and cut serial source lookups
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [c4a2b27](https://github.com/Kayracs3/Kayra/commit/c4a2b2713a22c11ab6bb89904cb1e36b7c2315ab)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:75158042d68353d5d9b543300bfcc034b6ee2eed -->
 ### Speed up DiziAsya source resolution and skip duplicate extractors
 
