@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:856a328bd1663f9d7ce14bbd803c4a3e3a2e0165 -->
+### DiziAsya portre kartlarını ve alternatif oynatıcı hostlarını düzelt
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [856a328](https://github.com/Kayracs3/Kayra/commit/856a328bd1663f9d7ce14bbd803c4a3e3a2e0165)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:bc24705aefd19d2ae630e391c369a19bd7144550 -->
 ### DiziAsya kaynak adaylarını filtrele ve dosya kapanışını düzelt
 
