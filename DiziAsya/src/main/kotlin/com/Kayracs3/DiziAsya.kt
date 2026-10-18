@@ -221,13 +221,8 @@ class DiziAsya : MainAPI() {
                 val base = node.baseUri().ifBlank { mainUrl }
                 val rawUrl = absoluteUrl(candidate, base) ?: continue
 
-                // Keep the site's own Next.js image proxy instead of bypassing it to the
-                // origin URL, because the origin may require the site's image/CDN headers.
-                val rawPath = pathOf(rawUrl).lowercase(Locale.ROOT)
-                if (rawPath.endsWith("/_next/image") && rawUrl.contains("url=", true) &&
-                    isImageCandidateUrl(rawUrl)
-                ) return rawUrl
-
+                // Next.js' image optimizer URL can render as a blank poster in CloudStream.
+                // Use the original API/CDN image URL embedded in its "url" query parameter.
                 val normalized = normalizeImageUrl(rawUrl, base)
                 if (normalized != null && isImageCandidateUrl(normalized)) return normalized
                 if (isImageCandidateUrl(rawUrl)) return rawUrl
