@@ -599,29 +599,27 @@ class AsyaLuna : MainAPI() {
 
         val root = metadata?.optJSONObject("data") ?: metadata ?: return false
         var emitted = false
-        fun emit(url: String?, label: String, forceHls: Boolean = false) {
+        suspend fun emit(url: String?, label: String, forceHls: Boolean = false) {
             val mediaUrl = url?.trim().orEmpty()
             if (!mediaUrl.startsWith("http://", true) && !mediaUrl.startsWith("https://", true)) return
             if (isSubtitleUrl(mediaUrl)) return
             val hls = forceHls || mediaUrl.contains(".m3u8", true) || mediaUrl.contains(".m3u", true)
-            runCatching {
-                callback(
-                    newExtractorLink(
-                        source = "OK.ru",
-                        name = if (label.isBlank()) "OK.ru" else "OK.ru $label",
-                        url = mediaUrl,
-                        type = if (hls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                    ) {
-                        quality = qualityFrom("$label $mediaUrl")
-                        headers = mapOf(
-                            "User-Agent" to okHeaders.getValue("User-Agent"),
-                            "Referer" to videoUrl,
-                            "Origin" to "https://ok.ru"
-                        )
-                    }
-                )
-                emitted = true
-            }
+            callback(
+                newExtractorLink(
+                    source = "OK.ru",
+                    name = if (label.isBlank()) "OK.ru" else "OK.ru $label",
+                    url = mediaUrl,
+                    type = if (hls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                ) {
+                    quality = qualityFrom("$label $mediaUrl")
+                    headers = mapOf(
+                        "User-Agent" to okHeaders.getValue("User-Agent"),
+                        "Referer" to videoUrl,
+                        "Origin" to "https://ok.ru"
+                    )
+                }
+            )
+            emitted = true
         }
         for (key in listOf("hlsMasterPlaylistUrl", "hlsManifestUrl", "hlsUrl", "hls_url")) {
             val url = root.optString(key).orEmpty()

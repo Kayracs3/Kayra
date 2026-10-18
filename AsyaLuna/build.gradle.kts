@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 cloudstream {
     description = "AsyaLuna — Asya dizileri ve bölüm sağlayıcısı"
