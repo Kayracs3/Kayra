@@ -57,8 +57,7 @@ class DiziAsya : MainAPI() {
         "$mainUrl/diziler?category=komedi" to "Komedi",
         "$mainUrl/diziler?category=korku" to "Korku",
         "$mainUrl/diziler?category=romantizm" to "Romantik",        
-        "$mainUrl/filmler" to "Filmler",
-        "$mainUrl/programlar" to "Programlar"
+        "$mainUrl/filmler" to "Filmler"        
     )
 
     private fun normalize(value: String): String {
