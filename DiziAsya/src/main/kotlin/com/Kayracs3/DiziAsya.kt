@@ -351,6 +351,71 @@ class DiziAsya : MainAPI() {
     }
 
     private fun parseCards(document: Document): List<CatalogItem> {
+        // Build a URL-to-poster index independently from title links. Some catalog cards
+        // render the poster and title in separate anchors; parsing only the title anchor
+        // leaves that item without a poster, often affecting every card after a layout change.
+        val posterByUrl = LinkedHashMap<String, String>()
+        val posterByTitle = LinkedHashMap<String, String>()
+        val imageNodes = document.select(
+            "img, picture source, source[srcset], [data-poster], [data-background], " +
+                "[data-bg], [data-image], [data-img], [data-thumbnail], [data-srcset], " +
+                "[data-lazy-srcset], [style*=background]"
+        )
+
+        for (imageNode in imageNodes) {
+            val poster = posterFrom(imageNode) ?: continue
+            val imageTitle = cleanTitle(
+                imageNode.attr("alt").ifBlank { imageNode.attr("title") }
+            )
+            var targetUrl: String? = null
+            val owner = imageNode.closest("a[href]")
+            if (owner != null) {
+                val ownerRaw = absoluteUrl(
+                    owner.attr("href"),
+                    owner.baseUri().ifBlank { mainUrl }
+                )
+                if (ownerRaw != null && categoryFor(ownerRaw) != null &&
+                    pathParts(ownerRaw).size == 2
+                ) {
+                    targetUrl = canonicalUrl(ownerRaw)
+                }
+            }
+
+            // If the image itself is not inside its own anchor, associate it only with a
+            // nearby card that contains one unique show/movie URL. Never scan a whole grid.
+            if (targetUrl == null) {
+                var ancestor = imageNode.parent()
+                repeat(4) {
+                    val current = ancestor ?: return@repeat
+                    val tag = current.normalName().lowercase(Locale.ROOT)
+                    if (tag in setOf("html", "body", "main", "section", "nav", "ul", "ol")) {
+                        return@repeat
+                    }
+                    val urls = current.select("a[href]").mapNotNull { anchor ->
+                        val raw = absoluteUrl(
+                            anchor.attr("href"),
+                            anchor.baseUri().ifBlank { mainUrl }
+                        ) ?: return@mapNotNull null
+                        if (categoryFor(raw) == null || pathParts(raw).size != 2) {
+                            return@mapNotNull null
+                        }
+                        canonicalUrl(raw)
+                    }.distinct()
+                    if (urls.size > 1) return@repeat
+                    if (urls.size == 1) {
+                        targetUrl = urls.single()
+                        return@repeat
+                    }
+                    ancestor = current.parent()
+                }
+            }
+
+            if (targetUrl != null) posterByUrl.putIfAbsent(targetUrl!!, poster)
+            if (imageTitle.isNotBlank() && targetUrl != null) {
+                posterByTitle.putIfAbsent(normalize(imageTitle), poster)
+            }
+        }
+
         val results = LinkedHashMap<String, CatalogItem>()
         for (link in document.select("a[href]")) {
             val linkedUrl = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: continue
@@ -373,7 +438,11 @@ class DiziAsya : MainAPI() {
             val title = cardTitle(link, card, resultUrl)
             if (title.isBlank() || isGenericTitle(title)) continue
             if (normalize(title) in setOf("ilk", "son", "onceki", "sonraki", "sayfa")) continue
-            val poster = posterFrom(link) ?: posterFrom(card) ?: posterFromRelatedAncestors(link, resultUrl)
+            val poster = posterFrom(link)
+                ?: posterByUrl[resultUrl]
+                ?: posterByTitle[normalize(title)]
+                ?: posterFrom(card)
+                ?: posterFromRelatedAncestors(link, resultUrl)
             val cardText = card.text()
             val item = CatalogItem(
                 title, resultUrl, poster, yearFrom(title) ?: yearFrom(cardText),
