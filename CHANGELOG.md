@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:c02f2c0ddc3ddab3e243bb7197f3350a1dc738ef -->
+### Bump DiziAsya to version 21 for WebP poster proxy
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [c02f2c0](https://github.com/Kayracs3/Kayra/commit/c02f2c0ddc3ddab3e243bb7197f3350a1dc738ef)
+
+## 2026-10-18
+
+<!-- kayra-commit:e3bc63cf33ee746caeb4a41bc3b511beb694bb96 -->
+### Normalize DiziAsya Open Graph posters and force WebP
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [e3bc63c](https://github.com/Kayracs3/Kayra/commit/e3bc63cf33ee746caeb4a41bc3b511beb694bb96)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:bc2a29b90ea37ce24a2f23234815edcd67b169bd -->
 ### Avoid wildcard image formats for DiziAsya posters
 
