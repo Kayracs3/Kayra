@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:0af43b812aa91d35f5cf138ac4f5f20bf9b41ef6 -->
+### DiziAsya sürümünü 2 yap ve test kanalından çıkar
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [0af43b8](https://github.com/Kayracs3/Kayra/commit/0af43b812aa91d35f5cf138ac4f5f20bf9b41ef6)
+
+## 2026-10-18
+
+<!-- kayra-commit:615a058c18439da60806210a202e2cd807b00706 -->
+### DiziAsya afiş, oyuncu/tür ve video kaynaklarını düzelt
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [615a058](https://github.com/Kayracs3/Kayra/commit/615a058c18439da60806210a202e2cd807b00706)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:eca2a9d8486cc3c0b452898b9eaadd59fc354871 -->
 ### DiziAsya katalog, metadata, bölüm ve oynatıcı sağlayıcısını ekle
 
