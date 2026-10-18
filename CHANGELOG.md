@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:1a895f82b0d0db6436d4b56ee3f21fbf1e0bf3d1 -->
+### AsyaLuna bölüm ayrıştırıcısında değişken adını netleştir
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [1a895f8](https://github.com/Kayracs3/Kayra/commit/1a895f82b0d0db6436d4b56ee3f21fbf1e0bf3d1)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:5857de0a01e01b3d8dba40ae58e4ca82307b833e -->
 ### AsyaLuna bölüm bağlantılarını ve konu metni ayrıştırmasını düzelt
 
