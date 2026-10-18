@@ -339,7 +339,11 @@ class AsyaLuna : MainAPI() {
             normalized.startsWith("bolum sayisi") ||
             normalized.startsWith("sure") ||
             normalized.startsWith("durum") ||
-            normalized =    private fun parsePlot(document: Document): String? {
+            normalized == "tur" ||
+            normalized.startsWith("tur ")
+    }
+
+    private fun parsePlot(document: Document): String? {
         // The synopsis may be plain text immediately after a heading such as:
         // <h2><span style="color:#FFCC00;">Merry Berry Love 2026 Japon Konusu:</span></h2>
         // Read element siblings and raw text siblings, because it is not always wrapped in <p>.
