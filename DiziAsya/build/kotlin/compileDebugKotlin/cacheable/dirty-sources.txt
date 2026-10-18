@@ -1,0 +1,2 @@
+/home/runner/work/Kayra/Kayra/DiziAsya/src/main/kotlin/com/Kayracs3/DiziAsyaPlugin.kt
+/home/runner/work/Kayra/Kayra/DiziAsya/src/main/kotlin/com/Kayracs3/DiziAsya.kt
