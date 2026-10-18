@@ -27,6 +27,8 @@ class DiziAsya : MainAPI() {
     override val hasChromecastSupport = true
     override val hasDownloadSupport = true
     override var sequentialMainPage = true
+    override var sequentialMainPageDelay = 200L
+    override var sequentialMainPageScrollDelay = 250L
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Anime, TvType.Movie, TvType.AsianDrama)
 
     private val browserUa =
@@ -34,6 +36,13 @@ class DiziAsya : MainAPI() {
     private val requestHeaders = mapOf(
         "User-Agent" to browserUa,
         "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer" to "$mainUrl/"
+    )
+
+    private val posterRequestHeaders = mapOf(
+        "User-Agent" to browserUa,
+        "Accept" to "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
         "Referer" to "$mainUrl/"
     )
@@ -175,39 +184,61 @@ class DiziAsya : MainAPI() {
             url.contains("/images/", true) || url.contains("/uploads/", true)
     }
 
+    private fun isImageCandidateUrl(url: String): Boolean {
+        if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) return false
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        val path = uri.path.orEmpty().lowercase(Locale.ROOT)
+        val file = path.substringAfterLast('/')
+        if (file.endsWith(".svg") || file.endsWith(".gif") || file.endsWith(".ico")) return false
+        if (Regex("""(?i)(logo|avatar|placeholder|no[-_]?image|transparent|blank|favicon|pixel|spacer)""")
+                .containsMatchIn(file)
+        ) return false
+        // Image-specific attributes can contain extensionless CDN/API URLs.
+        return path.isNotBlank()
+    }
+
     private fun posterFrom(element: Element?): String? {
         if (element == null) return null
         val nodes = listOf(element) + element.select(
             "img, picture img, picture source, source[srcset], [data-poster], [data-background], " +
-                "[data-bg], [data-image], [data-img], [data-thumbnail], [data-srcset], [style*=background]"
+                "[data-bg], [data-image], [data-img], [data-thumbnail], [data-srcset], " +
+                "[data-lazy-srcset], [style*=background]"
         )
         for (node in nodes.distinct()) {
             for (attr in listOf(
                 "data-poster", "data-original", "data-original-src", "data-lazy-src", "data-lazy",
-                "data-lazyload", "data-src", "data-srcset", "data-thumb", "data-thumbnail",
-                "data-image", "data-image-url", "data-background-image", "data-img",
+                "data-lazyload", "data-src", "data-srcset", "data-lazy-srcset", "data-thumb",
+                "data-thumbnail", "data-image", "data-image-url", "data-background-image", "data-img",
                 "srcset", "src", "poster", "content"
             )) {
                 val raw = node.attr(attr).trim()
                 if (raw.isBlank() || raw.startsWith("data:", true)) continue
-                val candidate = if (attr.contains("srcset")) {
-                    raw.substringBefore(',').trim().substringBefore(' ')
+                val candidate = if (attr.contains("srcset", true)) {
+                    raw.split(',').maxByOrNull { part ->
+                        Regex("""(\d+)(?:w|x)""").find(part)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+                    }?.trim()?.substringBefore(' ').orEmpty()
                 } else raw
                 val base = node.baseUri().ifBlank { mainUrl }
                 val rawUrl = absoluteUrl(candidate, base) ?: continue
-                val url = normalizeImageUrl(rawUrl, base) ?: continue
-                // Prefer the unwrapped original image URL, but keep Next.js image-proxy
-                // URLs when the original source has no recognizable file extension.
-                if (isUsablePoster(url)) return url
-                if (isUsablePoster(rawUrl)) return rawUrl
+
+                // Keep the site's own Next.js image proxy instead of bypassing it to the
+                // origin URL, because the origin may require the site's image/CDN headers.
+                val rawPath = pathOf(rawUrl).lowercase(Locale.ROOT)
+                if (rawPath.endsWith("/_next/image") && rawUrl.contains("url=", true) &&
+                    isImageCandidateUrl(rawUrl)
+                ) return rawUrl
+
+                val normalized = normalizeImageUrl(rawUrl, base)
+                if (normalized != null && isImageCandidateUrl(normalized)) return normalized
+                if (isImageCandidateUrl(rawUrl)) return rawUrl
             }
             val base = node.baseUri().ifBlank { mainUrl }
-            val bg = Regex("""(?i)url\(\s*['"]?([^)'" ]+)""")
-                .find(node.attr("style"))?.groupValues?.getOrNull(1)
+            val bg = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
+                .find(node.attr("style"))?.groupValues?.getOrNull(1)?.trim()
             val rawBgUrl = absoluteUrl(bg, base)
-            val bgUrl = normalizeImageUrl(bg, base)
-            if (bgUrl != null && isUsablePoster(bgUrl)) return bgUrl
-            if (rawBgUrl != null && isUsablePoster(rawBgUrl)) return rawBgUrl
+            val normalizedBg = normalizeImageUrl(rawBgUrl, base)
+            if (normalizedBg != null && isImageCandidateUrl(normalizedBg)) return normalizedBg
+            if (rawBgUrl != null && isImageCandidateUrl(rawBgUrl)) return rawBgUrl
         }
         return null
     }
@@ -348,47 +379,89 @@ class DiziAsya : MainAPI() {
         if (type == TvType.Movie) {
             newMovieSearchResponse(title, url, TvType.Movie) {
                 posterUrl = this@toSearchResponse.poster
+                posterHeaders = posterRequestHeaders
                 year = this@toSearchResponse.year
                 score = this@toSearchResponse.score
             }
         } else {
             newTvSeriesSearchResponse(title, url, type) {
                 posterUrl = this@toSearchResponse.poster
+                posterHeaders = posterRequestHeaders
                 year = this@toSearchResponse.year
                 score = this@toSearchResponse.score
             }
         }
 
     private fun pageUrl(base: String, page: Int): String {
-        if (page <= 1) return base
+        if (page <= 1) return base.substringBefore('#')
         val clean = base.substringBefore('#')
         val path = clean.substringBefore('?')
         val query = clean.substringAfter('?', "")
-        val params = query.split('&').filter { it.isNotBlank() && !it.startsWith("page=") }
-        return path + "?" + (params + "page=" + page).joinToString("&")
+        val params = query.split('&')
+            .filter { it.isNotBlank() && !it.substringBefore('=').equals("page", true) }
+        return path + "?" + (params + "page=$page").joinToString("&")
     }
 
-    private fun hasNextPage(document: Document, page: Int): Boolean {
-        val next = page + 1
-        for (link in document.select("a[href]")) {
-            val raw = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: continue
-            val label = normalize(link.text() + " " + link.attr("aria-label") + " " + link.attr("rel"))
-            if (label.contains("sonraki") || label == "next" || link.attr("rel").equals("next", true)) return true
-            val queryPage = Regex("""(?:[?&])page=(\d+)\b""").find(raw)?.groupValues?.getOrNull(1)?.toIntOrNull()
-            val pathPage = Regex("""/(?:page|sayfa)/(\d+)/?$""").find(pathOf(raw))?.groupValues?.getOrNull(1)?.toIntOrNull()
-            if (queryPage == next || pathPage == next) return true
+    private fun pageNumberFromUrl(rawUrl: String): Int? {
+        val url = absoluteUrl(rawUrl, mainUrl) ?: return null
+        val query = runCatching { URI(url).rawQuery.orEmpty() }.getOrDefault("")
+        val queryPage = query.split('&').firstNotNullOfOrNull { part ->
+            if (!part.substringBefore('=').equals("page", true)) null
+            else part.substringAfter('=', "").toIntOrNull()
         }
-        return false
+        if (queryPage != null) return queryPage
+        return Regex("""(?i)/(?:page|sayfa)/(\d+)/?$""")
+            .find(pathOf(url))?.groupValues?.getOrNull(1)?.toIntOrNull()
+    }
+
+    private fun totalItemCount(document: Document): Int? {
+        val raw = Regex("""(?i)\b([\d., ]+)\s+icerik\b""")
+            .find(document.text())?.groupValues?.getOrNull(1) ?: return null
+        return raw.replace(Regex("""[.,\s]"""), "").toIntOrNull()
+    }
+
+    private fun hasNextPage(document: Document, page: Int, itemCount: Int): Boolean {
+        if (itemCount <= 0 || page >= 250) return false
+        val links = document.select("a[href]")
+        val pageNumbers = links.mapNotNull { link ->
+            val fullUrl = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: return@mapNotNull null
+            pageNumberFromUrl(fullUrl)
+        }.distinct()
+
+        if (pageNumbers.any { it > page }) return true
+
+        if (links.any { link ->
+                val fullUrl = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: return@any false
+                val label = normalize(link.text() + " " + link.attr("aria-label") + " " +
+                    link.attr("title") + " " + link.attr("rel"))
+                val isNextControl = link.attr("rel").equals("next", true) ||
+                    link.classNames().any { it.equals("next", true) } ||
+                    label.contains("sonraki") || label == "next"
+                isNextControl && (pageNumberFromUrl(fullUrl)?.let { it > page } ?: true)
+            }) return true
+
+        // The current site defaults to 18 items per page. Its page count is shown in the
+        // HTML, so still permit scrolling if numeric pagination controls are re-rendered.
+        val total = totalItemCount(document)
+        if (total != null) return page < (total + 17) / 18
+
+        // Final fallback: let CloudStream request the next URL; an empty response stops it.
+        return true
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val requestedUrl = pageUrl(request.data, page)
         val response = runCatching {
-            app.get(pageUrl(request.data, page), headers = requestHeaders, referer = "$mainUrl/", allowRedirects = true)
+            app.get(requestedUrl, headers = requestHeaders, referer = "$mainUrl/", allowRedirects = true)
         }.getOrNull()
         val document = response?.takeIf { it.isSuccessful }?.document
             ?: return newHomePageResponse(request.name, emptyList<SearchResponse>(), hasNext = false)
         val items = parseCards(document).map { it.toSearchResponse() }.distinctBy { it.url }
-        return newHomePageResponse(request.name, items, hasNext = hasNextPage(document, page))
+        return newHomePageResponse(
+            request.name,
+            items,
+            hasNext = hasNextPage(document, page, items.size)
+        )
     }
 
     private fun titleMatches(query: String, title: String): Boolean {
@@ -745,6 +818,7 @@ class DiziAsya : MainAPI() {
                     this.season = season
                     episode = number
                     this.posterUrl = poster
+                    this.posterHeaders = posterRequestHeaders
                 }
             }
         }
@@ -811,6 +885,7 @@ class DiziAsya : MainAPI() {
                     this.season = season
                     episode = number
                     this.posterUrl = poster
+                    this.posterHeaders = posterRequestHeaders
                 }
             }
         }
@@ -848,6 +923,7 @@ class DiziAsya : MainAPI() {
         if (kind == "film") {
             return newMovieLoadResponse(title, targetUrl, TvType.Movie, targetUrl) {
                 posterUrl = poster
+                posterHeaders = posterRequestHeaders
                 this.year = year
                 this.plot = plot
                 this.score = score
@@ -861,6 +937,7 @@ class DiziAsya : MainAPI() {
         val episodes = parseEpisodes(document, targetUrl, poster)
         return newTvSeriesLoadResponse(title, targetUrl, type, episodes) {
             posterUrl = poster
+            posterHeaders = posterRequestHeaders
             this.year = year
             this.plot = plot
             this.score = score
