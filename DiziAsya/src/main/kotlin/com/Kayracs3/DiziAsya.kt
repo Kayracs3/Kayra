@@ -161,12 +161,35 @@ class DiziAsya : MainAPI() {
         val uri = runCatching { URI(resolved) }.getOrNull() ?: return resolved
         if (!uri.path.orEmpty().contains("/_next/image")) return resolved
 
+        // Extract the real source URL from Next.js' image optimizer endpoint. If extraction
+        // fails, reject the optimizer URL rather than letting CloudStream display a blank card.
         val encodedImage = uri.rawQuery.orEmpty().split('&')
-            .firstOrNull { it.startsWith("url=", true) }
-            ?.substringAfter('=') ?: return resolved
+            .firstOrNull { it.substringBefore('=').equals("url", true) }
+            ?.substringAfter('=', "")
+            ?.takeIf { it.isNotBlank() } ?: return null
         val decodedImage = runCatching { URLDecoder.decode(encodedImage, "UTF-8") }
-            .getOrNull()?.takeIf { it.isNotBlank() } ?: return resolved
-        return absoluteUrl(decodedImage, base) ?: absoluteUrl(decodedImage, resolved) ?: resolved
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        val imageUrl = absoluteUrl(decodedImage, base) ?: return null
+        val imageUri = runCatching { URI(imageUrl) }.getOrNull() ?: return null
+        if (imageUri.host.isNullOrBlank() || imageUri.path.isNullOrBlank()) return null
+        return imageUrl
+    }
+
+    private fun bestSrcsetUrl(raw: String): String? {
+        // Poster filenames can themselves contain values like "15x09.webp". Read resolution
+        // only from the descriptor after the URL, not from a number inside the filename.
+        return raw.split(',')
+            .mapNotNull { entry ->
+                val parts = entry.trim().split(Regex("\\s+"), limit = 2)
+                val url = parts.firstOrNull().orEmpty()
+                if (url.isBlank()) return@mapNotNull null
+                val descriptor = parts.getOrNull(1).orEmpty().trim()
+                val size = Regex("""^(\d+)(?:w|x)$""")
+                    .matchEntire(descriptor)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+                url to size
+            }
+            .maxByOrNull { it.second }
+            ?.first
     }
 
     private fun isUsablePoster(url: String): Boolean {
@@ -189,6 +212,8 @@ class DiziAsya : MainAPI() {
         val uri = runCatching { URI(url) }.getOrNull() ?: return false
         val path = uri.path.orEmpty().lowercase(Locale.ROOT)
         val file = path.substringAfterLast('/')
+        // Do not accept an unresolved Next.js optimizer endpoint as if it were an image.
+        if (path.endsWith("/_next/image")) return false
         if (file.endsWith(".svg") || file.endsWith(".gif") || file.endsWith(".ico")) return false
         if (Regex("""(?i)(logo|avatar|placeholder|no[-_]?image|transparent|blank|favicon|pixel|spacer)""")
                 .containsMatchIn(file)
@@ -214,9 +239,7 @@ class DiziAsya : MainAPI() {
                 val raw = node.attr(attr).trim()
                 if (raw.isBlank() || raw.startsWith("data:", true)) continue
                 val candidate = if (attr.contains("srcset", true)) {
-                    raw.split(',').maxByOrNull { part ->
-                        Regex("""(\d+)(?:w|x)""").find(part)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
-                    }?.trim()?.substringBefore(' ').orEmpty()
+                    bestSrcsetUrl(raw).orEmpty()
                 } else raw
                 val base = node.baseUri().ifBlank { mainUrl }
                 val rawUrl = absoluteUrl(candidate, base) ?: continue
