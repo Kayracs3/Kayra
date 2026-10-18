@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:4b82392dd545a410f3821a66af914328edabdc8e -->
+### Bump DiziAsya to version 7 for card-title fix
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [4b82392](https://github.com/Kayracs3/Kayra/commit/4b82392dd545a410f3821a66af914328edabdc8e)
+
+## 2026-10-18
+
+<!-- kayra-commit:29d5b19421fb09142d0c28c09e1fbcb3f52d9bf3 -->
+### Handle numeric DiziAsya slugs safely
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [29d5b19](https://github.com/Kayracs3/Kayra/commit/29d5b19421fb09142d0c28c09e1fbcb3f52d9bf3)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:a2100fa9afe73c9f1ad53ccde1a36b3a59674452 -->
 ### Fix DiziAsya titles using each item's own URL slug
 
