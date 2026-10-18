@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:ac73f69421646a027dcbec2c7dcb571cc7c1e5ce -->
+### AsyaLuna konusu, bölümleri ve OK.ru oynatımını düzelt
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [ac73f69](https://github.com/Kayracs3/Kayra/commit/ac73f69421646a027dcbec2c7dcb571cc7c1e5ce)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:54785388f0a2495cf476b1fb559f7fe238330dd7 -->
 ### AsyaLuna sayfalama regex düzeltmesi
 
