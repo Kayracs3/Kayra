@@ -178,25 +178,36 @@ class DiziAsya : MainAPI() {
     private fun posterFrom(element: Element?): String? {
         if (element == null) return null
         val nodes = listOf(element) + element.select(
-            "img, picture img, [data-poster], [data-background], [data-bg], [style*=background]"
+            "img, picture img, picture source, source[srcset], [data-poster], [data-background], " +
+                "[data-bg], [data-image], [data-img], [data-thumbnail], [data-srcset], [style*=background]"
         )
         for (node in nodes.distinct()) {
             for (attr in listOf(
-                "data-poster", "data-original", "data-lazy-src", "data-src",
-                "data-srcset", "srcset", "data-image", "data-nimg", "src", "content"
+                "data-poster", "data-original", "data-original-src", "data-lazy-src", "data-lazy",
+                "data-lazyload", "data-src", "data-srcset", "data-thumb", "data-thumbnail",
+                "data-image", "data-image-url", "data-background-image", "data-img",
+                "srcset", "src", "poster", "content"
             )) {
                 val raw = node.attr(attr).trim()
                 if (raw.isBlank() || raw.startsWith("data:", true)) continue
                 val candidate = if (attr.contains("srcset")) {
                     raw.substringBefore(',').trim().substringBefore(' ')
                 } else raw
-                val url = normalizeImageUrl(candidate, node.baseUri().ifBlank { mainUrl }) ?: continue
+                val base = node.baseUri().ifBlank { mainUrl }
+                val rawUrl = absoluteUrl(candidate, base) ?: continue
+                val url = normalizeImageUrl(rawUrl, base) ?: continue
+                // Prefer the unwrapped original image URL, but keep Next.js image-proxy
+                // URLs when the original source has no recognizable file extension.
                 if (isUsablePoster(url)) return url
+                if (isUsablePoster(rawUrl)) return rawUrl
             }
-            val bg = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
+            val base = node.baseUri().ifBlank { mainUrl }
+            val bg = Regex("""(?i)url\(\s*['"]?([^)'" ]+)""")
                 .find(node.attr("style"))?.groupValues?.getOrNull(1)
-            val bgUrl = normalizeImageUrl(bg, node.baseUri().ifBlank { mainUrl })
+            val rawBgUrl = absoluteUrl(bg, base)
+            val bgUrl = normalizeImageUrl(bg, base)
             if (bgUrl != null && isUsablePoster(bgUrl)) return bgUrl
+            if (rawBgUrl != null && isUsablePoster(rawBgUrl)) return rawBgUrl
         }
         return null
     }
@@ -267,13 +278,23 @@ class DiziAsya : MainAPI() {
             if (normalize(title) in setOf("ilk", "son", "onceki", "sonraki", "sayfa")) continue
             val poster = posterFrom(link) ?: posterFrom(card)
             val cardText = card.text()
-            results.putIfAbsent(
-                resultUrl,
-                CatalogItem(
-                    title, resultUrl, poster, yearFrom(title) ?: yearFrom(cardText),
-                    scoreFrom(cardText), type
-                )
+            val item = CatalogItem(
+                title, resultUrl, poster, yearFrom(title) ?: yearFrom(cardText),
+                scoreFrom(cardText), type
             )
+            val existing = results[resultUrl]
+            if (existing == null) {
+                results[resultUrl] = item
+            } else {
+                // A text-only anchor may appear before the poster anchor for the same URL.
+                // Merge later metadata instead of permanently retaining a missing poster.
+                results[resultUrl] = existing.copy(
+                    poster = existing.poster ?: item.poster,
+                    year = existing.year ?: item.year,
+                    score = existing.score ?: item.score,
+                    title = if (isGenericTitle(existing.title) && !isGenericTitle(item.title)) item.title else existing.title
+                )
+            }
         }
         return results.values.toList()
     }
@@ -682,6 +703,73 @@ class DiziAsya : MainAPI() {
                 }
             }
         }
+        // Some pages serialize episode links in Next.js state instead of real anchors.
+        // Scan the source too, while validating every candidate against this series.
+        val source = normalizeEmbeddedText(document.html())
+        val sourceEpisodePattern = Regex("""(?i)/(?:dizi|anime|program)/[a-z0-9-]+/sezon-\d+-bolum-\d+""")
+        for (match in sourceEpisodePattern.findAll(source)) {
+            val episodeUrl = absoluteUrl(match.value, base) ?: continue
+            val epParts = pathParts(episodeUrl)
+            if (epParts.size < 3 || epParts[0] != root || epParts[1] != slug) continue
+            val episodeMatch = pattern.find(pathOf(episodeUrl).trimEnd('/')) ?: continue
+            val season = episodeMatch.groupValues[1].toIntOrNull() ?: continue
+            val number = episodeMatch.groupValues[2].toIntOrNull() ?: continue
+            if (season !in 1..99 || number !in 1..2000) continue
+            episodes.putIfAbsent("$season-$number", newEpisode(episodeUrl.substringBefore('#')) {
+                name = "$season. Sezon $number. Bölüm"
+                this.season = season
+                episode = number
+                this.posterUrl = poster
+            })
+        }
+
+        // Some listings expose only the first batch (commonly 18 entries) although
+        // the detail page explicitly states the full count, e.g. "1. Sezon 47 Bölüm".
+        // Use that declared count to fill only missing canonical episode routes.
+        val pageText = document.text().replace(Regex("""\s+"""), " ")
+        val declaredSeasonCounts = LinkedHashMap<Int, Int>()
+        val seasonCountPattern = Regex(
+            """(?i)\b(\d{1,2})\s*\.?\s*(?:sezon|season)\s+(\d{1,3})\s*(?:bölüm|bolum|episodes?)\b"""
+        )
+        for (match in seasonCountPattern.findAll(pageText)) {
+            val season = match.groupValues.getOrNull(1)?.toIntOrNull() ?: continue
+            val count = match.groupValues.getOrNull(2)?.toIntOrNull() ?: continue
+            if (season in 1..99 && count in 1..2000) {
+                declaredSeasonCounts[season] = maxOf(declaredSeasonCounts[season] ?: 0, count)
+            }
+        }
+
+        if (declaredSeasonCounts.isEmpty()) {
+            val seasonLabels = Regex("""(?i)\b(\d{1,2})\s*\.?\s*(?:sezon|season)\b""")
+                .findAll(pageText).mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }.toSet()
+            val seasonsWithLinks = episodes.values.mapNotNull { it.season }.toSet()
+            val knownSeasons = seasonLabels + seasonsWithLinks
+            // A global count can be safely assigned only when this is a single-season show.
+            if (knownSeasons.size <= 1) {
+                val totalCount = Regex("""(?i)\b(\d{1,3})\s*(?:bölüm|bolum|episodes?)\b""")
+                    .find(pageText)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                val season = knownSeasons.firstOrNull() ?: 1
+                if (totalCount != null && totalCount in 1..2000) {
+                    declaredSeasonCounts[season] = totalCount
+                }
+            }
+        }
+
+        for ((season, count) in declaredSeasonCounts) {
+            for (number in 1..count) {
+                val key = "$season-$number"
+                if (episodes.containsKey(key)) continue
+                val episodeUrl = "$mainUrl/$root/$slug/sezon-$season-bolum-$number"
+                if (!isEpisodeUrl(episodeUrl)) continue
+                episodes[key] = newEpisode(episodeUrl) {
+                    name = "$season. Sezon $number. Bölüm"
+                    this.season = season
+                    episode = number
+                    this.posterUrl = poster
+                }
+            }
+        }
+
         return episodes.values.sortedWith(compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: 0 })
     }
 
