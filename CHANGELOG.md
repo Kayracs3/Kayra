@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:d3f93bac791a38460cda7feea179ca5410fbef07 -->
+### Bump DiziAsya version for poster title fallback fix
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [d3f93ba](https://github.com/Kayracs3/Kayra/commit/d3f93bac791a38460cda7feea179ca5410fbef07)
+
+## 2026-10-18
+
+<!-- kayra-commit:466d8a821e762d4fdf238833323cf539a1b71ed7 -->
+### Fix DiziAsya poster title fallback mapping
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [466d8a8](https://github.com/Kayracs3/Kayra/commit/466d8a821e762d4fdf238833323cf539a1b71ed7)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:b4856d71cbfff3aef6b9b62591989dfe23dee696 -->
 ### Bump DiziAsya version for poster card mapping
 
