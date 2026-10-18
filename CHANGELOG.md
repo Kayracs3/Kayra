@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:5dbe93e2414a6540c9fa502fe502059e69150b50 -->
+### Bump DiziAsya version to 9
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [5dbe93e](https://github.com/Kayracs3/Kayra/commit/5dbe93e2414a6540c9fa502fe502059e69150b50)
+
+## 2026-10-18
+
+<!-- kayra-commit:d2a4c116c11deab7a6ac3ff2cf7d49e1b561a31b -->
+### Fix DiziAsya poster lookup and invalid IMDb score parsing
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [d2a4c11](https://github.com/Kayracs3/Kayra/commit/d2a4c116c11deab7a6ac3ff2cf7d49e1b561a31b)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:37419816c902295209fc4157b153ccaec9763e41 -->
 ### Bump DiziAsya version to 8
 
