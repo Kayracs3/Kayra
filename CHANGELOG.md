@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:54785388f0a2495cf476b1fb559f7fe238330dd7 -->
+### AsyaLuna sayfalama regex düzeltmesi
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [5478538](https://github.com/Kayracs3/Kayra/commit/54785388f0a2495cf476b1fb559f7fe238330dd7)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:ed6aae2827bf9debe2f057be8e5422b23d9ec938 -->
 ### AsyaLuna kategori başlıklarını ve sayfalama kontrolünü düzelt
 
