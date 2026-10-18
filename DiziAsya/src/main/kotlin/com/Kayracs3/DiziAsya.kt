@@ -221,8 +221,9 @@ class DiziAsya : MainAPI() {
         // first; DiziAsya uses readable slugs such as /dizi/sacred-jewel.
         val slugTitle = titleFromUrl(url)
         val normalizedSlug = normalize(slugTitle)
+        val slugIsNumericId = normalizedSlug.length >= 4 && normalizedSlug.all { it.isDigit() }
         val slugIsUseful = !isGenericTitle(slugTitle) &&
-            !normalizedSlug.matches(Regex("""\\d{4,}""")) &&
+            !slugIsNumericId &&
             !normalizedSlug.matches(Regex("""[a-f0-9]{12,}"""))
         if (slugIsUseful) return slugTitle
 
