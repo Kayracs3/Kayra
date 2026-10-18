@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:260c0df4fcdff09f682d2c19ef0499eda33aee21 -->
+### Fix DiziAsya synopsis parsing and source discovery
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [260c0df](https://github.com/Kayracs3/Kayra/commit/260c0df4fcdff09f682d2c19ef0499eda33aee21)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:5b8057468489ea0ec030a69d03a0d41ddda42871 -->
 ### DiziAsya oyuncu listesi tip uyuşmazlığını düzelt
 
