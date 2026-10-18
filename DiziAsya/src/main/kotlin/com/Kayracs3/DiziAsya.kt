@@ -1131,9 +1131,13 @@ class DiziAsya : MainAPI() {
                 }
             }
             .take(4)
-        for (player in fastPlayers) {
-            harvestPlayerPage(player)
-            if (resolvedPlayerPages.size >= 2) break
+        if (directMedia.isEmpty()) {
+            for (player in fastPlayers) {
+                harvestPlayerPage(player)
+                // Once a playable stream URL is found, do not block startup while fetching
+                // slower alternative providers; the direct URL is returned immediately below.
+                if (directMedia.isNotEmpty()) break
+            }
         }
         if (directMedia.isNotEmpty()) {
             for (url in directMedia) emitDirectMedia(url)
@@ -1181,8 +1185,9 @@ class DiziAsya : MainAPI() {
         // The HTML fast path did not find a direct stream. Retry any player URLs discovered
         // in the route chunks, still with a strict total page-fetch cap.
         for (player in players.toList().take(12)) {
-            if (playerPagesRead >= 6 || resolvedPlayerPages.size >= 2) break
+            if (playerPagesRead >= 6) break
             harvestPlayerPage(player)
+            if (directMedia.isNotEmpty()) break
         }
         if (directMedia.isNotEmpty()) {
             for (url in directMedia) emitDirectMedia(url)
@@ -1193,6 +1198,7 @@ class DiziAsya : MainAPI() {
         // Last resort: query only a few same-site source/API endpoints when player pages failed.
         val visitedApi = HashSet<String>()
         for (endpoint in apiCandidates.take(3)) {
+            if (directMedia.isNotEmpty()) break
             if (!visitedApi.add(endpoint)) continue
             val apiResponse = runCatching {
                 app.get(
