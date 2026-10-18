@@ -2,6 +2,23 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:37419816c902295209fc4157b153ccaec9763e41 -->
+### Bump DiziAsya version to 8
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [3741981](https://github.com/Kayracs3/Kayra/commit/37419816c902295209fc4157b153ccaec9763e41)
+
+## 2026-10-18
+
+<!-- kayra-commit:5858cca33115fb60fbc0265f25ee258806d76245 -->
+### Fix DiziAsya poster fallbacks and missing episodes
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [5858cca](https://github.com/Kayracs3/Kayra/commit/5858cca33115fb60fbc0265f25ee258806d76245)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:832c20d98202ca9529ac03659f4301e1e3064273 -->
 ### Update mainPage by removing 'Son Eklenenler' entry
 
