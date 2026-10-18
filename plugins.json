@@ -129,10 +129,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=diziasya.com&sz=%size%",
-        "fileHash": "sha256-79da69006cef404f73ca65e698f3d09b5805da0e7857e5b7eb02f5b3cadd892a",
+        "fileHash": "sha256-d5d99c4687b6078f4aa2b01c90a41e5d03d13236881c7377559d496d139f6a0c",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 52729,
+        "fileSize": 54748,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -143,7 +143,7 @@
             "Anime",
             "Movie"
         ],
-        "version": 2,
+        "version": 3,
         "internalName": "DiziAsya",
         "description": "DiziAsya \u2014 Kore, \u00c7in, Japon dizileri ve animeler",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziAsya.cs3",
