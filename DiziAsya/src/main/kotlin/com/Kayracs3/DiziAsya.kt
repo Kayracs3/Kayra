@@ -212,12 +212,57 @@ class DiziAsya : MainAPI() {
         return null
     }
 
+    /**
+     * Some card layouts render the cover in a sibling element, outside the title anchor.
+     * Walk only nearby ancestors and stop before a list/grid containing several different
+     * show links, so we don't accidentally assign another show's poster.
+     */
+    private fun posterFromRelatedAncestors(link: Element, expectedUrl: String): String? {
+        val expected = canonicalUrl(expectedUrl)
+        var ancestor = link.parent()
+        repeat(5) {
+            val current = ancestor ?: return null
+            val tag = current.normalName().lowercase(Locale.ROOT)
+            if (tag in setOf("html", "body", "main", "section", "nav", "ul", "ol")) return null
+
+            val itemUrls = current.select("a[href]").mapNotNull { anchor ->
+                val raw = absoluteUrl(anchor.attr("href"), anchor.baseUri().ifBlank { mainUrl }) ?: return@mapNotNull null
+                if (categoryFor(raw) == null) return@mapNotNull null
+                canonicalUrl(raw)
+            }.distinct()
+            // More than one title target means this is a list/grid, not one item's card.
+            if (itemUrls.size > 1) return null
+            if (itemUrls.isNotEmpty() && itemUrls.single() != expected) return null
+
+            val imageNodes = current.select(
+                "img, picture source, source[srcset], [data-poster], [data-background], " +
+                    "[data-bg], [data-image], [data-img], [data-thumbnail], [style*=background]"
+            )
+            for (imageNode in imageNodes) {
+                val owner = imageNode.closest("a[href]")
+                if (owner != null) {
+                    val ownerRaw = absoluteUrl(owner.attr("href"), owner.baseUri().ifBlank { mainUrl }) ?: continue
+                    if (categoryFor(ownerRaw) != null && canonicalUrl(ownerRaw) != expected) continue
+                }
+                posterFrom(imageNode)?.let { return it }
+            }
+            ancestor = current.parent()
+        }
+        return null
+    }
+
     private fun yearFrom(text: String): Int? =
         Regex("""\b(?:19|20|21)\d{2}\b""").find(text)?.value?.toIntOrNull()
 
     private fun scoreFrom(text: String): Score? {
-        val value = Regex("""(?<!\d)(10(?:[.,]0)?|[0-9](?:[.,]\d+)?)(?:\s*\(\d+\))?""")
-            .findAll(text).mapNotNull { it.groupValues.getOrNull(1)?.replace(',', '.')?.toDoubleOrNull() }
+        // Never infer IMDb from an arbitrary number in a title/card (year, season,
+        // episode number, platform score, view count, etc.). The source must label it.
+        val patterns = listOf(
+            Regex("""(?i)\bIMDb(?:\s*(?:puan[ıi]|rating))?\s*[:：]?\s*(10(?:[.,]0)?|[0-9](?:[.,]\d+)?)\s*(?:/\s*10)?\b"""),
+            Regex("""(?i)\bIMDB(?:\s*(?:puan[ıi]|rating))?\s*[:：]?\s*(10(?:[.,]0)?|[0-9](?:[.,]\d+)?)\s*(?:/\s*10)?\b""")
+        )
+        val value = patterns.asSequence()
+            .mapNotNull { it.find(text)?.groupValues?.getOrNull(1)?.replace(',', '.')?.toDoubleOrNull() }
             .firstOrNull { it in 0.0..10.0 } ?: return null
         return Score.from10(value.toString())
     }
@@ -276,7 +321,7 @@ class DiziAsya : MainAPI() {
             val title = cardTitle(link, card, resultUrl)
             if (title.isBlank() || isGenericTitle(title)) continue
             if (normalize(title) in setOf("ilk", "son", "onceki", "sonraki", "sayfa")) continue
-            val poster = posterFrom(link) ?: posterFrom(card)
+            val poster = posterFrom(link) ?: posterFrom(card) ?: posterFromRelatedAncestors(link, resultUrl)
             val cardText = card.text()
             val item = CatalogItem(
                 title, resultUrl, poster, yearFrom(title) ?: yearFrom(cardText),
