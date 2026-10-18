@@ -330,46 +330,102 @@ class DiziAsya : MainAPI() {
         return all.values.toList()
     }
 
+    private fun plotCandidate(raw: String?): String? {
+        val text = raw.orEmpty()
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        if (text.length < 45) return null
+
+        val n = normalize(text)
+        val boilerplate = listOf(
+            "videonun altinda bulunan butonlarla kaynak secebilirsiniz",
+            "videolarin altinda bulunan butonlarla kaynak secebilirsiniz",
+            "diger kaynaklar disaridan",
+            "reklam engelleyici ile kapatabilirsiniz",
+            "bu film icin henuz video kaynagi eklenmemis",
+            "bu bolumun",
+            "yayinlanmasi planlanmaktadir",
+            "kore cin ve japon dizileri ile populer animeleri turkce altyazili izleyin",
+            "romantizm dram ve aksiyon dolu yuzlerce yapimla asya kulturu",
+            "diziasya guncel asya dizilerini",
+            "diziasya sevdiginiz asya dizilerini bir araya getiren bir platformdur",
+            "tum icerikler video paylasim siteleri uzerinden sunulmaktadir",
+            "telif hakki konularinda hassasiz",
+            "yeni bolumler eklendikce guncellenir",
+            "bizi takip et",
+            "yorum yaz seviye atla",
+            "giris yap uye ol"
+        )
+        if (boilerplate.any { n.contains(it) }) return null
+        if (n.contains("oyuncular") && n.contains("bolumler") && text.length > 180) return null
+        return text.take(6000)
+    }
+
     private fun parsePlot(document: Document): String? {
+        // Prefer explicit synopsis/plot blocks. Player instructions and site-wide footer
+        // copy are filtered by plotCandidate so they can never become the synopsis.
         val headings = document.select("h1,h2,h3,h4,h5,h6,strong,b")
             .filter { normalize(it.text()).contains("konusu") || normalize(it.text()).contains("ozet") }
         for (heading in headings) {
             var branch: Node? = heading
             var depth = 0
-            while (branch != null && depth < 5) {
+            while (branch != null && depth < 4) {
                 var sibling: Node? = branch.nextSibling()
                 var scanned = 0
                 val found = ArrayList<String>()
                 while (sibling != null && scanned < 20) {
                     if (sibling is Element) {
                         val element = sibling
-                        val text = element.text().trim()
-                        val n = normalize(text)
+                        val n = normalize(element.text())
                         if (element.tagName().matches(Regex("(?i)h[1-6]"))) break
                         if (n.startsWith("oyuncular") || n.startsWith("bolumler") ||
-                            n.startsWith("benzer diziler") || n.startsWith("yorumlar")
+                            n.startsWith("benzer diziler") || n.startsWith("yorumlar") ||
+                            n.startsWith("videonun altinda")
                         ) break
-                        if (text.length >= 35 && !n.contains("reklam engelleyici")) found.add(text)
+                        plotCandidate(element.text())?.let { found.add(it) }
                     } else if (sibling is TextNode) {
-                        val text = sibling.text().trim()
-                        if (text.length >= 35 && !normalize(text).contains("reklam engelleyici")) found.add(text)
+                        plotCandidate(sibling.text())?.let { found.add(it) }
                     }
                     sibling = sibling.nextSibling()
                     scanned++
                 }
-                if (found.isNotEmpty()) return found.distinct().joinToString("\n\n").take(6000)
+                if (found.isNotEmpty()) return found.distinct().maxByOrNull { it.length }
                 branch = branch.parent()
                 depth++
             }
         }
-        val paragraph = document.select(
-            "main p, article p, [class*=description], [class*=synopsis], [class*=overview], .prose p"
-        ).asSequence().map { it.text().trim() }
-            .firstOrNull { it.length >= 45 && !normalize(it).contains("reklam engelleyici") }
-        if (!paragraph.isNullOrBlank()) return paragraph.take(6000)
-        val meta = document.selectFirst("meta[property=og:description], meta[name=description]")
-            ?.attr("content")?.trim()
-        return meta?.takeIf { it.length >= 35 }?.take(6000)
+
+        val selectors = listOf(
+            "[class*=synopsis]", "[class*=overview]", "[class*=plot]",
+            "[data-testid*=description]", ".prose", "article p", "main p",
+            "[class*=description]"
+        )
+        val visibleCandidates = selectors.flatMap { selector ->
+            document.select(selector).mapNotNull { plotCandidate(it.text()) }
+        }
+        if (visibleCandidates.isNotEmpty()) {
+            return visibleCandidates.distinct().maxByOrNull { it.length }
+        }
+
+        // Some pages expose the real synopsis only through their SEO metadata.
+        val metaCandidates = document.select(
+            "meta[property=og:description], meta[name=description], meta[name=twitter:description]"
+        ).mapNotNull { plotCandidate(it.attr("content")) }
+        if (metaCandidates.isNotEmpty()) return metaCandidates.maxByOrNull { it.length }
+
+        // Last fallback for Next.js pages which serialize metadata into JSON-LD.
+        val jsonDescriptions = ArrayList<String>()
+        for (script in document.select("script[type=application/ld+json]")) {
+            val json = script.data().ifBlank { script.html() }
+            Regex("""(?is)["']description["']\s*:\s*["']((?:\\.|[^"'\\]){45,6000})["']""")
+                .findAll(json)
+                .forEach { match ->
+                    val decoded = match.groupValues.getOrNull(1).orEmpty()
+                        .replace("\\n", " ").replace("\\r", " ").replace("\\\"", "\"")
+                    plotCandidate(decoded)?.let { jsonDescriptions.add(it) }
+                }
+        }
+        return jsonDescriptions.maxByOrNull { it.length }
     }
 
     private fun parseGenres(document: Document): List<String> {
@@ -689,7 +745,7 @@ class DiziAsya : MainAPI() {
         }
         return listOf(
             "ok.ru", "odnoklassniki.ru", "vidmoly", "4me", "abyss", "abstr", "p2p", "lulu",
-            "dracarys", "dood", "filemoon", "streamwish", "mixdrop", "uqload", "voe",
+            "dracarys", "klaus", "vudeo", "dood", "filemoon", "streamwish", "mixdrop", "uqload", "voe",
             "dailymotion", "youtube.com", "youtu.be", "drive.google", "vidoza", "vidsrc", "streamtape"
         ).any { host.contains(it) } ||
             lower.contains("/embed/") || lower.contains("/player/")
@@ -763,7 +819,7 @@ class DiziAsya : MainAPI() {
             // must resemble a player path unless the hostname identifies a known video host.
             val knownHost = listOf(
                 "ok.ru", "odnoklassniki.ru", "vidmoly", "abyss", "4me", "p2p", "abstr",
-                "lulu", "streamwish", "filemoon", "dood", "mixdrop", "uqload", "voe",
+                "lulu", "klaus", "vudeo", "dracarys", "streamwish", "filemoon", "dood", "mixdrop", "uqload", "voe",
                 "dailymotion", "youtube.com", "youtu.be", "streamtape", "vidoza"
             ).any { host.contains(it) }
             val playerPath = listOf(
@@ -798,7 +854,8 @@ class DiziAsya : MainAPI() {
                         element.attr("data-server") + " " + element.attr("data-source")
                 )
                 val sourceButton = listOf(
-                    "diziasya2", "okru", "vidmoly", "abyss", "4me", "ev", "p2p", "abstr", "lulu"
+                    "diziasya", "klaus", "okru", "vidmoly", "abyss", "4me", "ev",
+                    "p2p", "abstr", "lulu", "vudeo", "dracarys"
                 ).any { label.contains(it) }
                 for (attr in candidateAttrs) {
                     if (!element.hasAttr(attr)) continue
@@ -862,7 +919,7 @@ class DiziAsya : MainAPI() {
         val relativeMediaRegex = Regex(
             """(?i)["']((?:/|\.{1,2}/)[^"'<> ]{3,1000})["']"""
         )
-        val providerLabels = listOf("Diziasya2", "OKRU", "Vidmoly", "Abyss", "4Me", "EV", "P2P", "ABStr", "LULU")
+        val providerLabels = listOf("DiziAsya", "Klaus", "OKRU", "Vidmoly", "Abyss", "4Me", "EV", "P2P", "ABStr", "LULU", "Vudeo", "Dracarys")
 
         for (source in sources) {
             urlRegex.findAll(source).forEach { match ->
@@ -913,10 +970,11 @@ class DiziAsya : MainAPI() {
         val scriptUrls = document?.select("script[src]")?.mapNotNull {
             absoluteUrl(it.attr("src"), pageUrl)
         }?.distinct()?.filter {
-            it.contains("/_next/static/", true) && it.endsWith(".js", true) &&
-                (it.contains("dizi", true) || it.contains("video", true) ||
-                    it.contains("watch", true) || it.contains("page-", true))
-        }?.take(8).orEmpty()
+            // Server buttons are wired by Next.js chunks whose generated filenames do not
+            // necessarily contain words such as "dizi" or "video". Inspect route and shared
+            // chunks together so those handlers/API paths are discoverable.
+            it.contains("/_next/static/", true) && it.endsWith(".js", true)
+        }?.take(24).orEmpty()
         for (scriptUrl in scriptUrls) {
             val script = runCatching {
                 app.get(scriptUrl, headers = requestHeaders + ("Referer" to pageUrl), referer = pageUrl)
