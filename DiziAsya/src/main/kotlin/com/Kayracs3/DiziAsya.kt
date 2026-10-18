@@ -50,7 +50,13 @@ class DiziAsya : MainAPI() {
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Son Eklenenler",
         "$mainUrl/diziler" to "Diziler",
-        "$mainUrl/animeler" to "Animeler",
+        "$mainUrl/diziler?category=aksiyon" to "Aksiyon",
+        "$mainUrl/diziler?category=bilim-kurgu" to "Bilimkurgu",
+        "$mainUrl/diziler?category=fantastik" to "Fantastik",
+        "$mainUrl/diziler?category=gizem" to "Gizem",
+        "$mainUrl/diziler?category=komedi" to "Komedi",
+        "$mainUrl/diziler?category=korku" to "Korku",
+        "$mainUrl/diziler?category=romantizm" to "Romantik",        
         "$mainUrl/filmler" to "Filmler",
         "$mainUrl/programlar" to "Programlar"
     )
