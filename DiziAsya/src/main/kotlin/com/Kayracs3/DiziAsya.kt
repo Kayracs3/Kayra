@@ -385,12 +385,11 @@ class DiziAsya : MainAPI() {
             // nearby card that contains one unique show/movie URL. Never scan a whole grid.
             if (targetUrl == null) {
                 var ancestor = imageNode.parent()
-                repeat(4) {
-                    val current = ancestor ?: return@repeat
+                for (depth in 0 until 4) {
+                    val current = ancestor ?: break
                     val tag = current.normalName().lowercase(Locale.ROOT)
-                    if (tag in setOf("html", "body", "main", "section", "nav", "ul", "ol")) {
-                        return@repeat
-                    }
+                    if (tag in setOf("html", "body", "main", "section", "nav", "ul", "ol")) break
+
                     val urls = current.select("a[href]").mapNotNull { anchor ->
                         val raw = absoluteUrl(
                             anchor.attr("href"),
@@ -401,17 +400,22 @@ class DiziAsya : MainAPI() {
                         }
                         canonicalUrl(raw)
                     }.distinct()
-                    if (urls.size > 1) return@repeat
+
+                    // Multiple different media links mean we've reached a shared list/grid.
+                    if (urls.size > 1) break
                     if (urls.size == 1) {
                         targetUrl = urls.single()
-                        return@repeat
+                        break
                     }
                     ancestor = current.parent()
                 }
             }
 
             if (targetUrl != null) posterByUrl.putIfAbsent(targetUrl!!, poster)
-            if (imageTitle.isNotBlank() && targetUrl != null) {
+
+            // The image alt text is a useful second key even when the DOM separates the
+            // poster from its title anchor and no safe nearby URL association was possible.
+            if (imageTitle.isNotBlank()) {
                 posterByTitle.putIfAbsent(normalize(imageTitle), poster)
             }
         }
