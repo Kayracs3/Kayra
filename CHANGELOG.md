@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:bc9d5ffd7f3ea0634bc515a1fa5df1db1918056a -->
+### Document artwork compatibility debugging rules
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [bc9d5ff](https://github.com/Kayracs3/Kayra/commit/bc9d5ffd7f3ea0634bc515a1fa5df1db1918056a)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:c02f2c0ddc3ddab3e243bb7197f3350a1dc738ef -->
 ### Bump DiziAsya to version 21 for WebP poster proxy
 
