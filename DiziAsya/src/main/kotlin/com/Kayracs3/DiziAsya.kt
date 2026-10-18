@@ -229,6 +229,12 @@ class DiziAsya : MainAPI() {
         val results = LinkedHashMap<String, CatalogItem>()
         for (link in document.select("a[href]")) {
             val linkedUrl = absoluteUrl(link.attr("href"), link.baseUri().ifBlank { mainUrl }) ?: continue
+
+            // Episode URLs are playback entries, not catalog cards. Canonicalizing them to
+            // /dizi/<slug> here caused an episode's label/card text to be stored as the
+            // series title and mixed into other listing results.
+            if (isEpisodeUrl(linkedUrl) || pathParts(linkedUrl).size != 2) continue
+
             val rootKind = categoryFor(linkedUrl) ?: continue
             val resultUrl = canonicalUrl(linkedUrl)
             val type = when (rootKind) {
@@ -810,7 +816,7 @@ class DiziAsya : MainAPI() {
 
         // Send direct streams to CloudStream as soon as they are found. Do not wait for
         // every optional player/API request to finish before publishing the first playable URL.
-        fun emitDirectMedia(url: String) {
+        suspend fun emitDirectMedia(url: String) {
             if (isSubtitleUrl(url)) return
             val hls = url.contains(".m3u8", true)
             val referer = directMediaReferers[url] ?: pageUrl
@@ -826,7 +832,7 @@ class DiziAsya : MainAPI() {
                     if (hls) "DiziAsya HLS ($shortHost)" else "DiziAsya Video ($shortHost)"
                 }
             }
-            runCatching {
+            try {
                 emit(
                     newExtractorLink(
                         source = "DiziAsya",
@@ -838,6 +844,8 @@ class DiziAsya : MainAPI() {
                         headers = mapOf("Referer" to referer, "User-Agent" to browserUa)
                     }
                 )
+            } catch (_: Exception) {
+                // One malformed candidate must not block the other discovered streams.
             }
         }
 
@@ -863,7 +871,6 @@ class DiziAsya : MainAPI() {
                 directMedia.add(url)
                 val referer = if (base.contains("/_next/static/", true)) pageUrl else base
                 directMediaReferers.putIfAbsent(url, referer)
-                emitDirectMedia(url)
                 return
             }
 
@@ -1044,7 +1051,6 @@ class DiziAsya : MainAPI() {
                     directMedia.add(resolved)
                     directMediaReferers[resolved] = player
                     resolvedPlayerPages.add(player)
-                    emitDirectMedia(resolved)
                 } else {
                     addCandidate(resolved, player)
                 }
@@ -1063,6 +1069,11 @@ class DiziAsya : MainAPI() {
                 val raw = element.attr("src").ifBlank { element.attr("data-src") }
                     .ifBlank { element.attr("data-file") }.ifBlank { element.attr("data-url") }
                 harvestPlayerUrl(raw)
+            }
+
+            // Publish direct streams only from this suspend function, after the page scan.
+            for (url in directMedia.filter { directMediaReferers[it] == player }) {
+                emitDirectMedia(url)
             }
         }
 
