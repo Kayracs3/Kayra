@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:5349e10b6871b7041492a7eb92c9538520a3de99 -->
+### AsyaLuna metadata ve konu ayrıştırıcı bölümlerini sağlamlaştır
+
+- Etkilenen alanlar: AsyaLuna
+- Commit: [5349e10](https://github.com/Kayracs3/Kayra/commit/5349e10b6871b7041492a7eb92c9538520a3de99)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:7f04f7f93785d99d73a3fc79305a82b3fc00946d -->
 ### AsyaLuna konu ayrıştırıcısındaki eski kod artığını temizle
 
