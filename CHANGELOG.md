@@ -2,6 +2,15 @@
 
 ## 2026-10-18
 
+<!-- kayra-commit:eca2a9d8486cc3c0b452898b9eaadd59fc354871 -->
+### DiziAsya katalog, metadata, bölüm ve oynatıcı sağlayıcısını ekle
+
+- Etkilenen alanlar: DiziAsya
+- Commit: [eca2a9d](https://github.com/Kayracs3/Kayra/commit/eca2a9d8486cc3c0b452898b9eaadd59fc354871)
+
+
+## 2026-10-18
+
 <!-- kayra-commit:473ff901f22ff6ff4c3d55431ff71ce08e75dfc1 -->
 ### DiziAsya CloudStream eklenti kaydını ekle
 
