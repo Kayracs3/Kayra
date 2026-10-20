@@ -1393,7 +1393,7 @@ class InatBoxYedek : MainAPI() {
 
         if (name.isBlank() || url.isBlank()) return null
 
-        val jsonResponse = makeInatPostRequest(url) ?: run {
+        val jsonResponse = makeInatSeriesRequest(url) ?: run {
             Log.w("InatBoxYedek", "Could not load season list for $name")
             return null
         }
@@ -1437,7 +1437,7 @@ class InatBoxYedek : MainAPI() {
                     continue
                 }
 
-                val episodeResponse = makeInatPostRequest(seasonUrl)
+                val episodeResponse = makeInatSeriesRequest(seasonUrl)
                 if (episodeResponse.isNullOrBlank()) {
                     Log.w("InatBoxYedek", "Could not load episodes for $name / $seasonName")
                     continue
@@ -2237,6 +2237,70 @@ class InatBoxYedek : MainAPI() {
         }.getOrNull()
     }
 
+    /**
+     * Series season/episode endpoints are less consistent than the live catalogue.
+     * Try the current signed/dynamic-key protocol first, then the legacy POST protocol,
+     * and finally a plain GET for endpoints that expose JSON directly.
+     */
+    private suspend fun makeInatSeriesRequest(url: String): String? {
+        makeInatPostRequest(url)?.takeIf { it.isNotBlank() }?.let { return it }
+
+        val endpoint = endpointLogLabel(url)
+        Log.w("InatBoxYedek", "Signed POST returned no decoded series data; trying legacy POST for $endpoint")
+
+        makeLegacyInatRequest(url)?.takeIf { it.isNotBlank() }?.let {
+            Log.d("InatBoxYedek", "Series data decoded via legacy POST for $endpoint")
+            return it
+        }
+
+        return runCatching {
+            val response = app.get(
+                url = url,
+                headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/150.0.0.0 Safari/537.36",
+                    "Accept" to "application/json,text/plain,*/*",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                    "Referer" to "https://speedrestapi.com/"
+                )
+            )
+
+            if (!response.isSuccessful) {
+                Log.w("InatBoxYedek", "Series GET fallback HTTP ${response.code} for $endpoint")
+                return@runCatching null
+            }
+
+            val body = response.text.trim()
+            if (body.isBlank()) {
+                Log.w("InatBoxYedek", "Series GET fallback returned an empty body for $endpoint")
+                return@runCatching null
+            }
+
+            extractJsonPayload(body)?.let { directJson ->
+                Log.d("InatBoxYedek", "Series data received as plain JSON via GET for $endpoint")
+                return@runCatching directJson
+            }
+
+            val legacyDecoded = decryptLegacyInatResponse(body)
+            val decoded = legacyDecoded?.let { extractJsonPayload(it) ?: it }
+            if (!decoded.isNullOrBlank()) {
+                Log.d("InatBoxYedek", "Series data decoded from GET response for $endpoint")
+                decoded
+            } else {
+                Log.w("InatBoxYedek", "Series GET fallback returned unrecognized data for $endpoint")
+                null
+            }
+        }.getOrElse {
+            Log.w("InatBoxYedek", "Series GET fallback failed for $endpoint: ${it.message}")
+            null
+        }
+    }
+
+    private fun endpointLogLabel(url: String): String =
+        runCatching {
+            val uri = URI(url)
+            "${uri.host.orEmpty()}${uri.rawPath.orEmpty()}"
+        }.getOrDefault("invalid-endpoint")
+
     private fun decryptLegacyInatResponse(response: String): String? {
         return runCatching {
             val firstPart = response.substringBefore(":")
@@ -2302,17 +2366,29 @@ class InatBoxYedek : MainAPI() {
                     )
                 )
 
-                if (
-                    response.isSuccessful &&
-                    response.text.isNotBlank()
-                ) {
-                    val decrypted = decryptDoubleAes(
-                        response.text,
-                        dynamicKey
-                    )
-
-                    if (!decrypted.isNullOrBlank()) {
-                        return decrypted
+                val responseText = response.text
+                when {
+                    !response.isSuccessful -> {
+                        Log.w(
+                            "InatBoxYedek",
+                            "Signed POST HTTP ${response.code} on attempt ${attempt + 1}/$retryCount for ${endpointLogLabel(url)}"
+                        )
+                    }
+                    responseText.isBlank() -> {
+                        Log.w(
+                            "InatBoxYedek",
+                            "Signed POST returned an empty body on attempt ${attempt + 1}/$retryCount for ${endpointLogLabel(url)}"
+                        )
+                    }
+                    else -> {
+                        val decrypted = decryptDoubleAes(responseText, dynamicKey)
+                        if (!decrypted.isNullOrBlank()) {
+                            return decrypted
+                        }
+                        Log.w(
+                            "InatBoxYedek",
+                            "Signed POST response decryption failed on attempt ${attempt + 1}/$retryCount for ${endpointLogLabel(url)}"
+                        )
                     }
                 }
             } catch (e: Exception) {
