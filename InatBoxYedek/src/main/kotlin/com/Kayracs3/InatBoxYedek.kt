@@ -55,7 +55,7 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 
-private object InatBoxYedekYedekHlsProxy {
+private object InatBoxYedekHlsProxy {
 
     private data class Mapping(
         val refreshUrl: String,
@@ -75,7 +75,7 @@ private object InatBoxYedekYedekHlsProxy {
 
     private val mappings = ConcurrentHashMap<String, Mapping>()
     private val executor = Executors.newCachedThreadPool { runnable ->
-        Thread(runnable, "InatBoxYedekYedekHlsProxy").apply { isDaemon = true }
+        Thread(runnable, "InatBoxYedekHlsProxy").apply { isDaemon = true }
     }
 
     @Volatile
@@ -115,7 +115,7 @@ private object InatBoxYedekYedekHlsProxy {
 
             "http://127.0.0.1:$serverPort/hls/$id/index.m3u8"
         }.getOrElse {
-            Log.e("InatBoxYedekYedekHlsProxy", "Could not create local HLS proxy: ${it.message}", it)
+            Log.e("InatBoxYedekHlsProxy", "Could not create local HLS proxy: ${it.message}", it)
             null
         }
     }
@@ -142,13 +142,13 @@ private object InatBoxYedekYedekHlsProxy {
                         executor.execute { handleClient(client) }
                     } catch (e: Exception) {
                         if (!socket.isClosed) {
-                            Log.w("InatBoxYedekYedekHlsProxy", "Accept failed: ${e.message}")
+                            Log.w("InatBoxYedekHlsProxy", "Accept failed: ${e.message}")
                         }
                     }
                 }
             }
 
-            Log.d("InatBoxYedekYedekHlsProxy", "Started on 127.0.0.1:$serverPort")
+            Log.d("InatBoxYedekHlsProxy", "Started on 127.0.0.1:$serverPort")
         }
     }
 
@@ -201,7 +201,7 @@ private object InatBoxYedekYedekHlsProxy {
                     serveTarget(output, mapping, mappingId, target)
                 }
             } catch (e: Exception) {
-                Log.w("InatBoxYedekYedekHlsProxy", "Client failed: ${e.message}")
+                Log.w("InatBoxYedekHlsProxy", "Client failed: ${e.message}")
             }
         }
     }
@@ -275,7 +275,7 @@ private object InatBoxYedekYedekHlsProxy {
         // Mevcut URL gerçekten bozulmuş/süresi dolmuşsa yalnızca o zaman
         // kaynak API'den yeni URL iste.
         Log.d(
-            "InatBoxYedekYedekHlsProxy",
+            "InatBoxYedekHlsProxy",
             "Current HLS URL failed for ${mapping.name}; refreshing source"
         )
 
@@ -292,12 +292,12 @@ private object InatBoxYedekYedekHlsProxy {
             fetchManifestFromUrl(mapping, freshUrl)?.also {
                 mapping.currentUrl = freshUrl
                 Log.d(
-                    "InatBoxYedekYedekHlsProxy",
+                    "InatBoxYedekHlsProxy",
                     "HLS source refreshed for ${mapping.name}"
                 )
             }
         }.getOrElse {
-            Log.w("InatBoxYedekYedekHlsProxy", "Manifest refresh failed: ${it.message}")
+            Log.w("InatBoxYedekHlsProxy", "Manifest refresh failed: ${it.message}")
             null
         }
     }
@@ -317,7 +317,7 @@ private object InatBoxYedekYedekHlsProxy {
 
             if (response.first !in 200..299) {
                 Log.w(
-                    "InatBoxYedekYedekHlsProxy",
+                    "InatBoxYedekHlsProxy",
                     "Upstream manifest HTTP ${response.first} for ${mapping.name}"
                 )
                 return null
@@ -326,7 +326,7 @@ private object InatBoxYedekYedekHlsProxy {
             val body = response.second
             if (!body.trimStart().startsWith("#EXTM3U")) {
                 Log.w(
-                    "InatBoxYedekYedekHlsProxy",
+                    "InatBoxYedekHlsProxy",
                     "Upstream response is not HLS for ${mapping.name}"
                 )
                 return null
@@ -335,7 +335,7 @@ private object InatBoxYedekYedekHlsProxy {
             Pair(body, url)
         }.getOrElse {
             Log.w(
-                "InatBoxYedekYedekHlsProxy",
+                "InatBoxYedekHlsProxy",
                 "Manifest request failed for ${mapping.name}: ${it.message}"
             )
             null
@@ -1091,7 +1091,7 @@ class InatBoxYedek : MainAPI() {
         }
     }
 
-    private data class InatBoxYedekYedekPlaybackTraversalState(
+    private data class InatBoxYedekPlaybackTraversalState(
         val visitedEndpoints: MutableSet<String> = HashSet(),
         var apiRequests: Int = 0
     )
@@ -1105,7 +1105,7 @@ class InatBoxYedek : MainAPI() {
         raw: String,
         sourceUrl: String?,
         depth: Int,
-        state: InatBoxYedekYedekPlaybackTraversalState,
+        state: InatBoxYedekPlaybackTraversalState,
         fallbackName: String,
         fallbackImage: String,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -1166,14 +1166,14 @@ class InatBoxYedek : MainAPI() {
         item: JSONObject,
         sourceUrl: String?,
         depth: Int,
-        state: InatBoxYedekYedekPlaybackTraversalState,
+        state: InatBoxYedekPlaybackTraversalState,
         fallbackName: String,
         fallbackImage: String,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         // Actual stream records use chUrl. Preserve source metadata so temporary URLs
-        // can still be refreshed by the existing InatBoxYedekYedekHlsProxy logic.
+        // can still be refreshed by the existing InatBoxYedekHlsProxy logic.
         val streamUrl = item.optString("chUrl").trim()
         if (streamUrl.isNotBlank() && !streamUrl.equals("null", true)) {
             val enriched = runCatching {
@@ -1192,8 +1192,8 @@ class InatBoxYedek : MainAPI() {
             } else {
                 enriched
             }
-            return loadInatBoxYedekYedekChContentLinks(
-                parseToInatBoxYedekYedekChContent(withSource),
+            return loadInatBoxYedekChContentLinks(
+                parseToInatBoxYedekChContent(withSource),
                 subtitleCallback,
                 callback
             )
@@ -1255,7 +1255,7 @@ class InatBoxYedek : MainAPI() {
                         raw = trimmed,
                         sourceUrl = null,
                         depth = 0,
-                        state = InatBoxYedekYedekPlaybackTraversalState(),
+                        state = InatBoxYedekPlaybackTraversalState(),
                         fallbackName = "InatBoxYedek",
                         fallbackImage = "",
                         subtitleCallback = subtitleCallback,
@@ -1502,7 +1502,7 @@ class InatBoxYedek : MainAPI() {
         item: JSONObject
     ): LiveStreamLoadResponse? {
         return try {
-            val chContent = parseToInatBoxYedekYedekChContent(item)
+            val chContent = parseToInatBoxYedekChContent(item)
 
             newLiveStreamLoadResponse(
                 chContent.chName,
@@ -1521,7 +1521,7 @@ class InatBoxYedek : MainAPI() {
         item: JSONObject
     ): LiveStreamLoadResponse? {
         return try {
-            val chContent = parseToInatBoxYedekYedekChContent(item)
+            val chContent = parseToInatBoxYedekChContent(item)
 
             newLiveStreamLoadResponse(
                 chContent.chName,
@@ -1561,8 +1561,8 @@ class InatBoxYedek : MainAPI() {
         }
     }
 
-    private fun parseToInatBoxYedekYedekChContent(item: JSONObject): InatBoxYedekYedekChContent {
-        return InatBoxYedekYedekChContent(
+    private fun parseToInatBoxYedekChContent(item: JSONObject): InatBoxYedekChContent {
+        return InatBoxYedekChContent(
             chName = item.optString("chName"),
             chUrl = item.optString("chUrl").vkSourceFix(),
             chImg = item.optString("chImg"),
@@ -1574,8 +1574,8 @@ class InatBoxYedek : MainAPI() {
         )
     }
 
-    private suspend fun loadInatBoxYedekYedekChContentLinks(
-        chContent: InatBoxYedekYedekChContent,
+    private suspend fun loadInatBoxYedekChContentLinks(
+        chContent: InatBoxYedekChContent,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
@@ -1682,7 +1682,7 @@ class InatBoxYedek : MainAPI() {
             isExpiringDirectStream(sourceUrl) &&
             sourceUrl.contains(".m3u8", ignoreCase = true)
         ) {
-            val proxyUrl = InatBoxYedekYedekHlsProxy.createLink(
+            val proxyUrl = InatBoxYedekHlsProxy.createLink(
                 refreshUrl = chContent.refreshUrl,
                 initialUrl = sourceUrl,
                 headers = headers,
@@ -2539,7 +2539,7 @@ class InatBoxYedek : MainAPI() {
 }
 
 
-private data class InatBoxYedekYedekChContent(
+private data class InatBoxYedekChContent(
     val chName: String,
     val chUrl: String,
     val chImg: String,
