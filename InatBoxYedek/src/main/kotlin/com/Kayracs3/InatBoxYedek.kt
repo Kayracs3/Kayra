@@ -471,9 +471,13 @@ private object InatBoxYedekHlsProxy {
         mappingId: String,
         target: String
     ) {
-        val isPlaylist = target.contains(".m3u8", ignoreCase = true) ||
-            target.contains("/hls/", ignoreCase = true) ||
-            target.contains("/playlist", ignoreCase = true)
+        // Do not identify every URL under /hls/ as a playlist: many providers also
+        // serve TS segments beneath that path. Detect playlists from the payload,
+        // using the URL only as a guard against an HTML error page on a .m3u8 URL.
+        val targetPath = runCatching { URI(target).path.orEmpty() }
+            .getOrDefault(target.substringBefore('?').substringBefore('#'))
+        val urlLooksLikePlaylist = targetPath.endsWith(".m3u8", ignoreCase = true) ||
+            targetPath.substringAfterLast('/').equals("playlist", ignoreCase = true)
 
         val response = InatBoxYedek.httpGetBlocking(
             url = target,
@@ -483,16 +487,23 @@ private object InatBoxYedekHlsProxy {
 
         if (response == null || response.first !in 200..299) {
             val code = response?.first ?: 502
+            Log.w(
+                "InatBoxYedekHlsProxy",
+                "Upstream resource HTTP $code for ${mapping.name}"
+            )
             writeResponse(
                 output,
-                code,
+                502,
                 "text/plain; charset=utf-8",
                 "Upstream resource failed".toByteArray()
             )
             return
         }
 
-        if (isPlaylist) {
+        val responseText = response.second.trimStart()
+        val isHlsPlaylist = responseText.startsWith("#EXTM3U", ignoreCase = false)
+
+        if (isHlsPlaylist) {
             val rewritten = rewriteManifest(
                 body = response.second,
                 baseUrl = target,
@@ -512,11 +523,46 @@ private object InatBoxYedekHlsProxy {
             return
         }
 
+        // Some CDN edges return an HTML/JSON block with HTTP 200. Do not hand that
+        // body to ExoPlayer as TS media, as it looks like a successful URL but yields
+        // malformed MPEG-TS data and intermittent playback.
+        val prefix = responseText.take(512).lowercase(Locale.ROOT)
+        val errorPayload = prefix.startsWith("<!doctype html") ||
+            prefix.startsWith("<html") ||
+            prefix.startsWith("access denied") ||
+            prefix.startsWith("cloudflare") ||
+            (prefix.startsWith("{") &&
+                (prefix.contains("\"error\"") ||
+                    prefix.contains("\"message\"") ||
+                    prefix.contains("\"success\":false")))
+
+        if (urlLooksLikePlaylist || errorPayload) {
+            val compactPrefix = responseText.take(96).replace(Regex("\\s+"), " ")
+            Log.w(
+                "InatBoxYedekHlsProxy",
+                if (urlLooksLikePlaylist) {
+                    "Playlist URL returned non-HLS payload for ${mapping.name}; prefix=$compactPrefix"
+                } else {
+                    "Upstream media returned an error payload for ${mapping.name}; prefix=$compactPrefix"
+                }
+            )
+            writeResponse(
+                output,
+                502,
+                "text/plain; charset=utf-8",
+                "Upstream did not return playable media".toByteArray()
+            )
+            return
+        }
+
         val bodyBytes = response.third ?: response.second.toByteArray(StandardCharsets.ISO_8859_1)
+        val hasTsSync = bodyBytes.size > 188 &&
+            bodyBytes[0] == 0x47.toByte() &&
+            (bodyBytes.size <= 376 || bodyBytes[188] == 0x47.toByte())
         val contentType = when {
-            target.contains(".aac", true) -> "audio/aac"
-            target.contains(".m4s", true) -> "video/iso.segment"
-            target.contains(".ts", true) -> "video/mp2t"
+            targetPath.contains(".aac", true) -> "audio/aac"
+            targetPath.contains(".m4s", true) -> "video/iso.segment"
+            targetPath.contains(".ts", true) || hasTsSync -> "video/mp2t"
             else -> "application/octet-stream"
         }
 
@@ -1082,14 +1128,14 @@ class InatBoxYedek : MainAPI() {
                 }
             } else if (
                 item.has("chName") &&
-                item.has("chUrl") &&
-                item.has("chImg")
+                item.has("chUrl")
             ) {
                 val chType = item.optString("chType")
                 val chUrl = item.optString("chUrl")
 
                 when {
                     chType.contains("SsprDrm", ignoreCase = true) -> parseSSportResponse(item)
+                    isClf2Endpoint(chUrl) -> parseLiveStreamLoadResponse(item)
                     chType.contains("live", ignoreCase = true) ||
                         chType.contains("cable", ignoreCase = true) ->
                         parseLiveStreamLoadResponse(item)
@@ -1704,7 +1750,11 @@ class InatBoxYedek : MainAPI() {
         return InatBoxYedekChContent(
             chName = item.optString("chName"),
             chUrl = item.optString("chUrl").vkSourceFix(),
-            chImg = item.optString("chImg"),
+            chImg = posterUrlFrom(
+                item,
+                item.optString("__inat_source_url").takeIf { it.isNotBlank() },
+                listOf("chImg", "chImage", "ch_image", "poster", "posterUrl", "image", "imageUrl")
+            ).orEmpty(),
             chHeaders = item.opt("chHeaders")?.toString() ?: "null",
             chReg = item.opt("chReg")?.toString() ?: "null",
             chType = item.optString("chType"),
@@ -1788,11 +1838,7 @@ class InatBoxYedek : MainAPI() {
 
         // CLF2 kaynakları da çözücü API'leri kullanır, ancak katalogdaki chType
         // her zaman "tekli" olmayabilir. Bu yüzden yalnızca tipe güvenme.
-        val isClf2ResolverEndpoint = runCatching {
-            val sourceUri = URI(sourceUrl)
-            sourceUri.host.equals("str.sprboxs.bar", ignoreCase = true) &&
-                sourceUri.path.trimEnd('/').equals("/CLF2", ignoreCase = true)
-        }.getOrDefault(false)
+        val isClf2ResolverEndpoint = isClf2Endpoint(sourceUrl)
 
         if ((chContent.chType.contains("tekli", ignoreCase = true) ||
                 isClf2ResolverEndpoint) && !isDirectStream(sourceUrl)
@@ -2158,6 +2204,13 @@ class InatBoxYedek : MainAPI() {
             findChUrl(root, 0)
         }.getOrNull()
     }
+    private fun isClf2Endpoint(url: String): Boolean =
+        runCatching {
+            val sourceUri = URI(url)
+            sourceUri.host.equals("str.sprboxs.bar", ignoreCase = true) &&
+                sourceUri.path.trimEnd('/').equals("/CLF2", ignoreCase = true)
+        }.getOrDefault(false)
+
     private fun isDirectStream(url: String): Boolean {
         val lower = url.lowercase(Locale.ROOT)
         return lower.contains(".m3u8") ||
@@ -2772,8 +2825,7 @@ class InatBoxYedek : MainAPI() {
 
                 if (
                     item.has("chName") &&
-                    item.has("chUrl") &&
-                    item.has("chImg")
+                    item.has("chUrl")
                 ) {
                     val name = item.optString("chName", "İsimsiz")
                     val posterUrl = posterUrlFrom(
@@ -2785,6 +2837,18 @@ class InatBoxYedek : MainAPI() {
                     val chUrl = item.optString("chUrl")
 
                     when {
+                        isClf2Endpoint(chUrl) -> {
+                            searchResults.add(
+                                newLiveSearchResponse(
+                                    name,
+                                    item.toString(),
+                                    TvType.Live
+                                ) {
+                                    this.posterUrl = posterUrl
+                                }
+                            )
+                        }
+
                         chType.contains("live", ignoreCase = true) -> {
                             searchResults.add(
                                 newLiveSearchResponse(
