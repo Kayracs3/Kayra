@@ -2,6 +2,15 @@
 
 ## 2026-10-20
 
+<!-- kayra-commit:8d88ecda1855564d841e3b437666b467f28685a4 -->
+### Fix InatBoxYedek playback and artwork
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [8d88ecd](https://github.com/Kayracs3/Kayra/commit/8d88ecda1855564d841e3b437666b467f28685a4)
+
+
+## 2026-10-20
+
 <!-- kayra-commit:213bd189a455f31b83009ad359b1c473d7fa2aff -->
 ### Add isolated InatBoxYedek provider
 
