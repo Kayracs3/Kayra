@@ -845,19 +845,34 @@ class InatBoxYedek : MainAPI() {
             cached.second
         } else {
             val jsonResponse = loadCatalogResponse(url)
-            if (jsonResponse.isNullOrBlank()) {
-                cached?.second ?: emptyList()
+            val parsedResults = if (jsonResponse.isNullOrBlank()) {
+                emptyList()
             } else {
-                val results = getSearchResponseList(
+                getSearchResponseList(
                     jsonResponse,
                     sourceUrl = url,
                     allowGeneric4k = is4kCatalogUrl(url)
                 )
-                if (results.isNotEmpty()) {
-                    tabCache[url] = Pair(System.currentTimeMillis(), results)
-                    results.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
+            }
+
+            if (parsedResults.isNotEmpty()) {
+                // Only replace the last known-good catalog with a non-empty response.
+                // Some live-TV endpoints intermittently answer with an empty/unknown
+                // payload while channels are still available on the source app.
+                tabCache[url] = Pair(System.currentTimeMillis(), parsedResults)
+                parsedResults.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
+                parsedResults
+            } else {
+                val previous = cached?.second.orEmpty()
+                if (previous.isNotEmpty()) {
+                    Log.w(
+                        "InatBoxYedek",
+                        "Catalog returned no parsed items; keeping ${previous.size} cached items for ${request.name}"
+                    )
+                    previous
+                } else {
+                    emptyList()
                 }
-                results
             }
         }
 
@@ -2467,13 +2482,32 @@ class InatBoxYedek : MainAPI() {
             val trimmedJson = jsonResponse.trimStart()
             val itemsArray = if (trimmedJson.startsWith("[")) {
                 JSONArray(jsonResponse)
-            } else if (allowGeneric4k && trimmedJson.startsWith("{")) {
+            } else if (trimmedJson.startsWith("{")) {
                 val root = JSONObject(jsonResponse)
-                sequenceOf("data", "results", "items", "movies", "films", "catalog")
-                    .mapNotNull { key -> root.optJSONArray(key) }
-                    .firstOrNull()
+                val arrayKeys = listOf(
+                    "data", "results", "items", "movies", "films", "catalog",
+                    "channels", "channelList", "live", "streams", "vod", "list", "rows"
+                )
+                val objectKeys = listOf("data", "result", "response", "payload")
+
+                fun findCatalogArray(node: JSONObject, depth: Int): JSONArray? {
+                    if (depth > 3) return null
+                    arrayKeys.forEach { key ->
+                        node.optJSONArray(key)?.let { return it }
+                    }
+                    objectKeys.forEach { key ->
+                        val nested = node.optJSONObject(key) ?: return@forEach
+                        findCatalogArray(nested, depth + 1)?.let { return it }
+                    }
+                    return null
+                }
+
+                findCatalogArray(root, 0)
                     ?: JSONArray().apply {
-                        if (hasStandardInatFields(root) || root.has("name") || root.has("title")) {
+                        if (
+                            hasStandardInatFields(root) ||
+                            (allowGeneric4k && (root.has("name") || root.has("title")))
+                        ) {
                             put(root)
                         }
                     }
