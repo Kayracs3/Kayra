@@ -1298,6 +1298,82 @@ class InatBoxYedek : MainAPI() {
         }
     }
 
+    /**
+     * Season and episode endpoints normally return a JSON array, but some
+     * responses wrap records in data/result/items objects. Unwrap common shapes
+     * recursively instead of silently dropping an entire season when JSONArray
+     * parsing fails.
+     */
+    private fun parseInatRecordArray(
+        raw: String?,
+        preferredArrayKeys: List<String>,
+        recordKeys: Set<String>
+    ): JSONArray? {
+        val text = raw?.trim().orEmpty()
+        if (text.isBlank()) return null
+
+        fun parseValue(value: String): Any? {
+            val candidate = value.trim()
+            return runCatching {
+                when {
+                    candidate.startsWith("[") -> JSONArray(candidate)
+                    candidate.startsWith("{") -> JSONObject(candidate)
+                    else -> {
+                        val extracted = extractJsonPayload(candidate) ?: return null
+                        when {
+                            extracted.startsWith("[") -> JSONArray(extracted)
+                            extracted.startsWith("{") -> JSONObject(extracted)
+                            else -> null
+                        }
+                    }
+                }
+            }.getOrNull()
+        }
+
+        fun findRecords(value: Any?, depth: Int): JSONArray? {
+            if (depth > 5 || value == null) return null
+
+            when (value) {
+                is JSONArray -> return value
+                is JSONObject -> {
+                    for (key in preferredArrayKeys) {
+                        val child = value.opt(key) ?: continue
+                        when (child) {
+                            is JSONArray -> return child
+                            is JSONObject -> findRecords(child, depth + 1)?.let { return it }
+                            is String -> {
+                                val parsed = parseValue(child) ?: continue
+                                findRecords(parsed, depth + 1)?.let { return it }
+                            }
+                        }
+                    }
+
+                    for (key in listOf("data", "result", "response", "payload", "body", "content")) {
+                        val child = value.opt(key) ?: continue
+                        when (child) {
+                            is JSONObject -> findRecords(child, depth + 1)?.let { return it }
+                            is String -> {
+                                val parsed = parseValue(child) ?: continue
+                                findRecords(parsed, depth + 1)?.let { return it }
+                            }
+                        }
+                    }
+
+                    if (recordKeys.any { value.has(it) }) {
+                        return JSONArray().put(value)
+                    }
+                }
+                is String -> {
+                    val parsed = parseValue(value) ?: return null
+                    return findRecords(parsed, depth + 1)
+                }
+            }
+            return null
+        }
+
+        return findRecords(parseValue(text), 0)
+    }
+
     private suspend fun parseTvSeriesResponse(
         item: JSONObject,
         tvType: TvType = TvType.TvSeries
@@ -1317,13 +1393,29 @@ class InatBoxYedek : MainAPI() {
 
         if (name.isBlank() || url.isBlank()) return null
 
-        val jsonResponse = makeInatPostRequest(url) ?: return null
-        val jsonArray = runCatching { JSONArray(jsonResponse) }.getOrNull() ?: return null
+        val jsonResponse = makeInatPostRequest(url) ?: run {
+            Log.w("InatBoxYedek", "Could not load season list for $name")
+            return null
+        }
+        val jsonArray = parseInatRecordArray(
+            raw = jsonResponse,
+            preferredArrayKeys = listOf("seasons", "series", "data", "result", "results", "items", "list", "rows", "episodes"),
+            recordKeys = setOf("diziUrl", "seasonUrl", "season_url")
+        ) ?: run {
+            Log.w("InatBoxYedek", "Unrecognized season-list response for $name")
+            return null
+        }
+
+        if (jsonArray.length() == 0) {
+            Log.w("InatBoxYedek", "Season list was empty for $name")
+        }
 
         return try {
             for (i in 0 until jsonArray.length()) {
-                val seasonItem = jsonArray.getJSONObject(i)
-                val seasonName = seasonItem.optString("diziName", "Sezon ${i + 1}")
+                val seasonItem = jsonArray.optJSONObject(i) ?: continue
+                val seasonName = firstNonBlankJsonString(
+                    seasonItem, "diziName", "seasonName", "season_name", "name"
+                ).ifBlank { "Sezon ${i + 1}" }
 
                 seasonDataList.add(
                     SeasonData(
@@ -1332,21 +1424,45 @@ class InatBoxYedek : MainAPI() {
                     )
                 )
 
-                val seasonUrl = seasonItem.optString("diziUrl")
+                val seasonUrl = firstNonBlankJsonString(
+                    seasonItem, "diziUrl", "seasonUrl", "season_url", "url", "link", "href"
+                )
                 val seasonPosterUrl = posterUrlFrom(
                     seasonItem,
                     seasonUrl.ifBlank { url },
                     listOf("diziImg", "diziImage", "chImg", "chImage", "poster", "posterUrl", "image")
                 ) ?: seriesPosterUrl
-                if (seasonUrl.isBlank()) continue
+                if (seasonUrl.isBlank()) {
+                    Log.w("InatBoxYedek", "Season URL missing: $seasonName ($name)")
+                    continue
+                }
 
-                val episodeResponse = makeInatPostRequest(seasonUrl) ?: continue
-                val episodeArray = runCatching { JSONArray(episodeResponse) }.getOrNull() ?: continue
+                val episodeResponse = makeInatPostRequest(seasonUrl)
+                if (episodeResponse.isNullOrBlank()) {
+                    Log.w("InatBoxYedek", "Could not load episodes for $name / $seasonName")
+                    continue
+                }
+
+                val episodeArray = parseInatRecordArray(
+                    raw = episodeResponse,
+                    preferredArrayKeys = listOf("episodes", "contents", "data", "result", "results", "items", "list", "rows", "streams", "media"),
+                    recordKeys = setOf("chName", "episodeName", "episode_name", "chUrl", "episodeUrl", "episode_url", "videoUrl", "playUrl")
+                )
+                if (episodeArray == null) {
+                    Log.w("InatBoxYedek", "Unrecognized episode response for $name / $seasonName")
+                    continue
+                }
+                if (episodeArray.length() == 0) {
+                    Log.w("InatBoxYedek", "Episode list empty for $name / $seasonName")
+                    continue
+                }
 
                 for (j in 0 until episodeArray.length()) {
                     try {
-                        val episodeItem = episodeArray.getJSONObject(j)
-                        val episodeName = episodeItem.optString("chName", "Bölüm ${j + 1}")
+                        val episodeItem = episodeArray.optJSONObject(j) ?: continue
+                        val episodeName = firstNonBlankJsonString(
+                            episodeItem, "chName", "episodeName", "episode_name", "name", "title", "diziName"
+                        ).ifBlank { "Bölüm ${j + 1}" }
                         // Prefer episode-specific artwork, then inherit season/show artwork.
                         // Many InatBoxYedek season endpoints return names and playback URLs only.
                         val episodePoster = posterUrlFrom(
@@ -1387,6 +1503,13 @@ class InatBoxYedek : MainAPI() {
                 }
                 .firstOrNull()
                 ?: seriesPosterUrl
+
+            val totalEpisodes = episodes.values.sumOf { it.size }
+            if (totalEpisodes == 0) {
+                Log.w("InatBoxYedek", "No episodes were parsed for $name; seasons=${seasonDataList.size}")
+            } else {
+                Log.d("InatBoxYedek", "Parsed $totalEpisodes episodes across ${seasonDataList.size} seasons for $name")
+            }
 
             newAnimeLoadResponse(
                 name = name,
@@ -1739,6 +1862,16 @@ class InatBoxYedek : MainAPI() {
             subtitleCallback = subtitleCallback,
             callback = callback
         )
+    }
+
+    private fun firstNonBlankJsonString(item: JSONObject, vararg keys: String): String {
+        for (key in keys) {
+            val value = item.optString(key).trim()
+            if (value.isNotBlank() && !value.equals("null", ignoreCase = true) && value != "0") {
+                return value
+            }
+        }
+        return ""
     }
 
     private fun parseFirstJsonObject(raw: String): JSONObject? {
