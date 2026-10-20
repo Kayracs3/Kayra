@@ -2,6 +2,15 @@
 
 ## 2026-10-20
 
+<!-- kayra-commit:6ad61f2ea1080c32c448ffbd220d3375da1e058a -->
+### InatBoxYedek v6: HLS segment and artwork fixes
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [6ad61f2](https://github.com/Kayracs3/Kayra/commit/6ad61f2ea1080c32c448ffbd220d3375da1e058a)
+
+
+## 2026-10-20
+
 <!-- kayra-commit:9beb89ce6cdc40ade4050f0be64363f38c428941 -->
 ### InatBoxYedek v5: season request fallbacks
 
