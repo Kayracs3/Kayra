@@ -498,6 +498,28 @@
         "name": "InatBox"
     },
     {
+        "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
+        "fileHash": "sha256-a4e930e5413164c31525b090ed73973c6782175eb8a70c6965b49ec46633bf42",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 85794,
+        "status": 3,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Live"
+        ],
+        "version": 1,
+        "internalName": "InatBoxYedek",
+        "description": "\u0130natBoxYedek: InatBox ana eklentisinden ayr\u0131, test ve yedek ama\u00e7l\u0131 sa\u011flay\u0131c\u0131.",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBoxYedek.cs3",
+        "name": "InatBoxYedek"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=jetfilmizle.now&sz=%size%",
         "fileHash": "sha256-a8663b4704b21b2aec73af27ec011db504a47f8d4924db117eeb2a05e21d05d4",
         "apiVersion": 1,
