@@ -2,6 +2,15 @@
 
 ## 2026-10-20
 
+<!-- kayra-commit:9beb89ce6cdc40ade4050f0be64363f38c428941 -->
+### InatBoxYedek v5: season request fallbacks
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [9beb89c](https://github.com/Kayracs3/Kayra/commit/9beb89ce6cdc40ade4050f0be64363f38c428941)
+
+
+## 2026-10-20
+
 <!-- kayra-commit:22b8cbb2fcfd0f9fe817c857933be459ad27ca06 -->
 ### Recover InatBoxYedek episode lists
 
