@@ -499,10 +499,10 @@
     },
     {
         "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
-        "fileHash": "sha256-f0acbf05328934336adb187690a758526873cc4e4293af615fc69182023c56a5",
+        "fileHash": "sha256-311eaf9e66d0802e0ae72b6664902232049680ff4b4d60ac1a932656dbc89d4d",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 89202,
+        "fileSize": 91029,
         "status": 3,
         "language": "tr",
         "authors": [
@@ -513,7 +513,7 @@
             "TvSeries",
             "Live"
         ],
-        "version": 4,
+        "version": 5,
         "internalName": "InatBoxYedek",
         "description": "\u0130natBoxYedek: InatBox ana eklentisinden ayr\u0131, test ve yedek ama\u00e7l\u0131 sa\u011flay\u0131c\u0131.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBoxYedek.cs3",
