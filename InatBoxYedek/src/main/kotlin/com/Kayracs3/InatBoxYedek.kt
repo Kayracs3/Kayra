@@ -42,6 +42,7 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URI
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -1647,7 +1648,17 @@ class InatBoxYedek : MainAPI() {
             }
         }
 
-        if (chContent.chType.contains("tekli", ignoreCase = true) && !isDirectStream(sourceUrl)) {
+        // CLF2 kaynakları da çözücü API'leri kullanır, ancak katalogdaki chType
+        // her zaman "tekli" olmayabilir. Bu yüzden yalnızca tipe güvenme.
+        val isClf2ResolverEndpoint = runCatching {
+            val sourceUri = URI(sourceUrl)
+            sourceUri.host.equals("str.sprboxs.bar", ignoreCase = true) &&
+                sourceUri.path.trimEnd('/').equals("/CLF2", ignoreCase = true)
+        }.getOrDefault(false)
+
+        if ((chContent.chType.contains("tekli", ignoreCase = true) ||
+                isClf2ResolverEndpoint) && !isDirectStream(sourceUrl)
+        ) {
             val resolved = resolveTekliRegexStream(
                 sourceUrl,
                 headers,
@@ -1661,6 +1672,10 @@ class InatBoxYedek : MainAPI() {
                 if (sourceUrl.startsWith("//")) {
                     sourceUrl = "https:$sourceUrl"
                 }
+                Log.d("InatBoxYedek", "Resolved stream endpoint for ${chContent.chName}")
+            } else if (isClf2ResolverEndpoint) {
+                Log.w("InatBoxYedek", "CLF2 endpoint did not return a playable chUrl for ${chContent.chName}")
+                return false
             }
         }
 
@@ -1951,16 +1966,50 @@ class InatBoxYedek : MainAPI() {
 
         return runCatching {
             val trimmed = rawJson.trim()
-            when {
-                trimmed.startsWith("{") -> JSONObject(trimmed).optString("chUrl", null)
-                trimmed.startsWith("[") -> JSONArray(trimmed)
-                    .optJSONObject(0)
-                    ?.optString("chUrl", null)
-                else -> null
-            }?.takeIf { !it.isNullOrBlank() }
+            val payload = when {
+                trimmed.startsWith("{") || trimmed.startsWith("[") -> trimmed
+                else -> extractJsonPayload(trimmed) ?: return@runCatching null
+            }
+
+            val root: Any = when {
+                payload.startsWith("{") -> JSONObject(payload)
+                payload.startsWith("[") -> JSONArray(payload)
+                else -> return@runCatching null
+            }
+
+            fun findChUrl(value: Any?, depth: Int): String? {
+                if (value == null || depth > 5) return null
+
+                when (value) {
+                    is JSONObject -> {
+                        val direct = value.optString("chUrl").trim()
+                        if (direct.isNotBlank() && !direct.equals("null", ignoreCase = true)) {
+                            return direct
+                        }
+
+                        // Modern responses may wrap stream records several levels deep.
+                        val nestedKeys = listOf(
+                            "result", "data", "results", "items", "sources",
+                            "source", "stream", "episodes", "seasons", "media"
+                        )
+                        for (key in nestedKeys) {
+                            val nested = value.opt(key) ?: continue
+                            findChUrl(nested, depth + 1)?.let { return it }
+                        }
+                    }
+
+                    is JSONArray -> {
+                        for (index in 0 until value.length()) {
+                            findChUrl(value.opt(index), depth + 1)?.let { return it }
+                        }
+                    }
+                }
+                return null
+            }
+
+            findChUrl(root, 0)
         }.getOrNull()
     }
-
     private fun isDirectStream(url: String): Boolean {
         val lower = url.lowercase(Locale.ROOT)
         return lower.contains(".m3u8") ||
@@ -2148,6 +2197,22 @@ class InatBoxYedek : MainAPI() {
      * as literal text. Treat those as missing, preserve valid absolute CDN URLs, and
      * resolve relative paths against the endpoint that supplied the record.
      */
+    /**
+     * CloudStream/Coil on some devices cannot load raw R2 URLs from this catalog
+     * (the runtime log showed TLS packet parsing errors). Convert those URLs to
+     * WebP explicitly, avoiding a potentially incompatible optimizer response.
+     */
+    private fun makeArtworkCompatible(url: String): String {
+        val host = runCatching { URI(url).host.orEmpty() }
+            .getOrDefault("")
+            .lowercase(Locale.ROOT)
+
+        if (!host.endsWith(".r2.dev")) return url
+
+        val encoded = URLEncoder.encode(url, "UTF-8")
+        return "https://wsrv.nl/?url=$encoded&w=384&output=webp&q=80"
+    }
+
     private fun normalizePosterUrl(raw: String?, sourceUrl: String? = null): String? {
         var value = raw?.trim().orEmpty()
         if (value.isBlank() || value.equals("null", true) || value == "0") return null
@@ -2167,22 +2232,23 @@ class InatBoxYedek : MainAPI() {
             value.startsWith("about:", true)
         ) return null
 
-        if (value.startsWith("//")) return "https:$value"
+        if (value.startsWith("//")) return makeArtworkCompatible("https:$value")
         if (value.startsWith("https://", true) || value.startsWith("http://", true)) {
-            return value
+            return makeArtworkCompatible(value)
         }
 
         if (Regex("""(?i)^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?/""").containsMatchIn(value)) {
-            return "https://$value"
+            return makeArtworkCompatible("https://$value")
         }
 
         val base = runCatching { URI(sourceUrl.orEmpty()) }.getOrNull() ?: return null
         if (base.scheme.isNullOrBlank() || base.host.isNullOrBlank()) return null
-        return runCatching { base.resolve(value).toString() }
+        val resolved = runCatching { base.resolve(value).toString() }
             .getOrNull()
             ?.takeIf { it.startsWith("https://", true) || it.startsWith("http://", true) }
+            ?: return null
+        return makeArtworkCompatible(resolved)
     }
-
     private fun isArtworkField(key: String): Boolean {
         val normalized = key.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
         return normalized in setOf(
