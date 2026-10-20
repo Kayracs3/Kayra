@@ -2,6 +2,15 @@
 
 ## 2026-10-20
 
+<!-- kayra-commit:93b2c9dd232e16f264d3bbb2a8b1d5178e19008d -->
+### Keep InatBoxYedek live catalog resilient
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [93b2c9d](https://github.com/Kayracs3/Kayra/commit/93b2c9dd232e16f264d3bbb2a8b1d5178e19008d)
+
+
+## 2026-10-20
+
 <!-- kayra-commit:8d88ecda1855564d841e3b437666b467f28685a4 -->
 ### Fix InatBoxYedek playback and artwork
 
