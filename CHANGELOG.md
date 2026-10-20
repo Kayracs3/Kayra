@@ -2,6 +2,15 @@
 
 ## 2026-10-20
 
+<!-- kayra-commit:22b8cbb2fcfd0f9fe817c857933be459ad27ca06 -->
+### Recover InatBoxYedek episode lists
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [22b8cbb](https://github.com/Kayracs3/Kayra/commit/22b8cbb2fcfd0f9fe817c857933be459ad27ca06)
+
+
+## 2026-10-20
+
 <!-- kayra-commit:93b2c9dd232e16f264d3bbb2a8b1d5178e19008d -->
 ### Keep InatBoxYedek live catalog resilient
 
