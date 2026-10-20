@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-20
+
+<!-- kayra-commit:213bd189a455f31b83009ad359b1c473d7fa2aff -->
+### Add isolated InatBoxYedek provider
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [213bd18](https://github.com/Kayracs3/Kayra/commit/213bd189a455f31b83009ad359b1c473d7fa2aff)
+
+
 ## 2026-10-18
 
 <!-- kayra-commit:bc9d5ffd7f3ea0634bc515a1fa5df1db1918056a -->
