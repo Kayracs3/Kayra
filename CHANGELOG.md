@@ -2,6 +2,15 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:0f2b4d0ecfa92ee1a65656ed2a95a9c417f89c78 -->
+### Fix Flix player script matching regex
+
+- Etkilenen alanlar: Flix
+- Commit: [0f2b4d0](https://github.com/Kayracs3/Kayra/commit/0f2b4d0ecfa92ee1a65656ed2a95a9c417f89c78)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:8d4da100407398ff50895f04cfe7266f0697118a -->
 ### Search Flix player scripts and alternate HLS manifests
 
