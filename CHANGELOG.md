@@ -2,6 +2,15 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:bd814a2a4ef57071945dc132d22f4ef08c131027 -->
+### Scan raw Flix player responses and log source detection
+
+- Etkilenen alanlar: Flix
+- Commit: [bd814a2](https://github.com/Kayracs3/Kayra/commit/bd814a2a4ef57071945dc132d22f4ef08c131027)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:434acdf8e04f618e557075eea23b699cc7a78cbf -->
 ### Include Flix request scripts in player source scan
 
