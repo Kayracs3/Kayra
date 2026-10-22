@@ -1,5 +1,7 @@
 package com.Kayracs3
 
+import android.util.Log
+
 import com.lagradost.cloudstream3.newEpisode
 
 import com.lagradost.cloudstream3.newHomePageResponse
@@ -362,7 +364,9 @@ class Flix : MainAPI() {
                     allowRedirects = true
                 )
             }.getOrNull() ?: return
+            val responseBody = response.text
             val document = response.document
+            Log.d("Flix", "Tarama başladı: ${pageUrl.substringBefore('?')} (derinlik=$depth)")
 
             for (track in document.select("track[src], track[data-src], track[data-url]")) {
                 val raw = sequenceOf(
@@ -427,7 +431,7 @@ class Flix : MainAPI() {
                 }
             }.take(8).forEach { candidates.add(it) }
 
-            val html = document.html()
+            val html = responseBody
                 .replace("""\/""", "/")
                 .replace("""\u002F""", "/", true)
                 .replace("""\u0026""", "&", true)
@@ -451,6 +455,7 @@ class Flix : MainAPI() {
                 if (isDirectMedia) {
                     var playableUrl = candidate
                     if (isHlsCandidate && !isPlayableHls(candidate, pageUrl)) {
+                        Log.w("Flix", "Oynatılabilir olmayan HLS adayı elendi: ${candidate.substringBefore('?')}")
                         playableUrl = findAlternativeHls(candidate, pageUrl) ?: continue
                     }
                     val playablePath = runCatching { URI(playableUrl).path.orEmpty().lowercase() }
@@ -472,6 +477,7 @@ class Flix : MainAPI() {
                             }
                         )
                         found = true
+                        Log.d("Flix", "Oynatılabilir bağlantı bulundu: ${playableUrl.substringBefore('?')}")
                     }
                     continue
                 }
@@ -494,6 +500,9 @@ class Flix : MainAPI() {
         }
 
         scanPage(data, "$mainUrl/", 0)
+        if (!found) {
+            Log.w("Flix", "Bağlantı bulunamadı; taranan sayfa sayısı=${visitedPages.size}")
+        }
         return found
     }
 
