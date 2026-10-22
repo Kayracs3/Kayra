@@ -169,6 +169,15 @@ jobs:
           # Keep the new provider's source in master so later builds do not
           # remove it from the published plugin repository.
           git add -- "$MODULE_NAME/build.gradle.kts" "$MODULE_NAME/src"
+
+          # Gradle updates tracked build outputs (especially build/plugins.json).
+          # The successful build's .cs3 files and catalogue were already copied
+          # to ARTIFACT_DIR above, so restore all unstaged tracked outputs before
+          # committing/rebasing the provider source. Keep staged provider files.
+          git restore --worktree -- .
+          echo "Git status after restoring generated build outputs:"
+          git status --short
+
           if ! git diff --cached --quiet; then
             git commit -m "Add URL-generated CloudStream provider: $MODULE_NAME"
             SOURCE_PUSHED=0
