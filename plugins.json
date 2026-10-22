@@ -542,10 +542,10 @@
     },
     {
         "iconUrl": "https://inattv1327.xyz/favicon.ico",
-        "fileHash": "sha256-2f541a1fd2642717f3c4661d03187d93c4e8ec5272c6653a5e88943d9430f8ef",
+        "fileHash": "sha256-751788eaaee48cc399ae6453f88449887ceba72f118908f0e59cecd3d1afbffd",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 25239,
+        "fileSize": 28328,
         "status": 1,
         "language": "tr",
         "authors": [
