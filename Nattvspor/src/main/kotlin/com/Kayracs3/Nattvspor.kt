@@ -92,7 +92,7 @@ class Nattvspor : MainAPI() {
         }
 
         val style = element.attr("style")
-        Regex("""(?i)url\\((?:['"])?([^)'"]+)""")
+        Regex("""(?i)url\((?:['"])?([^)'"]+)""")
             .findAll(style)
             .map { it.groupValues[1].trim() }
             .filter { it.isNotBlank() }
