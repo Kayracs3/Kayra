@@ -2,6 +2,15 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:bc566ef5c0c5b608ea2ac4a64041fd15b0c93638 -->
+### Remove Nattvspor provider
+
+- Etkilenen alanlar: Nattvspor
+- Commit: [bc566ef](https://github.com/Kayracs3/Kayra/commit/bc566ef5c0c5b608ea2ac4a64041fd15b0c93638)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:7cc835e9a3b4da12f841f5dae3bba0d296937824 -->
 ### Skip Nattvspor image-only HLS previews
 
