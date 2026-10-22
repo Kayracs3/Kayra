@@ -2,6 +2,15 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:8d4da100407398ff50895f04cfe7266f0697118a -->
+### Search Flix player scripts and alternate HLS manifests
+
+- Etkilenen alanlar: Flix
+- Commit: [8d4da10](https://github.com/Kayracs3/Kayra/commit/8d4da100407398ff50895f04cfe7266f0697118a)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:d27102a070b7e9a1769d7757bc93791e5b9dcbfa -->
 ### Reject image-only HLS preview playlists in Flix
 
