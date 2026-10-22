@@ -566,6 +566,27 @@
         "name": "RecTV"
     },
     {
+        "iconUrl": "https://reelpulse.org/favicon.ico",
+        "fileHash": "sha256-ea2a9a223a6febfc17c6623093f9da21954808b06076b6d5f25d13f54482c9a5",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 23354,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "Reelpulse",
+        "description": "ReelPulse otomatik sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Reelpulse.cs3",
+        "name": "Reelpulse"
+    },
+    {
         "iconUrl": "https://www.setfilmizle.ltd/favicon.ico",
         "fileHash": "sha256-6edf9360f77f1b435d1fa67f544fb5dcc37de527d591585a1e2b5ceb3b7999c1",
         "apiVersion": 1,
