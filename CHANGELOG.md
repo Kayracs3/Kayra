@@ -2,6 +2,15 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:eaacd72780c8626957c8465f1410ad336c8f7a8a -->
+### Correct CSS background poster URL matching
+
+- Etkilenen alanlar: Nattvspor
+- Commit: [eaacd72](https://github.com/Kayracs3/Kayra/commit/eaacd72780c8626957c8465f1410ad336c8f7a8a)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:069f33fa396dd2ab7407be2644ec0f7caf445d84 -->
 ### Fix Nattvspor poster extraction
 
