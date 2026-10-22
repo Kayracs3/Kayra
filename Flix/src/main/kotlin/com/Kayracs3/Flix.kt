@@ -355,12 +355,12 @@ class Flix : MainAPI() {
             }
 
             val html = document.html()
-                .replace("\\\\/", "/")
-                .replace("\\\\u002F", "/", true)
-                .replace("\\\\u0026", "&", true)
+                .replace("""\/""", "/")
+                .replace("""\u002F""", "/", true)
+                .replace("""\u0026""", "&", true)
                 .replace("&quot;", "\"", true)
             val mediaPattern = Regex(
-                "(?i)(?:https?:)?//[^\\\\s\\\\\"'<>]+\\\\.(?:m3u8|mp4)(?:\\\\?[^\\\\s\\\\\"'<>]*)?"
+                """(?i)(?:https?:)?//[^\s"'<>]+\.(?:m3u8|mp4)(?:\?[^\s"'<>]*)?"""
             )
             mediaPattern.findAll(html).forEach { match ->
                 val candidate = fixUrl(match.value, pageUrl)
