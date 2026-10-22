@@ -57,15 +57,59 @@ class Reelpulse : MainAPI() {
         host == base || host.endsWith(".$base")
     }.getOrDefault(false)
 
+    private val redBullPosterUrl =
+        "https://res.cloudinary.com/hhhkasdw4/image/upload/f_png,w_480,q_auto/streaming-platform/smarttv/rbtv/logos/logo.png"
+
+    private fun normalizeLabel(value: String): String = value.lowercase()
+        .replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u')
+        .replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+        .replace(Regex("[^a-z0-9]+"), " ")
+        .trim()
+
+    // Site navigation and promotion buttons must never be treated as channel cards.
+    private fun isUiActionTitle(title: String): Boolean {
+        val normalized = normalizeLabel(title)
+        if (normalized.isBlank()) return true
+
+        val exactOrPhraseMatches = listOf(
+            "windows desktop application", "windows desktop app", "desktop application",
+            "desktop app", "windows app", "mobile application", "mobile app",
+            "mobil uygulamamiz", "mobil uygulama", "uygulamamizi indir",
+            "uygulamayi indir", "become a publisher", "yayinci ol",
+            "download apk", "apk indir", "apk download", "download app", "app indir",
+            "advertisement", "advertising", "reklam ver", "reklam alanlari"
+        )
+        if (exactOrPhraseMatches.any { normalized == it || normalized.contains(it) }) return true
+
+        val words = normalized.split(Regex("\\s+")).toSet()
+        return words.any { it in setOf("browse", "gozat", "ads", "reklam", "publisher") }
+    }
+
     private fun isContentUrl(url: String): Boolean {
         if (!sameSite(url)) return false
         val path = runCatching { URI(url).path.orEmpty() }.getOrDefault("")
-        if (path.isBlank() || path == "/") return false
-        if (Regex("(?i)^/(?:wp-admin|wp-login|login|logout|register|privacy|privacy-policy|terms|contact|about|search|arama|category|kategori|tag|etiket|genre|tur)(?:/|$)").containsMatchIn(path)) return false
+        // ReelPulse channel detail pages use /watch/{slug}. Restricting the catalogue
+        // to these routes prevents app-download, publisher, browse and ad buttons
+        // from accidentally appearing as channel tiles.
+        if (!Regex("(?i)^/watch/[^/]+/?$").matches(path)) return false
         return true
     }
 
-    private fun posterFrom(element: Element, link: Element): String? {
+    private fun posterUrl(raw: String?, title: String, base: String = mainUrl): String? {
+        val resolved = fixUrl(raw, base)
+        val normalizedTitle = normalizeLabel(title)
+        val isRedBull = normalizedTitle.contains("red bull") ||
+            normalizedTitle.contains("redbull") ||
+            raw.orEmpty().contains("/rbtv/logos/logo.svg", ignoreCase = true) ||
+            resolved.orEmpty().contains("/rbtv/logos/logo.svg", ignoreCase = true)
+
+        // ReelPulse supplies Red Bull TV as SVG, which CloudStream/Coil can render
+        // as an empty poster on some devices. Request the same image as PNG instead.
+        if (isRedBull) return redBullPosterUrl
+        return resolved
+    }
+
+    private fun posterFrom(element: Element, link: Element, title: String): String? {
         val image = element.selectFirst("img") ?: link.selectFirst("img")
         val raw = sequenceOf(
             image?.attr("data-src"),
@@ -74,7 +118,7 @@ class Reelpulse : MainAPI() {
             image?.attr("data-original-src"),
             image?.attr("src")
         ).firstOrNull { !it.isNullOrBlank() && !it.startsWith("data:", true) }
-        return fixUrl(raw)
+        return posterUrl(raw, title)
     }
 
     private fun titleFrom(element: Element, link: Element): String {
@@ -104,7 +148,7 @@ class Reelpulse : MainAPI() {
         if (!isContentUrl(url)) return null
 
         val title = titleFrom(this, link)
-        if (title.length < 2 || title.lowercase() in setOf(
+        if (title.length < 2 || isUiActionTitle(title) || title.lowercase() in setOf(
                 "ana sayfa", "home", "filmler", "diziler", "kategoriler", "giriş", "giris",
                 "kayıt ol", "kayit ol", "iletişim", "iletisim", "hakkımızda", "hakkimizda"
             )
@@ -116,7 +160,7 @@ class Reelpulse : MainAPI() {
         } else {
             TvType.Movie
         }
-        val poster = posterFrom(this, link)
+        val poster = posterFrom(this, link, title)
         val year = Regex("\\b(?:19|20)\\d{2}\\b").find(allText)?.value?.toIntOrNull()
         return newMovieSearchResponse(title, url, type) {
             posterUrl = poster
@@ -214,13 +258,14 @@ class Reelpulse : MainAPI() {
             ?.trim()
             ?: return null
 
-        val poster = sequenceOf(
+        val posterRaw = sequenceOf(
             document.selectFirst("meta[property=og:image]")?.attr("content"),
             document.selectFirst("img[class*=poster]")?.attr("data-src"),
             document.selectFirst("img[class*=poster]")?.attr("src"),
             document.selectFirst("img")?.attr("data-src"),
             document.selectFirst("img")?.attr("src")
-        ).firstOrNull { !it.isNullOrBlank() }?.let { fixUrl(it, pageUrl) }
+        ).firstOrNull { !it.isNullOrBlank() }
+        val poster = posterUrl(posterRaw, title, pageUrl)
 
         val description = sequenceOf(
             document.selectFirst("meta[name=description]")?.attr("content"),
