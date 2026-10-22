@@ -65,16 +65,87 @@ class Nattvspor : MainAPI() {
         return true
     }
 
+    private fun srcsetUrl(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        return raw.split(',')
+            .asSequence()
+            .map { candidate -> candidate.trim().split(Regex("\\s+"), limit = 2).firstOrNull().orEmpty() }
+            .firstOrNull { it.isNotBlank() && !it.startsWith("data:", true) }
+    }
+
+    private fun imageValues(element: Element): List<String> {
+        val values = mutableListOf<String>()
+        val directAttributes = listOf(
+            "data-lazy-src", "data-src", "data-original", "data-original-src",
+            "data-poster", "data-image", "data-bg", "data-background", "src"
+        )
+        for (attribute in directAttributes) {
+            val value = element.attr(attribute).trim()
+            if (value.isNotBlank()) values += value
+        }
+
+        val srcsetAttributes = listOf(
+            "data-lazy-srcset", "data-srcset", "data-original-srcset", "srcset"
+        )
+        for (attribute in srcsetAttributes) {
+            srcsetUrl(element.attr(attribute))?.let(values::add)
+        }
+
+        val style = element.attr("style")
+        Regex("""(?i)url\\((?:['"])?([^)'"]+)""")
+            .findAll(style)
+            .map { it.groupValues[1].trim() }
+            .filter { it.isNotBlank() }
+            .forEach(values::add)
+
+        return values
+    }
+
+    private fun usablePoster(raw: String?, base: String = mainUrl): String? {
+        val resolved = fixUrl(raw, base) ?: return null
+        val path = runCatching { URI(resolved).path.orEmpty().lowercase() }
+            .getOrDefault("")
+        if (Regex("(?i)(?:placeholder|transparent|blank\\.gif|no[-_]?image|image[-_]?not[-_]?found|spacer\\.gif)").containsMatchIn(path)) {
+            return null
+        }
+        return resolved
+    }
+
     private fun posterFrom(element: Element, link: Element): String? {
-        val image = element.selectFirst("img") ?: link.selectFirst("img")
-        val raw = sequenceOf(
-            image?.attr("data-src"),
-            image?.attr("data-lazy-src"),
-            image?.attr("data-original"),
-            image?.attr("data-original-src"),
-            image?.attr("src")
-        ).firstOrNull { !it.isNullOrBlank() && !it.startsWith("data:", true) }
-        return fixUrl(raw)
+        val nodes = buildList {
+            add(element)
+            if (link !== element) add(link)
+            addAll(element.select("img, picture source, source, [data-bg], [data-background], [style*=background-image]"))
+            addAll(link.select("img, picture source, source, [data-bg], [data-background], [style*=background-image]"))
+        }.distinct()
+
+        for (node in nodes) {
+            for (candidate in imageValues(node)) {
+                usablePoster(candidate)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun posterFromDocument(document: Document, pageUrl: String): String? {
+        val preferred = listOf(
+            document.selectFirst("meta[property=og:image]")?.attr("content"),
+            document.selectFirst("meta[name=twitter:image]")?.attr("content")
+        )
+        for (candidate in preferred) {
+            usablePoster(candidate, pageUrl)?.let { return it }
+        }
+
+        val nodes = buildList {
+            addAll(document.select("img[class*=poster], img[class*=logo], img[data-lazy-src], img[data-src], picture source, source[srcset]"))
+            addAll(document.select("img, source, [data-bg], [data-background], [style*=background-image]"))
+        }.distinct()
+        for (node in nodes) {
+            for (candidate in imageValues(node)) {
+                usablePoster(candidate, pageUrl)?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun titleFrom(element: Element, link: Element): String {
@@ -214,13 +285,7 @@ class Nattvspor : MainAPI() {
             ?.trim()
             ?: return null
 
-        val poster = sequenceOf(
-            document.selectFirst("meta[property=og:image]")?.attr("content"),
-            document.selectFirst("img[class*=poster]")?.attr("data-src"),
-            document.selectFirst("img[class*=poster]")?.attr("src"),
-            document.selectFirst("img")?.attr("data-src"),
-            document.selectFirst("img")?.attr("src")
-        ).firstOrNull { !it.isNullOrBlank() }?.let { fixUrl(it, pageUrl) }
+        val poster = posterFromDocument(document, pageUrl)
 
         val description = sequenceOf(
             document.selectFirst("meta[name=description]")?.attr("content"),
