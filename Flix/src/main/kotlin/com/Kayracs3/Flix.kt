@@ -285,62 +285,133 @@ class Flix : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = runCatching {
-            app.get(data, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
-        }.getOrNull() ?: return false
+        val visitedPages = linkedSetOf<String>()
+        val emittedLinks = linkedSetOf<String>()
         var found = false
 
-        for (track in document.select("track[src], track[data-src]")) {
-            val raw = track.attr("src").ifBlank { track.attr("data-src") }
-            val subtitleUrl = fixUrl(raw, data) ?: continue
-            if (Regex("(?i)\\.(vtt|srt|ass)(\\?|$)").containsMatchIn(subtitleUrl)) {
-                val language = track.attr("srclang").ifBlank { track.attr("label") }.ifBlank { "Unknown" }
-                subtitleCallback(SubtitleFile(language, subtitleUrl))
-            }
-        }
+        suspend fun scanPage(pageRaw: String, referer: String, depth: Int) {
+            if (depth > 2 || visitedPages.size >= 8) return
+            val pageUrl = fixUrl(pageRaw) ?: return
+            if (!visitedPages.add(pageUrl)) return
 
-        val candidates = linkedSetOf<String>()
-        for (element in document.select(
-            "iframe[src], iframe[data-src], video[src], video source[src], source[src], a[href*='.m3u8'], a[href*='.mp4']"
-        )) {
-            val raw = when {
-                element.hasAttr("src") -> element.attr("src")
-                element.hasAttr("data-src") -> element.attr("data-src")
-                else -> element.attr("href")
-            }
-            fixUrl(raw, data)?.let { candidates.add(it) }
-        }
-
-        val html = document.html().replace("\\/", "/").replace("\\u002F", "/", true)
-            .replace("\\u0026", "&", true)
-        val mediaPattern = Regex("(?i)(?:https?:)?//[^\\s\\\"'<>]+\\.(?:m3u8|mp4)(?:\\?[^\\s\\\"'<>]*)?")
-        mediaPattern.findAll(html).forEach { match ->
-            fixUrl(match.value, data)?.let { candidates.add(it) }
-        }
-
-        for (candidate in candidates) {
-            if (Regex("(?i)\\.(m3u8|mp4)(\\?.*)?$").containsMatchIn(candidate)) {
-                callback(
-                    newExtractorLink(
-                        source = name,
-                        name = name,
-                        url = candidate,
-                        type = if (candidate.substringBefore('?').endsWith(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                    ) {
-                        referer = data
-                        quality = Qualities.Unknown.value
-                    }
+            val response = runCatching {
+                app.get(
+                    pageUrl,
+                    headers = pageHeaders + ("Referer" to referer),
+                    allowRedirects = true
                 )
-                found = true
-            } else {
-                runCatching {
-                    loadExtractor(candidate, data, subtitleCallback) { link ->
-                        callback(link)
+            }.getOrNull() ?: return
+            val document = response.document
+
+            for (track in document.select("track[src], track[data-src], track[data-url]")) {
+                val raw = sequenceOf(
+                    track.attr("src"),
+                    track.attr("data-src"),
+                    track.attr("data-url")
+                ).firstOrNull { it.isNotBlank() } ?: continue
+                val subtitleUrl = fixUrl(raw, pageUrl) ?: continue
+                if (Regex("(?i)\\.(vtt|srt|ass)(\\?|$)").containsMatchIn(subtitleUrl)) {
+                    val language = track.attr("srclang")
+                        .ifBlank { track.attr("label") }
+                        .ifBlank { track.attr("lang") }
+                        .ifBlank { "Unknown" }
+                    subtitleCallback(SubtitleFile(language, subtitleUrl))
+                }
+            }
+
+            val candidates = linkedSetOf<String>()
+            val selector = listOf(
+                "iframe",
+                "video",
+                "video source",
+                "source",
+                "[data-embed]",
+                "[data-embed-url]",
+                "[data-video]",
+                "[data-player]",
+                "[data-player-url]",
+                "[data-stream]",
+                "a[href*='.m3u8']",
+                "a[href*='.mp4']"
+            ).joinToString(", ")
+
+            for (element in document.select(selector)) {
+                val raw = sequenceOf(
+                    element.attr("src"),
+                    element.attr("data-src"),
+                    element.attr("data-lazy-src"),
+                    element.attr("data-url"),
+                    element.attr("data-embed"),
+                    element.attr("data-embed-url"),
+                    element.attr("data-video"),
+                    element.attr("data-player"),
+                    element.attr("data-player-url"),
+                    element.attr("data-stream"),
+                    element.attr("href")
+                ).firstOrNull { it.isNotBlank() } ?: continue
+
+                val candidate = fixUrl(raw, pageUrl) ?: continue
+                if (candidate != pageUrl) candidates.add(candidate)
+            }
+
+            val html = document.html()
+                .replace("\\\\/", "/")
+                .replace("\\\\u002F", "/", true)
+                .replace("\\\\u0026", "&", true)
+                .replace("&quot;", "\"", true)
+            val mediaPattern = Regex(
+                "(?i)(?:https?:)?//[^\\\\s\\\\\"'<>]+\\\\.(?:m3u8|mp4)(?:\\\\?[^\\\\s\\\\\"'<>]*)?"
+            )
+            mediaPattern.findAll(html).forEach { match ->
+                val candidate = fixUrl(match.value, pageUrl)
+                if (candidate != null) candidates.add(candidate)
+            }
+
+            for (candidate in candidates.take(40)) {
+                val path = runCatching { URI(candidate).path.orEmpty().lowercase() }.getOrDefault("")
+                val isDirectMedia = path.endsWith(".m3u8") || path.endsWith(".mp4")
+
+                if (isDirectMedia) {
+                    if (emittedLinks.add(candidate)) {
+                        callback(
+                            newExtractorLink(
+                                source = name,
+                                name = name,
+                                url = candidate,
+                                type = if (path.endsWith(".m3u8")) {
+                                    ExtractorLinkType.M3U8
+                                } else {
+                                    ExtractorLinkType.VIDEO
+                                }
+                            ) {
+                                this.referer = pageUrl
+                                quality = Qualities.Unknown.value
+                            }
+                        )
                         found = true
                     }
+                    continue
+                }
+
+                runCatching {
+                    loadExtractor(candidate, pageUrl, subtitleCallback) { link ->
+                        if (emittedLinks.add(link.url)) {
+                            callback(link)
+                            found = true
+                        }
+                    }
+                }
+
+                // A player wrapper can contain another iframe, so inspect a limited
+                // number of nested player pages instead of stopping at the first level.
+                if (depth < 2 && visitedPages.size < 8) {
+                    scanPage(candidate, pageUrl, depth + 1)
                 }
             }
         }
+
+        scanPage(data, "$mainUrl/", 0)
         return found
     }
+
 }
