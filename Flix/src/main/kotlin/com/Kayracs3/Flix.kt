@@ -279,6 +279,25 @@ class Flix : MainAPI() {
         }
     }
 
+    private suspend fun findAlternativeHls(manifestUrl: String, referer: String): String? {
+        val base = runCatching { URI(manifestUrl) }.getOrNull() ?: return null
+        val alternatives = listOf(
+            "master.m3u8",
+            "index.m3u8",
+            "playlist.m3u8",
+            "live.m3u8",
+            "stream.m3u8",
+            "video.m3u8",
+            "master_720.m3u8"
+        )
+        for (name in alternatives) {
+            val candidate = runCatching { base.resolve(name).toString() }.getOrNull() ?: continue
+            if (candidate == manifestUrl) continue
+            if (isPlayableHls(candidate, referer)) return candidate
+        }
+        return null
+    }
+
     private suspend fun isPlayableHls(url: String, referer: String): Boolean {
         val response = runCatching {
             app.get(
@@ -396,13 +415,25 @@ class Flix : MainAPI() {
                 if (candidate != pageUrl) candidates.add(candidate)
             }
 
+            // Player scripts often contain the real source while the visible mono.m3u8 is only a thumbnail playlist.
+            document.select("script[src]").mapNotNull { script ->
+                val scriptUrl = fixUrl(script.attr("src"), pageUrl) ?: return@mapNotNull null
+                val scriptName = runCatching { URI(scriptUrl).path.orEmpty().substringAfterLast('/') }
+                    .getOrDefault("")
+                if (Regex("(?i)(player|video|stream|embed|hls|jwplayer|dash|source|main|app).{0,30}\.js$").containsMatchIn(scriptName)) {
+                    scriptUrl
+                } else {
+                    null
+                }
+            }.take(5).forEach { candidates.add(it) }
+
             val html = document.html()
                 .replace("""\/""", "/")
                 .replace("""\u002F""", "/", true)
                 .replace("""\u0026""", "&", true)
                 .replace("&quot;", "\"", true)
             val mediaPattern = Regex(
-                """(?i)(?:https?:)?//[^\s"'<>]+\.(?:m3u8|mp4)(?:\?[^\s"'<>]*)?"""
+                """(?i)(?:https?:)?//[^\s"'<>]+\.(?:m3u8|mp4|txt)(?:\?[^\s"'<>]*)?"""
             )
             mediaPattern.findAll(html).forEach { match ->
                 val candidate = fixUrl(match.value, pageUrl)
@@ -411,22 +442,29 @@ class Flix : MainAPI() {
 
             for (candidate in candidates.take(40)) {
                 val path = runCatching { URI(candidate).path.orEmpty().lowercase() }.getOrDefault("")
-                val isDirectMedia = path.endsWith(".m3u8") || path.endsWith(".mp4")
+                val isTextManifest = path.endsWith("/master.txt") ||
+                    path.endsWith("/index.txt") ||
+                    path.endsWith("/playlist.txt")
+                val isHlsCandidate = path.endsWith(".m3u8") || isTextManifest
+                val isDirectMedia = isHlsCandidate || path.endsWith(".mp4")
 
                 if (isDirectMedia) {
-                    if (path.endsWith(".m3u8") && !isPlayableHls(candidate, pageUrl)) {
-                        continue
+                    var playableUrl = candidate
+                    if (isHlsCandidate && !isPlayableHls(candidate, pageUrl)) {
+                        playableUrl = findAlternativeHls(candidate, pageUrl) ?: continue
                     }
-                    if (emittedLinks.add(candidate)) {
+                    val playablePath = runCatching { URI(playableUrl).path.orEmpty().lowercase() }
+                        .getOrDefault("")
+                    if (emittedLinks.add(playableUrl)) {
                         callback(
                             newExtractorLink(
                                 source = name,
                                 name = name,
-                                url = candidate,
-                                type = if (path.endsWith(".m3u8")) {
-                                    ExtractorLinkType.M3U8
-                                } else {
+                                url = playableUrl,
+                                type = if (playablePath.endsWith(".mp4")) {
                                     ExtractorLinkType.VIDEO
+                                } else {
+                                    ExtractorLinkType.M3U8
                                 }
                             ) {
                                 this.referer = pageUrl
