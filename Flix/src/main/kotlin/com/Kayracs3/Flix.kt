@@ -1,21 +1,6 @@
 package com.Kayracs3
 
 import android.util.Log
-
-import com.lagradost.cloudstream3.newEpisode
-
-import com.lagradost.cloudstream3.newHomePageResponse
-
-import com.lagradost.cloudstream3.utils.loadExtractor
-
-import com.lagradost.cloudstream3.utils.ExtractorLink
-
-import com.lagradost.cloudstream3.newMovieSearchResponse
-
-import com.lagradost.cloudstream3.newTvSeriesLoadResponse
-
-import com.lagradost.cloudstream3.newMovieLoadResponse
-
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Document
@@ -114,8 +99,8 @@ class Flix : MainAPI() {
 
         val allText = "${title} ${url} ${text()}"
         val type = when {
-            Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText) -> TvType.TvSeries
             Regex("(?i)(canlı|canli|live|yayın|yayin|channel\\.html|/kanal|/channel|/tv/)").containsMatchIn(allText) -> TvType.Live
+            Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText) -> TvType.TvSeries
             else -> TvType.Movie
         }
         val poster = posterFrom(this, link)
@@ -260,18 +245,28 @@ class Flix : MainAPI() {
             }
         }.distinctBy { it.name + "|" + it.season + "|" + it.episode }
 
-        // Canlı kanal tespiti: doğrudan channel.html iframe'i varsa ya da URL canlı anahtar kelimeler içeriyorsa
+        // Canlı kanal tespiti: channel.html iframe'i veya URL'de canlı anahtar kelime varsa
         val isLive = document.selectFirst("iframe[src*=channel\\.html]") != null ||
-            Regex("(?i)(canlı|canli|/live|/channel|channel\\.html|/kanal/|yayin|yayın)").containsMatchIn(pageUrl)
+            Regex("(?i)(channel\\.html|/live|/channel|/kanal|canlı|canli)").containsMatchIn(pageUrl)
 
         val isSeries = !isLive && (episodes.isNotEmpty() ||
             Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl))
 
         return when {
-            isLive -> newMovieLoadResponse(title, pageUrl, TvType.Live, pageUrl) {
-                posterUrl = poster
-                this.plot = description
-                this.tags = tags
+            isLive -> {
+                // Eğer ana sayfa URL'si doğrudan channel.html değilse, iframe'in src'sini data olarak kullan.
+                val liveDataUrl = if (pageUrl.contains("channel.html", true)) {
+                    pageUrl
+                } else {
+                    document.selectFirst("iframe[src*=channel\\.html]")?.let { iframe ->
+                        fixUrl(iframe.attr("src"), pageUrl) ?: pageUrl
+                    } ?: pageUrl
+                }
+                newMovieLoadResponse(title, pageUrl, TvType.Live, liveDataUrl) {
+                    posterUrl = poster
+                    this.plot = description
+                    this.tags = tags
+                }
             }
             isSeries -> newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
                 posterUrl = poster
@@ -290,32 +285,9 @@ class Flix : MainAPI() {
         }
     }
 
-    private suspend fun findAlternativeHls(manifestUrl: String, referer: String): String? {
-        val base = runCatching { URI(manifestUrl) }.getOrNull() ?: return null
-        val alternatives = listOf(
-            "master.m3u8",
-            "index.m3u8",
-            "playlist.m3u8",
-            "live.m3u8",
-            "stream.m3u8",
-            "video.m3u8",
-            "master_720.m3u8"
-        )
-        for (name in alternatives) {
-            val candidate = runCatching { base.resolve(name).toString() }.getOrNull() ?: continue
-            if (candidate == manifestUrl) continue
-            if (isPlayableHls(candidate, referer)) return candidate
-        }
-        return null
-    }
-
     private suspend fun isPlayableHls(url: String, referer: String): Boolean {
         val response = runCatching {
-            app.get(
-                url,
-                headers = pageHeaders + ("Referer" to referer),
-                allowRedirects = true
-            )
+            app.get(url, headers = pageHeaders + ("Referer" to referer), allowRedirects = true)
         }.getOrNull() ?: return false
 
         val body = response.text.trim()
@@ -326,18 +298,9 @@ class Flix : MainAPI() {
 
         if (!body.startsWith("#EXTM3U")) return false
 
-        val hasVariantPlaylist = Regex(
-            """(?im)^\s*#EXT-X-STREAM-INF\s*:"""
-        ).containsMatchIn(body)
-
-        val hasVideoMap = Regex(
-            """(?i)#EXT-X-MAP:.*URI=["']?[^"']+\.(?:mp4|m4s)(?:[?#][^"']*)?"""
-        ).containsMatchIn(body)
-
-        // Canlı yayınlar çoğunlukla #EXTINF segment listesi içerir.
-        val hasLiveSegments = Regex(
-            """(?im)^\s*#EXTINF\s*:"""
-        ).containsMatchIn(body)
+        val hasVariantPlaylist = Regex("""(?im)^\s*#EXT-X-STREAM-INF\s*:""").containsMatchIn(body)
+        val hasVideoMap = Regex("""(?i)#EXT-X-MAP:.*URI=["']?[^"']+\.(?:mp4|m4s)(?:[?#][^"']*)?""").containsMatchIn(body)
+        val hasLiveSegments = Regex("""(?im)^\s*#EXTINF\s*:""").containsMatchIn(body)
 
         val uriLines = body.lineSequence()
             .map { it.trim() }
@@ -347,71 +310,38 @@ class Flix : MainAPI() {
         if (uriLines.isEmpty()) return hasVariantPlaylist || hasVideoMap || hasLiveSegments
 
         val imageOnly = uriLines.all { line ->
-            Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)(?:[?#].*)?$""")
-                .containsMatchIn(line)
+            Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)(?:[?#].*)?$""").containsMatchIn(line)
         }
 
-        // Sadece görsel playlist'i ise oynatma; aksi halde (canlı segmentler dahil) kabul et.
         return !imageOnly || hasVariantPlaylist || hasVideoMap || hasLiveSegments
     }
 
     /**
-     * channel.html sayfalarındaki Clappr player CONFIG nesnesini ayrıştırır.
-     * Sırasıyla:
-     *  1. CONFIG içindeki bilinen anahtarlarda doğrudan .m3u8/.mp4/.txt URL'si arar.
-     *  2. Gövdede geçen herhangi bir m3u8/mp4 URL'sini yakalar.
-     *  3. Son çare olarak `baseUrl` + yaygın manifest yollarını deneyip
-     *     `isPlayableHls` ile doğrular.
+     * channel.html sayfasındaki CONFIG.domainUrl adresine istek atarak
+     * güncel baseurl değerini alır ve id parametresiyle birleştirerek
+     * canlı yayın akış URL'sini (mono.m3u8) döndürür.
      */
     private suspend fun extractStreamFromChannelPage(body: String, pageUrl: String): String? {
-        val cleaned = body
-            .replace("""\/""", "/")
-            .replace("""\u002F""", "/", true)
-            .replace("""\u0026""", "&", true)
-            .replace("&quot;", "\"", true)
-            .replace("&#039;", "'", true)
-            .replace("&amp;", "&", true)
+        // 1. domainUrl'i al
+        val domainUrl = Regex("""domainUrl\s*:\s*['"]([^'"]+)['"]""")
+            .find(body)?.groupValues?.getOrNull(1) ?: return null
 
-        // 1. Adım: Clappr CONFIG içindeki yaygın anahtarlar
-        val configKeys = listOf(
-            "baseUrl", "source", "file", "url", "streamUrl", "hlsUrl",
-            "src", "m3u8", "m3u8Url", "stream", "videoUrl", "playlist",
-            "manifest", "liveUrl", "hls", "link", "video", "playlistUrl"
-        )
-        for (key in configKeys) {
-            val regex = Regex(
-                """(?i)["']?$key["']?\s*[:=]\s*["']([^"'\s]+\.(?:m3u8|mp4|txt)[^"'\s]*)["']"""
-            )
-            val match = regex.find(cleaned)
-            if (match != null) {
-                val url = fixUrl(match.groupValues[1], pageUrl)
-                if (url != null) return url
-            }
-        }
+        // 2. id parametresini al
+        val id = runCatching {
+            URI(pageUrl).query?.split("&")
+                ?.find { it.startsWith("id=") }
+                ?.substringAfter("id=")
+        }.getOrNull() ?: return null
 
-        // 2. Adım: Gövdede geçen herhangi bir m3u8/mp4 URL'si
-        val anyUrlRegex = Regex(
-            """(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?"""
-        )
-        val directUrl = anyUrlRegex.find(cleaned)?.value?.let { fixUrl(it, pageUrl) }
-        if (directUrl != null) return directUrl
+        // 3. domainUrl'e istek at, baseurl'i al
+        val baseUrl = runCatching {
+            val response = app.get(domainUrl, headers = pageHeaders, allowRedirects = true).text
+            Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
+                .find(response)?.groupValues?.getOrNull(1)
+        }.getOrNull() ?: return null
 
-        // 3. Adım: baseUrl varsa yaygın manifest yollarını dene
-        val baseUrlMatch = Regex("""(?i)["']?baseUrl["']?\s*[:=]\s*["']([^"']+)["']""")
-            .find(cleaned)?.groupValues?.getOrNull(1)
-            ?.let { fixUrl(it, pageUrl) }
-        if (baseUrlMatch != null && !Regex("""(?i)\.(?:m3u8|mp4|txt)(?:\?.*)?$""").containsMatchIn(baseUrlMatch)) {
-            val base = baseUrlMatch.trimEnd('/')
-            for (path in listOf(
-                "index.m3u8", "playlist.m3u8", "master.m3u8",
-                "live.m3u8", "stream.m3u8", "video.m3u8"
-            )) {
-                val candidate = "$base/$path"
-                if (isPlayableHls(candidate, pageUrl)) return candidate
-            }
-        }
-
-        return null
+        // 4. Akış URL'sini oluştur
+        return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
     override suspend fun loadLinks(
@@ -430,50 +360,35 @@ class Flix : MainAPI() {
             if (!visitedPages.add(pageUrl)) return
 
             val response = runCatching {
-                app.get(
-                    pageUrl,
-                    headers = pageHeaders + ("Referer" to referer),
-                    allowRedirects = true
-                )
+                app.get(pageUrl, headers = pageHeaders + ("Referer" to referer), allowRedirects = true)
             }.getOrNull() ?: return
             val responseBody = response.text
             val document = response.document
             Log.d("Flix", "Tarama başladı: ${pageUrl.substringBefore('?')} (derinlik=$depth)")
 
-            // channel.html sayfaları Clappr CONFIG içinde akış URL'sini saklar.
-            if (pageUrl.contains("channel.html", ignoreCase = true) ||
-                Regex("(?i)/channel\\b").containsMatchIn(pageUrl)
-            ) {
+            // channel.html sayfası: CONFIG.domainUrl üzerinden akış URL'sini oluştur
+            if (pageUrl.contains("channel.html", ignoreCase = true)) {
                 val streamUrl = extractStreamFromChannelPage(responseBody, pageUrl)
                 if (streamUrl != null && emittedLinks.add(streamUrl)) {
-                    val path = runCatching { URI(streamUrl).path.orEmpty().lowercase() }
-                        .getOrDefault("")
                     callback(
                         newExtractorLink(
                             source = name,
                             name = name,
                             url = streamUrl,
-                            type = if (path.endsWith(".mp4")) {
-                                ExtractorLinkType.VIDEO
-                            } else {
-                                ExtractorLinkType.M3U8
-                            }
+                            type = ExtractorLinkType.M3U8
                         ) {
                             this.referer = pageUrl
                             quality = Qualities.Unknown.value
                         }
                     )
                     found = true
-                    Log.d("Flix", "channel.html CONFIG'ten akış bulundu: ${streamUrl.substringBefore('?')}")
+                    Log.d("Flix", "channel.html üzerinden akış bulundu: ${streamUrl.substringBefore('?')}")
                 }
             }
 
             for (track in document.select("track[src], track[data-src], track[data-url]")) {
-                val raw = sequenceOf(
-                    track.attr("src"),
-                    track.attr("data-src"),
-                    track.attr("data-url")
-                ).firstOrNull { it.isNotBlank() } ?: continue
+                val raw = sequenceOf(track.attr("src"), track.attr("data-src"), track.attr("data-url"))
+                    .firstOrNull { it.isNotBlank() } ?: continue
                 val subtitleUrl = fixUrl(raw, pageUrl) ?: continue
                 if (Regex("(?i)\\.(vtt|srt|ass)(\\?|$)").containsMatchIn(subtitleUrl)) {
                     val language = track.attr("srclang")
@@ -486,49 +401,29 @@ class Flix : MainAPI() {
 
             val candidates = linkedSetOf<String>()
             val selector = listOf(
-                "iframe",
-                "video",
-                "video source",
-                "source",
-                "[data-embed]",
-                "[data-embed-url]",
-                "[data-video]",
-                "[data-player]",
-                "[data-player-url]",
-                "[data-stream]",
-                "a[href*='.m3u8']",
-                "a[href*='.mp4']",
-                "a[href*='channel.html']"
+                "iframe", "video", "video source", "source",
+                "[data-embed]", "[data-embed-url]", "[data-video]", "[data-player]",
+                "[data-player-url]", "[data-stream]",
+                "a[href*='.m3u8']", "a[href*='.mp4']", "a[href*='channel.html']"
             ).joinToString(", ")
 
             for (element in document.select(selector)) {
                 val raw = sequenceOf(
-                    element.attr("src"),
-                    element.attr("data-src"),
-                    element.attr("data-lazy-src"),
-                    element.attr("data-url"),
-                    element.attr("data-embed"),
-                    element.attr("data-embed-url"),
-                    element.attr("data-video"),
-                    element.attr("data-player"),
-                    element.attr("data-player-url"),
-                    element.attr("data-stream"),
-                    element.attr("href")
+                    element.attr("src"), element.attr("data-src"), element.attr("data-lazy-src"),
+                    element.attr("data-url"), element.attr("data-embed"), element.attr("data-embed-url"),
+                    element.attr("data-video"), element.attr("data-player"), element.attr("data-player-url"),
+                    element.attr("data-stream"), element.attr("href")
                 ).firstOrNull { it.isNotBlank() } ?: continue
-
                 val candidate = fixUrl(raw, pageUrl) ?: continue
                 if (candidate != pageUrl) candidates.add(candidate)
             }
 
             document.select("script[src]").mapNotNull { script ->
                 val scriptUrl = fixUrl(script.attr("src"), pageUrl) ?: return@mapNotNull null
-                val scriptName = runCatching { URI(scriptUrl).path.orEmpty().substringAfterLast('/') }
-                    .getOrDefault("")
+                val scriptName = runCatching { URI(scriptUrl).path.orEmpty().substringAfterLast('/') }.getOrDefault("")
                 if (Regex("""(?i)(player|video|stream|embed|hls|jwplayer|dash|source|main|app|request|xhr|api|network|index|clappr).{0,30}\.js$""").containsMatchIn(scriptName)) {
                     scriptUrl
-                } else {
-                    null
-                }
+                } else null
             }.take(8).forEach { candidates.add(it) }
 
             val html = responseBody
@@ -536,9 +431,8 @@ class Flix : MainAPI() {
                 .replace("""\u002F""", "/", true)
                 .replace("""\u0026""", "&", true)
                 .replace("&quot;", "\"", true)
-            val mediaPattern = Regex(
-                """(?i)(?:https?:)?//[^\s"'<>]+\.(?:m3u8|mp4|txt)(?:\?[^\s"'<>]*)?"""
-            )
+
+            val mediaPattern = Regex("""(?i)(?:https?:)?//[^\s"'<>]+\.(?:m3u8|mp4|txt)(?:\?[^\s"'<>]*)?""")
             mediaPattern.findAll(html).forEach { match ->
                 val candidate = fixUrl(match.value, pageUrl)
                 if (candidate != null) candidates.add(candidate)
@@ -546,9 +440,7 @@ class Flix : MainAPI() {
 
             for (candidate in candidates.take(40)) {
                 val path = runCatching { URI(candidate).path.orEmpty().lowercase() }.getOrDefault("")
-                val isTextManifest = path.endsWith("/master.txt") ||
-                    path.endsWith("/index.txt") ||
-                    path.endsWith("/playlist.txt")
+                val isTextManifest = path.endsWith("/master.txt") || path.endsWith("/index.txt") || path.endsWith("/playlist.txt")
                 val isHlsCandidate = path.endsWith(".m3u8") || isTextManifest
                 val isDirectMedia = isHlsCandidate || path.endsWith(".mp4")
 
@@ -556,21 +448,16 @@ class Flix : MainAPI() {
                     var playableUrl = candidate
                     if (isHlsCandidate && !isPlayableHls(candidate, pageUrl)) {
                         Log.w("Flix", "Oynatılabilir olmayan HLS adayı elendi: ${candidate.substringBefore('?')}")
-                        playableUrl = findAlternativeHls(candidate, pageUrl) ?: continue
+                        continue
                     }
-                    val playablePath = runCatching { URI(playableUrl).path.orEmpty().lowercase() }
-                        .getOrDefault("")
+                    val playablePath = runCatching { URI(playableUrl).path.orEmpty().lowercase() }.getOrDefault("")
                     if (emittedLinks.add(playableUrl)) {
                         callback(
                             newExtractorLink(
                                 source = name,
                                 name = name,
                                 url = playableUrl,
-                                type = if (playablePath.endsWith(".mp4")) {
-                                    ExtractorLinkType.VIDEO
-                                } else {
-                                    ExtractorLinkType.M3U8
-                                }
+                                type = if (playablePath.endsWith(".mp4")) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8
                             ) {
                                 this.referer = pageUrl
                                 quality = Qualities.Unknown.value
@@ -591,7 +478,6 @@ class Flix : MainAPI() {
                     }
                 }
 
-                // channel.html adaylarını önce iç CONFIG ayrıştırması için recurse et
                 if (depth < 2 && visitedPages.size < 8) {
                     scanPage(candidate, pageUrl, depth + 1)
                 }
