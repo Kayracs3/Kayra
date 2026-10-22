@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:486c72bfb125a862696ba9bb06e06fac3f97d6ec -->
+### Add Turkish channel logos and improve logo fetching
+
+- Etkilenen alanlar: Flix
+- Commit: [486c72b](https://github.com/Kayracs3/Kayra/commit/486c72bfb125a862696ba9bb06e06fac3f97d6ec)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:47269330ee7bf1e065d929692eb4f054f42e37fa -->
 ### Refactor Flix.kt for improved readability and logic
 
