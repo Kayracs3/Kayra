@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-22
+
+<!-- kayra-commit:eaff76de8151c5f000d386022a2b5965cd26cc23 -->
+### Fix URL plugin publication rebase with clean worktree
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [eaff76d](https://github.com/Kayracs3/Kayra/commit/eaff76de8151c5f000d386022a2b5965cd26cc23)
+
+
 ## 2026-10-20
 
 <!-- kayra-commit:6ad61f2ea1080c32c448ffbd220d3375da1e058a -->
