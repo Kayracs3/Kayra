@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:2a67468c798a85d41a6cf2cd451fa7cd541a6793 -->
+### Remove hardcoded TRT1 fallback from Flix channels
+
+- Etkilenen alanlar: Flix
+- Commit: [2a67468](https://github.com/Kayracs3/Kayra/commit/2a67468c798a85d41a6cf2cd451fa7cd541a6793)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:228eba53657fb9d00445ad6089589890e0e3b205 -->
 ### Add official TRT1 stream fallback for Flix channel page
 
