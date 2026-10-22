@@ -567,10 +567,10 @@
     },
     {
         "iconUrl": "https://reelpulse.org/favicon.ico",
-        "fileHash": "sha256-ea2a9a223a6febfc17c6623093f9da21954808b06076b6d5f25d13f54482c9a5",
+        "fileHash": "sha256-0fca962d86d32f57e6e2c60d2be18b36898c6d7432c10d870d073282ca61ad6b",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 23354,
+        "fileSize": 24760,
         "status": 1,
         "language": "tr",
         "authors": [
