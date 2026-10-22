@@ -16,7 +16,7 @@
         ],
         "version": 2,
         "internalName": "AsyaFilmIzle",
-        "description": "AsyaFilm\u0130zle \u2014 Asya filmleri ve dizileri sa\u011flay\u0131c\u0131s\u0131",
+        "description": "AsyaFilmİzle — Asya filmleri ve dizileri sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaFilmIzle.cs3",
         "name": "AsyaFilmIzle"
     },
@@ -37,7 +37,7 @@
         ],
         "version": 5,
         "internalName": "AsyaLuna",
-        "description": "AsyaLuna \u2014 Asya dizileri ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "description": "AsyaLuna — Asya dizileri ve bölüm sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaLuna.cs3",
         "name": "AsyaLuna"
     },
@@ -58,7 +58,7 @@
         ],
         "version": 23,
         "internalName": "AsyaWatch",
-        "description": "AsyaWatch \u2014 Asya filmleri ve dizileri sa\u011flay\u0131c\u0131s\u0131",
+        "description": "AsyaWatch — Asya filmleri ve dizileri sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaWatch.cs3",
         "name": "AsyaWatch"
     },
@@ -103,7 +103,7 @@
         ],
         "version": 3,
         "internalName": "ClipBox",
-        "description": "T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "description": "Türkiye katalog ve bölüm sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/ClipBox.cs3",
         "name": "ClipBox"
     },
@@ -123,7 +123,7 @@
         ],
         "version": 1,
         "internalName": "DDizi",
-        "description": "DDizi - yerli, yabanc\u0131 ve eski diziler",
+        "description": "DDizi - yerli, yabancı ve eski diziler",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DDizi.cs3",
         "name": "DDizi"
     },
@@ -145,7 +145,7 @@
         ],
         "version": 21,
         "internalName": "DiziAsya",
-        "description": "DiziAsya \u2014 Kore, \u00c7in, Japon dizileri ve animeler",
+        "description": "DiziAsya — Kore, Çin, Japon dizileri ve animeler",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziAsya.cs3",
         "name": "DiziAsya"
     },
@@ -166,7 +166,7 @@
         ],
         "version": 27,
         "internalName": "DiziDad",
-        "description": "DiziDAD \u2014 t\u00fcm diziler, filmler ve eksiksiz sezon/b\u00f6l\u00fcm listeleri",
+        "description": "DiziDAD — tüm diziler, filmler ve eksiksiz sezon/bölüm listeleri",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziDad.cs3",
         "name": "DiziDad"
     },
@@ -187,7 +187,7 @@
         ],
         "version": 2,
         "internalName": "Dizigecesi",
-        "description": "Dizigecesi film ve dizi sa\u011flay\u0131c\u0131s\u0131",
+        "description": "Dizigecesi film ve dizi sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizigecesi.cs3",
         "name": "Dizigecesi"
     },
@@ -207,7 +207,7 @@
         ],
         "version": 2,
         "internalName": "DiziKorea",
-        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "description": "DiziPal Türkiye katalog ve bölüm sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziKorea.cs3",
         "name": "DiziKorea"
     },
@@ -228,7 +228,7 @@
         ],
         "version": 7,
         "internalName": "DiziLife",
-        "description": "DiziLife \u2014 dizi ve film sa\u011flay\u0131c\u0131s\u0131",
+        "description": "DiziLife — dizi ve film sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziLife.cs3",
         "name": "DiziLife"
     },
@@ -248,7 +248,7 @@
         ],
         "version": 14,
         "internalName": "Dizilla",
-        "description": "Dizilla t\u00fcm yabanc\u0131 dizileri \u00fccretsiz olarak T\u00fcrk\u00e7e Dublaj ve altyaz\u0131l\u0131 se\u00e7enekleri ile 1080P kalite izleyebilece\u011finiz yeni nesil yabanc\u0131 dizi izleme siteniz.",
+        "description": "Dizilla tüm yabancı dizileri ücretsiz olarak Türkçe Dublaj ve altyazılı seçenekleri ile 1080P kalite izleyebileceğiniz yeni nesil yabancı dizi izleme siteniz.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizilla.cs3",
         "name": "Dizilla"
     },
@@ -269,7 +269,7 @@
         ],
         "version": 18,
         "internalName": "DiziPal",
-        "description": "Dizipal dizi ve film sa\u011flay\u0131c\u0131s\u0131",
+        "description": "Dizipal dizi ve film sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPal.cs3",
         "name": "DiziPal"
     },
@@ -289,7 +289,7 @@
         ],
         "version": 7,
         "internalName": "DiziPod",
-        "description": "1080P yabanc\u0131 film izle, T\u00fcrk\u00e7e dublaj ve T\u00fcrk\u00e7e altyaz\u0131l\u0131 film se\u00e7enekleri ile T\u00fcrkiye'nin en geni\u015f film ar\u015fivi 720pizle Full hd film izle.",
+        "description": "1080P yabancı film izle, Türkçe dublaj ve Türkçe altyazılı film seçenekleri ile Türkiye'nin en geniş film arşivi 720pizle Full hd film izle.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPod.cs3",
         "name": "DiziPod"
     },
@@ -310,7 +310,7 @@
         ],
         "version": 3,
         "internalName": "DiziSol",
-        "description": "DiziSol film ve dizi sa\u011flay\u0131c\u0131s\u0131; sezon, b\u00f6l\u00fcm, metadata ve video kaynaklar\u0131",
+        "description": "DiziSol film ve dizi sağlayıcısı; sezon, bölüm, metadata ve video kaynakları",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziSol.cs3",
         "name": "DiziSol"
     },
@@ -330,7 +330,7 @@
         ],
         "version": 1,
         "internalName": "DiziYou",
-        "description": "katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "description": "katalog ve bölüm sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziYou.cs3",
         "name": "DiziYou"
     },
@@ -350,7 +350,7 @@
         ],
         "version": 1,
         "internalName": "Dramadizilerim",
-        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "description": "DiziPal Türkiye katalog ve bölüm sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dramadizilerim.cs3",
         "name": "Dramadizilerim"
     },
@@ -370,7 +370,7 @@
         ],
         "version": 5,
         "internalName": "FilmizleHell",
-        "description": "FilmizleHell film ar\u015fivi; arama, afi\u015f, IMDb, oyuncu bilgileri ve video kaynaklar\u0131",
+        "description": "FilmizleHell film arşivi; arama, afiş, IMDb, oyuncu bilgileri ve video kaynakları",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmizleHell.cs3",
         "name": "FilmizleHell"
     },
@@ -390,7 +390,7 @@
         ],
         "version": 1,
         "internalName": "FilmKutusu",
-        "description": "FilmKutusu film ar\u015fivi, arama ve film bilgileri",
+        "description": "FilmKutusu film arşivi, arama ve film bilgileri",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmKutusu.cs3",
         "name": "FilmKutusu"
     },
@@ -403,14 +403,14 @@
         "status": 1,
         "language": "tr",
         "authors": [
-            "FilmMakinas\u0131"
+            "FilmMakinası"
         ],
         "tvTypes": [
             "TvSeries"
         ],
         "version": 3,
         "internalName": "FilmMakinesi",
-        "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "description": "DiziPal Türkiye katalog ve bölüm sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmMakinesi.cs3",
         "name": "FilmMakinesi"
     },
@@ -430,7 +430,7 @@
         ],
         "version": 2,
         "internalName": "FilmModu",
-        "description": "FilmModu film sa\u011flay\u0131c\u0131s\u0131",
+        "description": "FilmModu film sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmModu.cs3",
         "name": "FilmModu"
     },
@@ -450,7 +450,7 @@
         ],
         "version": 4,
         "internalName": "FullHDFilmizlesene",
-        "description": "Sinema zevkini evinize kadar getirdik. T\u00fcrkiye'nin lider Film sitesinde, en yeni filmleri Full HD izleyin.",
+        "description": "Sinema zevkini evinize kadar getirdik. Türkiye'nin lider Film sitesinde, en yeni filmleri Full HD izleyin.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FullHDFilmizlesene.cs3",
         "name": "FullHDFilmizlesene"
     },
@@ -470,7 +470,7 @@
         ],
         "version": 1,
         "internalName": "HDFilmCehennemi",
-        "description": "T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "description": "Türkiye katalog ve bölüm sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/HDFilmCehennemi.cs3",
         "name": "HDFilmCehennemi"
     },
@@ -493,7 +493,7 @@
         ],
         "version": 18,
         "internalName": "InatBox",
-        "description": "\u0130natBox cloudstream eklentisidir. Sevdi\u011finiz yay\u0131n platformlar\u0131n\u0131 ve canl\u0131 ma\u00e7lar\u0131 burada bulabilirsiniz.",
+        "description": "İnatBox cloudstream eklentisidir. Sevdiğiniz yayın platformlarını ve canlı maçları burada bulabilirsiniz.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBox.cs3",
         "name": "InatBox"
     },
@@ -515,7 +515,7 @@
         ],
         "version": 6,
         "internalName": "InatBoxYedek",
-        "description": "\u0130natBoxYedek: InatBox ana eklentisinden ayr\u0131, test ve yedek ama\u00e7l\u0131 sa\u011flay\u0131c\u0131.",
+        "description": "İnatBoxYedek: InatBox ana eklentisinden ayrı, test ve yedek amaçlı sağlayıcı.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBoxYedek.cs3",
         "name": "InatBoxYedek"
     },
@@ -536,30 +536,9 @@
         ],
         "version": 23,
         "internalName": "JetFilmizle",
-        "description": "Jet Film - T\u00fcrk\u00e7e dublajl\u0131 ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
+        "description": "Jet Film - Türkçe dublajlı ve altyazılı film sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/JetFilmizle.cs3",
         "name": "JetFilmizle"
-    },
-    {
-        "iconUrl": "https://inattv1327.xyz/favicon.ico",
-        "fileHash": "sha256-751788eaaee48cc399ae6453f88449887ceba72f118908f0e59cecd3d1afbffd",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 28328,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries"
-        ],
-        "version": 2,
-        "internalName": "Nattvspor",
-        "description": "\u0130nattvSpor otomatik sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Nattvspor.cs3",
-        "name": "Nattvspor"
     },
     {
         "iconUrl": "https://rectvapk.cc/wp-content/uploads/2023/02/Rec-TV.webp",
@@ -582,7 +561,7 @@
         ],
         "version": 65,
         "internalName": "RecTV",
-        "description": "RecTv APK, T\u00fcrkiye\u2019deki en pop\u00fcler \u00c7evrimi\u00e7i Medya Ak\u0131\u015f platformlar\u0131ndan biridir. Filmlerin, Canl\u0131 Sporlar\u0131n, Web Dizilerinin ve \u00e7ok daha fazlas\u0131n\u0131n keyfini \u00fccretsiz \u00e7\u0131kar\u0131n.",
+        "description": "RecTv APK, Türkiye’deki en popüler Çevrimiçi Medya Akış platformlarından biridir. Filmlerin, Canlı Sporların, Web Dizilerinin ve çok daha fazlasının keyfini ücretsiz çıkarın.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/RecTV.cs3",
         "name": "RecTV"
     },
@@ -603,7 +582,7 @@
         ],
         "version": 1,
         "internalName": "Reelpulse",
-        "description": "ReelPulse otomatik sa\u011flay\u0131c\u0131s\u0131",
+        "description": "ReelPulse otomatik sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Reelpulse.cs3",
         "name": "Reelpulse"
     },
@@ -624,7 +603,7 @@
         ],
         "version": 1,
         "internalName": "SetFilmIzle",
-        "description": "SetFilmIzle film ve dizi sa\u011flay\u0131c\u0131s\u0131",
+        "description": "SetFilmIzle film ve dizi sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SetFilmIzle.cs3",
         "name": "SetFilmIzle"
     },
@@ -644,7 +623,7 @@
         ],
         "version": 23,
         "internalName": "SinemaCX",
-        "description": "Sinema CC - T\u00fcrk\u00e7e dublaj ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
+        "description": "Sinema CC - Türkçe dublaj ve altyazılı film sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinemaCX.cs3",
         "name": "SinemaCX"
     },
@@ -665,7 +644,7 @@
         ],
         "version": 1,
         "internalName": "SinezyTo",
-        "description": "Sinezy.to film ve dizi sa\u011flay\u0131c\u0131s\u0131",
+        "description": "Sinezy.to film ve dizi sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinezyTo.cs3",
         "name": "SinezyTo"
     },
@@ -688,7 +667,7 @@
         ],
         "version": 2,
         "internalName": "WebDramaTurkey",
-        "description": "Web Drama Turkey Kore, \u00c7in ve Asya dizileri sa\u011flay\u0131c\u0131s\u0131",
+        "description": "Web Drama Turkey Kore, Çin ve Asya dizileri sağlayıcısı",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/WebDramaTurkey.cs3",
         "name": "WebDramaTurkey"
     }
