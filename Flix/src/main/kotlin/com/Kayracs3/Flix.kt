@@ -29,7 +29,7 @@ class Flix : MainAPI() {
     override var lang = "tr"
     override val hasMainPage = true
     override val hasQuickSearch = true
-    override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
+    override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries, TvType.Live)
     override val mainPage = mainPageOf("$mainUrl/" to "Ana Sayfa")
 
     private val pageHeaders = mapOf(
@@ -113,10 +113,10 @@ class Flix : MainAPI() {
         ) return null
 
         val allText = "${title} ${url} ${text()}"
-        val type = if (Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText)) {
-            TvType.TvSeries
-        } else {
-            TvType.Movie
+        val type = when {
+            Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText) -> TvType.TvSeries
+            Regex("(?i)(canlı|canli|live|yayın|yayin|channel\\.html|/kanal|/channel|/tv/)").containsMatchIn(allText) -> TvType.Live
+            else -> TvType.Movie
         }
         val poster = posterFrom(this, link)
         val year = Regex("\\b(?:19|20)\\d{2}\\b").find(allText)?.value?.toIntOrNull()
@@ -260,18 +260,27 @@ class Flix : MainAPI() {
             }
         }.distinctBy { it.name + "|" + it.season + "|" + it.episode }
 
-        val isSeries = episodes.isNotEmpty() ||
-            Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl)
-        return if (isSeries) {
-            newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
+        // Canlı kanal tespiti: doğrudan channel.html iframe'i varsa ya da URL canlı anahtar kelimeler içeriyorsa
+        val isLive = document.selectFirst("iframe[src*=channel\\.html]") != null ||
+            Regex("(?i)(canlı|canli|/live|/channel|channel\\.html|/kanal/|yayin|yayın)").containsMatchIn(pageUrl)
+
+        val isSeries = !isLive && (episodes.isNotEmpty() ||
+            Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl))
+
+        return when {
+            isLive -> newMovieLoadResponse(title, pageUrl, TvType.Live, pageUrl) {
+                posterUrl = poster
+                this.plot = description
+                this.tags = tags
+            }
+            isSeries -> newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
                 posterUrl = poster
                 this.year = year
                 this.plot = description
                 this.tags = tags
                 this.score = score
             }
-        } else {
-            newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
+            else -> newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
                 posterUrl = poster
                 this.year = year
                 this.plot = description
@@ -325,21 +334,84 @@ class Flix : MainAPI() {
             """(?i)#EXT-X-MAP:.*URI=["']?[^"']+\.(?:mp4|m4s)(?:[?#][^"']*)?"""
         ).containsMatchIn(body)
 
+        // Canlı yayınlar çoğunlukla #EXTINF segment listesi içerir.
+        val hasLiveSegments = Regex(
+            """(?im)^\s*#EXTINF\s*:"""
+        ).containsMatchIn(body)
+
         val uriLines = body.lineSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
             .toList()
 
-        if (uriLines.isEmpty()) return hasVariantPlaylist || hasVideoMap
+        if (uriLines.isEmpty()) return hasVariantPlaylist || hasVideoMap || hasLiveSegments
 
         val imageOnly = uriLines.all { line ->
             Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)(?:[?#].*)?$""")
                 .containsMatchIn(line)
         }
 
-        // Some sites return a slideshow/preview manifest made only of still images.
-        // Do not expose it as a playable video stream.
-        return !imageOnly || hasVariantPlaylist || hasVideoMap
+        // Sadece görsel playlist'i ise oynatma; aksi halde (canlı segmentler dahil) kabul et.
+        return !imageOnly || hasVariantPlaylist || hasVideoMap || hasLiveSegments
+    }
+
+    /**
+     * channel.html sayfalarındaki Clappr player CONFIG nesnesini ayrıştırır.
+     * Sırasıyla:
+     *  1. CONFIG içindeki bilinen anahtarlarda doğrudan .m3u8/.mp4/.txt URL'si arar.
+     *  2. Gövdede geçen herhangi bir m3u8/mp4 URL'sini yakalar.
+     *  3. Son çare olarak `baseUrl` + yaygın manifest yollarını deneyip
+     *     `isPlayableHls` ile doğrular.
+     */
+    private suspend fun extractStreamFromChannelPage(body: String, pageUrl: String): String? {
+        val cleaned = body
+            .replace("""\/""", "/")
+            .replace("""\u002F""", "/", true)
+            .replace("""\u0026""", "&", true)
+            .replace("&quot;", "\"", true)
+            .replace("&#039;", "'", true)
+            .replace("&amp;", "&", true)
+
+        // 1. Adım: Clappr CONFIG içindeki yaygın anahtarlar
+        val configKeys = listOf(
+            "baseUrl", "source", "file", "url", "streamUrl", "hlsUrl",
+            "src", "m3u8", "m3u8Url", "stream", "videoUrl", "playlist",
+            "manifest", "liveUrl", "hls", "link", "video", "playlistUrl"
+        )
+        for (key in configKeys) {
+            val regex = Regex(
+                """(?i)["']?$key["']?\s*[:=]\s*["']([^"'\s]+\.(?:m3u8|mp4|txt)[^"'\s]*)["']"""
+            )
+            val match = regex.find(cleaned)
+            if (match != null) {
+                val url = fixUrl(match.groupValues[1], pageUrl)
+                if (url != null) return url
+            }
+        }
+
+        // 2. Adım: Gövdede geçen herhangi bir m3u8/mp4 URL'si
+        val anyUrlRegex = Regex(
+            """(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?"""
+        )
+        val directUrl = anyUrlRegex.find(cleaned)?.value?.let { fixUrl(it, pageUrl) }
+        if (directUrl != null) return directUrl
+
+        // 3. Adım: baseUrl varsa yaygın manifest yollarını dene
+        val baseUrlMatch = Regex("""(?i)["']?baseUrl["']?\s*[:=]\s*["']([^"']+)["']""")
+            .find(cleaned)?.groupValues?.getOrNull(1)
+            ?.let { fixUrl(it, pageUrl) }
+        if (baseUrlMatch != null && !Regex("""(?i)\.(?:m3u8|mp4|txt)(?:\?.*)?$""").containsMatchIn(baseUrlMatch)) {
+            val base = baseUrlMatch.trimEnd('/')
+            for (path in listOf(
+                "index.m3u8", "playlist.m3u8", "master.m3u8",
+                "live.m3u8", "stream.m3u8", "video.m3u8"
+            )) {
+                val candidate = "$base/$path"
+                if (isPlayableHls(candidate, pageUrl)) return candidate
+            }
+        }
+
+        return null
     }
 
     override suspend fun loadLinks(
@@ -367,6 +439,34 @@ class Flix : MainAPI() {
             val responseBody = response.text
             val document = response.document
             Log.d("Flix", "Tarama başladı: ${pageUrl.substringBefore('?')} (derinlik=$depth)")
+
+            // channel.html sayfaları Clappr CONFIG içinde akış URL'sini saklar.
+            if (pageUrl.contains("channel.html", ignoreCase = true) ||
+                Regex("(?i)/channel\\b").containsMatchIn(pageUrl)
+            ) {
+                val streamUrl = extractStreamFromChannelPage(responseBody, pageUrl)
+                if (streamUrl != null && emittedLinks.add(streamUrl)) {
+                    val path = runCatching { URI(streamUrl).path.orEmpty().lowercase() }
+                        .getOrDefault("")
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = name,
+                            url = streamUrl,
+                            type = if (path.endsWith(".mp4")) {
+                                ExtractorLinkType.VIDEO
+                            } else {
+                                ExtractorLinkType.M3U8
+                            }
+                        ) {
+                            this.referer = pageUrl
+                            quality = Qualities.Unknown.value
+                        }
+                    )
+                    found = true
+                    Log.d("Flix", "channel.html CONFIG'ten akış bulundu: ${streamUrl.substringBefore('?')}")
+                }
+            }
 
             for (track in document.select("track[src], track[data-src], track[data-url]")) {
                 val raw = sequenceOf(
@@ -397,7 +497,8 @@ class Flix : MainAPI() {
                 "[data-player-url]",
                 "[data-stream]",
                 "a[href*='.m3u8']",
-                "a[href*='.mp4']"
+                "a[href*='.mp4']",
+                "a[href*='channel.html']"
             ).joinToString(", ")
 
             for (element in document.select(selector)) {
@@ -419,12 +520,11 @@ class Flix : MainAPI() {
                 if (candidate != pageUrl) candidates.add(candidate)
             }
 
-            // Player scripts often contain the real source while the visible mono.m3u8 is only a thumbnail playlist.
             document.select("script[src]").mapNotNull { script ->
                 val scriptUrl = fixUrl(script.attr("src"), pageUrl) ?: return@mapNotNull null
                 val scriptName = runCatching { URI(scriptUrl).path.orEmpty().substringAfterLast('/') }
                     .getOrDefault("")
-                if (Regex("""(?i)(player|video|stream|embed|hls|jwplayer|dash|source|main|app|request|xhr|api|network|index).{0,30}\.js$""").containsMatchIn(scriptName)) {
+                if (Regex("""(?i)(player|video|stream|embed|hls|jwplayer|dash|source|main|app|request|xhr|api|network|index|clappr).{0,30}\.js$""").containsMatchIn(scriptName)) {
                     scriptUrl
                 } else {
                     null
@@ -491,8 +591,7 @@ class Flix : MainAPI() {
                     }
                 }
 
-                // A player wrapper can contain another iframe, so inspect a limited
-                // number of nested player pages instead of stopping at the first level.
+                // channel.html adaylarını önce iç CONFIG ayrıştırması için recurse et
                 if (depth < 2 && visitedPages.size < 8) {
                     scanPage(candidate, pageUrl, depth + 1)
                 }
@@ -506,5 +605,4 @@ class Flix : MainAPI() {
         }
         return found
     }
-
 }
