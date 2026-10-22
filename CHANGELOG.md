@@ -2,6 +2,15 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:d27102a070b7e9a1769d7757bc93791e5b9dcbfa -->
+### Reject image-only HLS preview playlists in Flix
+
+- Etkilenen alanlar: Flix
+- Commit: [d27102a](https://github.com/Kayracs3/Kayra/commit/d27102a070b7e9a1769d7757bc93791e5b9dcbfa)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:f5cdd6572ff4881abdf8f6c6e2caaa38653f65c9 -->
 ### Correct Flix escaped media URL matching
 
