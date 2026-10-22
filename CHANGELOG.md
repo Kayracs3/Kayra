@@ -2,6 +2,15 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:7cc835e9a3b4da12f841f5dae3bba0d296937824 -->
+### Skip Nattvspor image-only HLS previews
+
+- Etkilenen alanlar: Nattvspor
+- Commit: [7cc835e](https://github.com/Kayracs3/Kayra/commit/7cc835e9a3b4da12f841f5dae3bba0d296937824)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:eaacd72780c8626957c8465f1410ad336c8f7a8a -->
 ### Correct CSS background poster URL matching
 
