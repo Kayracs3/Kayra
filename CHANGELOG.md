@@ -2,6 +2,23 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:0df0f0d08087711355fa026d71073022dc6f6591 -->
+### Improve Flix nested player and media link detection
+
+- Etkilenen alanlar: Flix
+- Commit: [0df0f0d](https://github.com/Kayracs3/Kayra/commit/0df0f0d08087711355fa026d71073022dc6f6591)
+
+## 2026-10-22
+
+<!-- kayra-commit:7a7387505d87d42647cf688b178a2fe18a913dd2 -->
+### Add URL-generated CloudStream provider: Flix
+
+- Etkilenen alanlar: Flix
+- Commit: [7a73875](https://github.com/Kayracs3/Kayra/commit/7a7387505d87d42647cf688b178a2fe18a913dd2)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:bc566ef5c0c5b608ea2ac4a64041fd15b0c93638 -->
 ### Remove Nattvspor provider
 
