@@ -501,37 +501,6 @@ class Flix : MainAPI() {
 
         scanPage(data, "$mainUrl/", 0)
 
-        // fixbettv84.com's channel.html only exposed a still-image mono.m3u8 in the
-        // browser trace for TRT 1. When its JS-only player cannot reveal a playable
-        // media stream, use TRT's public player manifest instead of offering JPG frames.
-        val currentUri = runCatching { URI(data) }.getOrNull()
-        val isFixbetChannelPage =
-            currentUri?.host?.lowercase()?.removePrefix("www.") == "fixbettv84.com" &&
-            currentUri.path.equals("/channel.html", ignoreCase = true)
-
-        if (!found && isFixbetChannelPage) {
-            val trt1Fallbacks = listOf(
-                "https://tv-trt1.medya.trt.com.tr/master_720.m3u8" to "TRT 1 · 720p",
-                "https://tv-trt1.medya.trt.com.tr/master.m3u8" to "TRT 1 · Alternatif"
-            )
-            for ((streamUrl, streamName) in trt1Fallbacks) {
-                if (!emittedLinks.add(streamUrl)) continue
-                callback(
-                    newExtractorLink(
-                        source = name,
-                        name = streamName,
-                        url = streamUrl,
-                        type = ExtractorLinkType.M3U8
-                    ) {
-                        referer = "https://www.trt1.com.tr/"
-                        quality = Qualities.Unknown.value
-                    }
-                )
-                found = true
-            }
-            Log.w("Flix", "Site oynatılabilir video vermedi; TRT 1 için alternatif manifestler eklendi")
-        }
-
         if (!found) {
             Log.w("Flix", "Bağlantı bulunamadı; taranan sayfa sayısı=${visitedPages.size}")
         }
