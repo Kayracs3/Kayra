@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-23
+
+<!-- kayra-commit:228eba53657fb9d00445ad6089589890e0e3b205 -->
+### Add official TRT1 stream fallback for Flix channel page
+
+- Etkilenen alanlar: Flix
+- Commit: [228eba5](https://github.com/Kayracs3/Kayra/commit/228eba53657fb9d00445ad6089589890e0e3b205)
+
+
 ## 2026-10-22
 
 <!-- kayra-commit:bd814a2a4ef57071945dc132d22f4ef08c131027 -->
