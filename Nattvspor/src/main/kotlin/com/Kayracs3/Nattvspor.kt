@@ -1,5 +1,7 @@
 package com.Kayracs3
 
+import android.util.Log
+
 import com.lagradost.cloudstream3.newEpisode
 
 import com.lagradost.cloudstream3.newHomePageResponse
@@ -344,6 +346,42 @@ class Nattvspor : MainAPI() {
         }
     }
 
+
+    /**
+     * Reject preview-only HLS playlists. Some pages expose a .m3u8 URL whose
+     * EXTINF entries point to JPEG snapshot frames rather than video segments.
+     * Do not publish those as playable streams; keep normal HLS/master playlists.
+     */
+    private suspend fun isImagePreviewPlaylist(url: String, referer: String): Boolean {
+        val manifest = runCatching {
+            app.get(
+                url,
+                headers = pageHeaders + mapOf("Referer" to referer),
+                referer = referer,
+                allowRedirects = true
+            ).text
+        }.getOrNull() ?: return false
+
+        val normalized = manifest.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+        if (!normalized.startsWith("#EXTM3U")) return false
+
+        val lines = normalized.lines().map { it.trim() }
+        if (lines.none { it.startsWith("#EXTINF", ignoreCase = true) }) return false
+
+        val mediaLines = lines.filter { it.isNotBlank() && !it.startsWith("#") }
+        if (mediaLines.isEmpty()) return false
+
+        val imageCount = mediaLines.count { line ->
+            val resolved = fixUrl(line, url) ?: line
+            val segmentPath = runCatching { URI(resolved).path.orEmpty() }
+                .getOrDefault(resolved.substringBefore('?').substringBefore('#'))
+            Regex("(?i)\\.(?:jpe?g|png|webp|gif|avif)$")
+                .containsMatchIn(segmentPath)
+        }
+
+        return imageCount == mediaLines.size
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -385,12 +423,21 @@ class Nattvspor : MainAPI() {
 
         for (candidate in candidates) {
             if (Regex("(?i)\\.(m3u8|mp4)(\\?.*)?$").containsMatchIn(candidate)) {
+                val isHls = candidate.substringBefore('?').endsWith(".m3u8", true)
+                if (isHls && isImagePreviewPlaylist(candidate, data)) {
+                    Log.w(
+                        "Nattvspor",
+                        "Skipped preview-only HLS playlist containing image frames: ${candidate.substringBefore('?')}"
+                    )
+                    continue
+                }
+
                 callback(
                     newExtractorLink(
                         source = name,
                         name = name,
                         url = candidate,
-                        type = if (candidate.substringBefore('?').endsWith(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                        type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                     ) {
                         referer = data
                         quality = Qualities.Unknown.value
@@ -398,11 +445,24 @@ class Nattvspor : MainAPI() {
                 )
                 found = true
             } else {
+                val extractedLinks = mutableListOf<ExtractorLink>()
                 runCatching {
                     loadExtractor(candidate, data, subtitleCallback) { link ->
-                        callback(link)
-                        found = true
+                        extractedLinks.add(link)
                     }
+                }
+
+                for (link in extractedLinks) {
+                    val isHls = link.url.substringBefore('?').endsWith(".m3u8", true)
+                    if (isHls && isImagePreviewPlaylist(link.url, data)) {
+                        Log.w(
+                            "Nattvspor",
+                            "Skipped extractor preview-only HLS playlist containing image frames: ${link.url.substringBefore('?')}"
+                        )
+                        continue
+                    }
+                    callback(link)
+                    found = true
                 }
             }
         }
