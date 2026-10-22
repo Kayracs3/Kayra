@@ -2,6 +2,23 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:2ffb17b06fbc4eaa86dfe5b765f7429be514d4d8 -->
+### Filter ReelPulse navigation tiles and fix Red Bull poster
+
+- Etkilenen alanlar: Reelpulse
+- Commit: [2ffb17b](https://github.com/Kayracs3/Kayra/commit/2ffb17b06fbc4eaa86dfe5b765f7429be514d4d8)
+
+## 2026-10-22
+
+<!-- kayra-commit:dd245c245019cf8ae2d46a0154953cda4cd1e71d -->
+### Add URL-generated CloudStream provider: Reelpulse
+
+- Etkilenen alanlar: Reelpulse
+- Commit: [dd245c2](https://github.com/Kayracs3/Kayra/commit/dd245c245019cf8ae2d46a0154953cda4cd1e71d)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:eaff76de8151c5f000d386022a2b5965cd26cc23 -->
 ### Fix URL plugin publication rebase with clean worktree
 
