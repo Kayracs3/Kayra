@@ -420,12 +420,12 @@ class Flix : MainAPI() {
                 val scriptUrl = fixUrl(script.attr("src"), pageUrl) ?: return@mapNotNull null
                 val scriptName = runCatching { URI(scriptUrl).path.orEmpty().substringAfterLast('/') }
                     .getOrDefault("")
-                if (Regex("""(?i)(player|video|stream|embed|hls|jwplayer|dash|source|main|app).{0,30}\.js$""").containsMatchIn(scriptName)) {
+                if (Regex("""(?i)(player|video|stream|embed|hls|jwplayer|dash|source|main|app|request|xhr|api|network|index).{0,30}\.js$""").containsMatchIn(scriptName)) {
                     scriptUrl
                 } else {
                     null
                 }
-            }.take(5).forEach { candidates.add(it) }
+            }.take(8).forEach { candidates.add(it) }
 
             val html = document.html()
                 .replace("""\/""", "/")
