@@ -23,6 +23,153 @@ class Flix : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
+    // Yaygın Türk kanalları için logo URL'leri (tv-logos GitHub deposundan).
+    // Anahtarlar normalize edilmiş kanal adlarıdır (küçük harf, Türkçe karakterler dönüştürülmüş).
+    private val channelLogos: Map<String, String> = mapOf(
+        "trt 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-1-tr.png",
+        "trt1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-1-tr.png",
+        "trt 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-2-tr.png",
+        "trt 3" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-3-tr.png",
+        "trt haber" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-haber-tr.png",
+        "trt spor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-spor-tr.png",
+        "trt spor yildiz" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-spor-yildiz-tr.png",
+        "trt belgesel" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-belgesel-tr.png",
+        "trt muzik" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-muzik-tr.png",
+        "trt cocuk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-cocuk-tr.png",
+        "trt avaz" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-avaz-tr.png",
+        "trt kurdi" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-kurdi-tr.png",
+        "trt arabi" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-arabi-tr.png",
+        "trt world" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-world-tr.png",
+        "atv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/atv-tr.png",
+        "a haber" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/a-haber-tr.png",
+        "a para" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/a-para-tr.png",
+        "a spor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/a-spor-tr.png",
+        "show tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/show-tv-tr.png",
+        "showtv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/show-tv-tr.png",
+        "showmax" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/showmax-tr.png",
+        "star tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/star-tv-tr.png",
+        "startv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/star-tv-tr.png",
+        "now tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/now-tv-tr.png",
+        "now" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/now-tv-tr.png",
+        "fox" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/fox-tv-tr.png",
+        "fox tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/fox-tv-tr.png",
+        "tv8" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tv8-tr.png",
+        "tv8,5" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tv8-5-tr.png",
+        "kanal d" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/kanal-d-tr.png",
+        "kanald" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/kanal-d-tr.png",
+        "cnn turk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/cnn-turk-tr.png",
+        "cnnturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/cnn-turk-tr.png",
+        "ntv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ntv-tr.png",
+        "ntv spor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ntv-spor-tr.png",
+        "haberturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/haberturk-tr.png",
+        "beyaz tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/beyaz-tv-tr.png",
+        "beyaztv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/beyaz-tv-tr.png",
+        "tv 100" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tv-100-tr.png",
+        "tv100" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tv-100-tr.png",
+        "teve2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/teve2-tr.png",
+        "360" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/360-tr.png",
+        "360 tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/360-tr.png",
+        "ulke tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ulke-tv-tr.png",
+        "tvnet" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tvnet-tr.png",
+        "haber global" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/haber-global-tr.png",
+        "haberglobal" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/haber-global-tr.png",
+        "halk tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/halk-tv-tr.png",
+        "halktv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/halk-tv-tr.png",
+        "tele 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tele1-tr.png",
+        "tele1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tele1-tr.png",
+        "sozcu tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/sozcu-tv-tr.png",
+        "sozcutv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/sozcu-tv-tr.png",
+        "krt" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/krt-tr.png",
+        "benguturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/benguturk-tr.png",
+        "ulusal kanal" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ulusal-kanal-tr.png",
+        "s sport" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/s-sport-tr.png",
+        "ssport" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/s-sport-tr.png",
+        "s sport 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/s-sport-2-tr.png",
+        "ssport2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/s-sport-2-tr.png",
+        "tivibu spor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tivibu-spor-tr.png",
+        "tivibuspor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tivibu-spor-tr.png",
+        "tivibu spor 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tivibu-spor-2-tr.png",
+        "bein sports 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-1-tr.png",
+        "beinsports 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-1-tr.png",
+        "beinsports1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-1-tr.png",
+        "bein sports 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-2-tr.png",
+        "beinsports 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-2-tr.png",
+        "beinsports2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-2-tr.png",
+        "bein sports 3" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-3-tr.png",
+        "beinsports 3" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-3-tr.png",
+        "bein sports 4" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-4-tr.png",
+        "bein sports max 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-max-1-tr.png",
+        "bein sports max 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-max-2-tr.png",
+        "eurosport 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/eurosport-1-tr.png",
+        "eurosport 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/eurosport-2-tr.png",
+        "minika cocuk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/minika-cocuk-tr.png",
+        "minikacocuk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/minika-cocuk-tr.png",
+        "minika go" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/minika-go-tr.png",
+        "minikago" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/minika-go-tr.png",
+        "disney channel" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/disney-channel-tr.png",
+        "cartoon network" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/cartoon-network-tr.png",
+        "nickelodeon" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/nickelodeon-tr.png",
+        "nat geo" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/nat-geo-tr.png",
+        "national geographic" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/nat-geo-tr.png",
+        "nat geo wild" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/nat-geo-wild-tr.png",
+        "discovery channel" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/discovery-channel-tr.png",
+        "discovery" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/discovery-channel-tr.png",
+        "history" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/history-tr.png",
+        "animal planet" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/animal-planet-tr.png",
+        "tlc" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tlc-tr.png",
+        "dmax" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/dmax-tr.png",
+        "bloomberg ht" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bloomberg-ht-tr.png",
+        "cnbc-e" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/cnbc-e-tr.png",
+        "ekoturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ekoturk-tr.png",
+        "powerturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/powerturk-tr.png",
+        "power turk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/powerturk-tr.png",
+        "number one tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/number-one-tv-tr.png",
+        "nr1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/number-one-tv-tr.png",
+        "dream turk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/dream-turk-tr.png",
+        "dreamturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/dream-turk-tr.png",
+        "kral tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/kral-tv-tr.png",
+        "kral pop" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/kral-pop-tv-tr.png",
+        "tv 24" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/24-tv-tr.png",
+        "24 tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/24-tv-tr.png",
+        "24" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/24-tv-tr.png"
+    )
+
+    /**
+     * Kanal adını normalize eder: Türkçe karakterleri dönüştürür, küçük harfe çevirir,
+     * özel karakterleri kaldırır ve fazla boşlukları temizler.
+     */
+    private fun normalizeChannelName(raw: String): String = raw.lowercase()
+        .replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u')
+        .replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+        .replace('İ', 'i').replace('Ğ', 'g').replace('Ü', 'u')
+        .replace('Ş', 's').replace('Ö', 'o').replace('Ç', 'c')
+        .replace(Regex("[^a-z0-9]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    /**
+     * Canlı kanal için logo URL'si döndürür.
+     * Önce yerleşik haritada tam/kısmi eşleşme arar.
+     * Bulamazsa ui-avatars.com üzerinden kanal adının baş harflerini gösteren
+     * renkli bir kart döndürür (bu servis asla 404 dönmez).
+     */
+    private fun liveLogoFor(title: String): String {
+        val norm = normalizeChannelName(title)
+        if (norm.isNotEmpty()) {
+            channelLogos[norm]?.let { return it }
+            // Kısmi eşleşme: "trt 1 hd" -> "trt 1", "atv canli" -> "atv"
+            for ((key, url) in channelLogos) {
+                if (norm == key || norm.startsWith("$key ") || norm.endsWith(" $key") ||
+                    norm.contains(" $key ") || norm.contains(key)
+                ) {
+                    return url
+                }
+            }
+        }
+        val encoded = runCatching { URLEncoder.encode(title, "UTF-8") }.getOrDefault(title)
+        return "https://ui-avatars.com/api/?name=$encoded&size=400&background=1e3a8a&color=ffffff&bold=true&length=2"
+    }
+
     private fun fixUrl(raw: String?, base: String = mainUrl): String? {
         val value = raw?.trim()?.replace("\\/", "/")?.replace("&amp;", "&")?.trim('"', '\'')
             ?: return null
@@ -103,7 +250,11 @@ class Flix : MainAPI() {
             Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText) -> TvType.TvSeries
             else -> TvType.Movie
         }
-        val poster = posterFrom(this, link)
+        val sitePoster = posterFrom(this, link)
+        // Canlı kanallarda site afişi yoksa/yetersizse kanal logosuna düş.
+        val poster = if (type == TvType.Live && sitePoster.isNullOrBlank()) {
+            liveLogoFor(title)
+        } else sitePoster
         val year = Regex("\\b(?:19|20)\\d{2}\\b").find(allText)?.value?.toIntOrNull()
         return newMovieSearchResponse(title, url, type) {
             posterUrl = poster
@@ -112,12 +263,8 @@ class Flix : MainAPI() {
     }
 
     private fun matchesQuery(query: String, title: String): Boolean {
-        val normalizedTitle = title.lowercase()
-            .replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u')
-            .replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
-        val normalizedQuery = query.lowercase().trim()
-            .replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u')
-            .replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+        val normalizedTitle = normalizeChannelName(title)
+        val normalizedQuery = normalizeChannelName(query)
         if (normalizedQuery.isBlank()) return true
         return normalizedTitle.contains(normalizedQuery) ||
             normalizedQuery.split(Regex("\\s+")).filter { it.length > 1 }.all { normalizedTitle.contains(it) }
@@ -201,7 +348,7 @@ class Flix : MainAPI() {
             ?.trim()
             ?: return null
 
-        val poster = sequenceOf(
+        val sitePoster = sequenceOf(
             document.selectFirst("meta[property=og:image]")?.attr("content"),
             document.selectFirst("img[class*=poster]")?.attr("data-src"),
             document.selectFirst("img[class*=poster]")?.attr("src"),
@@ -241,7 +388,7 @@ class Flix : MainAPI() {
                 name = episodeName.ifBlank { "Bölüm" }
                 season = numbers?.first
                 episode = numbers?.second
-                posterUrl = poster
+                posterUrl = sitePoster
             }
         }.distinctBy { it.name + "|" + it.season + "|" + it.episode }
 
@@ -252,9 +399,12 @@ class Flix : MainAPI() {
         val isSeries = !isLive && (episodes.isNotEmpty() ||
             Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl))
 
+        // Canlı kanallarda site afişi olsa bile kanal logosunu tercih et
+        // (site afişleri genelde boş ya da ilgisiz oluyor).
+        val livePoster = liveLogoFor(title)
+
         return when {
             isLive -> {
-                // Eğer ana sayfa URL'si doğrudan channel.html değilse, iframe'in src'sini data olarak kullan.
                 val liveDataUrl = if (pageUrl.contains("channel.html", true)) {
                     pageUrl
                 } else {
@@ -263,20 +413,20 @@ class Flix : MainAPI() {
                     } ?: pageUrl
                 }
                 newMovieLoadResponse(title, pageUrl, TvType.Live, liveDataUrl) {
-                    posterUrl = poster
+                    posterUrl = livePoster
                     this.plot = description
                     this.tags = tags
                 }
             }
             isSeries -> newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
-                posterUrl = poster
+                posterUrl = sitePoster
                 this.year = year
                 this.plot = description
                 this.tags = tags
                 this.score = score
             }
             else -> newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
-                posterUrl = poster
+                posterUrl = sitePoster
                 this.year = year
                 this.plot = description
                 this.tags = tags
@@ -316,31 +466,22 @@ class Flix : MainAPI() {
         return !imageOnly || hasVariantPlaylist || hasVideoMap || hasLiveSegments
     }
 
-    /**
-     * channel.html sayfasındaki CONFIG.domainUrl adresine istek atarak
-     * güncel baseurl değerini alır ve id parametresiyle birleştirerek
-     * canlı yayın akış URL'sini (mono.m3u8) döndürür.
-     */
     private suspend fun extractStreamFromChannelPage(body: String, pageUrl: String): String? {
-        // 1. domainUrl'i al
         val domainUrl = Regex("""domainUrl\s*:\s*['"]([^'"]+)['"]""")
             .find(body)?.groupValues?.getOrNull(1) ?: return null
 
-        // 2. id parametresini al
         val id = runCatching {
             URI(pageUrl).query?.split("&")
                 ?.find { it.startsWith("id=") }
                 ?.substringAfter("id=")
         }.getOrNull() ?: return null
 
-        // 3. domainUrl'e istek at, baseurl'i al
         val baseUrl = runCatching {
             val response = app.get(domainUrl, headers = pageHeaders, allowRedirects = true).text
             Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
                 .find(response)?.groupValues?.getOrNull(1)
         }.getOrNull() ?: return null
 
-        // 4. Akış URL'sini oluştur
         return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
@@ -366,7 +507,6 @@ class Flix : MainAPI() {
             val document = response.document
             Log.d("Flix", "Tarama başladı: ${pageUrl.substringBefore('?')} (derinlik=$depth)")
 
-            // channel.html sayfası: CONFIG.domainUrl üzerinden akış URL'sini oluştur
             if (pageUrl.contains("channel.html", ignoreCase = true)) {
                 val streamUrl = extractStreamFromChannelPage(responseBody, pageUrl)
                 if (streamUrl != null && emittedLinks.add(streamUrl)) {
@@ -445,18 +585,17 @@ class Flix : MainAPI() {
                 val isDirectMedia = isHlsCandidate || path.endsWith(".mp4")
 
                 if (isDirectMedia) {
-                    var playableUrl = candidate
                     if (isHlsCandidate && !isPlayableHls(candidate, pageUrl)) {
                         Log.w("Flix", "Oynatılabilir olmayan HLS adayı elendi: ${candidate.substringBefore('?')}")
                         continue
                     }
-                    val playablePath = runCatching { URI(playableUrl).path.orEmpty().lowercase() }.getOrDefault("")
-                    if (emittedLinks.add(playableUrl)) {
+                    val playablePath = runCatching { URI(candidate).path.orEmpty().lowercase() }.getOrDefault("")
+                    if (emittedLinks.add(candidate)) {
                         callback(
                             newExtractorLink(
                                 source = name,
                                 name = name,
-                                url = playableUrl,
+                                url = candidate,
                                 type = if (playablePath.endsWith(".mp4")) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8
                             ) {
                                 this.referer = pageUrl
@@ -464,7 +603,7 @@ class Flix : MainAPI() {
                             }
                         )
                         found = true
-                        Log.d("Flix", "Oynatılabilir bağlantı bulundu: ${playableUrl.substringBefore('?')}")
+                        Log.d("Flix", "Oynatılabilir bağlantı bulundu: ${candidate.substringBefore('?')}")
                     }
                     continue
                 }
