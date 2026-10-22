@@ -2,6 +2,15 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:f5cdd6572ff4881abdf8f6c6e2caaa38653f65c9 -->
+### Correct Flix escaped media URL matching
+
+- Etkilenen alanlar: Flix
+- Commit: [f5cdd65](https://github.com/Kayracs3/Kayra/commit/f5cdd6572ff4881abdf8f6c6e2caaa38653f65c9)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:0df0f0d08087711355fa026d71073022dc6f6591 -->
 ### Improve Flix nested player and media link detection
 
