@@ -279,6 +279,48 @@ class Flix : MainAPI() {
         }
     }
 
+    private suspend fun isPlayableHls(url: String, referer: String): Boolean {
+        val response = runCatching {
+            app.get(
+                url,
+                headers = pageHeaders + ("Referer" to referer),
+                allowRedirects = true
+            )
+        }.getOrNull() ?: return false
+
+        val body = response.text.trim()
+            .replace("""\/""", "/")
+            .replace("""\:""", ":")
+            .replace("""\u002F""", "/", true)
+            .replace("""\u0026""", "&", true)
+
+        if (!body.startsWith("#EXTM3U")) return false
+
+        val hasVariantPlaylist = Regex(
+            """(?im)^\s*#EXT-X-STREAM-INF\s*:"""
+        ).containsMatchIn(body)
+
+        val hasVideoMap = Regex(
+            """(?i)#EXT-X-MAP:.*URI=["']?[^"']+\.(?:mp4|m4s)(?:[?#][^"']*)?"""
+        ).containsMatchIn(body)
+
+        val uriLines = body.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+            .toList()
+
+        if (uriLines.isEmpty()) return hasVariantPlaylist || hasVideoMap
+
+        val imageOnly = uriLines.all { line ->
+            Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)(?:[?#].*)?$""")
+                .containsMatchIn(line)
+        }
+
+        // Some sites return a slideshow/preview manifest made only of still images.
+        // Do not expose it as a playable video stream.
+        return !imageOnly || hasVariantPlaylist || hasVideoMap
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -372,6 +414,9 @@ class Flix : MainAPI() {
                 val isDirectMedia = path.endsWith(".m3u8") || path.endsWith(".mp4")
 
                 if (isDirectMedia) {
+                    if (path.endsWith(".m3u8") && !isPlayableHls(candidate, pageUrl)) {
+                        continue
+                    }
                     if (emittedLinks.add(candidate)) {
                         callback(
                             newExtractorLink(
