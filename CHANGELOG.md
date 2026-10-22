@@ -2,6 +2,23 @@
 
 ## 2026-10-22
 
+<!-- kayra-commit:069f33fa396dd2ab7407be2644ec0f7caf445d84 -->
+### Fix Nattvspor poster extraction
+
+- Etkilenen alanlar: Nattvspor
+- Commit: [069f33f](https://github.com/Kayracs3/Kayra/commit/069f33fa396dd2ab7407be2644ec0f7caf445d84)
+
+## 2026-10-22
+
+<!-- kayra-commit:b169cd7f8cff4d88eff362d2634b592d1fe121e0 -->
+### Add URL-generated CloudStream provider: Nattvspor
+
+- Etkilenen alanlar: Nattvspor
+- Commit: [b169cd7](https://github.com/Kayracs3/Kayra/commit/b169cd7f8cff4d88eff362d2634b592d1fe121e0)
+
+
+## 2026-10-22
+
 <!-- kayra-commit:2ffb17b06fbc4eaa86dfe5b765f7429be514d4d8 -->
 ### Filter ReelPulse navigation tiles and fix Red Bull poster
 
