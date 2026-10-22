@@ -542,10 +542,10 @@
     },
     {
         "iconUrl": "https://inattv1327.xyz/favicon.ico",
-        "fileHash": "sha256-a73fdf0754810586c67c00feb26c3115c06a28c837090a80643fdad9211a1cbb",
+        "fileHash": "sha256-2f541a1fd2642717f3c4661d03187d93c4e8ec5272c6653a5e88943d9430f8ef",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 23365,
+        "fileSize": 25239,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -555,7 +555,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "Nattvspor",
         "description": "\u0130nattvSpor otomatik sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Nattvspor.cs3",
