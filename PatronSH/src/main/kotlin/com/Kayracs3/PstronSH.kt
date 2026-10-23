@@ -3,7 +3,6 @@ package com.Kayracs3
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import org.jsoup.nodes.Element
 import java.net.URI
 import java.net.URLEncoder
 
@@ -112,38 +111,49 @@ class PatronSaha : MainAPI() {
         }
     }
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+    private suspend fun fetchChannels(): List<SearchResponse> {
         var items = fetchChannelsFromApi()
 
+        // API sonuç döndürmezse ana sayfanın HTML listesini yedek kaynak olarak kullan.
         if (items.isEmpty()) {
             val document = runCatching {
                 app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
             }.getOrNull()
+
             if (document != null) {
                 items = document.select("div.channel-item").mapNotNull { el ->
                     if (el.hasClass("channel-ad-item")) return@mapNotNull null
                     val dataSrc = el.attr("data-src").trim()
                     if (dataSrc.isBlank()) return@mapNotNull null
                     val url = fixUrl(dataSrc) ?: return@mapNotNull null
-                    if (!sameSite(url)) return@mapNotNull null
+                    if (!sameSite(url) || isAdUrl(url)) return@mapNotNull null
                     val name = el.selectFirst("span.channel-name-text")?.text()?.trim()
+                        ?: el.selectFirst("img")?.attr("alt")?.trim()
                         ?: return@mapNotNull null
                     if (name.length < 2) return@mapNotNull null
+
                     val logo = el.selectFirst("img.channel-logo-right")?.attr("src")
                         ?.let { fixUrl(it, url) } ?: liveLogoFor(name)
-                    newMovieSearchResponse(name, url, TvType.Live) { posterUrl = logo }
+
+                    newMovieSearchResponse(name, url, TvType.Live) {
+                        posterUrl = logo
+                    }
                 }
             }
         }
 
+        return items.distinctBy { it.url }.take(200)
+    }
+
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val items = fetchChannels()
         Log.d("Patron", "Toplam kanal: ${items.size}")
-        return newHomePageResponse(request.name, items.distinctBy { it.url }.take(200))
+        return newHomePageResponse(request.name, items)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         if (query.isBlank()) return emptyList()
-        return getMainPage(1, mainPage.first()).items
-            .filter { it.name.contains(query, ignoreCase = true) }
+        return fetchChannels().filter { it.name.contains(query, ignoreCase = true) }
     }
 
     // ---------------------------------------------------------------------
@@ -265,7 +275,8 @@ class PatronSaha : MainAPI() {
             null
         } ?: run { Log.w("Patron", "baseurl BULUNAMADI"); return null }
 
-        return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
+        val resolvedBaseUrl = baseUrl ?: return null
+        return "${resolvedBaseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
     // ---------------------------------------------------------------------
