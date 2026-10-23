@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:573f4d596eeee525813d1775e0ce628bd35a0717 -->
+### Add stream headers and improve link extraction
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [573f4d5](https://github.com/Kayracs3/Kayra/commit/573f4d596eeee525813d1775e0ce628bd35a0717)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:23f02685fef8ed988c7621323e0b0ec55083f19c -->
 ### Add live channel support and update main page logic
 
