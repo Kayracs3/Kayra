@@ -3,7 +3,6 @@ package com.Kayracs3
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.net.URLEncoder
@@ -17,22 +16,16 @@ class PatronSaha : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
     override val mainPage = mainPageOf("$mainUrl/" to "Canlı Kanallar")
 
+    // Kanal listesini döndüren API (logolarla birlikte)
+    private val channelsApi = "https://patronsports2.cfd/channels.php"
+
     private val browserUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 
-    // Tarayıcı isteğini taklit etmek için genişletilmiş header seti
     private val pageHeaders = mapOf(
         "User-Agent" to browserUserAgent,
-        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Sec-Fetch-Dest" to "document",
-        "Sec-Fetch-Mode" to "navigate",
-        "Sec-Fetch-Site" to "none",
-        "Sec-Fetch-User" to "?1",
-        "Upgrade-Insecure-Requests" to "1",
-        "sec-ch-ua" to "\"Chromium\";v=\"150\", \"Not;A=Brand\";v=\"8\", \"Google Chrome\";v=\"150\"",
-        "sec-ch-ua-mobile" to "?0",
-        "sec-ch-ua-platform" to "\"Windows\""
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
     private val streamHeaders = mapOf(
@@ -72,165 +65,81 @@ class PatronSaha : MainAPI() {
     }.getOrDefault(false)
 
     // ---------------------------------------------------------------------
-    //  KANAL KARTI → SearchResponse
+    //  KANAL LİSTESİ → channels.php API
     // ---------------------------------------------------------------------
-    private fun Element.toChannelItemResult(): SearchResponse? {
-        if (!hasClass("channel-item")) return null
-        if (hasClass("channel-ad-item")) return null
-
-        val dataSrc = attr("data-src").trim().ifBlank { attr("data-href").trim() }
-        if (dataSrc.isBlank()) return null
-        val url = fixUrl(dataSrc) ?: return null
-        if (!sameSite(url)) return null
-
-        val name = sequenceOf(
-            selectFirst("span.channel-name-text")?.text()?.trim(),
-            selectFirst("img.channel-logo-right")?.attr("alt")?.trim(),
-            attr("title").trim()
-        ).mapNotNull { it }
-            .firstOrNull { it.length >= 2 }
-            ?: return null
-
-        val logoRaw = selectFirst("img.channel-logo-right")?.attr("src")?.trim()
-            ?.takeIf { it.isNotBlank() }
-        val logo = logoRaw?.let { fixUrl(it, url) } ?: liveLogoFor(name)
-
-        return newMovieSearchResponse(name, url, TvType.Live) {
-            posterUrl = logo
+    private suspend fun fetchChannelsFromApi(): List<SearchResponse> {
+        val json = runCatching {
+            app.get(
+                channelsApi,
+                headers = pageHeaders + ("Referer" to "$mainUrl/"),
+                allowRedirects = true
+            ).text
+        }.getOrNull() ?: run {
+            Log.w("Patron", "channels.php isteği başarısız")
+            return emptyList()
         }
-    }
 
-    // ---------------------------------------------------------------------
-    //  KANALLARI BULMA STRATEJİLERİ
-    // ---------------------------------------------------------------------
-    /** Strateji 1: Statik HTML'deki div.channel-item kartları */
-    private fun parseChannelsFromHtml(document: Document): List<SearchResponse> =
-        document.select("div.channel-item").mapNotNull { it.toChannelItemResult() }
+        Log.d("Patron", "channels.php yanıt uzunluğu: ${json.length}")
+        Log.d("Patron", "channels.php ilk 200: ${json.take(200).replace("\n", " ")}")
 
-    /** Strateji 2: Inline script içindeki JSON dizi */
-    private fun parseChannelsFromInlineScript(document: Document): List<SearchResponse> {
-        val results = mutableListOf<SearchResponse>()
-        for (script in document.select("script:not([src])")) {
-            val data = script.data()
-            // [{"id":"patron","name":"..."}, ...] veya [{"ch_id":...}]
-            val arrayMatch = Regex("""\[\s*\{[^\[\]]*?(?:id|ch_id|channel_id|name|title)["']?\s*:.{0,5000}?\}\s*]""",
-                RegexOption.DOT_MATCHES_ALL).find(data) ?: continue
-            val ids = Regex("""["'](?:id|ch_id|channel_id)["']\s*:\s*["']([^"']+)["']""")
-                .findAll(arrayMatch.value).map { it.groupValues[1] }.toList()
-            val names = Regex("""["'](?:name|title|kanal_adi)["']\s*:\s*["']([^"']+)["']""")
-                .findAll(arrayMatch.value).map { it.groupValues[1] }.toList()
-            if (ids.isEmpty()) continue
-            Log.d("Patron", "Inline script → ${ids.size} id, ${names.size} name")
-            ids.forEachIndexed { i, id ->
-                val name = names.getOrNull(i) ?: id
-                val url = "$mainUrl/ch.html?id=$id"
-                results.add(newMovieSearchResponse(name, url, TvType.Live) {
-                    posterUrl = liveLogoFor(name)
-                })
+        // JSON'dan Mac (kanal adı), Logo (logo yolu), URL (kanal linki) üçlüsünü çıkar
+        val macRegex = Regex(""""Mac"\s*:\s*"([^"]+)"""")
+        val logoRegex = Regex(""""Logo"\s*:\s*"([^"]+)"""")
+        val urlRegex = Regex(""""URL"\s*:\s*"([^"]+)"""")
+
+        val macs = macRegex.findAll(json).map { it.groupValues[1] }.toList()
+        val logos = logoRegex.findAll(json).map { it.groupValues[1] }.toList()
+        val urls = urlRegex.findAll(json).map { it.groupValues[1] }.toList()
+
+        Log.d("Patron", "API: ${macs.size} kanal, ${logos.size} logo, ${urls.size} url")
+
+        if (macs.isEmpty()) return emptyList()
+
+        val channels = mutableListOf<SearchResponse>()
+        for (i in macs.indices) {
+            val name = macs[i].trim()
+            if (name.isBlank()) continue
+
+            val rawUrl = urls.getOrNull(i)?.replace("\\/", "/") ?: "/ch.html?id=${name.lowercase()}"
+            val channelUrl = fixUrl(rawUrl, mainUrl) ?: continue
+
+            val logoPath = logos.getOrNull(i)?.replace("\\/", "/")
+            val logo = if (!logoPath.isNullOrBlank()) {
+                fixUrl(logoPath, "https://patronsports2.cfd") ?: liveLogoFor(name)
+            } else {
+                liveLogoFor(name)
             }
-            if (results.isNotEmpty()) return results
-        }
-        return results
-    }
 
-    /** Strateji 3: Bilinen kanal API'lerini dene */
-    private suspend fun parseChannelsFromApis(): List<SearchResponse> {
-        val apis = listOf(
-            "/api/channels", "/api/channels.php", "/api/kanallar",
-            "/channels.json", "/api/channels.json", "/data/channels.json",
-            "/getChannels", "/get-channels", "/api/get-channels",
-            "/api/matches", "/matches.json", "/api/matches.php",
-            "/api/live", "/api/live.json", "/canli.json", "/channels",
-            "/kanallar.json", "/kanallar", "/api/getChannels.php"
-        )
-        for (api in apis) {
-            val url = "$mainUrl$api"
-            val text = runCatching {
-                app.get(url, headers = pageHeaders + ("Referer" to "$mainUrl/"), allowRedirects = true).text
-            }.getOrNull() ?: continue
-            if (text.length < 50) continue
-            // JSON'dan id + name çiftlerini çıkar
-            val ids = Regex("""["'](?:id|ch_id|channel_id)["']\s*:\s*["']([^"']+)["']""")
-                .findAll(text).map { it.groupValues[1] }.toList()
-            val names = Regex("""["'](?:name|title|kanal_adi)["']\s*:\s*["']([^"']+)["']""")
-                .findAll(text).map { it.groupValues[1] }.toList()
-            if (ids.isEmpty()) continue
-            Log.d("Patron", "API $api → ${ids.size} id")
-            val results = ids.mapIndexed { i, id ->
-                val name = names.getOrNull(i) ?: id
-                newMovieSearchResponse(name, "$mainUrl/ch.html?id=$id", TvType.Live) {
-                    posterUrl = liveLogoFor(name)
+            channels.add(
+                newMovieSearchResponse(name, channelUrl, TvType.Live) {
+                    posterUrl = logo
                 }
-            }
-            return results
+            )
         }
-        return emptyList()
+
+        Log.d("Patron", "API'den ${channels.size} kanal ayrıştırıldı")
+        return channels
     }
 
     // ---------------------------------------------------------------------
-    //  ANA SAYFA (Tanılama + 3 strateji)
+    //  ANA SAYFA (API tabanlı)
     // ---------------------------------------------------------------------
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val response = runCatching {
-            app.get(mainUrl, headers = pageHeaders, allowRedirects = true)
-        }.getOrNull() ?: run {
-            Log.w("Patron", "Ana sayfa isteği başarısız")
-            return newHomePageResponse(request.name, emptyList<SearchResponse>())
-        }
+        // Önce API'den dene
+        var items = fetchChannelsFromApi()
 
-        val body = response.text
-        val document = response.document
-
-        Log.d("Patron", "=== ANA SAYFA TANILAMA ===")
-        Log.d("Patron", "HTTP: ${response.code}  BodyLen: ${body.length}")
-        Log.d("Patron", "Body ilk 500: ${body.take(500).replace("\n", " ")}")
-        Log.d("Patron", "div.channel-item: ${document.select("div.channel-item").size}")
-        Log.d("Patron", "#matchList: ${document.select("#matchList").size}")
-        Log.d("Patron", "script[src]: ${document.select("script[src]").map { it.attr("src") }.take(10)}")
-        Log.d("Patron", "Inline script sayısı: ${document.select("script:not([src])").size}")
-
-        // Cloudflare kontrolü
-        if (body.contains("cf-challenge", true) ||
-            body.contains("Checking your browser", true) ||
-            body.contains("Just a moment", true)
-        ) {
-            Log.w("Patron", "!!! CLOUDFLARE CHALLENGE TESPİT EDİLDİ. CloudflareKiller kur!")
-        }
-
-        // Strateji 1: statik HTML
-        var items = parseChannelsFromHtml(document)
-        Log.d("Patron", "Strateji 1 (HTML): ${items.size} kanal")
-
-        // Strateji 2: inline script
+        // API başarısızsa statik HTML'e düş
         if (items.isEmpty()) {
-            items = parseChannelsFromInlineScript(document)
-            Log.d("Patron", "Strateji 2 (inline script): ${items.size} kanal")
-        }
+            val document = runCatching {
+                app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
+            }.getOrNull()
 
-        // Strateji 3: API endpoint'leri
-        if (items.isEmpty()) {
-            items = parseChannelsFromApis()
-            Log.d("Patron", "Strateji 3 (API): ${items.size} kanal")
-        }
-
-        Log.d("Patron", "TOPLAM: ${items.size} kanal")
-        return newHomePageResponse(request.name, items.distinctBy { it.url }.take(200))
-    }
-
-    override suspend fun search(query: String): List<SearchResponse> {
-        if (query.isBlank()) return emptyList()
-
-        val document = runCatching {
-            app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
-        }.getOrNull() ?: return emptyList()
-
-        var items = document.select("div.channel-item")
-            .mapNotNull { it.toChannelItemResult() }
-
-        if (items.isEmpty()) {
-            items = document.select("[data-src*='ch.html'], [data-src*='channel']")
-                .mapNotNull { el ->
-                    val url = fixUrl(el.attr("data-src").trim()) ?: return@mapNotNull null
+            if (document != null) {
+                items = document.select("div.channel-item").mapNotNull { el ->
+                    if (el.hasClass("channel-ad-item")) return@mapNotNull null
+                    val dataSrc = el.attr("data-src").trim()
+                    if (dataSrc.isBlank()) return@mapNotNull null
+                    val url = fixUrl(dataSrc) ?: return@mapNotNull null
                     if (!sameSite(url)) return@mapNotNull null
                     val name = el.selectFirst("span.channel-name-text")?.text()?.trim()
                         ?: el.selectFirst("img")?.attr("alt")?.trim()
@@ -240,9 +149,16 @@ class PatronSaha : MainAPI() {
                         ?.let { fixUrl(it, url) } ?: liveLogoFor(name)
                     newMovieSearchResponse(name, url, TvType.Live) { posterUrl = logo }
                 }
+            }
         }
 
-        return items.distinctBy { it.url }
+        Log.d("Patron", "Toplam kanal: ${items.size}")
+        return newHomePageResponse(request.name, items.distinctBy { it.url }.take(200))
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        if (query.isBlank()) return emptyList()
+        return getMainPage(1, mainPage.first()).items
             .filter { it.name.contains(query, ignoreCase = true) }
     }
 
@@ -353,8 +269,7 @@ class PatronSaha : MainAPI() {
             null
         } ?: run { Log.w("Patron", "baseurl BULUNAMADI"); return null }
 
-        val resolvedBaseUrl = baseUrl ?: return null
-        return "${resolvedBaseUrl.trimEnd('/')}/$id/mono.m3u8"
+        return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
     // ---------------------------------------------------------------------
