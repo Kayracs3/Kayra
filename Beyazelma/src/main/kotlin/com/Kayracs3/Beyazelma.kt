@@ -34,6 +34,7 @@ class Beyazelma : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
+    // m3u8 akış istekleri için gerekli başlıklar
     private val streamHeaders = mapOf(
         "User-Agent" to browserUserAgent,
         "Accept" to "*/*",
@@ -433,16 +434,50 @@ class Beyazelma : MainAPI() {
                 val channelName = document.selectFirst("h1")?.text()?.trim() ?: slug
                 Log.d("Beyazelma", "Slug=$slug ChannelName=$channelName")
 
+                // DOĞRUDAN PREROLL API'SİNİ DENE
+                val prerollApi = "$mainUrl/api/preroll"
+                val payload = mapOf(
+                    "type" to "channel",
+                    "itemId" to slug,
+                    "itemName" to channelName,
+                    "duration" to 45
+                )
+                val prerollResp = runCatching {
+                    app.post(
+                        prerollApi,
+                        headers = pageHeaders + mapOf(
+                            "Content-Type" to "application/json",
+                            "Referer" to pageUrl,
+                            "Origin" to mainUrl,
+                            "Accept" to "application/json, text/plain, */*"
+                        ),
+                        json = payload
+                    )
+                }.getOrNull()
+
+                if (prerollResp != null && prerollResp.code in 200..299) {
+                    val respBody = prerollResp.text
+                    Log.d("Beyazelma", "POST $prerollApi → kod=${prerollResp.code} len=${respBody.length}")
+                    Log.d("Beyazelma", "PREROLL YANITI: ${respBody.take(1000).replace("\n", " ")}")
+
+                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                        .findAll(respBody.replace("\\/", "/")).forEach { m ->
+                            fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
+                        }
+                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
+                        .findAll(respBody).forEach { m ->
+                            fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
+                        }
+                } else {
+                    Log.w("Beyazelma", "PREROLL API BAŞARISIZ: kod=${prerollResp?.code ?: "null"}")
+                }
+
+                // Diğer API'leri de dene (yedek)
                 val apiEndpoints = listOf(
-                    "$mainUrl/api/preroll",
                     "$mainUrl/api/embed",
                     "$mainUrl/api/player",
-                    "$mainUrl/api/stream",
-                    "$mainUrl/api/track/ad",
-                    "$mainUrl/api/channels/$slug/embed",
-                    "$mainUrl/api/channels/$slug/stream"
+                    "$mainUrl/api/stream"
                 )
-
                 for (api in apiEndpoints) {
                     val postResp = runCatching {
                         app.post(
@@ -453,11 +488,7 @@ class Beyazelma : MainAPI() {
                                 "Origin" to mainUrl,
                                 "Accept" to "application/json, text/plain, */*"
                             ),
-                            json = mapOf(
-                                "type" to "channel",
-                                "itemId" to slug,
-                                "itemName" to channelName
-                            )
+                            json = payload
                         )
                     }.getOrNull()
 
