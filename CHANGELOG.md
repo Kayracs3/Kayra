@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:765214e49a4e39aa2316997dd0e6a833735c1208 -->
+### Update build.gradle.kts
+
+- Etkilenen alanlar: PatronSH
+- Commit: [765214e](https://github.com/Kayracs3/Kayra/commit/765214e49a4e39aa2316997dd0e6a833735c1208)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:ae108cc435143d1349b628fd7968619a27215952 -->
 ### Add files via upload
 
