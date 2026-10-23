@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:fbf525a2cf84d9c668484d474f1203834ab289d4 -->
+### Refactor preroll API request handling
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [fbf525a](https://github.com/Kayracs3/Kayra/commit/fbf525a2cf84d9c668484d474f1203834ab289d4)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:1e7bb8942dd016b449a70f7a79708fe038d188f1 -->
 ### Implement preroll API request and response handling
 
