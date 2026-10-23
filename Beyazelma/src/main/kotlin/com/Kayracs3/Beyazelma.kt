@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.json.JSONArray
+import org.json.JSONObject
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
@@ -338,11 +339,6 @@ class Beyazelma : MainAPI() {
                 val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull() ?: ""
                 Log.d("Beyazelma", "Slug=$slug")
 
-                val acceptHeaders = pageHeaders + mapOf(
-                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Referer" to pageUrl
-                )
-
                 // 1) Embed sayfasını çek ve StreamPlayer.mount satırından embed slug'ını bul
                 var embedSlug: String? = null
                 val embedUrls = listOf(
@@ -352,7 +348,7 @@ class Beyazelma : MainAPI() {
                     "https://embed.beyazelma78.com/$slug"
                 )
                 for (url in embedUrls) {
-                    val resp = runCatching { app.get(url, headers = acceptHeaders).text }.getOrNull() ?: continue
+                    val resp = runCatching { app.get(url, headers = pageHeaders).text }.getOrNull() ?: continue
                     if (resp.contains("StreamPlayer.mount")) {
                         Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL).find(resp)?.let {
                             embedSlug = it.groupValues[1]
@@ -362,35 +358,38 @@ class Beyazelma : MainAPI() {
                     }
                 }
 
-                // 2) player.js dosyasını indir (her koşulda)
-                val playerJsUrl = "https://embed.beyazelma78.com/player.js"
-                val playerJs = runCatching {
-                    app.get(playerJsUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true).text
-                }.getOrNull()
+                // 2) player.js'deki fetchPlay mantığını taklit et: /api/play/{embedSlug}
+                if (embedSlug != null) {
+                    val apiPlayUrl = "https://embed.beyazelma78.com/api/play/$embedSlug"
+                    Log.d("Beyazelma", "API Play URL: $apiPlayUrl")
+                    val apiResp = runCatching {
+                        app.get(apiPlayUrl, headers = pageHeaders + mapOf(
+                            "Referer" to "https://embed.beyazelma78.com/",
+                            "Origin" to "https://embed.beyazelma78.com"
+                        )).text
+                    }.getOrNull()
 
-                if (playerJs != null) {
-                    Log.d("Beyazelma", "player.js indirildi, boyut: ${playerJs.length}")
-                    
-                    // player.js içindeki tüm /api/ yollarını bul
-                    val apiPaths = Regex("""['"](/api/[^'"]+)['"]""").findAll(playerJs)
-                        .map { it.groupValues[1] }.distinct().toList()
-
-                    // Embed slug'ı bulunduysa, bu API'leri embed domaini üzerinde dene
-                    if (embedSlug != null) {
-                        for (apiPath in apiPaths) {
-                            val apiUrl = "https://embed.beyazelma78.com$apiPath?slug=$embedSlug"
-                            val apiResp = runCatching {
-                                app.get(apiUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true)
-                            }.getOrNull()
-
-                            if (apiResp != null && apiResp.code in 200..299) {
-                                val apiBody = apiResp.text
-                                Log.d("Beyazelma", "API denemesi: $apiUrl → kod=${apiResp.code} len=${apiBody.length}")
-                                Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                                    .findAll(apiBody.replace("\\/", "/")).forEach { m -> fixUrl(m.value, apiUrl)?.let { candidates.add(it) } }
-                                Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                                    .findAll(apiBody).forEach { m -> fixUrl(m.groupValues[1].replace("\\/", "/"), apiUrl)?.let { candidates.add(it) } }
+                    if (apiResp != null) {
+                        Log.d("Beyazelma", "API yanıtı: ${apiResp.take(500)}")
+                        try {
+                            val json = JSONObject(apiResp)
+                            val primary = json.optString("primary", "")
+                            if (primary.isNotBlank()) {
+                                Log.d("Beyazelma", "Primary akış bulundu: $primary")
+                                candidates.add(primary)
                             }
+                            val fallbacks = json.optJSONArray("fallbacks")
+                            if (fallbacks != null) {
+                                for (i in 0 until fallbacks.length()) {
+                                    val fallback = fallbacks.optString(i, "")
+                                    if (fallback.isNotBlank()) {
+                                        Log.d("Beyazelma", "Fallback akış bulundu: $fallback")
+                                        candidates.add(fallback)
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("Beyazelma", "JSON parse hatası: ${e.message}")
                         }
                     }
                 }
