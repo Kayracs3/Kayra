@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:bde3b44c19a3023523224fb85595285107b8c4c5 -->
+### Align PatronSaha metadata with live TV type
+
+- Etkilenen alanlar: PatronSH
+- Commit: [bde3b44](https://github.com/Kayracs3/Kayra/commit/bde3b44c19a3023523224fb85595285107b8c4c5)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:314bf56bd0ab711c26a47a867d326edc5dc5bcdb -->
 ### Fix PatronSaha channel parsing and stream regexes
 
