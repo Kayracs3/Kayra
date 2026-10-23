@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:57d768b47f945fd454525dcb8bdcdc6991c24847 -->
+### Fix PatronSaha search types and nullable base URL
+
+- Etkilenen alanlar: PatronSH
+- Commit: [57d768b](https://github.com/Kayracs3/Kayra/commit/57d768b47f945fd454525dcb8bdcdc6991c24847)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:bde3b44c19a3023523224fb85595285107b8c4c5 -->
 ### Align PatronSaha metadata with live TV type
 
