@@ -563,21 +563,21 @@
     },
     {
         "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg-hdTlaRfTO3bpbNN57otxLOQ1iSvgBNOGkXCnePUFZ5bWcvNQEd4LsTWcckMOTA8WMDUZjgS7cz8Qe1DHnsnMz8KsFjr8jGx7OwGwFmAuhGVhiRbiPrJwHlSj_vT2RGIlKBE7Qw1jXBw0n74mZk5ltikRlLqjH24eBTTbeow_XT9Q3uFfR1lz1esWxQk/s230/logo.png",
-        "fileHash": "sha256-1758a686c73b0049475d5cd71314642c8fedc308c0de210e79b40438963d69bc",
+        "fileHash": "sha256-a146351b75b6b60ddc8d694a89465253e30c962fc11cb6afe54db347bd6c66fd",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 32042,
+        "fileSize": 28319,
         "status": 1,
         "language": "tr",
         "authors": [
             "Kayracs3"
         ],
         "tvTypes": [
-            "TvSeries"
+            "Live"
         ],
         "version": 1,
         "internalName": "PatronSH",
-        "description": "T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "description": "T\u00fcrkiye canl\u0131 yay\u0131n sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/PatronSH.cs3",
         "name": "PatronSH"
     },
