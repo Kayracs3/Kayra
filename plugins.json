@@ -64,18 +64,17 @@
     },
     {
         "iconUrl": "https://beyazelma78.com/favicon.ico",
-        "fileHash": "sha256-807d4d5b6ef867d57e5aa283c426f02b85134d7eb3e867d30f7942fc956a9c40",
+        "fileHash": "sha256-9aa0d808ca3d044088123a125bb1152754ddc29545719013916a2a06355c1e32",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 23357,
+        "fileSize": 23369,
         "status": 1,
         "language": "tr",
         "authors": [
             "Kayracs3"
         ],
         "tvTypes": [
-            "Movie",
-            "TvSeries"
+            "Live"
         ],
         "version": 1,
         "internalName": "Beyazelma",
