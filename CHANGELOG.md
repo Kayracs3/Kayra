@@ -2,6 +2,23 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:585747b74476460a5f0917853ca4f4a50f710f47 -->
+### Fix PatronSH search MainPageRequest type mismatch
+
+- Etkilenen alanlar: PatronSH
+- Commit: [585747b](https://github.com/Kayracs3/Kayra/commit/585747b74476460a5f0917853ca4f4a50f710f47)
+
+## 2026-10-23
+
+<!-- kayra-commit:947d68b845cd4a635ea29d55f9b45df9adfa5e04 -->
+### Fix PatronSH provider registration name
+
+- Etkilenen alanlar: PatronSH
+- Commit: [947d68b](https://github.com/Kayracs3/Kayra/commit/947d68b845cd4a635ea29d55f9b45df9adfa5e04)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:d1081e2740d01411eb5427eedd8c18d48c4ccb08 -->
 ### Change package name from com.neoncs3 to com.Kayracs3
 
