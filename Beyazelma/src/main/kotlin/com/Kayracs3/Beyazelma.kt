@@ -25,16 +25,15 @@ class Beyazelma : MainAPI() {
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries, TvType.Live)
     override val mainPage = mainPageOf("$mainUrl/" to "Canlı Kanallar")
 
+    private val browserUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+
     private val pageHeaders = mapOf(
-        "User-Agent" to USER_AGENT,
+        "User-Agent" to browserUserAgent,
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
-    private val browserUserAgent =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
-
-    // m3u8 isteği için ZORUNLU başlıklar (tarayıcıdan alındı)
     private val streamHeaders = mapOf(
         "User-Agent" to browserUserAgent,
         "Accept" to "*/*",
@@ -264,7 +263,6 @@ class Beyazelma : MainAPI() {
             document.selectFirst("img")?.attr("src")
         ).firstOrNull { !it.isNullOrBlank() }?.let { fixUrl(it, pageUrl) }
 
-        // Canlı yayın tespiti
         if (pageUrl.contains("/kanal/") || pageUrl.contains("/canli/") || pageUrl.contains("/live/")) {
             return newMovieLoadResponse(title, pageUrl, TvType.Live, pageUrl) {
                 posterUrl = poster
@@ -329,9 +327,6 @@ class Beyazelma : MainAPI() {
         }
     }
 
-    // ---------------------------------------------------------------------
-    //  m3u8 testi — ZORUNLU başlıklarla
-    // ---------------------------------------------------------------------
     private suspend fun isPlayableHls(url: String, referer: String, origin: String): Boolean {
         val response = runCatching {
             app.get(
@@ -342,7 +337,7 @@ class Beyazelma : MainAPI() {
         }.getOrNull() ?: return false
 
         if (response.code !in 200..299) {
-            Log.w("Beyazelma", "HLS HTTP ${response.code}: $url")
+            Log.w("Beyazelma", "HLS HTTP ${response.code}: ${url.substringBefore('?')}")
             return false
         }
         val body = response.text.trim()
@@ -353,9 +348,6 @@ class Beyazelma : MainAPI() {
         return true
     }
 
-    // ---------------------------------------------------------------------
-    //  Aday URL toplama (HTML + inline script)
-    // ---------------------------------------------------------------------
     private fun collectCandidateUrls(body: String, document: Document, baseUrl: String): LinkedHashSet<String> {
         val candidates = linkedSetOf<String>()
         val cleaned = body
@@ -366,13 +358,9 @@ class Beyazelma : MainAPI() {
             .replace("&#039;", "'")
             .replace("&amp;", "&")
 
-        // 1. Doğrudan m3u8/mp4
         Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-            .findAll(cleaned).forEach { m ->
-                fixUrl(m.value, baseUrl)?.let { candidates.add(it) }
-            }
+            .findAll(cleaned).forEach { m -> fixUrl(m.value, baseUrl)?.let { candidates.add(it) } }
 
-        // 2. iframe / video / source etiketleri
         document.select(
             "iframe[src], iframe[data-src], video[src], video[data-src], source[src], source[data-src], [data-embed], [data-video], [data-player], [data-stream]"
         ).forEach { el ->
@@ -385,7 +373,6 @@ class Beyazelma : MainAPI() {
             }
         }
 
-        // 3. Inline script içindeki anahtarlar
         for (script in document.select("script:not([src])")) {
             val data = script.data()
             Regex("""["']?(?:url|src|file|stream|streamUrl|embedUrl|playerUrl|iframe|m3u8)["']?\s*[:=]\s*["']([^"']+)["']""")
@@ -398,9 +385,6 @@ class Beyazelma : MainAPI() {
         return candidates
     }
 
-    // ---------------------------------------------------------------------
-    //  LİNK ÇIKARMA — api/embed odaklı
-    // ---------------------------------------------------------------------
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -423,7 +407,7 @@ class Beyazelma : MainAPI() {
             val document = response.document
             Log.d("Beyazelma", "Tarama: ${pageUrl.substringBefore('?')} (d=$depth) bodyLen=${body.length}")
 
-            // Altyazılar
+            // --- Altyazılar ---
             document.select("track[src], track[data-src]").forEach { track ->
                 val s = fixUrl(track.attr("src").ifBlank { track.attr("data-src") }, pageUrl) ?: return@forEach
                 if (Regex("(?i)\\.(vtt|srt|ass)(\\?|$)").containsMatchIn(s)) {
@@ -433,39 +417,122 @@ class Beyazelma : MainAPI() {
             }
 
             val candidates = collectCandidateUrls(body, document, pageUrl)
-            Log.d("Beyazelma", "Aday URL sayısı: ${candidates.size}")
+            Log.d("Beyazelma", "HTML aday sayısı: ${candidates.size}")
 
-            // API endpoint denemeleri (slug üzerinden)
-            val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull()
-            if (!slug.isNullOrBlank() && depth <= 1) {
-                val apiCandidates = listOf(
-                    "$mainUrl/api/embed?channel=$slug",
-                    "$mainUrl/api/embed/$slug",
-                    "$mainUrl/api/stream/$slug",
-                    "$mainUrl/api/player/$slug",
-                    "$mainUrl/api/live/$slug",
-                    "$mainUrl/api/channels/$slug/stream",
-                    "$mainUrl/api/channels/$slug/embed"
+            // --- __NEXT_DATA__ içinden URL çıkar ---
+            document.selectFirst("script#__NEXT_DATA__")?.data()?.let { nextData ->
+                Log.d("Beyazelma", "__NEXT_DATA__ uzunluk: ${nextData.length}")
+                Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                    .findAll(nextData).forEach { m -> fixUrl(m.value, pageUrl)?.let { candidates.add(it) } }
+                Regex("""["']?(?:embedUrl|playerUrl|streamUrl|url|iframeUrl|m3u8)["']?\s*:\s*["']([^"']+)["']""")
+                    .findAll(nextData).forEach { m ->
+                        fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
+                    }
+            }
+
+            // --- Kanal sayfasıysa POST/GET API denemeleri ---
+            if (pageUrl.contains("/kanal/") && depth == 0) {
+                val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull() ?: ""
+                val channelName = document.selectFirst("h1")?.text()?.trim() ?: slug
+                Log.d("Beyazelma", "Slug=$slug ChannelName=$channelName")
+
+                val apiEndpoints = listOf(
+                    "$mainUrl/api/embed",
+                    "$mainUrl/api/player",
+                    "$mainUrl/api/stream",
+                    "$mainUrl/api/channel/embed",
+                    "$mainUrl/api/channels/embed",
+                    "$mainUrl/api/channels/$slug/embed",
+                    "$mainUrl/api/channels/$slug/stream"
                 )
-                for (api in apiCandidates) {
-                    val r = runCatching {
-                        app.get(api, headers = pageHeaders + ("Referer" to "$mainUrl/"), allowRedirects = true)
+
+                for (api in apiEndpoints) {
+                    // POST dene
+                    val postResp = runCatching {
+                        app.post(
+                            api,
+                            headers = pageHeaders + mapOf(
+                                "Content-Type" to "application/json",
+                                "Referer" to pageUrl,
+                                "Origin" to mainUrl,
+                                "Accept" to "application/json, text/plain, */*"
+                            ),
+                            json = mapOf(
+                                "type" to "channel",
+                                "itemId" to slug,
+                                "itemName" to channelName
+                            )
+                        )
+                    }.getOrNull()
+
+                    if (postResp != null && postResp.code in 200..299) {
+                        val respBody = postResp.text
+                        Log.d("Beyazelma", "POST $api → kod=${postResp.code} len=${respBody.length}")
+                        Log.d("Beyazelma", "POST yanıt: ${respBody.take(800).replace("\n", " ")}")
+
+                        Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                            .findAll(respBody.replace("\\/", "/")).forEach { m ->
+                                fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
+                            }
+                        Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
+                            .findAll(respBody).forEach { m ->
+                                fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
+                            }
+                    }
+
+                    // GET dene
+                    val getResp = runCatching {
+                        app.get(
+                            api,
+                            headers = pageHeaders + mapOf("Referer" to pageUrl, "Origin" to mainUrl),
+                            allowRedirects = true
+                        )
+                    }.getOrNull()
+
+                    if (getResp != null && getResp.code in 200..299) {
+                        val respBody = getResp.text
+                        if (respBody.length in 10..50000) {
+                            Log.d("Beyazelma", "GET $api → kod=${getResp.code} len=${respBody.length}")
+                            Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                                .findAll(respBody.replace("\\/", "/")).forEach { m ->
+                                    fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
+                                }
+                            Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
+                                .findAll(respBody).forEach { m ->
+                                    fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
+                                }
+                        }
+                    }
+                }
+
+                // --- JS chunk tara ---
+                val jsUrls = document.select("script[src]").map { it.attr("src") }
+                    .filter { it.contains("_next/static/chunks") || it.endsWith(".js") }
+                    .take(8)
+                val discoveredApis = mutableSetOf<String>()
+                for (jsSrc in jsUrls) {
+                    val jsFull = fixUrl(jsSrc, pageUrl) ?: continue
+                    val jsBody = runCatching {
+                        app.get(jsFull, headers = pageHeaders, allowRedirects = true).text
                     }.getOrNull() ?: continue
-                    if (r.code !in 200..299) continue
-                    val rBody = r.text
-                    Log.d("Beyazelma", "API denemesi: $api → kod=${r.code} len=${rBody.length}")
-                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                        .findAll(rBody.replace("\\/", "/")).forEach { m ->
-                            fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
+                    Regex("""["'](/api/[a-zA-Z0-9_/\-]+)["']""").findAll(jsBody).forEach { m ->
+                        discoveredApis.add(m.groupValues[1])
+                    }
+                    Regex("""["'](https?://[a-z0-9.-]+\.(?:online|xyz|cfd|top|link)[^"']*)["']""")
+                        .findAll(jsBody).forEach { m ->
+                            val u = m.groupValues[1]
+                            if (u.contains("embed") || u.contains("stream") || u.contains("player")) {
+                                Log.d("Beyazelma", "JS'de embed servis: $u")
+                            }
                         }
-                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src)["']?\s*[:=]\s*["']([^"']+)["']""")
-                        .findAll(rBody).forEach { m ->
-                            fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
-                        }
+                }
+                if (discoveredApis.isNotEmpty()) {
+                    Log.d("Beyazelma", "JS'de bulunan API'ler: $discoveredApis")
                 }
             }
 
-            // Adayları işle
+            // --- Adayları işle ---
+            Log.d("Beyazelma", "Toplam aday: ${candidates.size}")
             for (cand in candidates.take(50)) {
                 val path = runCatching { URI(cand).path.orEmpty().lowercase() }.getOrDefault("")
                 val isM3u8 = path.endsWith(".m3u8")
@@ -475,7 +542,7 @@ class Beyazelma : MainAPI() {
                 if (isDirect) {
                     if (isM3u8) {
                         val ok = isPlayableHls(cand, "$mainUrl/", mainUrl)
-                        Log.d("Beyazelma", "HLS testi: $ok → $cand")
+                        Log.d("Beyazelma", "HLS testi: $ok → ${cand.substringBefore('?')}")
                         if (!ok) continue
                     }
                     if (emitted.add(cand)) {
@@ -499,7 +566,6 @@ class Beyazelma : MainAPI() {
                         Log.d("Beyazelma", "AKIŞ EKLENDİ: ${cand.substringBefore('?')}")
                     }
                 } else {
-                    // Embed/player sayfası → içini tara
                     runCatching {
                         loadExtractor(cand, "$mainUrl/", subtitleCallback) { link ->
                             if (emitted.add(link.url)) { callback(link); found = true }
