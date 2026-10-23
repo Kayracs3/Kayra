@@ -3,7 +3,6 @@ package com.Kayracs3
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.net.URLEncoder
@@ -37,9 +36,6 @@ class PatronSaha : MainAPI() {
         "Sec-Fetch-Site" to "cross-site"
     )
 
-    // ---------------------------------------------------------------------
-    //  YARDIMCI
-    // ---------------------------------------------------------------------
     private fun liveLogoFor(title: String): String {
         val encoded = runCatching { URLEncoder.encode(title, "UTF-8") }.getOrDefault(title)
         return "https://ui-avatars.com/api/?name=$encoded&size=400&background=1e3a8a&color=ffffff&bold=true&length=2"
@@ -49,7 +45,8 @@ class PatronSaha : MainAPI() {
         val value = raw?.trim()?.replace("\\/", "/")?.replace("&amp;", "&")?.trim('"', '\'')
             ?: return null
         if (value.isBlank() || value == "#" || value.startsWith("javascript:", true) ||
-            value.startsWith("data:", true) || value.startsWith("mailto:", true)) return null
+            value.startsWith("data:", true) || value.startsWith("mailto:", true)
+        ) return null
         return runCatching {
             when {
                 value.startsWith("https://", true) || value.startsWith("http://", true) -> value
@@ -67,10 +64,6 @@ class PatronSaha : MainAPI() {
 
     // ---------------------------------------------------------------------
     //  KANAL KARTI → SearchResponse
-    //  <div class="channel-item" data-src="/ch.html?id=patron">
-    //      <span class="channel-name-text">BEIN SPORTS 1</span>
-    //      <img class="channel-logo-right" src="https://patronsports2.cfd/img/beinsports1.png">
-    //  </div>
     // ---------------------------------------------------------------------
     private fun Element.toChannelItemResult(): SearchResponse? {
         if (!hasClass("channel-item")) return null
@@ -104,7 +97,7 @@ class PatronSaha : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = runCatching {
             app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
-        }.getOrNull() ?: return newHomePageResponse(request.name, emptyList())
+        }.getOrNull() ?: return newHomePageResponse(request.name, emptyList<SearchResponse>())
 
         var items = document.select("div.channel-item")
             .mapNotNull { it.toChannelItemResult() }
@@ -190,11 +183,6 @@ class PatronSaha : MainAPI() {
 
     // ---------------------------------------------------------------------
     //  CH.HTML → baseurl → mono.m3u8
-    //  Çok katmanlı strateji:
-    //   1) domainUrl varsa ondan JSON çek
-    //   2) inline baseurl
-    //   3) fetch/$.get/$.ajax/XHR endpoint'leri
-    //   4) bilinen yollar (/domain.php, /api/domain, ...)
     // ---------------------------------------------------------------------
     private suspend fun extractStreamFromChannelPage(body: String, pageUrl: String): String? {
         val id = runCatching {
@@ -232,7 +220,7 @@ class PatronSaha : MainAPI() {
             }
 
             val endpoints = linkedSetOf<String>()
-            Regex("""(?:fetch|\\$\.get|\\$\.ajax|axios\.get)\s*\(\s*['"]([^'"]+)['"]""")
+            Regex("""(?:fetch|\$\.get|\$\.ajax|axios\.get)\s*\(\s*['"]([^'"]+)['"]""")
                 .findAll(body).forEach { m ->
                     fixUrl(m.groupValues[1], pageUrl)?.let { endpoints.add(it) }
                 }
@@ -263,7 +251,7 @@ class PatronSaha : MainAPI() {
             }
             null
         } ?: run {
-            Log.w("Patron", "baseurl BULUNAMADI. Body'deki <script> içeriklerini kontrol et.")
+            Log.w("Patron", "baseurl BULUNAMADI.")
             return null
         }
 
@@ -322,7 +310,7 @@ class PatronSaha : MainAPI() {
                         )
                         found = true
                     } else if (!ok) {
-                        Log.w("Patron", "HLS oynatılamadı (403/CF olabilir): $streamUrl")
+                        Log.w("Patron", "HLS oynatılamadı: $streamUrl")
                     }
                 }
             }
