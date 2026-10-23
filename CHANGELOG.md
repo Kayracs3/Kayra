@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:2646ed037269dd76f529b6b19debd613325553f7 -->
+### Refactor API call logic and remove unused headers
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [2646ed0](https://github.com/Kayracs3/Kayra/commit/2646ed037269dd76f529b6b19debd613325553f7)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:89666d4f8138266e6bbb66ad5762211fe34f7ca5 -->
 ### Refactor embed URL handling and API calls
 
