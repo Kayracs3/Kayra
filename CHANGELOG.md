@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:89666d4f8138266e6bbb66ad5762211fe34f7ca5 -->
+### Refactor embed URL handling and API calls
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [89666d4](https://github.com/Kayracs3/Kayra/commit/89666d4f8138266e6bbb66ad5762211fe34f7ca5)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:33c952bde745754161bc878c470a8ae80ab5c3fd -->
 ### Refactor URL extraction and embed handling logic
 
