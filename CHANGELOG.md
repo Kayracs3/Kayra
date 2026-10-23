@@ -2,6 +2,23 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:8df33fd994e0887f0870e4e212ba54d2e936f596 -->
+### Update build.gradle.kts
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [8df33fd](https://github.com/Kayracs3/Kayra/commit/8df33fd994e0887f0870e4e212ba54d2e936f596)
+
+## 2026-10-23
+
+<!-- kayra-commit:e3e3efa41fa2cc640beb8c91da5d05ff196ca36e -->
+### Add URL-generated CloudStream provider: Beyazelma
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [e3e3efa](https://github.com/Kayracs3/Kayra/commit/e3e3efa41fa2cc640beb8c91da5d05ff196ca36e)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:4e088eaa01324c65d25d9a0324902cef78419568 -->
 ### Fix PatronSaha compiler errors in search and stream URL
 
