@@ -7,6 +7,6 @@ import android.content.Context
 @CloudstreamPlugin
 class PatronSHPlugin: Plugin() {
     override fun load(context: Context) {
-        registerMainAPI(PatronSH())
+        registerMainAPI(PatronSaha())
     }
 }
