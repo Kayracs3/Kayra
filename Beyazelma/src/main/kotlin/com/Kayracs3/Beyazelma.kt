@@ -28,7 +28,7 @@ class Beyazelma : MainAPI() {
     override val hasMainPage = true
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
-    override val mainPage = mainPageOf("$mainUrl/" to "Ana Sayfa")
+    override val mainPage = mainPageOf("$mainUrl/" to "Canlı MacTv")
 
     private val pageHeaders = mapOf(
         "User-Agent" to USER_AGENT,
