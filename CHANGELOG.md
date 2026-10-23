@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:7f33794cc0b6d39045271fb55358461ec7e09137 -->
+### Enhance URL extraction and embed handling logic
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [7f33794](https://github.com/Kayracs3/Kayra/commit/7f33794cc0b6d39045271fb55358461ec7e09137)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:f0032719d8ad2a3ae591a862d546026e692fe4a9 -->
 ### Refactor overlay and embed URL logic
 
