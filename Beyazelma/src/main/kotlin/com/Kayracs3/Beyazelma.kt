@@ -354,7 +354,7 @@ class Beyazelma : MainAPI() {
     }
 
     // ---------------------------------------------------------------------
-    //  Yardımcı: HTML + inline script içinden TÜM URL'leri topla
+    //  Aday URL toplama (HTML + inline script)
     // ---------------------------------------------------------------------
     private fun collectCandidateUrls(body: String, document: Document, baseUrl: String): LinkedHashSet<String> {
         val candidates = linkedSetOf<String>()
@@ -366,13 +366,13 @@ class Beyazelma : MainAPI() {
             .replace("&#039;", "'")
             .replace("&amp;", "&")
 
-        // 1. m3u8/mp4 doğrudan
+        // 1. Doğrudan m3u8/mp4
         Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
             .findAll(cleaned).forEach { m ->
                 fixUrl(m.value, baseUrl)?.let { candidates.add(it) }
             }
 
-        // 2. iframe, video, source etiketleri
+        // 2. iframe / video / source etiketleri
         document.select(
             "iframe[src], iframe[data-src], video[src], video[data-src], source[src], source[data-src], [data-embed], [data-video], [data-player], [data-stream]"
         ).forEach { el ->
@@ -385,10 +385,9 @@ class Beyazelma : MainAPI() {
             }
         }
 
-        // 3. Inline script içindeki "url", "src", "file", "stream", "embed", "player" anahtarları
+        // 3. Inline script içindeki anahtarlar
         for (script in document.select("script:not([src])")) {
             val data = script.data()
-            // "url": "...", url: "...", src: "...", vb.
             Regex("""["']?(?:url|src|file|stream|streamUrl|embedUrl|playerUrl|iframe|m3u8)["']?\s*[:=]\s*["']([^"']+)["']""")
                 .findAll(data).forEach { m ->
                     val v = m.groupValues[1].replace("\\/", "/")
@@ -400,7 +399,7 @@ class Beyazelma : MainAPI() {
     }
 
     // ---------------------------------------------------------------------
-    //  LİNK ÇIKARMA
+    //  LİNK ÇIKARMA — api/embed odaklı
     // ---------------------------------------------------------------------
     override suspend fun loadLinks(
         data: String,
@@ -413,7 +412,7 @@ class Beyazelma : MainAPI() {
         var found = false
 
         suspend fun scanPage(pageRaw: String, referer: String, depth: Int) {
-            if (depth > 3 || visited.size >= 12) return
+            if (depth > 3 || visited.size >= 15) return
             val pageUrl = fixUrl(pageRaw) ?: return
             if (!visited.add(pageUrl)) return
 
@@ -423,9 +422,6 @@ class Beyazelma : MainAPI() {
             val body = response.text
             val document = response.document
             Log.d("Beyazelma", "Tarama: ${pageUrl.substringBefore('?')} (d=$depth) bodyLen=${body.length}")
-            if (depth == 0) {
-                Log.d("Beyazelma", "Ana sayfa ilk 2000: ${body.take(2000).replace("\n", " ")}")
-            }
 
             // Altyazılar
             document.select("track[src], track[data-src]").forEach { track ->
@@ -436,16 +432,16 @@ class Beyazelma : MainAPI() {
                 }
             }
 
-            // Aday URL'leri topla
             val candidates = collectCandidateUrls(body, document, pageUrl)
             Log.d("Beyazelma", "Aday URL sayısı: ${candidates.size}")
 
-            // Ek: yaygın API endpoint'lerini dene (slug üzerinden)
+            // API endpoint denemeleri (slug üzerinden)
             val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull()
             if (!slug.isNullOrBlank() && depth <= 1) {
                 val apiCandidates = listOf(
-                    "$mainUrl/api/stream/$slug",
+                    "$mainUrl/api/embed?channel=$slug",
                     "$mainUrl/api/embed/$slug",
+                    "$mainUrl/api/stream/$slug",
                     "$mainUrl/api/player/$slug",
                     "$mainUrl/api/live/$slug",
                     "$mainUrl/api/channels/$slug/stream",
@@ -457,11 +453,12 @@ class Beyazelma : MainAPI() {
                     }.getOrNull() ?: continue
                     if (r.code !in 200..299) continue
                     val rBody = r.text
+                    Log.d("Beyazelma", "API denemesi: $api → kod=${r.code} len=${rBody.length}")
                     Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
                         .findAll(rBody.replace("\\/", "/")).forEach { m ->
                             fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
                         }
-                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8)["']?\s*[:=]\s*["']([^"']+)["']""")
+                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src)["']?\s*[:=]\s*["']([^"']+)["']""")
                         .findAll(rBody).forEach { m ->
                             fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
                         }
@@ -502,15 +499,13 @@ class Beyazelma : MainAPI() {
                         Log.d("Beyazelma", "AKIŞ EKLENDİ: ${cand.substringBefore('?')}")
                     }
                 } else {
-                    // Yabancı domain (embed/player) → iç sayfayı tara
+                    // Embed/player sayfası → içini tara
                     runCatching {
                         loadExtractor(cand, "$mainUrl/", subtitleCallback) { link ->
                             if (emitted.add(link.url)) { callback(link); found = true }
                         }
                     }
-                    if (depth < 3) {
-                        scanPage(cand, pageUrl, depth + 1)
-                    }
+                    if (depth < 3) scanPage(cand, pageUrl, depth + 1)
                 }
             }
         }
