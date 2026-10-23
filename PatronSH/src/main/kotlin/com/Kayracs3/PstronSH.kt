@@ -94,10 +94,10 @@ class PatronSaha : MainAPI() {
     // ---------------------------------------------------------------------
     //  ANA SAYFA
     // ---------------------------------------------------------------------
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+    private suspend fun fetchChannelItems(): List<SearchResponse> {
         val document = runCatching {
             app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
-        }.getOrNull() ?: return newHomePageResponse(request.name, emptyList<SearchResponse>())
+        }.getOrNull() ?: return emptyList()
 
         var items = document.select("div.channel-item")
             .mapNotNull { it.toChannelItemResult() }
@@ -117,8 +117,16 @@ class PatronSaha : MainAPI() {
                 }
         }
 
+        return items.distinctBy { it.url }.take(200)
+    }
+
+    // ---------------------------------------------------------------------
+    //  ANA SAYFA
+    // ---------------------------------------------------------------------
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val items = fetchChannelItems()
         Log.d("Patron", "Ana sayfa kanal sayısı = ${items.size}")
-        return newHomePageResponse(request.name, items.distinctBy { it.url }.take(200))
+        return newHomePageResponse(request.name, items)
     }
 
     // ---------------------------------------------------------------------
@@ -126,7 +134,7 @@ class PatronSaha : MainAPI() {
     // ---------------------------------------------------------------------
     override suspend fun search(query: String): List<SearchResponse> {
         if (query.isBlank()) return emptyList()
-        return getMainPage(1, mainPage.first()).items
+        return fetchChannelItems()
             .filter { it.name.contains(query, ignoreCase = true) }
     }
 
@@ -199,7 +207,7 @@ class PatronSaha : MainAPI() {
         val inlineBase = Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
             .find(body)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
 
-        val baseUrl: String? = run {
+        val baseUrl = run {
             if (domainUrl != null) {
                 Log.d("Patron", "domainUrl bulundu: $domainUrl")
                 val r = runCatching {
