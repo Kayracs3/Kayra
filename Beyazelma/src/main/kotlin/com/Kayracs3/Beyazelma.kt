@@ -343,37 +343,26 @@ class Beyazelma : MainAPI() {
                     "Referer" to pageUrl
                 )
 
-                // 1) /api/embed endpoint'ini farklı parametrelerle dene
-                val embedUrls = listOf(
-                    "$mainUrl/api/embed",
-                    "$mainUrl/api/embed?id=$slug",
-                    "$mainUrl/api/embed?slug=$slug",
-                    "$mainUrl/api/embed?channel=$slug"
-                )
+                // 1) Embed sayfasını çek ve StreamPlayer.mount satırından embed slug'ını bul
                 var embedSlug: String? = null
+                val embedUrls = listOf(
+                    "https://embed.beyazelma78.com/?slug=$slug",
+                    "https://embed.beyazelma78.com/?id=$slug",
+                    "https://embed.beyazelma78.com/?channel=$slug",
+                    "https://embed.beyazelma78.com/$slug"
+                )
                 for (url in embedUrls) {
                     val resp = runCatching { app.get(url, headers = acceptHeaders).text }.getOrNull() ?: continue
-                    Log.d("Beyazelma", "GET $url → len=${resp.length}")
-                    Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL).find(resp)?.let {
-                        embedSlug = it.groupValues[1]
-                        Log.d("Beyazelma", "Embed slug bulundu ($url): $embedSlug")
-                        break
-                    }
-                }
-
-                // 2) Doğrudan embed.beyazelma78.com adresini dene
-                if (embedSlug == null) {
-                    val embedDirectUrl = "https://embed.beyazelma78.com/?slug=$slug"
-                    val resp = runCatching { app.get(embedDirectUrl, headers = acceptHeaders).text }.getOrNull()
-                    if (resp != null) {
+                    if (resp.contains("StreamPlayer.mount")) {
                         Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL).find(resp)?.let {
                             embedSlug = it.groupValues[1]
-                            Log.d("Beyazelma", "Embed slug bulundu (direct): $embedSlug")
+                            Log.d("Beyazelma", "Embed slug bulundu ($url): $embedSlug")
+                            break
                         }
                     }
                 }
 
-                // 3) player.js dosyasını HER KOŞULDA indir ve içindeki API'leri / m3u8'leri ara
+                // 2) player.js dosyasını indir (her koşulda)
                 val playerJsUrl = "https://embed.beyazelma78.com/player.js"
                 val playerJs = runCatching {
                     app.get(playerJsUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true).text
@@ -382,28 +371,26 @@ class Beyazelma : MainAPI() {
                 if (playerJs != null) {
                     Log.d("Beyazelma", "player.js indirildi, boyut: ${playerJs.length}")
                     
-                    // player.js içinde doğrudan m3u8 var mı?
-                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                        .findAll(playerJs).forEach { m -> fixUrl(m.value, playerJsUrl)?.let { candidates.add(it) } }
-                    
-                    // player.js içindeki /api/ yollarını bul ve dene
+                    // player.js içindeki tüm /api/ yollarını bul
                     val apiPaths = Regex("""['"](/api/[^'"]+)['"]""").findAll(playerJs)
                         .map { it.groupValues[1] }.distinct().toList()
 
-                    for (apiPath in apiPaths) {
-                        val testSlug = embedSlug ?: slug
-                        val apiUrl = "https://embed.beyazelma78.com$apiPath?slug=$testSlug"
-                        val apiResp = runCatching {
-                            app.get(apiUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true)
-                        }.getOrNull()
+                    // Embed slug'ı bulunduysa, bu API'leri embed domaini üzerinde dene
+                    if (embedSlug != null) {
+                        for (apiPath in apiPaths) {
+                            val apiUrl = "https://embed.beyazelma78.com$apiPath?slug=$embedSlug"
+                            val apiResp = runCatching {
+                                app.get(apiUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true)
+                            }.getOrNull()
 
-                        if (apiResp != null && apiResp.code in 200..299) {
-                            val apiBody = apiResp.text
-                            Log.d("Beyazelma", "API denemesi: $apiUrl → kod=${apiResp.code} len=${apiBody.length}")
-                            Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                                .findAll(apiBody.replace("\\/", "/")).forEach { m -> fixUrl(m.value, apiUrl)?.let { candidates.add(it) } }
-                            Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                                .findAll(apiBody).forEach { m -> fixUrl(m.groupValues[1].replace("\\/", "/"), apiUrl)?.let { candidates.add(it) } }
+                            if (apiResp != null && apiResp.code in 200..299) {
+                                val apiBody = apiResp.text
+                                Log.d("Beyazelma", "API denemesi: $apiUrl → kod=${apiResp.code} len=${apiBody.length}")
+                                Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                                    .findAll(apiBody.replace("\\/", "/")).forEach { m -> fixUrl(m.value, apiUrl)?.let { candidates.add(it) } }
+                                Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
+                                    .findAll(apiBody).forEach { m -> fixUrl(m.groupValues[1].replace("\\/", "/"), apiUrl)?.let { candidates.add(it) } }
+                            }
                         }
                     }
                 }
