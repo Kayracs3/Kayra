@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:ebda9b1b5f63e4ba86c8e463cbc5addef3e8a3c4 -->
+### Refactor logging for overlay and embed responses
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [ebda9b1](https://github.com/Kayracs3/Kayra/commit/ebda9b1b5f63e4ba86c8e463cbc5addef3e8a3c4)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:b4d80396f790e50abdaa56f05286e87816353a7f -->
 ### Update Beyazelma.kt
 
