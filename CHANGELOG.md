@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:d1081e2740d01411eb5427eedd8c18d48c4ccb08 -->
+### Change package name from com.neoncs3 to com.Kayracs3
+
+- Etkilenen alanlar: PatronSH
+- Commit: [d1081e2](https://github.com/Kayracs3/Kayra/commit/d1081e2740d01411eb5427eedd8c18d48c4ccb08)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:765214e49a4e39aa2316997dd0e6a833735c1208 -->
 ### Update build.gradle.kts
 
