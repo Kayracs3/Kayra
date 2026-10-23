@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:9dd37daf558e49ac0f81bdadcb096266e431fdb2 -->
+### Update embed URL fetching and logging mechanisms
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [9dd37da](https://github.com/Kayracs3/Kayra/commit/9dd37daf558e49ac0f81bdadcb096266e431fdb2)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:ebda9b1b5f63e4ba86c8e463cbc5addef3e8a3c4 -->
 ### Refactor logging for overlay and embed responses
 
