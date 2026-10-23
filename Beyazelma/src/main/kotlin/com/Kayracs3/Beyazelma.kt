@@ -10,7 +10,6 @@ import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -360,9 +359,10 @@ class Beyazelma : MainAPI() {
                 }.getOrNull()
 
                 if (respOverlays != null && respOverlays.code in 200..299) {
-                    Log.d("Beyazelma", "GET $overlaysUrl → ${respOverlays.code} len=${respOverlays.text.length}")
+                    val text = respOverlays.text ?: ""
+                    Log.d("Beyazelma", "GET $overlaysUrl → ${respOverlays.code} len=${text.length}")
                     Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                        .findAll(respOverlays.text.replace("\\/", "/")).forEach { m ->
+                        .findAll(text.replace("\\/", "/")).forEach { m ->
                             fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
                         }
                 }
@@ -379,13 +379,14 @@ class Beyazelma : MainAPI() {
                         app.get(embedUrl, headers = pageHeaders + mapOf("Referer" to pageUrl, "Origin" to mainUrl), allowRedirects = true)
                     }.getOrNull() ?: continue
                     if (r.code in 200..299 && r.text.length < 50000) {
-                        Log.d("Beyazelma", "EMBED $embedUrl → ${r.code} len=${r.text.length}")
+                        val text = r.text
+                        Log.d("Beyazelma", "EMBED $embedUrl → ${r.code} len=${text.length}")
                         Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                            .findAll(r.text.replace("\\/", "/")).forEach { m ->
+                            .findAll(text.replace("\\/", "/")).forEach { m ->
                                 fixUrl(m.value, embedUrl)?.let { candidates.add(it) }
                             }
                         Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                            .findAll(r.text).forEach { m ->
+                            .findAll(text).forEach { m ->
                                 fixUrl(m.groupValues[1].replace("\\/", "/"), embedUrl)?.let { candidates.add(it) }
                             }
                     }
