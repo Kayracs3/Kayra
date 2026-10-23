@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:4e088eaa01324c65d25d9a0324902cef78419568 -->
+### Fix PatronSaha compiler errors in search and stream URL
+
+- Etkilenen alanlar: PatronSH
+- Commit: [4e088ea](https://github.com/Kayracs3/Kayra/commit/4e088eaa01324c65d25d9a0324902cef78419568)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:cbd45de3453d9ad1048438b98a5f3c9efe60b3ec -->
 ### Refactor channel fetching and add ad URL check
 
