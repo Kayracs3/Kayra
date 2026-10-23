@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:314bf56bd0ab711c26a47a867d326edc5dc5bcdb -->
+### Fix PatronSaha channel parsing and stream regexes
+
+- Etkilenen alanlar: PatronSH
+- Commit: [314bf56](https://github.com/Kayracs3/Kayra/commit/314bf56bd0ab711c26a47a867d326edc5dc5bcdb)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:de7f454e9deefed897868655240a89171794619c -->
 ### Refactor channel fetching and parsing logic
 
