@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:14612b54cd3f4be9bba1afe689cc6d81a542cead -->
+### Update logo URLs for various sports channels
+
+- Etkilenen alanlar: Flix
+- Commit: [14612b5](https://github.com/Kayracs3/Kayra/commit/14612b54cd3f4be9bba1afe689cc6d81a542cead)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:486c72bfb125a862696ba9bb06e06fac3f97d6ec -->
 ### Add Turkish channel logos and improve logo fetching
 
