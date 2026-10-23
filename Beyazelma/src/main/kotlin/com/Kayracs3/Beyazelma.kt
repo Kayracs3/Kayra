@@ -34,7 +34,6 @@ class Beyazelma : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
-    // m3u8 akış istekleri için gerekli başlıklar
     private val streamHeaders = mapOf(
         "User-Agent" to browserUserAgent,
         "Accept" to "*/*",
@@ -434,15 +433,44 @@ class Beyazelma : MainAPI() {
                 val channelName = document.selectFirst("h1")?.text()?.trim() ?: slug
                 Log.d("Beyazelma", "Slug=$slug ChannelName=$channelName")
 
-                // DOĞRUDAN PREROLL API'SİNİ DENE
+                // 1) Önce /api/preroll için GET dene (405 hatasını çözmek için)
                 val prerollApi = "$mainUrl/api/preroll"
+                val getResp = runCatching {
+                    app.get(
+                        prerollApi,
+                        headers = pageHeaders + mapOf(
+                            "Referer" to pageUrl,
+                            "Origin" to mainUrl,
+                            "Accept" to "application/json, text/plain, */*"
+                        ),
+                        allowRedirects = true
+                    )
+                }.getOrNull()
+
+                if (getResp != null && getResp.code in 200..299) {
+                    val respBody = getResp.text
+                    Log.d("Beyazelma", "GET $prerollApi → kod=${getResp.code} len=${respBody.length}")
+                    Log.d("Beyazelma", "PREROLL GET YANITI: ${respBody.take(1000).replace("\n", " ")}")
+                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                        .findAll(respBody.replace("\\/", "/")).forEach { m ->
+                            fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
+                        }
+                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
+                        .findAll(respBody).forEach { m ->
+                            fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
+                        }
+                } else {
+                    Log.w("Beyazelma", "GET PREROLL BAŞARISIZ: kod=${getResp?.code ?: "null"}")
+                }
+
+                // 2) GET başarısızsa POST dene (eski yöntem)
                 val payload = mapOf(
                     "type" to "channel",
                     "itemId" to slug,
                     "itemName" to channelName,
                     "duration" to 45
                 )
-                val prerollResp = runCatching {
+                val postResp = runCatching {
                     app.post(
                         prerollApi,
                         headers = pageHeaders + mapOf(
@@ -455,11 +483,10 @@ class Beyazelma : MainAPI() {
                     )
                 }.getOrNull()
 
-                if (prerollResp != null && prerollResp.code in 200..299) {
-                    val respBody = prerollResp.text
-                    Log.d("Beyazelma", "POST $prerollApi → kod=${prerollResp.code} len=${respBody.length}")
-                    Log.d("Beyazelma", "PREROLL YANITI: ${respBody.take(1000).replace("\n", " ")}")
-
+                if (postResp != null && postResp.code in 200..299) {
+                    val respBody = postResp.text
+                    Log.d("Beyazelma", "POST $prerollApi → kod=${postResp.code} len=${respBody.length}")
+                    Log.d("Beyazelma", "PREROLL POST YANITI: ${respBody.take(1000).replace("\n", " ")}")
                     Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
                         .findAll(respBody.replace("\\/", "/")).forEach { m ->
                             fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
@@ -469,45 +496,17 @@ class Beyazelma : MainAPI() {
                             fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
                         }
                 } else {
-                    Log.w("Beyazelma", "PREROLL API BAŞARISIZ: kod=${prerollResp?.code ?: "null"}")
+                    Log.w("Beyazelma", "POST PREROLL BAŞARISIZ: kod=${postResp?.code ?: "null"}")
                 }
 
-                // Diğer API'leri de dene (yedek)
+                // 3) Diğer yedek API'ler
                 val apiEndpoints = listOf(
                     "$mainUrl/api/embed",
                     "$mainUrl/api/player",
                     "$mainUrl/api/stream"
                 )
                 for (api in apiEndpoints) {
-                    val postResp = runCatching {
-                        app.post(
-                            api,
-                            headers = pageHeaders + mapOf(
-                                "Content-Type" to "application/json",
-                                "Referer" to pageUrl,
-                                "Origin" to mainUrl,
-                                "Accept" to "application/json, text/plain, */*"
-                            ),
-                            json = payload
-                        )
-                    }.getOrNull()
-
-                    if (postResp != null && postResp.code in 200..299) {
-                        val respBody = postResp.text
-                        Log.d("Beyazelma", "POST $api → kod=${postResp.code} len=${respBody.length}")
-                        Log.d("Beyazelma", "POST yanıt: ${respBody.take(800).replace("\n", " ")}")
-
-                        Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                            .findAll(respBody.replace("\\/", "/")).forEach { m ->
-                                fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
-                            }
-                        Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                            .findAll(respBody).forEach { m ->
-                                fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
-                            }
-                    }
-
-                    val getResp = runCatching {
+                    val resp = runCatching {
                         app.get(
                             api,
                             headers = pageHeaders + mapOf("Referer" to pageUrl, "Origin" to mainUrl),
@@ -515,10 +514,10 @@ class Beyazelma : MainAPI() {
                         )
                     }.getOrNull()
 
-                    if (getResp != null && getResp.code in 200..299) {
-                        val respBody = getResp.text
+                    if (resp != null && resp.code in 200..299) {
+                        val respBody = resp.text
                         if (respBody.length in 10..50000) {
-                            Log.d("Beyazelma", "GET $api → kod=${getResp.code} len=${respBody.length}")
+                            Log.d("Beyazelma", "GET $api → kod=${resp.code} len=${respBody.length}")
                             Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
                                 .findAll(respBody.replace("\\/", "/")).forEach { m ->
                                     fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
