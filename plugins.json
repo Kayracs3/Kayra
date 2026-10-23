@@ -63,6 +63,27 @@
         "name": "AsyaWatch"
     },
     {
+        "iconUrl": "https://beyazelma78.com/favicon.ico",
+        "fileHash": "sha256-807d4d5b6ef867d57e5aa283c426f02b85134d7eb3e867d30f7942fc956a9c40",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 23357,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "Beyazelma",
+        "description": "BeyazElma otomatik sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Beyazelma.cs3",
+        "name": "Beyazelma"
+    },
+    {
         "iconUrl": "https://raw.githubusercontent.com/Kayracs3/Kayra/master/CineStream/icon.png",
         "fileHash": "sha256-4a676af647a4cf6fec1e633f2f3825c55e0ba8f8e37af68f932d659e3ce21896",
         "apiVersion": 1,
