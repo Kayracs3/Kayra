@@ -219,7 +219,30 @@ class PatronSaha : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         if (query.isBlank()) return emptyList()
-        return getMainPage(1, mainPage.first()).items
+
+        val document = runCatching {
+            app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
+        }.getOrNull() ?: return emptyList()
+
+        var items = document.select("div.channel-item")
+            .mapNotNull { it.toChannelItemResult() }
+
+        if (items.isEmpty()) {
+            items = document.select("[data-src*='ch.html'], [data-src*='channel']")
+                .mapNotNull { el ->
+                    val url = fixUrl(el.attr("data-src").trim()) ?: return@mapNotNull null
+                    if (!sameSite(url)) return@mapNotNull null
+                    val name = el.selectFirst("span.channel-name-text")?.text()?.trim()
+                        ?: el.selectFirst("img")?.attr("alt")?.trim()
+                        ?: return@mapNotNull null
+                    if (name.length < 2) return@mapNotNull null
+                    val logo = el.selectFirst("img.channel-logo-right")?.attr("src")
+                        ?.let { fixUrl(it, url) } ?: liveLogoFor(name)
+                    newMovieSearchResponse(name, url, TvType.Live) { posterUrl = logo }
+                }
+        }
+
+        return items.distinctBy { it.url }
             .filter { it.name.contains(query, ignoreCase = true) }
     }
 
@@ -330,7 +353,8 @@ class PatronSaha : MainAPI() {
             null
         } ?: run { Log.w("Patron", "baseurl BULUNAMADI"); return null }
 
-        return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
+        val resolvedBaseUrl = baseUrl ?: return null
+        return "${resolvedBaseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
     // ---------------------------------------------------------------------
