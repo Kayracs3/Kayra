@@ -49,15 +49,14 @@ class Beyazelma : MainAPI() {
         val value = raw?.trim()?.replace("\\/", "/")?.replace("&amp;", "&")?.trim('"', '\'')
             ?: return null
         if (value.isBlank() || value == "#" || value.startsWith("javascript:", true) ||
-            value.startsWith("data:", true) || value.startsWith("mailto:", true)
-        ) return null
+            value.startsWith("data:", true) || value.startsWith("mailto:", true)) return null
         return runCatching {
             when {
                 value.startsWith("https://", true) || value.startsWith("http://", true) -> value
                 value.startsWith("//") -> "https:$value"
                 else -> URI(base).resolve(value).toString()
             }
-        }.getOrNull()?.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+        }.getOrNull()?.takeIf { it.startsWith("http", true) }
     }
 
     private fun sameSite(url: String): Boolean = runCatching {
@@ -77,11 +76,8 @@ class Beyazelma : MainAPI() {
     private fun posterFrom(element: Element, link: Element): String? {
         val image = element.selectFirst("img") ?: link.selectFirst("img")
         val raw = sequenceOf(
-            image?.attr("data-src"),
-            image?.attr("data-lazy-src"),
-            image?.attr("data-original"),
-            image?.attr("data-original-src"),
-            image?.attr("src")
+            image?.attr("data-src"), image?.attr("data-lazy-src"),
+            image?.attr("data-original"), image?.attr("data-original-src"), image?.attr("src")
         ).firstOrNull { !it.isNullOrBlank() && !it.startsWith("data:", true) }
         return fixUrl(raw)
     }
@@ -90,10 +86,7 @@ class Beyazelma : MainAPI() {
         val image = element.selectFirst("img") ?: link.selectFirst("img")
         return sequenceOf(
             element.selectFirst("h1, h2, h3, .title, .film-title, .movie-title")?.text(),
-            link.attr("title"),
-            image?.attr("alt"),
-            link.text(),
-            element.attr("title")
+            link.attr("title"), image?.attr("alt"), link.text(), element.attr("title")
         ).mapNotNull { it?.trim() }
             .firstOrNull { it.length >= 2 }
             .orEmpty()
@@ -105,121 +98,82 @@ class Beyazelma : MainAPI() {
     private fun Element.toSearchResult(): SearchResponse? {
         val link = if (tagName().equals("a", true)) this else {
             select("a[href]").firstOrNull { anchor ->
-                val resolved = fixUrl(anchor.attr("href"))
-                resolved != null && isContentUrl(resolved)
+                fixUrl(anchor.attr("href"))?.let { isContentUrl(it) } ?: false
             }
         } ?: return null
         val url = fixUrl(link.attr("href")) ?: return null
         if (!isContentUrl(url)) return null
-
         val title = titleFrom(this, link)
         if (title.length < 2 || title.lowercase() in setOf(
-                "ana sayfa", "home", "filmler", "diziler", "kategoriler", "giriş", "giris",
-                "kayıt ol", "kayit ol", "iletişim", "iletisim", "hakkımızda", "hakkimizda"
-            )
-        ) return null
-
-        val allText = "${title} ${url} ${text()}"
+                "ana sayfa","home","filmler","diziler","kategoriler","giriş","giris",
+                "kayıt ol","kayit ol","iletişim","iletisim","hakkımızda","hakkimizda")) return null
+        val allText = "$title $url ${text()}"
         val type = when {
             Regex("(?i)(canlı|canli|live|yayın|yayin|channel\\.html|/kanal|/channel|/tv/)").containsMatchIn(allText) -> TvType.Live
             Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText) -> TvType.TvSeries
             else -> TvType.Movie
         }
-        val poster = posterFrom(this, link)
-        val year = Regex("\\b(?:19|20)\\d{2}\\b").find(allText)?.value?.toIntOrNull()
         return newMovieSearchResponse(title, url, type) {
-            posterUrl = poster
-            this.year = year
+            posterUrl = posterFrom(this@toSearchResult, link)
+            this.year = Regex("\\b(?:19|20)\\d{2}\\b").find(allText)?.value?.toIntOrNull()
         }
     }
 
-    private fun matchesQuery(query: String, title: String): Boolean {
-        val normalizedTitle = title.lowercase()
-            .replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u')
-            .replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
-        val normalizedQuery = query.lowercase().trim()
-            .replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u')
-            .replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
-        if (normalizedQuery.isBlank()) return true
-        return normalizedTitle.contains(normalizedQuery) ||
-            normalizedQuery.split(Regex("\\s+")).filter { it.length > 1 }.all { normalizedTitle.contains(it) }
+    private fun matchesQuery(q: String, title: String): Boolean {
+        val n = title.lowercase().replace('ı','i').replace('ğ','g').replace('ü','u').replace('ş','s').replace('ö','o').replace('ç','c')
+        val nq = q.lowercase().trim().replace('ı','i').replace('ğ','g').replace('ü','u').replace('ş','s').replace('ö','o').replace('ç','c')
+        if (nq.isBlank()) return true
+        return n.contains(nq) || nq.split(Regex("\\s+")).filter { it.length > 1 }.all { n.contains(it) }
     }
 
     private fun parseResults(document: Document, query: String = ""): List<SearchResponse> {
         val cards = document.select(
             "article, .movie-item, .film-item, .video-item, .series-item, .film-card, .movie-card, .post-item, .movie, .film, .series, .card, .thumbnail, .list-item"
         ).mapNotNull { it.toSearchResult() }
-        val results = if (cards.isNotEmpty()) cards else {
-            document.select("a[href]").mapNotNull { it.toSearchResult() }
-        }
-        return results.distinctBy { it.url }
-            .filter { matchesQuery(query, it.name) }
-            .take(100)
+        val results = if (cards.isNotEmpty()) cards else document.select("a[href]").mapNotNull { it.toSearchResult() }
+        return results.distinctBy { it.url }.filter { matchesQuery(query, it.name) }.take(100)
     }
 
     private fun parseChannelsFromJson(json: String): List<SearchResponse> {
         val results = mutableListOf<SearchResponse>()
         try {
-            val array = JSONArray(json)
-            for (i in 0 until array.length()) {
-                val obj = array.getJSONObject(i)
-                val name = obj.optString("name").trim()
-                val slug = obj.optString("slug").trim()
-                val logoPath = obj.optString("logo").trim()
+            val arr = JSONArray(json)
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val name = o.optString("name").trim()
+                val slug = o.optString("slug").trim()
+                val logoPath = o.optString("logo").trim()
                 if (name.isBlank() || slug.isBlank()) continue
-
-                val url = "$mainUrl/kanal/$slug"
                 val poster = if (logoPath.isNotBlank()) fixUrl(logoPath, mainUrl) else null
-                results.add(
-                    newMovieSearchResponse(name, url, TvType.Live) {
-                        posterUrl = poster
-                    }
-                )
+                results.add(newMovieSearchResponse(name, "$mainUrl/kanal/$slug", TvType.Live) { posterUrl = poster })
             }
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
         return results
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val apiUrl = "$mainUrl/api/channels"
         val json = runCatching {
-            app.get(apiUrl, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).text
+            app.get("$mainUrl/api/channels", headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).text
         }.getOrNull()
-
         if (!json.isNullOrBlank()) {
-            val liveItems = parseChannelsFromJson(json)
-            if (liveItems.isNotEmpty()) {
-                return newHomePageResponse(request.name, liveItems)
-            }
+            val items = parseChannelsFromJson(json)
+            if (items.isNotEmpty()) return newHomePageResponse(request.name, items)
         }
-
-        val document = runCatching {
+        val doc = runCatching {
             app.get(request.data, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
         }.getOrNull() ?: return newHomePageResponse(request.name, emptyList())
-
-        val items = parseResults(document)
-        return newHomePageResponse(request.name, items)
+        return newHomePageResponse(request.name, parseResults(doc))
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val q = query.trim()
-        if (q.isBlank()) return emptyList()
-        val encoded = URLEncoder.encode(q, "UTF-8")
-        val searchUrls = listOf(
-            "$mainUrl/?s=$encoded",
-            "$mainUrl/?q=$encoded",
-            "$mainUrl/search/$encoded/",
-            "$mainUrl/arama/$encoded/",
-            "$mainUrl/?search=$encoded",
-            "$mainUrl/?ara=$encoded"
-        ).distinct()
-        for (url in searchUrls) {
-            val document = runCatching {
+        val q = query.trim(); if (q.isBlank()) return emptyList()
+        val enc = URLEncoder.encode(q, "UTF-8")
+        for (url in listOf("$mainUrl/?s=$enc", "$mainUrl/search/$enc/", "$mainUrl/arama/$enc/", "$mainUrl/?ara=$enc").distinct()) {
+            val doc = runCatching {
                 app.get(url, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
             }.getOrNull() ?: continue
-            val results = parseResults(document, q)
-            if (results.isNotEmpty()) return results
+            val r = parseResults(doc, q)
+            if (r.isNotEmpty()) return r
         }
         return emptyList()
     }
@@ -227,161 +181,99 @@ class Beyazelma : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     private fun parseEpisodeNumbers(value: String): Pair<Int, Int>? {
-        val source = value.replace('_', ' ').replace('-', ' ')
-        val first = Regex("(?i)(?:sezon|season|s)\\s*(\\d+)\\D{0,40}?(?:bölüm|bolum|episode|ep|e)\\s*(\\d+)")
-            .find(source)
+        val s = value.replace('_',' ').replace('-',' ')
+        val first = Regex("(?i)(?:sezon|season|s)\\s*(\\d+)\\D{0,40}?(?:bölüm|bolum|episode|ep|e)\\s*(\\d+)").find(s)
         if (first != null) {
-            return first.groupValues[1].toIntOrNull()?.let { season ->
-                first.groupValues[2].toIntOrNull()?.let { episode -> season to episode }
-            }
+            return first.groupValues[1].toIntOrNull()?.let { se -> first.groupValues[2].toIntOrNull()?.let { ep -> se to ep } }
         }
-        val compact = Regex("(?i)\\bs(\\d+)\\s*e(\\d+)\\b").find(value)
-        return compact?.let { it.groupValues[1].toIntOrNull()?.let { s -> it.groupValues[2].toIntOrNull()?.let { e -> s to e } } }
+        val c = Regex("(?i)\\bs(\\d+)\\s*e(\\d+)\\b").find(value)
+        return c?.let { it.groupValues[1].toIntOrNull()?.let { se -> it.groupValues[2].toIntOrNull()?.let { ep -> se to ep } } }
     }
 
     override suspend fun load(url: String): LoadResponse? {
         val pageUrl = fixUrl(url) ?: return null
-        val document = runCatching {
+        val doc = runCatching {
             app.get(pageUrl, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
         }.getOrNull() ?: return null
-
         val title = sequenceOf(
-            document.selectFirst("meta[property=og:title]")?.attr("content"),
-            document.selectFirst("h1")?.text(),
-            document.title()
-        ).mapNotNull { it?.trim() }
-            .firstOrNull { it.length > 1 }
-            ?.substringBefore(" | ")
-            ?.trim()
-            ?: return null
-
+            doc.selectFirst("meta[property=og:title]")?.attr("content"),
+            doc.selectFirst("h1")?.text(), doc.title()
+        ).mapNotNull { it?.trim() }.firstOrNull { it.length > 1 }?.substringBefore(" | ")?.trim() ?: return null
         val poster = sequenceOf(
-            document.selectFirst("meta[property=og:image]")?.attr("content"),
-            document.selectFirst("img[class*=poster]")?.attr("data-src"),
-            document.selectFirst("img[class*=poster]")?.attr("src"),
-            document.selectFirst("img")?.attr("data-src"),
-            document.selectFirst("img")?.attr("src")
+            doc.selectFirst("meta[property=og:image]")?.attr("content"),
+            doc.selectFirst("img[class*=poster]")?.attr("data-src"),
+            doc.selectFirst("img[class*=poster]")?.attr("src"),
+            doc.selectFirst("img")?.attr("data-src"),
+            doc.selectFirst("img")?.attr("src")
         ).firstOrNull { !it.isNullOrBlank() }?.let { fixUrl(it, pageUrl) }
 
         if (pageUrl.contains("/kanal/") || pageUrl.contains("/canli/") || pageUrl.contains("/live/")) {
             return newMovieLoadResponse(title, pageUrl, TvType.Live, pageUrl) {
-                posterUrl = poster
-                plot = "Canlı yayın — BeyazElma"
+                posterUrl = poster; plot = "Canlı yayın — BeyazElma"
             }
         }
 
-        val description = sequenceOf(
-            document.selectFirst("meta[name=description]")?.attr("content"),
-            document.selectFirst("meta[property=og:description]")?.attr("content"),
-            document.selectFirst(".description, .plot, .synopsis, [class*=description]")?.text()
+        val desc = sequenceOf(
+            doc.selectFirst("meta[name=description]")?.attr("content"),
+            doc.selectFirst("meta[property=og:description]")?.attr("content"),
+            doc.selectFirst(".description, .plot, .synopsis, [class*=description]")?.text()
         ).firstOrNull { !it.isNullOrBlank() }?.trim()
 
-        val pageText = document.text()
+        val pageText = doc.text()
         val year = Regex("\\b(?:19|20)\\d{2}\\b").find(pageText)?.value?.toIntOrNull()
-        val ratingText = document.selectFirst(".imdb, .rating, .score, [class*=rating], [class*=imdb]")?.text().orEmpty()
-        val rating = Regex("(?<!\\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\\d)")
-            .find(ratingText)?.groupValues?.getOrNull(1)?.replace(',', '.')
-        val score = rating?.let { runCatching { Score.from10(it) }.getOrNull() }
-        val tags = document.select("a[rel=tag], a[href*=genre], a[href*=tur/]")
-            .map { it.text().trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .take(30)
+        val score = doc.selectFirst(".imdb, .rating, .score, [class*=rating], [class*=imdb]")?.text()
+            ?.let { Regex("(?<!\\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\\d)").find(it)?.groupValues?.getOrNull(1)?.replace(',', '.') }
+            ?.let { runCatching { Score.from10(it) }.getOrNull() }
+        val tags = doc.select("a[rel=tag], a[href*=genre], a[href*=tur/]").map { it.text().trim() }.filter { it.isNotBlank() }.distinct().take(30)
 
-        val episodes = document.select("a[href]").mapNotNull { anchor ->
-            val episodeUrl = fixUrl(anchor.attr("href"), pageUrl) ?: return@mapNotNull null
-            if (!sameSite(episodeUrl) || episodeUrl.trimEnd('/') == pageUrl.trimEnd('/')) return@mapNotNull null
-            val episodeName = sequenceOf(anchor.text().trim(), anchor.attr("title").trim())
-                .firstOrNull { it.isNotBlank() }.orEmpty()
-            val descriptor = "$episodeUrl $episodeName"
-            if (!Regex("(?i)(bölüm|bolum|episode|/episodes?/|/bolum/|s\\d+\\s*e\\d+)").containsMatchIn(descriptor)) {
-                return@mapNotNull null
-            }
-            val numbers = parseEpisodeNumbers(descriptor)
-            newEpisode(episodeUrl) {
-                name = episodeName.ifBlank { "Bölüm" }
-                season = numbers?.first
-                episode = numbers?.second
-                posterUrl = poster
-            }
-        }.distinctBy { it.name + "|" + it.season + "|" + it.episode }
+        val episodes = doc.select("a[href]").mapNotNull { a ->
+            val eUrl = fixUrl(a.attr("href"), pageUrl) ?: return@mapNotNull null
+            if (!sameSite(eUrl) || eUrl.trimEnd('/') == pageUrl.trimEnd('/')) return@mapNotNull null
+            val eName = sequenceOf(a.text().trim(), a.attr("title").trim()).firstOrNull { it.isNotBlank() }.orEmpty()
+            val desc2 = "$eUrl $eName"
+            if (!Regex("(?i)(bölüm|bolum|episode|/episodes?/|/bolum/|s\\d+\\s*e\\d+)").containsMatchIn(desc2)) return@mapNotNull null
+            val nums = parseEpisodeNumbers(desc2)
+            newEpisode(eUrl) { name = eName.ifBlank { "Bölüm" }; season = nums?.first; episode = nums?.second; posterUrl = poster }
+        }.distinctBy { "${it.name}|${it.season}|${it.episode}" }
 
-        val isSeries = episodes.isNotEmpty() ||
-            Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl)
-        return if (isSeries) {
-            newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
-                posterUrl = poster
-                this.year = year
-                this.plot = description
-                this.tags = tags
-                this.score = score
-            }
-        } else {
-            newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
-                posterUrl = poster
-                this.year = year
-                this.plot = description
-                this.tags = tags
-                this.score = score
-            }
+        val isSeries = episodes.isNotEmpty() || Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl)
+        return if (isSeries) newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
+            posterUrl = poster; this.year = year; this.plot = desc; this.tags = tags; this.score = score
+        } else newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
+            posterUrl = poster; this.year = year; this.plot = desc; this.tags = tags; this.score = score
         }
     }
 
     private suspend fun isPlayableHls(url: String, referer: String, origin: String): Boolean {
-        val response = runCatching {
-            app.get(
-                url,
-                headers = streamHeaders + mapOf("Referer" to referer, "Origin" to origin),
-                allowRedirects = true
-            )
+        val r = runCatching {
+            app.get(url, headers = streamHeaders + mapOf("Referer" to referer, "Origin" to origin), allowRedirects = true)
         }.getOrNull() ?: return false
-
-        if (response.code !in 200..299) {
-            Log.w("Beyazelma", "HLS HTTP ${response.code}: ${url.substringBefore('?')}")
-            return false
-        }
-        val body = response.text.trim()
-        if (!body.startsWith("#EXTM3U")) {
-            Log.w("Beyazelma", "HLS EXTM3U değil (kod=${response.code}): ${body.take(80)}")
-            return false
-        }
-        return true
+        if (r.code !in 200..299) { Log.w("Beyazelma", "HLS HTTP ${r.code}: ${url.substringBefore('?')}"); return false }
+        return r.text.trim().startsWith("#EXTM3U")
     }
 
     private fun collectCandidateUrls(body: String, document: Document, baseUrl: String): LinkedHashSet<String> {
         val candidates = linkedSetOf<String>()
-        val cleaned = body
-            .replace("\\/", "/")
-            .replace("\\u002F", "/", true)
-            .replace("\\u0026", "&", true)
-            .replace("&quot;", "\"")
-            .replace("&#039;", "'")
-            .replace("&amp;", "&")
-
+        val cleaned = body.replace("\\/", "/").replace("\\u002F", "/", true)
+            .replace("\\u0026", "&", true).replace("&quot;", "\"").replace("&#039;", "'").replace("&amp;", "&")
         Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
             .findAll(cleaned).forEach { m -> fixUrl(m.value, baseUrl)?.let { candidates.add(it) } }
-
+        Regex("""(?i)(?:https?:)?//[^\s"'<>\\]*embedsnglys[^\s"'<>\\]*""")
+            .findAll(cleaned).forEach { m -> fixUrl(m.value, baseUrl)?.let { candidates.add(it) } }
         document.select(
             "iframe[src], iframe[data-src], video[src], video[data-src], source[src], source[data-src], [data-embed], [data-video], [data-player], [data-stream]"
         ).forEach { el ->
-            sequenceOf(
-                el.attr("src"), el.attr("data-src"), el.attr("data-url"),
-                el.attr("data-embed"), el.attr("data-video"),
-                el.attr("data-player"), el.attr("data-stream")
-            ).firstOrNull { it.isNotBlank() }?.let { raw ->
-                fixUrl(raw, baseUrl)?.takeIf { it != baseUrl }?.let { candidates.add(it) }
-            }
+            sequenceOf(el.attr("src"), el.attr("data-src"), el.attr("data-url"), el.attr("data-embed"),
+                el.attr("data-video"), el.attr("data-player"), el.attr("data-stream")
+            ).firstOrNull { it.isNotBlank() }?.let { raw -> fixUrl(raw, baseUrl)?.takeIf { it != baseUrl }?.let { candidates.add(it) } }
         }
-
         for (script in document.select("script:not([src])")) {
             val data = script.data()
-            Regex("""["']?(?:url|src|file|stream|streamUrl|embedUrl|playerUrl|iframe|m3u8)["']?\s*[:=]\s*["']([^"']+)["']""")
-                .findAll(data).forEach { m ->
-                    val v = m.groupValues[1].replace("\\/", "/")
-                    fixUrl(v, baseUrl)?.let { candidates.add(it) }
-                }
+            Regex("""["']?(?:url|src|file|stream|streamUrl|embedUrl|playerUrl|iframe|m3u8|source)["']?\s*[:=]\s*["']([^"']+)["']""")
+                .findAll(data).forEach { m -> fixUrl(m.groupValues[1].replace("\\/", "/"), baseUrl)?.let { candidates.add(it) } }
+            Regex("""(?:https?:)?//[^\s"'<>\\]*embedsnglys[^\s"'<>\\]*""")
+                .findAll(data.replace("\\/", "/")).forEach { m -> fixUrl(m.value, baseUrl)?.let { candidates.add(it) } }
         }
-
         return candidates
     }
 
@@ -395,8 +287,32 @@ class Beyazelma : MainAPI() {
         val emitted = linkedSetOf<String>()
         var found = false
 
+        suspend fun tryEmit(url: String, pageUrl: String) {
+            val path = runCatching { URI(url).path.orEmpty().lowercase() }.getOrDefault("")
+            val isM3u8 = path.endsWith(".m3u8")
+            val isMp4 = path.endsWith(".mp4")
+            if (isM3u8 || isMp4) {
+                if (isM3u8 && !isPlayableHls(url, "$mainUrl/", mainUrl)) return
+                if (!emitted.add(url)) return
+                callback(newExtractorLink(source = name, name = name, url = url,
+                    type = if (isMp4) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8) {
+                    this.referer = "https://beyazelma78.com/"
+                    this.headers = mapOf(
+                        "Origin" to "https://beyazelma78.com",
+                        "Referer" to "https://beyazelma78.com/",
+                        "User-Agent" to browserUserAgent
+                    )
+                    quality = Qualities.Unknown.value
+                })
+                found = true
+                Log.d("Beyazelma", "AKIŞ EKLENDİ: ${url.substringBefore('?')}")
+            } else {
+                runCatching { loadExtractor(url, "$mainUrl/", subtitleCallback) { link -> if (emitted.add(link.url)) { callback(link); found = true } } }
+            }
+        }
+
         suspend fun scanPage(pageRaw: String, referer: String, depth: Int) {
-            if (depth > 3 || visited.size >= 15) return
+            if (depth > 3 || visited.size >= 20) return
             val pageUrl = fixUrl(pageRaw) ?: return
             if (!visited.add(pageUrl)) return
 
@@ -404,190 +320,114 @@ class Beyazelma : MainAPI() {
                 app.get(pageUrl, headers = pageHeaders + ("Referer" to referer), allowRedirects = true)
             }.getOrNull() ?: return
             val body = response.text
-            val document = response.document
+            val doc = response.document
             Log.d("Beyazelma", "Tarama: ${pageUrl.substringBefore('?')} (d=$depth) bodyLen=${body.length}")
 
-            document.select("track[src], track[data-src]").forEach { track ->
-                val s = fixUrl(track.attr("src").ifBlank { track.attr("data-src") }, pageUrl) ?: return@forEach
+            doc.select("track[src], track[data-src]").forEach { t ->
+                val s = fixUrl(t.attr("src").ifBlank { t.attr("data-src") }, pageUrl) ?: return@forEach
                 if (Regex("(?i)\\.(vtt|srt|ass)(\\?|$)").containsMatchIn(s)) {
-                    val lang = track.attr("srclang").ifBlank { track.attr("label") }.ifBlank { "Unknown" }
+                    val lang = t.attr("srclang").ifBlank { t.attr("label") }.ifBlank { "Unknown" }
                     subtitleCallback(SubtitleFile(lang, s))
                 }
             }
 
-            val candidates = collectCandidateUrls(body, document, pageUrl)
+            val candidates = collectCandidateUrls(body, doc, pageUrl)
             Log.d("Beyazelma", "HTML aday sayısı: ${candidates.size}")
-
-            document.selectFirst("script#__NEXT_DATA__")?.data()?.let { nextData ->
-                Log.d("Beyazelma", "__NEXT_DATA__ uzunluk: ${nextData.length}")
-                Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                    .findAll(nextData).forEach { m -> fixUrl(m.value, pageUrl)?.let { candidates.add(it) } }
-                Regex("""["']?(?:embedUrl|playerUrl|streamUrl|url|iframeUrl|m3u8)["']?\s*:\s*["']([^"']+)["']""")
-                    .findAll(nextData).forEach { m ->
-                        fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
-                    }
-            }
 
             if (pageUrl.contains("/kanal/") && depth == 0) {
                 val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull() ?: ""
-                val channelName = document.selectFirst("h1")?.text()?.trim() ?: slug
+                val channelName = doc.selectFirst("h1")?.text()?.trim() ?: slug
                 Log.d("Beyazelma", "Slug=$slug ChannelName=$channelName")
 
-                // 1) Önce /api/preroll için GET dene (405 hatasını çözmek için)
-                val prerollApi = "$mainUrl/api/preroll"
-                val getResp = runCatching {
-                    app.get(
-                        prerollApi,
-                        headers = pageHeaders + mapOf(
-                            "Referer" to pageUrl,
-                            "Origin" to mainUrl,
-                            "Accept" to "application/json, text/plain, */*"
-                        ),
-                        allowRedirects = true
-                    )
-                }.getOrNull()
+                val payload = mapOf("type" to "channel", "itemId" to slug, "itemName" to channelName, "duration" to 45)
 
-                if (getResp != null && getResp.code in 200..299) {
-                    val respBody = getResp.text
-                    Log.d("Beyazelma", "GET $prerollApi → kod=${getResp.code} len=${respBody.length}")
-                    Log.d("Beyazelma", "PREROLL GET YANITI: ${respBody.take(1000).replace("\n", " ")}")
-                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                        .findAll(respBody.replace("\\/", "/")).forEach { m ->
-                            fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
-                        }
-                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                        .findAll(respBody).forEach { m ->
-                            fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
-                        }
-                } else {
-                    Log.w("Beyazelma", "GET PREROLL BAŞARISIZ: kod=${getResp?.code ?: "null"}")
-                }
-
-                // 2) GET başarısızsa POST dene (eski yöntem)
-                val payload = mapOf(
-                    "type" to "channel",
-                    "itemId" to slug,
-                    "itemName" to channelName,
-                    "duration" to 45
+                // 1) Önce parametreli embed/player varyantlarını dene
+                val variants = listOf(
+                    Triple("GET", "$mainUrl/api/embed?id=$slug", null as Map<String, String>?),
+                    Triple("GET", "$mainUrl/api/embed?channel=$slug", null),
+                    Triple("GET", "$mainUrl/api/embed?slug=$slug", null),
+                    Triple("GET", "$mainUrl/api/embed?channelId=$slug", null),
+                    Triple("GET", "$mainUrl/api/embed?itemId=$slug", null),
+                    Triple("GET", "$mainUrl/api/embed/$slug", null),
+                    Triple("GET", "$mainUrl/api/player?id=$slug", null),
+                    Triple("GET", "$mainUrl/api/player?channel=$slug", null),
+                    Triple("GET", "$mainUrl/api/player/$slug", null),
+                    Triple("GET", "$mainUrl/api/stream?id=$slug", null),
+                    Triple("GET", "$mainUrl/api/stream/$slug", null),
+                    Triple("GET", "$mainUrl/api/stream?channel=$slug", null),
+                    Triple("GET", "$mainUrl/api/channels/$slug", null),
+                    Triple("GET", "$mainUrl/api/channel/$slug", null),
+                    Triple("POST", "$mainUrl/api/embed", payload),
+                    Triple("POST", "$mainUrl/api/player", payload),
+                    Triple("POST", "$mainUrl/api/stream", payload)
                 )
-                val postResp = runCatching {
-                    app.post(
-                        prerollApi,
-                        headers = pageHeaders + mapOf(
-                            "Content-Type" to "application/json",
-                            "Referer" to pageUrl,
-                            "Origin" to mainUrl,
-                            "Accept" to "application/json, text/plain, */*"
-                        ),
-                        json = payload
-                    )
-                }.getOrNull()
 
-                if (postResp != null && postResp.code in 200..299) {
-                    val respBody = postResp.text
-                    Log.d("Beyazelma", "POST $prerollApi → kod=${postResp.code} len=${respBody.length}")
-                    Log.d("Beyazelma", "PREROLL POST YANITI: ${respBody.take(1000).replace("\n", " ")}")
-                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                        .findAll(respBody.replace("\\/", "/")).forEach { m ->
-                            fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
-                        }
-                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                        .findAll(respBody).forEach { m ->
-                            fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
-                        }
-                } else {
-                    Log.w("Beyazelma", "POST PREROLL BAŞARISIZ: kod=${postResp?.code ?: "null"}")
-                }
+                for ((method, url, body2) in variants) {
+                    val r = if (method == "GET") {
+                        runCatching { app.get(url, headers = pageHeaders + mapOf("Referer" to pageUrl, "Origin" to mainUrl, "Accept" to "application/json, text/plain, */*"), allowRedirects = true) }.getOrNull()
+                    } else {
+                        runCatching { app.post(url, json = body2, headers = pageHeaders + mapOf("Content-Type" to "application/json", "Referer" to pageUrl, "Origin" to mainUrl, "Accept" to "application/json, text/plain, */*")) }.getOrNull()
+                    } ?: continue
 
-                // 3) Diğer yedek API'ler
-                val apiEndpoints = listOf(
-                    "$mainUrl/api/embed",
-                    "$mainUrl/api/player",
-                    "$mainUrl/api/stream"
-                )
-                for (api in apiEndpoints) {
-                    val resp = runCatching {
-                        app.get(
-                            api,
-                            headers = pageHeaders + mapOf("Referer" to pageUrl, "Origin" to mainUrl),
-                            allowRedirects = true
-                        )
-                    }.getOrNull()
+                    Log.d("Beyazelma", "$method $url → kod=${r.code} len=${r.text.length}")
+                    if (r.code !in 200..299) continue
 
-                    if (resp != null && resp.code in 200..299) {
-                        val respBody = resp.text
-                        if (respBody.length in 10..50000) {
-                            Log.d("Beyazelma", "GET $api → kod=${resp.code} len=${respBody.length}")
-                            Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                                .findAll(respBody.replace("\\/", "/")).forEach { m ->
-                                    fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
-                                }
-                            Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                                .findAll(respBody).forEach { m ->
-                                    fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) }
-                                }
-                        }
+                    val txt = r.text
+                    val hasM3u8 = txt.contains("m3u8", true)
+                    val hasEmb = txt.contains("embedsnglys", true)
+                    if (hasM3u8 || hasEmb) {
+                        Log.d("Beyazelma", "  ★ EŞLEŞME: m3u8=$hasM3u8 embedsnglys=$hasEmb")
+                        val idx = if (hasEmb) txt.indexOf("embedsnglys", ignoreCase = true) else txt.indexOf("m3u8", ignoreCase = true)
+                        val start = (idx - 200).coerceAtLeast(0)
+                        val end = (idx + 600).coerceAtMost(txt.length)
+                        Log.d("Beyazelma", "  Body kesit: ${txt.substring(start, end).replace("\n", " ")}")
                     }
+                    if (txt.length < 3000) Log.d("Beyazelma", "  Body tam: ${txt.replace("\n", " ")}")
+                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                        .findAll(txt.replace("\\/", "/")).forEach { m -> fixUrl(m.value, pageUrl)?.let { candidates.add(it) } }
+                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]*embedsnglys[^\s"'<>\\]*""")
+                        .findAll(txt.replace("\\/", "/")).forEach { m -> fixUrl(m.value, pageUrl)?.let { candidates.add(it) } }
+                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
+                        .findAll(txt).forEach { m -> fixUrl(m.groupValues[1].replace("\\/", "/"), pageUrl)?.let { candidates.add(it) } }
                 }
 
-                val jsUrls = document.select("script[src]").map { it.attr("src") }
-                    .filter { it.contains("_next/static/chunks") || it.endsWith(".js") }
-                    .take(8)
-                val discoveredApis = mutableSetOf<String>()
+                // 2) Sitenin JS chunk'larını daha geniş regex ile tara
+                val jsUrls = doc.select("script[src]").map { it.attr("src") }
+                    .filter { it.contains("_next/static/chunks") || it.endsWith(".js") }.take(10)
                 for (jsSrc in jsUrls) {
                     val jsFull = fixUrl(jsSrc, pageUrl) ?: continue
-                    val jsBody = runCatching {
-                        app.get(jsFull, headers = pageHeaders, allowRedirects = true).text
-                    }.getOrNull() ?: continue
+                    val jsBody = runCatching { app.get(jsFull, headers = pageHeaders, allowRedirects = true).text }.getOrNull() ?: continue
+                    // /api/ yollar
                     Regex("""["'](/api/[a-zA-Z0-9_/\-]+)["']""").findAll(jsBody).forEach { m ->
-                        discoveredApis.add(m.groupValues[1])
+                        val api = m.groupValues[1]
+                        // Yayınla ilgili olabilecekleri ayrıca dene
+                        if (api.contains("embed") || api.contains("stream") || api.contains("player") || api.contains("channel")) {
+                            Log.d("Beyazelma", "JS endpoint aday: $api")
+                        }
                     }
-                }
-                if (discoveredApis.isNotEmpty()) {
-                    Log.d("Beyazelma", "JS'de bulunan API'ler: $discoveredApis")
+                    // Tam URL'ler (embedsnglys gibi)
+                    Regex("""["'](https?://[a-zA-Z0-9.\-]+\.(?:online|xyz|cfd|top|link|com|net)/[a-zA-Z0-9_/\-\.?=&]+)["']""")
+                        .findAll(jsBody).forEach { m ->
+                            val u = m.groupValues[1]
+                            if (u.contains("embed") || u.contains("stream") || u.contains("player") || u.contains("m3u8") || u.contains("api")) {
+                                Log.d("Beyazelma", "JS URL: $u")
+                                fixUrl(u, pageUrl)?.let { candidates.add(it) }
+                            }
+                        }
+                    // Doğrudan embedsnglys geçen herhangi bir string
+                    Regex("""(?:https?:)?//[^\s"'<>\\]*embedsnglys[^\s"'<>\\]*""")
+                        .findAll(jsBody.replace("\\/", "/")).forEach { m ->
+                            Log.d("Beyazelma", "JS embedsnglys: ${m.value}")
+                            fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
+                        }
                 }
             }
 
             Log.d("Beyazelma", "Toplam aday: ${candidates.size}")
-            for (cand in candidates.take(50)) {
-                val path = runCatching { URI(cand).path.orEmpty().lowercase() }.getOrDefault("")
-                val isM3u8 = path.endsWith(".m3u8")
-                val isMp4 = path.endsWith(".mp4")
-                val isDirect = isM3u8 || isMp4
-
-                if (isDirect) {
-                    if (isM3u8) {
-                        val ok = isPlayableHls(cand, "$mainUrl/", mainUrl)
-                        Log.d("Beyazelma", "HLS testi: $ok → ${cand.substringBefore('?')}")
-                        if (!ok) continue
-                    }
-                    if (emitted.add(cand)) {
-                        callback(
-                            newExtractorLink(
-                                source = name,
-                                name = name,
-                                url = cand,
-                                type = if (isMp4) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8
-                            ) {
-                                this.referer = "https://beyazelma78.com/"
-                                this.headers = mapOf(
-                                    "Origin" to "https://beyazelma78.com",
-                                    "Referer" to "https://beyazelma78.com/",
-                                    "User-Agent" to browserUserAgent
-                                )
-                                quality = Qualities.Unknown.value
-                            }
-                        )
-                        found = true
-                        Log.d("Beyazelma", "AKIŞ EKLENDİ: ${cand.substringBefore('?')}")
-                    }
-                } else {
-                    runCatching {
-                        loadExtractor(cand, "$mainUrl/", subtitleCallback) { link ->
-                            if (emitted.add(link.url)) { callback(link); found = true }
-                        }
-                    }
-                    if (depth < 3) scanPage(cand, pageUrl, depth + 1)
+            for (cand in candidates.take(60)) {
+                tryEmit(cand, pageUrl)
+                if (!cand.endsWith(".m3u8") && !cand.endsWith(".mp4") && depth < 3) {
+                    scanPage(cand, pageUrl, depth + 1)
                 }
             }
         }
