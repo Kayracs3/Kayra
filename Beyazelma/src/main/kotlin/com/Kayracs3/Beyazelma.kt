@@ -339,7 +339,6 @@ class Beyazelma : MainAPI() {
                 val channelName = doc.selectFirst("h1")?.text()?.trim() ?: slug
                 Log.d("Beyazelma", "Slug=$slug ChannelName=$channelName")
 
-                // siteToken'ı ara (inline script içinden)
                 var siteToken: String? = null
                 for (script in doc.select("script:not([src])")) {
                     Regex("""siteToken["']?\s*[:=]\s*["']([a-f0-9]+)["']""").find(script.data())?.let {
@@ -349,46 +348,58 @@ class Beyazelma : MainAPI() {
                 }
                 Log.d("Beyazelma", "siteToken: $siteToken")
 
-                // 1) player-overlays API'sini dene
-                val overlaysUrl = "$mainUrl/api/player-overlays"
-                val respOverlays = runCatching {
-                    app.get(overlaysUrl, headers = pageHeaders + mapOf(
-                        "Referer" to pageUrl,
-                        "Origin" to mainUrl
-                    ), allowRedirects = true)
-                }.getOrNull()
+                val detailsText = runCatching { app.get("$mainUrl/api/channels/$slug", headers = pageHeaders).text }.getOrNull() ?: ""
+                val channelId = Regex(""""_id"\s*:\s*"([^"]+)"""").find(detailsText)?.groupValues?.get(1)
+                Log.d("Beyazelma", "channelId: $channelId")
 
-                if (respOverlays != null && respOverlays.code in 200..299) {
-                    val text = respOverlays.text ?: ""
-                    Log.d("Beyazelma", "GET $overlaysUrl → ${respOverlays.code} len=${text.length}")
-                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                        .findAll(text.replace("\\/", "/")).forEach { m ->
-                            fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
-                        }
+                val embedCandidates = mutableListOf<String>()
+                val ids = listOfNotNull(slug, channelId)
+                for (id in ids) {
+                    embedCandidates.add("$mainUrl/api/embed?id=$id")
+                    embedCandidates.add("$mainUrl/api/embed?channel=$id")
+                    embedCandidates.add("$mainUrl/api/embed?itemId=$id")
+                    embedCandidates.add("$mainUrl/api/embed?slug=$id")
+                    
+                    embedCandidates.add("https://embed.beyazelma78.com/?id=$id")
+                    embedCandidates.add("https://embed.beyazelma78.com/?channel=$id")
+                    embedCandidates.add("https://embed.beyazelma78.com/embed/$id")
+                    embedCandidates.add("https://embed.beyazelma78.com/player/$id")
                 }
 
-                // 2) embed.beyazelma78.com alt alan adını dene
-                val embedDomains = listOf(
-                    "https://embed.beyazelma78.com/kanal/$slug",
-                    "https://embed.beyazelma78.com/channel/$slug",
-                    "https://embed.beyazelma78.com/?channel=$slug",
-                    "https://embed.beyazelma78.com/?id=$slug"
-                )
-                for (embedUrl in embedDomains) {
-                    val r = runCatching {
-                        app.get(embedUrl, headers = pageHeaders + mapOf("Referer" to pageUrl, "Origin" to mainUrl), allowRedirects = true)
-                    }.getOrNull() ?: continue
-                    if (r.code in 200..299 && r.text.length < 50000) {
-                        val text = r.text
-                        Log.d("Beyazelma", "EMBED $embedUrl → ${r.code} len=${text.length}")
+                val nextData = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: ""
+                Regex("""(?i)(?:https?:)?//embed\.beyazelma78\.com[^\s"'<>\\]*""")
+                    .findAll(nextData).forEach { m -> fixUrl(m.value, pageUrl)?.let { embedCandidates.add(it) } }
+                
+                for (script in doc.select("script:not([src])")) {
+                    val data = script.data()
+                    Regex("""(?i)(?:https?:)?//embed\.beyazelma78\.com[^\s"'<>\\]*""")
+                        .findAll(data).forEach { m -> fixUrl(m.value, pageUrl)?.let { embedCandidates.add(it) } }
+                }
+
+                val distinctEmbeds = embedCandidates.distinct()
+                Log.d("Beyazelma", "Denenecek embed/API sayısı: ${distinctEmbeds.size}")
+
+                val apiHeaders = pageHeaders.toMutableMap()
+                if (siteToken != null) {
+                    apiHeaders["x-site-token"] = siteToken!!
+                    apiHeaders["Authorization"] = "Bearer $siteToken"
+                }
+
+                for (embedUrl in distinctEmbeds) {
+                    val embedResp = runCatching { app.get(embedUrl, headers = apiHeaders + ("Referer" to pageUrl)) }.getOrNull() ?: continue
+                    val embedText = embedResp.text
+                    
+                    if (embedResp.code in 200..299 && embedText.length > 50) {
+                        Log.d("Beyazelma", "Deneme: $embedUrl → kod=${embedResp.code} len=${embedText.length}")
+                        if (embedText.contains("m3u8", true) || embedText.contains("embedsnglys", true)) {
+                            Log.d("Beyazelma", "★★★ BAŞARILI EMBED! İçerik: ${embedText.take(1000).replace("\n", " ")}")
+                        }
                         Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                            .findAll(text.replace("\\/", "/")).forEach { m ->
-                                fixUrl(m.value, embedUrl)?.let { candidates.add(it) }
-                            }
-                        Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                            .findAll(text).forEach { m ->
-                                fixUrl(m.groupValues[1].replace("\\/", "/"), embedUrl)?.let { candidates.add(it) }
-                            }
+                            .findAll(embedText.replace("\\/", "/")).forEach { m -> fixUrl(m.value, embedUrl)?.let { candidates.add(it) } }
+                        Regex("""(?i)(?:https?:)?//[^\s"'<>\\]*embedsnglys[^\s"'<>\\]*""")
+                            .findAll(embedText.replace("\\/", "/")).forEach { m -> fixUrl(m.value, embedUrl)?.let { candidates.add(it) } }
+                    } else if (embedResp.code !in 200..299) {
+                        Log.d("Beyazelma", "Deneme: $embedUrl → kod=${embedResp.code} (Başarısız)")
                     }
                 }
             }
