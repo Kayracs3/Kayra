@@ -3,7 +3,6 @@ package com.Kayracs3
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import org.jsoup.nodes.Element
 import java.net.URI
 import java.net.URLEncoder
 
@@ -82,43 +81,76 @@ class PatronSaha : MainAPI() {
         Log.d("Patron", "channels.php yanıt uzunluğu: ${json.length}")
         Log.d("Patron", "channels.php ilk 200: ${json.take(200).replace("\n", " ")}")
 
-        // JSON'dan Mac (kanal adı), Logo (logo yolu), URL (kanal linki) üçlüsünü çıkar
-        val macRegex = Regex(""""Mac"\s*:\s*"([^"]+)"""")
-        val logoRegex = Regex(""""Logo"\s*:\s*"([^"]+)"""")
-        val urlRegex = Regex(""""URL"\s*:\s*"([^"]+)"""")
-
-        val macs = macRegex.findAll(json).map { it.groupValues[1] }.toList()
-        val logos = logoRegex.findAll(json).map { it.groupValues[1] }.toList()
-        val urls = urlRegex.findAll(json).map { it.groupValues[1] }.toList()
-
-        Log.d("Patron", "API: ${macs.size} kanal, ${logos.size} logo, ${urls.size} url")
-
-        if (macs.isEmpty()) return emptyList()
-
+        // JSON'u alan listeleri üzerinden değil, her kanal nesnesini birlikte okuyarak ayrıştır.
+        // Böylece eksik logo/URL alanları diğer kanalların sıralamasını bozmaz.
         val channels = mutableListOf<SearchResponse>()
-        for (i in macs.indices) {
-            val name = macs[i].trim()
-            if (name.isBlank()) continue
 
-            val rawUrl = urls.getOrNull(i)?.replace("\\/", "/") ?: "/ch.html?id=${name.lowercase()}"
-            val channelUrl = fixUrl(rawUrl, mainUrl) ?: continue
+        fun readValue(obj: org.json.JSONObject, vararg keys: String): String {
+            for (key in keys) {
+                if (!obj.has(key) || obj.isNull(key)) continue
+                val value = obj.optString(key, "").trim()
+                if (value.isNotBlank() && !value.equals("null", ignoreCase = true)) return value
+            }
+            return ""
+        }
 
-            val logoPath = logos.getOrNull(i)?.replace("\\/", "/")
-            val logo = if (!logoPath.isNullOrBlank()) {
-                fixUrl(logoPath, "https://patronsports2.cfd") ?: liveLogoFor(name)
+        fun appendChannel(obj: org.json.JSONObject) {
+            val channelName = readValue(obj, "Mac", "mac", "Name", "name", "Title", "title")
+            if (channelName.isBlank()) return
+
+            val rawUrl = readValue(obj, "URL", "Url", "url", "link", "Link")
+            val logoPath = readValue(obj, "Logo", "logo", "logoUrl", "logo_url", "icon", "Icon")
+            if (rawUrl.isBlank() && logoPath.isBlank()) return
+
+            val fallbackId = runCatching {
+                URLEncoder.encode(channelName.lowercase(), "UTF-8")
+            }.getOrDefault(channelName.lowercase())
+            val channelUrl = fixUrl(
+                rawUrl.ifBlank { "/ch.html?id=$fallbackId" },
+                mainUrl
+            ) ?: return
+
+            val logo = if (logoPath.isNotBlank()) {
+                fixUrl(logoPath, "https://patronsports2.cfd") ?: liveLogoFor(channelName)
             } else {
-                liveLogoFor(name)
+                liveLogoFor(channelName)
             }
 
             channels.add(
-                newMovieSearchResponse(name, channelUrl, TvType.Live) {
+                newMovieSearchResponse(channelName, channelUrl, TvType.Live) {
                     posterUrl = logo
                 }
             )
         }
 
+        fun visitJson(node: Any?) {
+            when (node) {
+                is org.json.JSONObject -> {
+                    appendChannel(node)
+                    val keys = node.keys()
+                    while (keys.hasNext()) {
+                        visitJson(node.opt(keys.next()))
+                    }
+                }
+                is org.json.JSONArray -> {
+                    for (index in 0 until node.length()) {
+                        visitJson(node.opt(index))
+                    }
+                }
+            }
+        }
+
+        val root = runCatching { org.json.JSONTokener(json).nextValue() }.getOrNull()
+        when (root) {
+            is org.json.JSONObject, is org.json.JSONArray -> visitJson(root)
+            else -> {
+                Log.w("Patron", "channels.php geçerli JSON olarak ayrıştırılamadı")
+                return emptyList()
+            }
+        }
+
         Log.d("Patron", "API'den ${channels.size} kanal ayrıştırıldı")
-        return channels
+        return channels.distinctBy { it.url }
     }
 
     // ---------------------------------------------------------------------
