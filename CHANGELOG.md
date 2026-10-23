@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:bd3aa89ffacc75485a2618e03161f14a49915c97 -->
+### Refactor URL collection and link extraction logic
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [bd3aa89](https://github.com/Kayracs3/Kayra/commit/bd3aa89ffacc75485a2618e03161f14a49915c97)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:573f4d596eeee525813d1775e0ce628bd35a0717 -->
 ### Add stream headers and improve link extraction
 
