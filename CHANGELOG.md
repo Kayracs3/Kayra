@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:f072e9e390f38e4940e339ef5091526d95177632 -->
+### Clean up Beyazelma.kt and update API endpoints
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [f072e9e](https://github.com/Kayracs3/Kayra/commit/f072e9e390f38e4940e339ef5091526d95177632)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:4377490b15efb3e7cd60a6f4c728144b5196f62f -->
 ### Update user agent and clean up code
 
