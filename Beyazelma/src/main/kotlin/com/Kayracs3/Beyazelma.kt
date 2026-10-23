@@ -339,11 +339,19 @@ class Beyazelma : MainAPI() {
                 val channelName = doc.selectFirst("h1")?.text()?.trim() ?: slug
                 Log.d("Beyazelma", "Slug=$slug ChannelName=$channelName")
 
+                // siteToken'ı daha agresif ara (script, cookie vb.)
                 var siteToken: String? = null
+                // 1. Script içinde ara
                 for (script in doc.select("script:not([src])")) {
                     Regex("""siteToken["']?\s*[:=]\s*["']([a-f0-9]+)["']""").find(script.data())?.let {
                         siteToken = it.groupValues[1]
                         break
+                    }
+                }
+                // 2. data attribute'larında ara
+                if (siteToken == null) {
+                    doc.select("[data-site-token], [data-sitetoken]").firstOrNull()?.let {
+                        siteToken = it.attr("data-site-token").ifBlank { it.attr("data-sitetoken") }
                     }
                 }
                 Log.d("Beyazelma", "siteToken: $siteToken")
@@ -352,54 +360,35 @@ class Beyazelma : MainAPI() {
                 val channelId = Regex(""""_id"\s*:\s*"([^"]+)"""").find(detailsText)?.groupValues?.get(1)
                 Log.d("Beyazelma", "channelId: $channelId")
 
-                val embedCandidates = mutableListOf<String>()
-                val ids = listOfNotNull(slug, channelId)
-                for (id in ids) {
-                    embedCandidates.add("$mainUrl/api/embed?id=$id")
-                    embedCandidates.add("$mainUrl/api/embed?channel=$id")
-                    embedCandidates.add("$mainUrl/api/embed?itemId=$id")
-                    embedCandidates.add("$mainUrl/api/embed?slug=$id")
-                    
-                    embedCandidates.add("https://embed.beyazelma78.com/?id=$id")
-                    embedCandidates.add("https://embed.beyazelma78.com/?channel=$id")
-                    embedCandidates.add("https://embed.beyazelma78.com/embed/$id")
-                    embedCandidates.add("https://embed.beyazelma78.com/player/$id")
+                // player-overlays için parametreli denemeler
+                val overlaysCandidates = mutableListOf<String>()
+                if (channelId != null) {
+                    overlaysCandidates.add("$mainUrl/api/player-overlays?channelId=$channelId")
+                    overlaysCandidates.add("$mainUrl/api/player-overlays?id=$channelId")
                 }
+                overlaysCandidates.add("$mainUrl/api/player-overlays?channel=$slug")
+                overlaysCandidates.add("$mainUrl/api/player-overlays?slug=$slug")
 
-                val nextData = doc.selectFirst("script#__NEXT_DATA__")?.data() ?: ""
-                Regex("""(?i)(?:https?:)?//embed\.beyazelma78\.com[^\s"'<>\\]*""")
-                    .findAll(nextData).forEach { m -> fixUrl(m.value, pageUrl)?.let { embedCandidates.add(it) } }
-                
-                for (script in doc.select("script:not([src])")) {
-                    val data = script.data()
-                    Regex("""(?i)(?:https?:)?//embed\.beyazelma78\.com[^\s"'<>\\]*""")
-                        .findAll(data).forEach { m -> fixUrl(m.value, pageUrl)?.let { embedCandidates.add(it) } }
-                }
+                for (overlayUrl in overlaysCandidates) {
+                    val resp = runCatching {
+                        app.get(overlayUrl, headers = pageHeaders + mapOf(
+                            "Referer" to pageUrl,
+                            "Origin" to mainUrl
+                        ), allowRedirects = true)
+                    }.getOrNull() ?: continue
 
-                val distinctEmbeds = embedCandidates.distinct()
-                Log.d("Beyazelma", "Denenecek embed/API sayısı: ${distinctEmbeds.size}")
-
-                val apiHeaders = pageHeaders.toMutableMap()
-                if (siteToken != null) {
-                    apiHeaders["x-site-token"] = siteToken!!
-                    apiHeaders["Authorization"] = "Bearer $siteToken"
-                }
-
-                for (embedUrl in distinctEmbeds) {
-                    val embedResp = runCatching { app.get(embedUrl, headers = apiHeaders + ("Referer" to pageUrl)) }.getOrNull() ?: continue
-                    val embedText = embedResp.text
-                    
-                    if (embedResp.code in 200..299 && embedText.length > 50) {
-                        Log.d("Beyazelma", "Deneme: $embedUrl → kod=${embedResp.code} len=${embedText.length}")
-                        if (embedText.contains("m3u8", true) || embedText.contains("embedsnglys", true)) {
-                            Log.d("Beyazelma", "★★★ BAŞARILI EMBED! İçerik: ${embedText.take(1000).replace("\n", " ")}")
+                    if (resp.code in 200..299) {
+                        val text = resp.text
+                        Log.d("Beyazelma", "GET $overlayUrl → ${resp.code} len=${text.length}")
+                        if (text.contains("m3u8", true) || text.contains("embedsnglys", true)) {
+                            Log.d("Beyazelma", "★★★ BAŞARILI OVERLAY! İçerik: ${text.take(1000).replace("\n", " ")}")
                         }
                         Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                            .findAll(embedText.replace("\\/", "/")).forEach { m -> fixUrl(m.value, embedUrl)?.let { candidates.add(it) } }
+                            .findAll(text.replace("\\/", "/")).forEach { m -> fixUrl(m.value, overlayUrl)?.let { candidates.add(it) } }
                         Regex("""(?i)(?:https?:)?//[^\s"'<>\\]*embedsnglys[^\s"'<>\\]*""")
-                            .findAll(embedText.replace("\\/", "/")).forEach { m -> fixUrl(m.value, embedUrl)?.let { candidates.add(it) } }
-                    } else if (embedResp.code !in 200..299) {
-                        Log.d("Beyazelma", "Deneme: $embedUrl → kod=${embedResp.code} (Başarısız)")
+                            .findAll(text.replace("\\/", "/")).forEach { m -> fixUrl(m.value, overlayUrl)?.let { candidates.add(it) } }
+                    } else {
+                        Log.d("Beyazelma", "GET $overlayUrl → kod=${resp.code} (Başarısız)")
                     }
                 }
             }
