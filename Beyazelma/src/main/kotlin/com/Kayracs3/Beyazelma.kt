@@ -1,21 +1,15 @@
 package com.Kayracs3
 
 import com.lagradost.cloudstream3.newEpisode
-
 import com.lagradost.cloudstream3.newHomePageResponse
-
 import com.lagradost.cloudstream3.utils.loadExtractor
-
 import com.lagradost.cloudstream3.utils.ExtractorLink
-
 import com.lagradost.cloudstream3.newMovieSearchResponse
-
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
-
 import com.lagradost.cloudstream3.newMovieLoadResponse
-
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import org.json.JSONArray
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
@@ -27,8 +21,8 @@ class Beyazelma : MainAPI() {
     override var lang = "tr"
     override val hasMainPage = true
     override val hasQuickSearch = true
-    override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
-    override val mainPage = mainPageOf("$mainUrl/" to "Canlı MacTv")
+    override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries, TvType.Live)
+    override val mainPage = mainPageOf("$mainUrl/" to "Canlı Kanallar")
 
     private val pageHeaders = mapOf(
         "User-Agent" to USER_AGENT,
@@ -111,10 +105,10 @@ class Beyazelma : MainAPI() {
         ) return null
 
         val allText = "${title} ${url} ${text()}"
-        val type = if (Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText)) {
-            TvType.TvSeries
-        } else {
-            TvType.Movie
+        val type = when {
+            Regex("(?i)(canlı|canli|live|yayın|yayin|channel\\.html|/kanal|/channel|/tv/)").containsMatchIn(allText) -> TvType.Live
+            Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText) -> TvType.TvSeries
+            else -> TvType.Movie
         }
         val poster = posterFrom(this, link)
         val year = Regex("\\b(?:19|20)\\d{2}\\b").find(allText)?.value?.toIntOrNull()
@@ -148,17 +142,53 @@ class Beyazelma : MainAPI() {
             .take(100)
     }
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = when {
-            page <= 1 -> request.data
-            request.data.endsWith("/") -> request.data.trimEnd('/') + "/page/$page/"
-            else -> "$mainUrl/page/$page/"
+    /** `/api/channels` JSON yanıtını ayrıştırıp canlı kanal listesi döndürür. */
+    private fun parseChannelsFromJson(json: String): List<SearchResponse> {
+        val results = mutableListOf<SearchResponse>()
+        try {
+            val array = JSONArray(json)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val name = obj.optString("name").trim()
+                val slug = obj.optString("slug").trim()
+                val logoPath = obj.optString("logo").trim()
+                if (name.isBlank() || slug.isBlank()) continue
+
+                val url = "$mainUrl/kanal/$slug"
+                val poster = if (logoPath.isNotBlank()) fixUrl(logoPath, mainUrl) else null
+                results.add(
+                    newMovieSearchResponse(name, url, TvType.Live) {
+                        posterUrl = poster
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            // JSON ayrıştırma hatasını yut; boş liste dönecek.
         }
+        return results
+    }
+
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        // 1) Canlı kanallar API'si
+        val apiUrl = "$mainUrl/api/channels"
+        val json = runCatching {
+            app.get(apiUrl, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).text
+        }.getOrNull()
+
+        if (!json.isNullOrBlank()) {
+            val liveItems = parseChannelsFromJson(json)
+            if (liveItems.isNotEmpty()) {
+                return newHomePageResponse(request.name, liveItems)
+            }
+        }
+
+        // 2) API başarısız olursa eski HTML ayrıştırmasına düş
         val document = runCatching {
-            app.get(url, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
-        }.getOrNull() ?: return newHomePageResponse(request.name, emptyList(), false)
+            app.get(request.data, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
+        }.getOrNull() ?: return newHomePageResponse(request.name, emptyList())
+
         val items = parseResults(document)
-        return newHomePageResponse(request.name, items, items.isNotEmpty() && page < 50)
+        return newHomePageResponse(request.name, items)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -221,6 +251,14 @@ class Beyazelma : MainAPI() {
             document.selectFirst("img")?.attr("data-src"),
             document.selectFirst("img")?.attr("src")
         ).firstOrNull { !it.isNullOrBlank() }?.let { fixUrl(it, pageUrl) }
+
+        // Canlı yayın kontrolü: /kanal/ yolu
+        if (pageUrl.contains("/kanal/")) {
+            return newMovieLoadResponse(title, pageUrl, TvType.Live, pageUrl) {
+                posterUrl = poster
+                plot = "Canlı yayın — BeyazElma"
+            }
+        }
 
         val description = sequenceOf(
             document.selectFirst("meta[name=description]")?.attr("content"),
@@ -318,29 +356,32 @@ class Beyazelma : MainAPI() {
             fixUrl(match.value, data)?.let { candidates.add(it) }
         }
 
-        for (candidate in candidates) {
-            if (Regex("(?i)\\.(m3u8|mp4)(\\?.*)?$").containsMatchIn(candidate)) {
+        for (candidate in candidates.take(30)) {
+            val path = runCatching { URI(candidate).path.orEmpty().lowercase() }.getOrDefault("")
+            val isDirect = path.endsWith(".m3u8") || path.endsWith(".mp4")
+            if (isDirect) {
                 callback(
                     newExtractorLink(
                         source = name,
                         name = name,
                         url = candidate,
-                        type = if (candidate.substringBefore('?').endsWith(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                        type = if (path.endsWith(".mp4")) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8
                     ) {
-                        referer = data
+                        this.referer = "$mainUrl/"
                         quality = Qualities.Unknown.value
                     }
                 )
                 found = true
             } else {
                 runCatching {
-                    loadExtractor(candidate, data, subtitleCallback) { link ->
+                    loadExtractor(candidate, "$mainUrl/", subtitleCallback) { link ->
                         callback(link)
                         found = true
                     }
                 }
             }
         }
+
         return found
     }
 }
