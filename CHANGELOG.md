@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:23f02685fef8ed988c7621323e0b0ec55083f19c -->
+### Add live channel support and update main page logic
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [23f0268](https://github.com/Kayracs3/Kayra/commit/23f02685fef8ed988c7621323e0b0ec55083f19c)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:c7dafe84ad9ba6f28da6c14a5f5255afa0e9509f -->
 ### Change main page title from 'Ana Sayfa' to 'Canlı MacTv'
 
