@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:c7dafe84ad9ba6f28da6c14a5f5255afa0e9509f -->
+### Change main page title from 'Ana Sayfa' to 'Canlı MacTv'
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [c7dafe8](https://github.com/Kayracs3/Kayra/commit/c7dafe84ad9ba6f28da6c14a5f5255afa0e9509f)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:8df33fd994e0887f0870e4e212ba54d2e936f596 -->
 ### Update build.gradle.kts
 
