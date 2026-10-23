@@ -3,6 +3,7 @@ package com.Kayracs3
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import org.jsoup.nodes.Element
 import java.net.URI
 import java.net.URLEncoder
 
@@ -15,7 +16,6 @@ class PatronSaha : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
     override val mainPage = mainPageOf("$mainUrl/" to "Canlı Kanallar")
 
-    // Kanal listesini döndüren API (logolarla birlikte)
     private val channelsApi = "https://patronsports2.cfd/channels.php"
 
     private val browserUserAgent =
@@ -63,6 +63,10 @@ class PatronSaha : MainAPI() {
         host == base || host.endsWith(".$base")
     }.getOrDefault(false)
 
+    private fun isAdUrl(url: String): Boolean =
+        Regex("(?i)(sayac|ads?|banner|reklam|analytics|googletagmanager|beacon|chat\\.js|/cdn-cgi/)")
+            .containsMatchIn(url)
+
     // ---------------------------------------------------------------------
     //  KANAL LİSTESİ → channels.php API
     // ---------------------------------------------------------------------
@@ -78,93 +82,43 @@ class PatronSaha : MainAPI() {
             return emptyList()
         }
 
-        Log.d("Patron", "channels.php yanıt uzunluğu: ${json.length}")
-        Log.d("Patron", "channels.php ilk 200: ${json.take(200).replace("\n", " ")}")
+        Log.d("Patron", "channels.php uzunluk: ${json.length}")
 
-        // JSON'u alan listeleri üzerinden değil, her kanal nesnesini birlikte okuyarak ayrıştır.
-        // Böylece eksik logo/URL alanları diğer kanalların sıralamasını bozmaz.
-        val channels = mutableListOf<SearchResponse>()
+        val macs = Regex(""""Mac"\s*:\s*"([^"]+)"""").findAll(json).map { it.groupValues[1] }.toList()
+        val logos = Regex(""""Logo"\s*:\s*"([^"]+)"""").findAll(json).map { it.groupValues[1] }.toList()
+        val urls = Regex(""""URL"\s*:\s*"([^"]+)"""").findAll(json).map { it.groupValues[1] }.toList()
 
-        fun readValue(obj: org.json.JSONObject, vararg keys: String): String {
-            for (key in keys) {
-                if (!obj.has(key) || obj.isNull(key)) continue
-                val value = obj.optString(key, "").trim()
-                if (value.isNotBlank() && !value.equals("null", ignoreCase = true)) return value
-            }
-            return ""
-        }
+        Log.d("Patron", "API: ${macs.size} kanal")
 
-        fun appendChannel(obj: org.json.JSONObject) {
-            val channelName = readValue(obj, "Mac", "mac", "Name", "name", "Title", "title")
-            if (channelName.isBlank()) return
+        if (macs.isEmpty()) return emptyList()
 
-            val rawUrl = readValue(obj, "URL", "Url", "url", "link", "Link")
-            val logoPath = readValue(obj, "Logo", "logo", "logoUrl", "logo_url", "icon", "Icon")
-            if (rawUrl.isBlank() && logoPath.isBlank()) return
+        return macs.mapIndexedNotNull { i, name ->
+            val cleanName = name.trim()
+            if (cleanName.isBlank()) return@mapIndexedNotNull null
 
-            val fallbackId = runCatching {
-                URLEncoder.encode(channelName.lowercase(), "UTF-8")
-            }.getOrDefault(channelName.lowercase())
-            val channelUrl = fixUrl(
-                rawUrl.ifBlank { "/ch.html?id=$fallbackId" },
-                mainUrl
-            ) ?: return
+            val rawUrl = urls.getOrNull(i)?.replace("\\/", "/") ?: "/ch.html?id=${cleanName.lowercase()}"
+            val channelUrl = fixUrl(rawUrl, mainUrl) ?: return@mapIndexedNotNull null
 
-            val logo = if (logoPath.isNotBlank()) {
-                fixUrl(logoPath, "https://patronsports2.cfd") ?: liveLogoFor(channelName)
+            val logoPath = logos.getOrNull(i)?.replace("\\/", "/")
+            val logo = if (!logoPath.isNullOrBlank()) {
+                fixUrl(logoPath, "https://patronsports2.cfd") ?: liveLogoFor(cleanName)
             } else {
-                liveLogoFor(channelName)
+                liveLogoFor(cleanName)
             }
 
-            channels.add(
-                newMovieSearchResponse(channelName, channelUrl, TvType.Live) {
-                    posterUrl = logo
-                }
-            )
-        }
-
-        fun visitJson(node: Any?) {
-            when (node) {
-                is org.json.JSONObject -> {
-                    appendChannel(node)
-                    val keys = node.keys()
-                    while (keys.hasNext()) {
-                        visitJson(node.opt(keys.next()))
-                    }
-                }
-                is org.json.JSONArray -> {
-                    for (index in 0 until node.length()) {
-                        visitJson(node.opt(index))
-                    }
-                }
+            newMovieSearchResponse(cleanName, channelUrl, TvType.Live) {
+                posterUrl = logo
             }
         }
-
-        val root = runCatching { org.json.JSONTokener(json).nextValue() }.getOrNull()
-        when (root) {
-            is org.json.JSONObject, is org.json.JSONArray -> visitJson(root)
-            else -> {
-                Log.w("Patron", "channels.php geçerli JSON olarak ayrıştırılamadı")
-                return emptyList()
-            }
-        }
-
-        Log.d("Patron", "API'den ${channels.size} kanal ayrıştırıldı")
-        return channels.distinctBy { it.url }
     }
 
-    // ---------------------------------------------------------------------
-    //  KANAL LİSTESİ (API + HTML yedeği)
-    // ---------------------------------------------------------------------
-    private suspend fun fetchAllChannels(): List<SearchResponse> {
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         var items = fetchChannelsFromApi()
 
-        // API çalışmazsa sitenin HTML listesini dene.
         if (items.isEmpty()) {
             val document = runCatching {
                 app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
             }.getOrNull()
-
             if (document != null) {
                 items = document.select("div.channel-item").mapNotNull { el ->
                     if (el.hasClass("channel-ad-item")) return@mapNotNull null
@@ -172,36 +126,29 @@ class PatronSaha : MainAPI() {
                     if (dataSrc.isBlank()) return@mapNotNull null
                     val url = fixUrl(dataSrc) ?: return@mapNotNull null
                     if (!sameSite(url)) return@mapNotNull null
-                    val channelName = el.selectFirst("span.channel-name-text")?.text()?.trim()
-                        ?: el.selectFirst("img")?.attr("alt")?.trim()
+                    val name = el.selectFirst("span.channel-name-text")?.text()?.trim()
                         ?: return@mapNotNull null
-                    if (channelName.length < 2) return@mapNotNull null
+                    if (name.length < 2) return@mapNotNull null
                     val logo = el.selectFirst("img.channel-logo-right")?.attr("src")
-                        ?.let { fixUrl(it, url) } ?: liveLogoFor(channelName)
-                    newMovieSearchResponse(channelName, url, TvType.Live) { posterUrl = logo }
+                        ?.let { fixUrl(it, url) } ?: liveLogoFor(name)
+                    newMovieSearchResponse(name, url, TvType.Live) { posterUrl = logo }
                 }
             }
         }
 
-        val uniqueItems = items.distinctBy { it.url }.take(200)
-        Log.d("Patron", "Toplam kanal: ${uniqueItems.size}")
-        return uniqueItems
-    }
-
-    // ---------------------------------------------------------------------
-    //  ANA SAYFA
-    // ---------------------------------------------------------------------
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        return newHomePageResponse(request.name, fetchAllChannels())
+        Log.d("Patron", "Toplam kanal: ${items.size}")
+        return newHomePageResponse(request.name, items.distinctBy { it.url }.take(200))
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         if (query.isBlank()) return emptyList()
-        return fetchAllChannels().filter { it.name.contains(query.trim(), ignoreCase = true) }
+        return getMainPage(1, mainPage.first()).items
+            .filter { it.name.contains(query, ignoreCase = true) }
     }
 
-        // ---------------------------------------------------------------------
-    //  KANAL DETAYI
+    // ---------------------------------------------------------------------
+    //  KANAL DETAYI — ch.html kendisi oynatıcı sayfasıdır.
+    //  Reklam / geri sayım (sayac.html) iframe'lerini ATLA.
     // ---------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse? {
         val pageUrl = fixUrl(url) ?: return null
@@ -217,10 +164,21 @@ class PatronSaha : MainAPI() {
             ?.substringBefore(" | ")?.trim()
             ?: return null
 
-        val liveDataUrl = document.selectFirst("iframe[src]")?.let {
-            fixUrl(it.attr("src"), pageUrl)
-        } ?: pageUrl
+        // ch.html zaten oynatıcı sayfasıdır. Sadece oynatıcı iframe'i varsa onu kullan,
+        // sayac.html / ads / banner gibi reklam iframe'lerini ATLA.
+        var liveDataUrl = pageUrl
+        for (iframe in document.select("iframe[src]")) {
+            val iframeUrl = fixUrl(iframe.attr("src"), pageUrl) ?: continue
+            if (isAdUrl(iframeUrl)) {
+                Log.d("Patron", "Reklam iframe atlandı: $iframeUrl")
+                continue
+            }
+            liveDataUrl = iframeUrl
+            Log.d("Patron", "Oynatıcı iframe seçildi: $iframeUrl")
+            break
+        }
 
+        Log.d("Patron", "load() → data=$liveDataUrl")
         return newMovieLoadResponse(title, pageUrl, TvType.Live, liveDataUrl) {
             posterUrl = liveLogoFor(title)
             plot = "Canlı yayın — PatronSaha"
@@ -260,7 +218,7 @@ class PatronSaha : MainAPI() {
             ?: return null
 
         Log.d("Patron", "extract: id=$id bodyLen=${body.length}")
-        Log.d("Patron", "extract body[0..800]: ${body.take(800).replace("\n", " ")}")
+        Log.d("Patron", "extract body[0..1500]: ${body.take(1500).replace("\n", " ")}")
 
         val domainUrl = Regex("""domainUrl\s*:\s*['"]([^'"]+)['"]""")
             .find(body)?.groupValues?.getOrNull(1)
@@ -278,7 +236,7 @@ class PatronSaha : MainAPI() {
                     Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
                         .find(it)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
                 }
-                if (b != null) { Log.d("Patron", "baseurl (domainUrl üzerinden): $b"); return@run b }
+                if (b != null) { Log.d("Patron", "baseurl (domainUrl): $b"); return@run b }
             }
             if (inlineBase != null) { Log.d("Patron", "baseurl (inline): $inlineBase"); return@run inlineBase }
 
@@ -307,11 +265,7 @@ class PatronSaha : MainAPI() {
             null
         } ?: run { Log.w("Patron", "baseurl BULUNAMADI"); return null }
 
-        val resolvedBaseUrl = baseUrl ?: run {
-            Log.w("Patron", "baseurl çözümlenemedi")
-            return null
-        }
-        return "${resolvedBaseUrl.trimEnd('/')}/$id/mono.m3u8"
+        return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
     // ---------------------------------------------------------------------
@@ -330,6 +284,10 @@ class PatronSaha : MainAPI() {
         suspend fun scanPage(pageRaw: String, referer: String, depth: Int) {
             if (depth > 2 || visited.size >= 8) return
             val pageUrl = fixUrl(pageRaw) ?: return
+            if (isAdUrl(pageUrl)) {
+                Log.d("Patron", "Reklam/sayaç atlandı: $pageUrl")
+                return
+            }
             if (!visited.add(pageUrl)) return
 
             val response = runCatching {
@@ -381,7 +339,7 @@ class PatronSaha : MainAPI() {
                     el.attr("data-embed"), el.attr("data-video"), el.attr("data-player"),
                     el.attr("data-stream"), el.attr("href")
                 ).firstOrNull { it.isNotBlank() } ?: return@forEach
-                fixUrl(raw, pageUrl)?.takeIf { it != pageUrl }?.let { candidates.add(it) }
+                fixUrl(raw, pageUrl)?.takeIf { it != pageUrl && !isAdUrl(it) }?.let { candidates.add(it) }
             }
 
             val html = body.replace("""\/""", "/").replace("&quot;", "\"")
