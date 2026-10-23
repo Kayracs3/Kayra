@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:1e7bb8942dd016b449a70f7a79708fe038d188f1 -->
+### Implement preroll API request and response handling
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [1e7bb89](https://github.com/Kayracs3/Kayra/commit/1e7bb8942dd016b449a70f7a79708fe038d188f1)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:f072e9e390f38e4940e339ef5091526d95177632 -->
 ### Clean up Beyazelma.kt and update API endpoints
 
