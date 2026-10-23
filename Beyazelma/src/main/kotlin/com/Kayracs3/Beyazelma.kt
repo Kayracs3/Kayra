@@ -331,30 +331,40 @@ class Beyazelma : MainAPI() {
                 val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull() ?: ""
                 Log.d("Beyazelma", "Slug=$slug")
 
-                // Sayfa içindeki script'lerden embed slug'ını bul (varsa)
+                // 1) /api/embed endpoint'ini çağır
+                val apiEmbedUrl = "$mainUrl/api/embed"
+                val embedResp = runCatching {
+                    app.get(apiEmbedUrl, headers = pageHeaders + mapOf("Referer" to pageUrl), allowRedirects = true)
+                }.getOrNull()
+
                 var embedSlug = ""
-                for (script in doc.select("script:not([src])")) {
+                if (embedResp != null && embedResp.code in 200..299) {
+                    val embedBody = embedResp.text
+                    Log.d("Beyazelma", "GET $apiEmbedUrl → kod=${embedResp.code} len=${embedBody.length}")
+
                     Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL)
-                        .find(script.data())?.let { m -> embedSlug = m.groupValues[1] }
+                        .find(embedBody)?.let { m ->
+                            embedSlug = m.groupValues[1]
+                            Log.d("Beyazelma", "Embed slug bulundu: $embedSlug")
+                        }
+                    // Embed HTML'inde doğrudan m3u8 varsa ekle
+                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                        .findAll(embedBody.replace("\\/", "/")).forEach { m -> fixUrl(m.value, apiEmbedUrl)?.let { candidates.add(it) } }
                 }
 
+                // 2) player.js indir ve içindeki /api/ yollarını analiz et
                 if (embedSlug.isNotBlank()) {
-                    Log.d("Beyazelma", "Embed slug bulundu: $embedSlug")
-
-                    // player.js dosyasını indir ve içindeki gizli API endpoint'lerini bul
                     val playerJsUrl = "https://embed.beyazelma78.com/player.js"
                     val playerJs = runCatching {
-                        app.get(playerJsUrl, headers = pageHeaders, allowRedirects = true).text
+                        app.get(playerJsUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true).text
                     }.getOrNull()
 
                     if (playerJs != null) {
                         Log.d("Beyazelma", "player.js indirildi, boyut: ${playerJs.length}")
-                        // player.js içindeki "/api/..." yollarını bul
                         val apiPaths = Regex("""['"](/api/[^'"]+)['"]""").findAll(playerJs)
                             .map { it.groupValues[1] }.distinct().toList()
 
                         for (apiPath in apiPaths) {
-                            // Embed slug'ını bu API yoluna ekleyerek dene
                             val apiUrl = "https://embed.beyazelma78.com$apiPath?slug=$embedSlug"
                             val apiResp = runCatching {
                                 app.get(apiUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true)
@@ -363,13 +373,10 @@ class Beyazelma : MainAPI() {
                             if (apiResp != null && apiResp.code in 200..299) {
                                 val apiBody = apiResp.text
                                 Log.d("Beyazelma", "API denemesi: $apiUrl → kod=${apiResp.code} len=${apiBody.length}")
-                                // Yanıt JSON ise veya içinde m3u8 varsa adaylara ekle
-                                if (apiBody.trim().startsWith("{") || apiBody.contains("m3u8", true)) {
-                                    Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-                                        .findAll(apiBody.replace("\\/", "/")).forEach { m -> fixUrl(m.value, apiUrl)?.let { candidates.add(it) } }
-                                    Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
-                                        .findAll(apiBody).forEach { m -> fixUrl(m.groupValues[1].replace("\\/", "/"), apiUrl)?.let { candidates.add(it) } }
-                                }
+                                Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+                                    .findAll(apiBody.replace("\\/", "/")).forEach { m -> fixUrl(m.value, apiUrl)?.let { candidates.add(it) } }
+                                Regex("""["']?(?:url|streamUrl|embedUrl|playerUrl|m3u8|src|iframe|embed)["']?\s*[:=]\s*["']([^"']+)["']""")
+                                    .findAll(apiBody).forEach { m -> fixUrl(m.groupValues[1].replace("\\/", "/"), apiUrl)?.let { candidates.add(it) } }
                             }
                         }
                     }
