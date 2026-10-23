@@ -562,6 +562,26 @@
         "name": "JetFilmizle"
     },
     {
+        "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg-hdTlaRfTO3bpbNN57otxLOQ1iSvgBNOGkXCnePUFZ5bWcvNQEd4LsTWcckMOTA8WMDUZjgS7cz8Qe1DHnsnMz8KsFjr8jGx7OwGwFmAuhGVhiRbiPrJwHlSj_vT2RGIlKBE7Qw1jXBw0n74mZk5ltikRlLqjH24eBTTbeow_XT9Q3uFfR1lz1esWxQk/s230/logo.png",
+        "fileHash": "sha256-ba5564fd2cace9ee76a7bf0662c7142d13211a5d3bb508411aad0f3d518bd29d",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 28211,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "PatronSH",
+        "description": "T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/PatronSH.cs3",
+        "name": "PatronSH"
+    },
+    {
         "iconUrl": "https://rectvapk.cc/wp-content/uploads/2023/02/Rec-TV.webp",
         "fileHash": "sha256-659ad3a4cf31c566b4f121a0db71a06cb986abda90d7bb273eb022d1ac36e668",
         "apiVersion": 1,
