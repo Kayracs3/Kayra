@@ -154,13 +154,12 @@ class PatronSaha : MainAPI() {
     }
 
     // ---------------------------------------------------------------------
-    //  ANA SAYFA (API tabanlı)
+    //  KANAL LİSTESİ (API + HTML yedeği)
     // ---------------------------------------------------------------------
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        // Önce API'den dene
+    private suspend fun fetchAllChannels(): List<SearchResponse> {
         var items = fetchChannelsFromApi()
 
-        // API başarısızsa statik HTML'e düş
+        // API çalışmazsa sitenin HTML listesini dene.
         if (items.isEmpty()) {
             val document = runCatching {
                 app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
@@ -173,28 +172,35 @@ class PatronSaha : MainAPI() {
                     if (dataSrc.isBlank()) return@mapNotNull null
                     val url = fixUrl(dataSrc) ?: return@mapNotNull null
                     if (!sameSite(url)) return@mapNotNull null
-                    val name = el.selectFirst("span.channel-name-text")?.text()?.trim()
+                    val channelName = el.selectFirst("span.channel-name-text")?.text()?.trim()
                         ?: el.selectFirst("img")?.attr("alt")?.trim()
                         ?: return@mapNotNull null
-                    if (name.length < 2) return@mapNotNull null
+                    if (channelName.length < 2) return@mapNotNull null
                     val logo = el.selectFirst("img.channel-logo-right")?.attr("src")
-                        ?.let { fixUrl(it, url) } ?: liveLogoFor(name)
-                    newMovieSearchResponse(name, url, TvType.Live) { posterUrl = logo }
+                        ?.let { fixUrl(it, url) } ?: liveLogoFor(channelName)
+                    newMovieSearchResponse(channelName, url, TvType.Live) { posterUrl = logo }
                 }
             }
         }
 
-        Log.d("Patron", "Toplam kanal: ${items.size}")
-        return newHomePageResponse(request.name, items.distinctBy { it.url }.take(200))
+        val uniqueItems = items.distinctBy { it.url }.take(200)
+        Log.d("Patron", "Toplam kanal: ${uniqueItems.size}")
+        return uniqueItems
+    }
+
+    // ---------------------------------------------------------------------
+    //  ANA SAYFA
+    // ---------------------------------------------------------------------
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        return newHomePageResponse(request.name, fetchAllChannels())
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         if (query.isBlank()) return emptyList()
-        return getMainPage(1, mainPage.first()).items
-            .filter { it.name.contains(query, ignoreCase = true) }
+        return fetchAllChannels().filter { it.name.contains(query.trim(), ignoreCase = true) }
     }
 
-    // ---------------------------------------------------------------------
+        // ---------------------------------------------------------------------
     //  KANAL DETAYI
     // ---------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse? {
@@ -301,7 +307,11 @@ class PatronSaha : MainAPI() {
             null
         } ?: run { Log.w("Patron", "baseurl BULUNAMADI"); return null }
 
-        return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
+        val resolvedBaseUrl = baseUrl ?: run {
+            Log.w("Patron", "baseurl çözümlenemedi")
+            return null
+        }
+        return "${resolvedBaseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
     // ---------------------------------------------------------------------
