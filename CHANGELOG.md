@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:7d21a1081cec8b85370e872624da6e97b893d154 -->
+### Simplify link extraction and embed slug handling
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [7d21a10](https://github.com/Kayracs3/Kayra/commit/7d21a1081cec8b85370e872624da6e97b893d154)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:d4379fe07594450110ff4b91569b2bb2dce39f83 -->
 ### Refactor embed URL extraction and handling
 
