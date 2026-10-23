@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:0d284aecfcafc1e1849e27889170f1c33d9f1d3f -->
+### Enhance embed slug detection and logging
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [0d284ae](https://github.com/Kayracs3/Kayra/commit/0d284aecfcafc1e1849e27889170f1c33d9f1d3f)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:2646ed037269dd76f529b6b19debd613325553f7 -->
 ### Refactor API call logic and remove unused headers
 
