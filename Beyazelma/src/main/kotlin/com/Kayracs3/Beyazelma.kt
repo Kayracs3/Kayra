@@ -407,7 +407,6 @@ class Beyazelma : MainAPI() {
             val document = response.document
             Log.d("Beyazelma", "Tarama: ${pageUrl.substringBefore('?')} (d=$depth) bodyLen=${body.length}")
 
-            // --- Altyazılar ---
             document.select("track[src], track[data-src]").forEach { track ->
                 val s = fixUrl(track.attr("src").ifBlank { track.attr("data-src") }, pageUrl) ?: return@forEach
                 if (Regex("(?i)\\.(vtt|srt|ass)(\\?|$)").containsMatchIn(s)) {
@@ -419,7 +418,6 @@ class Beyazelma : MainAPI() {
             val candidates = collectCandidateUrls(body, document, pageUrl)
             Log.d("Beyazelma", "HTML aday sayısı: ${candidates.size}")
 
-            // --- __NEXT_DATA__ içinden URL çıkar ---
             document.selectFirst("script#__NEXT_DATA__")?.data()?.let { nextData ->
                 Log.d("Beyazelma", "__NEXT_DATA__ uzunluk: ${nextData.length}")
                 Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
@@ -430,24 +428,22 @@ class Beyazelma : MainAPI() {
                     }
             }
 
-            // --- Kanal sayfasıysa POST/GET API denemeleri ---
             if (pageUrl.contains("/kanal/") && depth == 0) {
                 val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull() ?: ""
                 val channelName = document.selectFirst("h1")?.text()?.trim() ?: slug
                 Log.d("Beyazelma", "Slug=$slug ChannelName=$channelName")
 
                 val apiEndpoints = listOf(
+                    "$mainUrl/api/preroll",
                     "$mainUrl/api/embed",
                     "$mainUrl/api/player",
                     "$mainUrl/api/stream",
-                    "$mainUrl/api/channel/embed",
-                    "$mainUrl/api/channels/embed",
+                    "$mainUrl/api/track/ad",
                     "$mainUrl/api/channels/$slug/embed",
                     "$mainUrl/api/channels/$slug/stream"
                 )
 
                 for (api in apiEndpoints) {
-                    // POST dene
                     val postResp = runCatching {
                         app.post(
                             api,
@@ -480,7 +476,6 @@ class Beyazelma : MainAPI() {
                             }
                     }
 
-                    // GET dene
                     val getResp = runCatching {
                         app.get(
                             api,
@@ -505,7 +500,6 @@ class Beyazelma : MainAPI() {
                     }
                 }
 
-                // --- JS chunk tara ---
                 val jsUrls = document.select("script[src]").map { it.attr("src") }
                     .filter { it.contains("_next/static/chunks") || it.endsWith(".js") }
                     .take(8)
@@ -518,20 +512,12 @@ class Beyazelma : MainAPI() {
                     Regex("""["'](/api/[a-zA-Z0-9_/\-]+)["']""").findAll(jsBody).forEach { m ->
                         discoveredApis.add(m.groupValues[1])
                     }
-                    Regex("""["'](https?://[a-z0-9.-]+\.(?:online|xyz|cfd|top|link)[^"']*)["']""")
-                        .findAll(jsBody).forEach { m ->
-                            val u = m.groupValues[1]
-                            if (u.contains("embed") || u.contains("stream") || u.contains("player")) {
-                                Log.d("Beyazelma", "JS'de embed servis: $u")
-                            }
-                        }
                 }
                 if (discoveredApis.isNotEmpty()) {
                     Log.d("Beyazelma", "JS'de bulunan API'ler: $discoveredApis")
                 }
             }
 
-            // --- Adayları işle ---
             Log.d("Beyazelma", "Toplam aday: ${candidates.size}")
             for (cand in candidates.take(50)) {
                 val path = runCatching { URI(cand).path.orEmpty().lowercase() }.getOrDefault("")
