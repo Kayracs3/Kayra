@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:4ac878607faff32a9a1bcc5f18c96ba2e2c8c836 -->
+### Add API embed handling and player.js analysis
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [4ac8786](https://github.com/Kayracs3/Kayra/commit/4ac878607faff32a9a1bcc5f18c96ba2e2c8c836)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:7d21a1081cec8b85370e872624da6e97b893d154 -->
 ### Simplify link extraction and embed slug handling
 
