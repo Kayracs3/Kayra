@@ -245,9 +245,24 @@ class PatronSaha : MainAPI() {
     //  ARAMA
     // ---------------------------------------------------------------------
     override suspend fun search(query: String): List<SearchResponse> {
-        if (query.isBlank()) return emptyList()
-        return getMainPage(1, mainPage.first()).items
-            .filter { it.name.contains(query, ignoreCase = true) }
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+
+        val document = runCatching {
+            app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
+        }.getOrNull() ?: return emptyList()
+
+        var items = document.select(
+            "article, .channel-item, .kanal-item, .card, .kanal, .channel, .match-item, .list-item, .post"
+        ).mapNotNull { it.toSearchResult() }
+
+        if (items.isEmpty()) {
+            items = document.select("a[href]").mapNotNull { it.toSearchResult() }
+        }
+
+        return items.distinctBy { it.url }
+            .filter { it.name.contains(q, ignoreCase = true) }
+            .take(100)
     }
 
     // ---------------------------------------------------------------------
