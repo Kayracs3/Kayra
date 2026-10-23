@@ -1,0 +1,2 @@
+/home/runner/work/Kayra/Kayra/Beyazelma/src/main/kotlin/com/Kayracs3/Beyazelma.kt
+/home/runner/work/Kayra/Kayra/Beyazelma/src/main/kotlin/com/Kayracs3/BeyazelmaPlugin.kt
