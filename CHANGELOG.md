@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:2b7f59ee6a755fcf3acb6abf945f90084d539793 -->
+### Refactor URL collection and embed response handling
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [2b7f59e](https://github.com/Kayracs3/Kayra/commit/2b7f59ee6a755fcf3acb6abf945f90084d539793)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:4ac878607faff32a9a1bcc5f18c96ba2e2c8c836 -->
 ### Add API embed handling and player.js analysis
 
