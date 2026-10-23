@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:d4379fe07594450110ff4b91569b2bb2dce39f83 -->
+### Refactor embed URL extraction and handling
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [d4379fe](https://github.com/Kayracs3/Kayra/commit/d4379fe07594450110ff4b91569b2bb2dce39f83)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:7f33794cc0b6d39045271fb55358461ec7e09137 -->
 ### Enhance URL extraction and embed handling logic
 
