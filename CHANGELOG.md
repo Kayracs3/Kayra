@@ -2,6 +2,15 @@
 
 ## 2026-10-23
 
+<!-- kayra-commit:cbd45de3453d9ad1048438b98a5f3c9efe60b3ec -->
+### Refactor channel fetching and add ad URL check
+
+- Etkilenen alanlar: PatronSH
+- Commit: [cbd45de](https://github.com/Kayracs3/Kayra/commit/cbd45de3453d9ad1048438b98a5f3c9efe60b3ec)
+
+
+## 2026-10-23
+
 <!-- kayra-commit:57d768b47f945fd454525dcb8bdcdc6991c24847 -->
 ### Fix PatronSaha search types and nullable base URL
 
