@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:6b03deed09f310e2ed8c5c7b39719fc60ba42952 -->
+### Refactor parseChannelsJson and update load method
+
+- Etkilenen alanlar: PatronSH
+- Commit: [6b03dee](https://github.com/Kayracs3/Kayra/commit/6b03deed09f310e2ed8c5c7b39719fc60ba42952)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:02f92b01b4599547fb8399eddc3dd0383a337122 -->
 ### Clarify return type and format parseChannelsJson
 
