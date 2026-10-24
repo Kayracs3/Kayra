@@ -188,43 +188,81 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun cardFor(anchor: Element): Element {
-        // Avoid scanning every descendant link for every item. The site has a large
-        // A-Z directory on most pages; repeated descendant scans can stall CloudStream
-        // while building the home page on slower Android devices.
+        // The site has a large A-Z index. Find the nearest plausible card without
+        // recounting and reparsing every descendant link at every ancestor level.
         var node: Element? = anchor
-        repeat(5) {
+        repeat(6) {
             val element = node ?: return anchor
             val marker = (element.id() + " " + element.className()).lowercase(Locale.ROOT)
             val looksLikeCard = Regex(
-                """(^|[\s_-])(card|item|entry|post|video|movie|film|dizi|episode|bolum|box|thumb|thumbnail)([\s_-]|$)"""
+                """(^|[\s_-])(card|item|entry|post|video|movie|film|dizi|episode|bolum|box|thumb|thumbnail|poster|cover|photo|picture|tile|frame|image)([\s_-]|$)"""
             ).containsMatchIn(marker)
-            val hasImage = element.selectFirst("img, picture img, [data-poster], [data-image], [style*=background-image]") != null
-            if (hasImage && (looksLikeCard || element.tagName() == "article" || element.tagName() == "li")) {
-                return element
+            val hasImage = element.selectFirst(
+                "img, picture img, source[srcset], [data-poster], [data-poster-url], [data-image], [data-image-url], [data-srcset], [data-cover], [style*=background-image]"
+            ) != null
+
+            if (hasImage) {
+                if (looksLikeCard || element.tagName() in setOf("article", "li", "figure")) {
+                    return element
+                }
+                // An image directly under the link is already the correct poster.
+                if (element.tagName() == "a") return element
+
+                // A compact, unmarked wrapper is also likely to be the poster card.
+                // Inspect it only once; large menus/lists are rejected immediately.
+                val descendantLinks = element.select("a[href]").size
+                if (descendantLinks in 1..4) return element
+                return anchor
             }
             node = element.parent()
         }
-        // The anchor itself is always the safest fallback; title and poster extractors
-        // still inspect its own metadata and nearby image elements.
         return anchor
     }
 
     private fun imageUrl(element: Element?, base: String): String? {
         if (element == null) return null
-        for (attr in listOf("data-poster", "data-image", "data-src", "data-lazy-src", "data-original", "data-thumbnail", "data-thumb", "data-bg", "src")) {
+
+        val imageAttributes = listOf(
+            "data-poster-url", "data-poster", "data-cover",
+            "data-image-url", "data-image", "data-original-src", "data-original",
+            "data-lazy-src", "data-echo", "data-srcset", "srcset",
+            "data-src", "data-thumbnail", "data-thumb", "data-bg", "src"
+        )
+        for (attr in imageAttributes) {
             val raw = element.attr(attr).trim()
             if (raw.isBlank() || raw.startsWith("data:", true)) continue
-            val url = abs(raw, base)
-            if (url != null && !Regex("""(?i)(logo|favicon|avatar|placeholder|blank|spacer|pixel|\.svg$)""").containsMatchIn(url)) return url
+
+            // srcset entries may contain width/density descriptors after the URL.
+            val candidate = if (attr.contains("srcset")) {
+                raw.substringBefore(',').trim().substringBefore(' ').trim()
+            } else {
+                raw
+            }
+            if (candidate.isBlank()) continue
+
+            val url = abs(candidate, base)
+            if (url != null && !Regex(
+                    """(?i)(logo|favicon|avatar|placeholder|blank|spacer|pixel|\.svg$)"""
+                ).containsMatchIn(url)
+            ) return url
         }
-        val bg = Regex("""(?i)url\(\s*['"]?([^)'"]+)""").find(element.attr("style"))?.groupValues?.getOrNull(1)
+
+        val bg = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
+            .find(element.attr("style"))?.groupValues?.getOrNull(1)
         return abs(bg, base)
     }
 
     private fun posterOf(anchor: Element, card: Element, base: String): String? =
-        imageUrl(anchor.selectFirst("img, picture img, source"), base)
-            ?: imageUrl(card.selectFirst("img, picture img, source, [data-poster], [style*=background-image]"), base)
+        imageUrl(anchor, base)
+            ?: imageUrl(
+                anchor.selectFirst("img, picture img, source[srcset], [data-poster], [data-srcset], [style*=background-image]"),
+                base
+            )
             ?: imageUrl(card, base)
+            ?: imageUrl(
+                card.selectFirst("img, picture img, source[srcset], [data-poster], [data-poster-url], [data-cover], [data-srcset], [style*=background-image]"),
+                base
+            )
 
     private fun titleOf(anchor: Element, card: Element, poster: String?): String {
         val image = anchor.selectFirst("img") ?: card.selectFirst("img")
