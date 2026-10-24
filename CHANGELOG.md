@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:f2fc110752de231fb71a7216a939c3c98ecc2721 -->
+### Implement blocked titles and path segments
+
+- Etkilenen alanlar: Dramix
+- Commit: [f2fc110](https://github.com/Kayracs3/Kayra/commit/f2fc110752de231fb71a7216a939c3c98ecc2721)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:d584007cbf851484e200a68a83bd371f8e6e0b86 -->
 ### Refactor Dramix.kt for improved readability and structure
 
