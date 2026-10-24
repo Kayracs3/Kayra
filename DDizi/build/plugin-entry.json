@@ -1,0 +1,20 @@
+{
+    "iconUrl": "https://www.google.com/s2/favicons?domain=ddizi.tel&sz=%size%",
+    "fileHash": "sha256-9608cc85f6b3990c3e131fccf655ae532d837c2d20b03e4b122d39be21f28fd4",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 47628,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "DDizi",
+    "description": "DDizi - yerli, yabanc\u0131 ve eski diziler",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DDizi.cs3",
+    "name": "DDizi"
+}

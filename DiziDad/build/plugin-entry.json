@@ -1,0 +1,21 @@
+{
+    "iconUrl": "https://www.google.com/s2/favicons?domain=dizidad.com&sz=%size%",
+    "fileHash": "sha256-1c4a584f92dfb1b089a6dbbd0bce77bb6af20a89a1ce3227797bd0045ec3bdf8",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 45410,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "Movie",
+        "TvSeries"
+    ],
+    "version": 27,
+    "internalName": "DiziDad",
+    "description": "DiziDAD \u2014 t\u00fcm diziler, filmler ve eksiksiz sezon/b\u00f6l\u00fcm listeleri",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziDad.cs3",
+    "name": "DiziDad"
+}

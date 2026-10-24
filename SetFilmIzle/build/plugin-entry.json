@@ -1,0 +1,21 @@
+{
+    "iconUrl": "https://www.setfilmizle.ltd/favicon.ico",
+    "fileHash": "sha256-6edf9360f77f1b435d1fa67f544fb5dcc37de527d591585a1e2b5ceb3b7999c1",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 58905,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayras3"
+    ],
+    "tvTypes": [
+        "TvSeries",
+        "Movie"
+    ],
+    "version": 1,
+    "internalName": "SetFilmIzle",
+    "description": "SetFilmIzle film ve dizi sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SetFilmIzle.cs3",
+    "name": "SetFilmIzle"
+}

@@ -1,0 +1,21 @@
+{
+    "iconUrl": "https://fixbettv84.com/favicon.ico",
+    "fileHash": "sha256-28da7590ac743fc377d32943c24809843b4761bac616708f1e096d6bac5989b4",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 37442,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "Movie",
+        "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "Flix",
+    "description": "Flix otomatik sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Flix.cs3",
+    "name": "Flix"
+}

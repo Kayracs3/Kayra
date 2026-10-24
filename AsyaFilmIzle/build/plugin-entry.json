@@ -1,0 +1,21 @@
+{
+    "iconUrl": "https://asyafilmizle.com/favicon.ico",
+    "fileHash": "sha256-3fa62b42f6c7d811c14bba62024b9a646a8d4145a69293b121b7d63f1711c4e7",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 57154,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "Movie",
+        "TvSeries"
+    ],
+    "version": 2,
+    "internalName": "AsyaFilmIzle",
+    "description": "AsyaFilm\u0130zle \u2014 Asya filmleri ve dizileri sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaFilmIzle.cs3",
+    "name": "AsyaFilmIzle"
+}

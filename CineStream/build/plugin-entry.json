@@ -1,0 +1,24 @@
+{
+    "iconUrl": "https://raw.githubusercontent.com/Kayracs3/Kayra/master/CineStream/icon.png",
+    "fileHash": "sha256-4a676af647a4cf6fec1e633f2f3825c55e0ba8f8e37af68f932d659e3ce21896",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 689265,
+    "status": 1,
+    "language": "en",
+    "authors": [
+        "megix"
+    ],
+    "tvTypes": [
+        "TvSeries",
+        "Movie",
+        "AsianDrama",
+        "Anime",
+        "Torrent"
+    ],
+    "version": 487,
+    "internalName": "CineStream",
+    "description": "One stop solution for Movies, Series, Anime, AsianDrama and Torrents",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/CineStream.cs3",
+    "name": "CineStream"
+}

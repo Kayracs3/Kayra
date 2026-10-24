@@ -1,0 +1,20 @@
+{
+    "iconUrl": "https://www.filmmodu.one/favicon.ico",
+    "fileHash": "sha256-8514416fd973cdd53d893cdcbf6592ecba205ed58c587d20c24e9ced52172d26",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 38176,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "Movie"
+    ],
+    "version": 2,
+    "internalName": "FilmModu",
+    "description": "FilmModu film sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmModu.cs3",
+    "name": "FilmModu"
+}

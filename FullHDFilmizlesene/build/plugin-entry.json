@@ -1,0 +1,20 @@
+{
+    "iconUrl": "https://www.google.com/s2/favicons?domain=www.fullhdfilmizlesene.de&sz=%size%",
+    "fileHash": "sha256-c9fd2c7a4c0e0010bd798bbe04c94aa5495b9b155175d7cdc55e9aecfe9b367a",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 43809,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "Movie"
+    ],
+    "version": 4,
+    "internalName": "FullHDFilmizlesene",
+    "description": "Sinema zevkini evinize kadar getirdik. T\u00fcrkiye'nin lider Film sitesinde, en yeni filmleri Full HD izleyin.",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FullHDFilmizlesene.cs3",
+    "name": "FullHDFilmizlesene"
+}
