@@ -198,7 +198,7 @@ class TrDiziIzle : MainAPI() {
                 """(^|[\s_-])(card|item|entry|post|video|movie|film|dizi|episode|bolum|box|thumb|thumbnail|poster|cover|photo|picture|tile|frame|image)([\s_-]|$)"""
             ).containsMatchIn(marker)
             val hasImage = element.selectFirst(
-                "img, picture img, source[srcset], [data-poster], [data-poster-url], [data-image], [data-image-url], [data-srcset], [data-cover], [style*=background-image]"
+                "img, picture img, source[srcset], [data-poster], [data-poster-url], [data-poster-src], [data-image], [data-image-url], [data-image-src], [data-srcset], [data-lazy-src], [data-cover], [data-bg], [data-bg-image], [data-background], [style*=background-image]"
             ) != null
 
             if (hasImage) {
@@ -225,10 +225,12 @@ class TrDiziIzle : MainAPI() {
         if (element == null) return null
 
         val imageAttributes = listOf(
-            "data-poster-url", "data-poster", "data-cover",
-            "data-image-url", "data-image", "data-original-src", "data-original",
-            "data-lazy-src", "data-echo", "data-srcset", "srcset",
-            "data-src", "data-thumbnail", "data-thumb", "data-bg", "src"
+            "data-poster-url", "data-poster-src", "data-poster", "data-cover",
+            "data-image-url", "data-image-src", "data-image", "data-original-url",
+            "data-original-src", "data-original", "data-lazy-srcset", "data-lazy-src",
+            "data-lazyload", "data-fallback-src", "data-src-url", "data-echo",
+            "data-srcset", "srcset", "data-thumbnail", "data-thumb", "data-bg-image",
+            "data-background", "data-bg", "data-src", "src"
         )
         for (attr in imageAttributes) {
             val raw = element.attr(attr).trim()
@@ -257,12 +259,16 @@ class TrDiziIzle : MainAPI() {
     private fun posterOf(anchor: Element, card: Element, base: String): String? =
         imageUrl(anchor, base)
             ?: imageUrl(
-                anchor.selectFirst("img, picture img, source[srcset], [data-poster], [data-srcset], [style*=background-image]"),
+                anchor.selectFirst(
+                    "img, picture img, source[srcset], [data-poster], [data-poster-url], [data-poster-src], [data-srcset], [data-lazy-src], [data-image-url], [data-image-src], [data-bg], [data-bg-image], [data-background], [style*=background-image]"
+                ),
                 base
             )
             ?: imageUrl(card, base)
             ?: imageUrl(
-                card.selectFirst("img, picture img, source[srcset], [data-poster], [data-poster-url], [data-cover], [data-srcset], [style*=background-image]"),
+                card.selectFirst(
+                    "img, picture img, source[srcset], [data-poster], [data-poster-url], [data-poster-src], [data-cover], [data-srcset], [data-lazy-src], [data-image-url], [data-image-src], [data-bg], [data-bg-image], [data-background], [style*=background-image]"
+                ),
                 base
             )
 
@@ -297,25 +303,30 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun parseItems(document: Document): List<SearchResponse> {
-        val output = LinkedHashMap<String, SearchResponse>()
+        // The current site puts a very large A-Z text index before its real poster cards.
+        // Collect the whole page and prefer entries for which an actual poster was found.
+        // An early "first 80 links" return incorrectly filled the result with posterless A-Z entries.
+        val posterItems = LinkedHashMap<String, SearchResponse>()
+        val fallbackItems = LinkedHashMap<String, SearchResponse>()
+
         document.select("a[href]").forEach { anchor ->
-            // A single site page may contain hundreds of archival links plus a huge
-            // A-Z menu. Return a useful first batch instead of parsing the entire tree.
-            if (output.size >= 80) return output.values.toList()
             if (excludedNavigation(anchor)) return@forEach
-            val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { mainUrl }) ?: return@forEach
+
+            // Resolve relative URLs against the page containing the card, not the item's detail URL.
+            val listingBase = anchor.baseUri().ifBlank { mainUrl }
+            val url = abs(anchor.attr("href"), listingBase) ?: return@forEach
             val anchorLabel = listOfNotNull(
                 anchor.ownText(), anchor.attr("title"), anchor.attr("aria-label"),
                 anchor.selectFirst("img")?.attr("alt"), anchor.selectFirst("img")?.attr("title")
             ).filter { it.isNotBlank() }.joinToString(" ")
             if (isTrailerUrl(url) || isTrailerLabel(anchorLabel)) return@forEach
             if (!isItem(url)) return@forEach
+
             val card = cardFor(anchor)
-            val poster = posterOf(anchor, card, url)
-            // Do not discard a legitimate recent episode just because its card uses
-            // a CSS background or the site temporarily omits its thumbnail.
+            val poster = posterOf(anchor, card, listingBase)
             val title = titleOf(anchor, card, poster)
             if (!validTitle(title)) return@forEach
+
             val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
             val item = if (isSeries(url)) {
                 newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
@@ -330,10 +341,16 @@ class TrDiziIzle : MainAPI() {
                     score?.let { this.score = Score.from10(it) }
                 }
             }
-            val old = output[url]
-            if (old == null || (old.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank())) output[url] = item
+
+            val target = if (!poster.isNullOrBlank()) posterItems else fallbackItems
+            val old = target[url]
+            if (old == null || (old.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank())) {
+                target[url] = item
+            }
         }
-        return output.values.toList()
+
+        Log.d(tag, "İçerik kartları: afişli=${posterItems.size}, afişsiz=${fallbackItems.size}")
+        return (if (posterItems.isNotEmpty()) posterItems.values else fallbackItems.values).take(80)
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
