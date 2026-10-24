@@ -35,9 +35,7 @@ class TrDiziIzle : MainAPI() {
         "Referer" to "$mainUrl/"
     )
     private val posterHeaders = headers + ("Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
-    private val browserUserAgent =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+    private val browserUserAgent = USER_AGENT
 
     override val mainPage = mainPageOf(
         "$mainUrl/tr2/" to "Son Eklenen Diziler",
@@ -257,10 +255,10 @@ class TrDiziIzle : MainAPI() {
         document.select("a[href]").forEach { anchor ->
             if (excludedNavigation(anchor)) return@forEach
             val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { mainUrl }) ?: return@forEach
-            val anchorLabel = listOf(
+            val anchorLabel = listOfNotNull(
                 anchor.ownText(), anchor.attr("title"), anchor.attr("aria-label"),
                 anchor.selectFirst("img")?.attr("alt"), anchor.selectFirst("img")?.attr("title")
-            ).filterNotNull().filter { it.isNotBlank() }.joinToString(" ")
+            ).filter { it.isNotBlank() }.joinToString(" ")
             if (isTrailerUrl(url) || isTrailerLabel(anchorLabel)) return@forEach
             if (!isItem(url)) return@forEach
             val card = cardFor(anchor)
@@ -292,7 +290,7 @@ class TrDiziIzle : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         for (url in pageCandidates(request.data, page)) {
             val document = runCatching {
-                app.get(url, headers = headers, referer = "$mainUrl/", allowRedirects = true).document
+                app.get(url, headers = headers, referer = "$mainUrl/", allowRedirects = true, timeout = 15000).document
             }.onFailure { Log.w(tag, "Ana sayfa alınamadı: " + url, it) }.getOrNull() ?: continue
             val items = parseItems(document)
             if (items.isNotEmpty()) {
@@ -344,7 +342,7 @@ class TrDiziIzle : MainAPI() {
             "$mainUrl/?search=$encoded"
         )
         for (url in searchUrls) {
-            val document = runCatching { app.get(url, headers = headers, referer = "$mainUrl/", allowRedirects = true).document }
+            val document = runCatching { app.get(url, headers = headers, referer = "$mainUrl/", allowRedirects = true, timeout = 10000).document }
                 .onFailure { Log.d(tag, "Arama isteği başarısız: $url") }.getOrNull() ?: continue
             val results = parseItems(document).filter { matchesQuery(q, it) }
             Log.d(tag, "Arama " + url.substringAfter(mainUrl) + ": " + results.size + " eşleşme")
@@ -425,7 +423,7 @@ class TrDiziIzle : MainAPI() {
         }
 
         var response = runCatching {
-            app.get(pageUrl, headers = headers, referer = "$mainUrl/", allowRedirects = true)
+            app.get(pageUrl, headers = headers, referer = "$mainUrl/", allowRedirects = true, timeout = 15000)
         }.onFailure {
             Log.w(tag, "İçerik sayfası ilk istek başarısız: $pageUrl", it)
         }.getOrNull()
@@ -441,7 +439,8 @@ class TrDiziIzle : MainAPI() {
                         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
                     ),
                     referer = "$mainUrl/",
-                    allowRedirects = true
+                    allowRedirects = true,
+                    timeout = 15000
                 )
             }.onFailure {
                 Log.w(tag, "İçerik sayfası tarayıcı profiliyle de başarısız: $pageUrl", it)
@@ -497,7 +496,8 @@ class TrDiziIzle : MainAPI() {
                         seasonUrl,
                         headers = headers + ("Referer" to pageUrl),
                         referer = pageUrl,
-                        allowRedirects = true
+                        allowRedirects = true,
+                        timeout = 10000
                     )
                 }.onFailure {
                     Log.d(tag, "Sezon sayfası alınamadı: $seasonUrl", it)
@@ -644,7 +644,7 @@ class TrDiziIzle : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val episodeUrl = abs(data, mainUrl) ?: return false
-        val first = runCatching { app.get(episodeUrl, headers = headers, referer = "$mainUrl/") }
+        val first = runCatching { app.get(episodeUrl, headers = headers, referer = "$mainUrl/", timeout = 15000) }
             .onFailure { Log.w(tag, "Bölüm/video sayfası açılamadı: $episodeUrl", it) }.getOrNull() ?: return false
         if (!first.isSuccessful) {
             Log.w(tag, "Bölüm/video HTTP " + first.code + ": " + episodeUrl)
@@ -677,7 +677,8 @@ class TrDiziIzle : MainAPI() {
                         scriptUrl,
                         headers = headers + ("Referer" to pageUrl),
                         referer = pageUrl,
-                        allowRedirects = true
+                        allowRedirects = true,
+                        timeout = 10000
                     )
                 }.getOrNull() ?: return@scriptLoop
                 if (!scriptResponse.isSuccessful || scriptResponse.text.isBlank()) return@scriptLoop
@@ -715,7 +716,7 @@ class TrDiziIzle : MainAPI() {
                 }
                 if (seenPages.size < 6) {
                     val nested = runCatching {
-                        app.get(candidate, headers = headers + ("Referer" to pageUrl), referer = pageUrl, allowRedirects = true)
+                        app.get(candidate, headers = headers + ("Referer" to pageUrl), referer = pageUrl, allowRedirects = true, timeout = 10000)
                     }.getOrNull()
                     if (nested != null && nested.isSuccessful && nested.text.isNotBlank()) {
                         pages.add(candidate to nested.document)
@@ -930,7 +931,7 @@ class TrDiziIzle : MainAPI() {
 
     companion object {
         private const val USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
     }
 }
