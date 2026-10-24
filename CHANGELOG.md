@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:45d2f47ac051159a5e9e18ac8ccc58e180182a2e -->
+### Bump TRDiziIzle plugin version after poster fix
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [45d2f47](https://github.com/Kayracs3/Kayra/commit/45d2f47ac051159a5e9e18ac8ccc58e180182a2e)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:0073d72539e0398e1fde5b348d305063b11ec20c -->
 ### Bound fallback card search to avoid slow page scans
 
