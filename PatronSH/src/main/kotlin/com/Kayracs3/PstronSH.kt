@@ -277,11 +277,11 @@ class PatronSaha : MainAPI() {
                 app.get(pageUrl, headers = pageHeaders + ("Referer" to referer), allowRedirects = true)
             }.getOrNull() ?: return
 
-            // Çerezleri yanıt başlıklarından al (Set-Cookie)
+            // Çerezleri OkHttp Headers API'siyle güvenli şekilde al
             val pageCookies = runCatching {
-                response.headers["Set-Cookie"]
-                    ?.joinToString("; ") { it.substringBefore(";").trim() }
-                    ?.takeIf { it.isNotBlank() }
+                response.headers.values("Set-Cookie")
+                    .joinToString("; ") { it.substringBefore(";").trim() }
+                    .takeIf { it.isNotBlank() }
             }.getOrNull()
 
             val body = response.text
