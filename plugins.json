@@ -376,10 +376,10 @@
     },
     {
         "iconUrl": "https://filmkutusu.com/favicon.ico",
-        "fileHash": "sha256-4be6cdfb74cced317d70eaf86e4eaa48cd8da0cf3930e6830f38f131d126f71c",
+        "fileHash": "sha256-63f8cc7f40b5a9aca5fe60ca5e0e65f216f8c49b124b1464c3f9a7d0e987e26e",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 21426,
+        "fileSize": 21499,
         "status": 1,
         "language": "tr",
         "authors": [
