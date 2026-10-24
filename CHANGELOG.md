@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:4a505a829f6a7cd766713dcf148b5b110469d002 -->
+### Fix non-null extractor referer in PatronSH
+
+- Etkilenen alanlar: PatronSH
+- Commit: [4a505a8](https://github.com/Kayracs3/Kayra/commit/4a505a829f6a7cd766713dcf148b5b110469d002)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:daa14c76b2c522053a7e36c3facdbe3991f056ec -->
 ### Refactor cookie retrieval in PstronSH.kt
 
