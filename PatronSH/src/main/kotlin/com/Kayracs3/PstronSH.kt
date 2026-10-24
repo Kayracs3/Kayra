@@ -257,7 +257,7 @@ class PatronSaha : MainAPI() {
                     url = streamUrl,
                     type = if (isMp4) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8
                 ) {
-                    this.referer = null
+                    this.referer = "$streamHost/"
                     this.headers = headers
                     quality = Qualities.Unknown.value
                 }
