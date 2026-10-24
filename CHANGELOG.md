@@ -2,6 +2,23 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:3c37c0389d1862f84d2461559a500a077c8b1f60 -->
+### Bump TRDiziIzle version for poster fix
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [3c37c03](https://github.com/Kayracs3/Kayra/commit/3c37c0389d1862f84d2461559a500a077c8b1f60)
+
+## 2026-10-24
+
+<!-- kayra-commit:a826de02a7473027a37255884a5dde2b8010c94e -->
+### Fix TRDiziIzle poster extraction from real content cards
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [a826de0](https://github.com/Kayracs3/Kayra/commit/a826de02a7473027a37255884a5dde2b8010c94e)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:a793f58bd262c997fd80ad2fee468a9156fecd45 -->
 ### Update settings.gradle.kts
 
