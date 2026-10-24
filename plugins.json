@@ -562,6 +562,26 @@
         "name": "JetFilmizle"
     },
     {
+        "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg-hdTlaRfTO3bpbNN57otxLOQ1iSvgBNOGkXCnePUFZ5bWcvNQEd4LsTWcckMOTA8WMDUZjgS7cz8Qe1DHnsnMz8KsFjr8jGx7OwGwFmAuhGVhiRbiPrJwHlSj_vT2RGIlKBE7Qw1jXBw0n74mZk5ltikRlLqjH24eBTTbeow_XT9Q3uFfR1lz1esWxQk/s230/logo.png",
+        "fileHash": "sha256-9abd9497f7f8296bb1837e1631874627ea90d2849f0b383eb549acf891c697bd",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 16154,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 1,
+        "internalName": "PatronSH",
+        "description": "T\u00fcrkiye canl\u0131 yay\u0131n sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/PatronSH.cs3",
+        "name": "PatronSH"
+    },
+    {
         "iconUrl": "https://rectvapk.cc/wp-content/uploads/2023/02/Rec-TV.webp",
         "fileHash": "sha256-659ad3a4cf31c566b4f121a0db71a06cb986abda90d7bb273eb022d1ac36e668",
         "apiVersion": 1,
