@@ -19,8 +19,8 @@ class PstronSH : MainAPI() {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 
-    // ==================== ANA SAYFA (JSON) ====================
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+    // ==================== KANAL VERİSİ ====================
+    private suspend fun fetchChannels(): List<SearchResponse> {
         val response = app.get(
             channelsUrl,
             headers = mapOf(
@@ -31,7 +31,12 @@ class PstronSH : MainAPI() {
         )
         val json = response.text
         Log.d("Patron", "channels.php alindi, uzunluk=${json.length}")
-        return newHomePageResponse("Kanallar", parseChannelsJson(json))
+        return parseChannelsJson(json)
+    }
+
+    // ==================== ANA SAYFA (JSON) ====================
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        return newHomePageResponse("Kanallar", fetchChannels())
     }
 
     private fun parseChannelsJson(json: String): List<SearchResponse> {
@@ -76,8 +81,12 @@ class PstronSH : MainAPI() {
 
     // ==================== ARAMA ====================
     override suspend fun search(query: String): List<SearchResponse> {
-        val all = getMainPage(1, MainPageRequest("Kanallar", null)).items
-        return all.filter { it.name.contains(query, ignoreCase = true) }
+        val cleanedQuery = query.trim()
+        if (cleanedQuery.isBlank()) return emptyList()
+
+        // HomePageResponse.items contains HomePageList sections, not SearchResponse items.
+        // Search the parsed channel records directly instead of extracting sections from the home page.
+        return fetchChannels().filter { it.name.contains(cleanedQuery, ignoreCase = true) }
     }
 
     // ==================== YÜKLEME ====================
