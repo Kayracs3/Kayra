@@ -2,6 +2,31 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:ebf698fb4c598cc6f8764f7d87659ecd5d4d89e2 -->
+### Use positional arguments for PatronSH live stream response factory
+
+- Etkilenen alanlar: PatronSH
+- Commit: [ebf698f](https://github.com/Kayracs3/Kayra/commit/ebf698fb4c598cc6f8764f7d87659ecd5d4d89e2)
+
+## 2026-10-24
+
+<!-- kayra-commit:12edf9edab6b944e69c6d310879394a8af983f0b -->
+### Bump PatronSH version after live response constructor fix
+
+- Etkilenen alanlar: PatronSH
+- Commit: [12edf9e](https://github.com/Kayracs3/Kayra/commit/12edf9edab6b944e69c6d310879394a8af983f0b)
+
+## 2026-10-24
+
+<!-- kayra-commit:6b393dad4da88d29ef9c90c65242a5b2b899fcd7 -->
+### Fix PatronSH deprecated live stream response constructor
+
+- Etkilenen alanlar: PatronSH
+- Commit: [6b393da](https://github.com/Kayracs3/Kayra/commit/6b393dad4da88d29ef9c90c65242a5b2b899fcd7)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:320418c7c36941e9f4d46a54003b1b81d07db2c8 -->
 ### Bump TRDiziIzle plugin version for A-Z index fix
 
