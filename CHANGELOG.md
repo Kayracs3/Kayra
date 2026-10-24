@@ -2,6 +2,23 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:81bf6000531a082cfb6011b65e7d47a3922cc9b4 -->
+### Bump TRDiziIzle plugin version for CloudStream update
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [81bf600](https://github.com/Kayracs3/Kayra/commit/81bf6000531a082cfb6011b65e7d47a3922cc9b4)
+
+## 2026-10-24
+
+<!-- kayra-commit:ba1fc10ffd9fb3046a039d1490908c4141081aca -->
+### Prevent TRDiziIzle home page parser from scanning huge link trees
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [ba1fc10](https://github.com/Kayracs3/Kayra/commit/ba1fc10ffd9fb3046a039d1490908c4141081aca)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:a142ec3090fb0d330eabbdaf500245293b405e9c -->
 ### Fix PatronSH plugin registration after provider rename
 
