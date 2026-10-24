@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:e9f9b7b2fdaed7572c76e64a267389b177ba5c58 -->
+### Implement Beyazelma class for streaming API
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [e9f9b7b](https://github.com/Kayracs3/Kayra/commit/e9f9b7b2fdaed7572c76e64a267389b177ba5c58)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:2f8a274a016fafed68cdb6ab21bc157bc6e3157c -->
 ### Refactor embed URL handling and play link fetching
 
