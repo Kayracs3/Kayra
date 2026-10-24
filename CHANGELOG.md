@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:f5fc13390904489c05a394c637a83710e9a9317c -->
+### FilmKoridoru ana sayfaya film kategorileri ekle
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [f5fc133](https://github.com/Kayracs3/Kayra/commit/f5fc13390904489c05a394c637a83710e9a9317c)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:281be358ccb4e5d48cf538cd67b3e8cfc0e336bb -->
 ### Refactor link extraction and improve comments
 
