@@ -196,7 +196,7 @@ class TrDiziIzle : MainAPI() {
             val element = node ?: return anchor
             val marker = (element.id() + " " + element.className()).lowercase(Locale.ROOT)
             val looksLikeCard = Regex(
-                """(^|[\\s_-])(card|item|entry|post|video|movie|film|dizi|episode|bolum|box|thumb|thumbnail)([\\s_-]|$)"""
+                """(^|[\s_-])(card|item|entry|post|video|movie|film|dizi|episode|bolum|box|thumb|thumbnail)([\s_-]|$)"""
             ).containsMatchIn(marker)
             val hasImage = element.selectFirst("img, picture img, [data-poster], [data-image], [style*=background-image]") != null
             if (hasImage && (looksLikeCard || element.tagName() == "article" || element.tagName() == "li")) {
