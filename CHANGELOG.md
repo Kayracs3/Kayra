@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:a0e35ee3df9d995961db67c10277a8bf7005a6e2 -->
+### Fix TRDiziIzle trailer classification and episode parsing
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [a0e35ee](https://github.com/Kayracs3/Kayra/commit/a0e35ee3df9d995961db67c10277a8bf7005a6e2)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:11ccb074ea2234f6cc7ad20abba43221ea306790 -->
 ### Refactor URL handling and improve ad detection
 
