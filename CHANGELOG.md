@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:6beaccc4fa97840d75697dc7365946bedc6ea617 -->
+### Refactor stream host and update headers
+
+- Etkilenen alanlar: PatronSH
+- Commit: [6beaccc](https://github.com/Kayracs3/Kayra/commit/6beaccc4fa97840d75697dc7365946bedc6ea617)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:8eb7b6d01a433e4a9c374c8140d1f5f318aa1862 -->
 ### Fix nullable base URL in PatronSH stream extraction
 
