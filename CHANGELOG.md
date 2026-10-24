@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:a142ec3090fb0d330eabbdaf500245293b405e9c -->
+### Fix PatronSH plugin registration after provider rename
+
+- Etkilenen alanlar: PatronSH
+- Commit: [a142ec3](https://github.com/Kayracs3/Kayra/commit/a142ec3090fb0d330eabbdaf500245293b405e9c)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:0ebe4bf256aebcfbd584dd5282266dee827ee841 -->
 ### Speed up TrDiziIzle startup and main page parsing
 
