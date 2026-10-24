@@ -13,45 +13,72 @@ class PstronSH : MainAPI() {
     override val hasDownloadSupport = true
     override val supportedTypes = setOf(TvType.NSFW)
 
-    private val browserUserAgent =
+    private val userAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 
-    private val streamHeaders = mapOf(
-        "User-Agent" to browserUserAgent,
-        "Accept" to "*/*",
-        "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8"
-    )
-
     // ==================== ANA SAYFA ====================
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val doc = app.get("$mainUrl/page/$page/", headers = streamHeaders).document
-        val items = doc.select("div.video-item, article, .item").mapNotNull { it.toSearchResult() }
-        return newHomePageResponse(HomePageList("Latest", items))
+        val url = if (page <= 1) mainUrl else "$mainUrl/page/$page/"
+        val doc = app.get(url, headers = mapOf("User-Agent" to userAgent)).document
+
+        val standard = doc
+            .select(".video, .item, article, .thumb, .post, .entry, .movie-item, .thumb-block")
+            .mapNotNull { it.toSearchResult() }
+
+        val items = if (standard.isNotEmpty()) standard else {
+            // Fallback: resim içeren tüm linkleri tara
+            val seen = mutableSetOf<String>()
+            doc.select("a[href]").mapNotNull { a ->
+                val href = a.attr("href")
+                if (href.isBlank() || href.startsWith("#") || href.startsWith("javascript")) return@mapNotNull null
+                val img = a.selectFirst("img")?.let {
+                    it.attr("data-src").ifBlank { it.attr("src") }
+                }
+                if (img.isNullOrBlank()) return@mapNotNull null
+                val title = a.attr("title").ifBlank { a.text() }.trim()
+                if (title.length < 2) return@mapNotNull null
+                if (!seen.add(href)) return@mapNotNull null
+                newMovieSearchResponse(title, fixUrl(href), TvType.NSFW) {
+                    this.posterUrl = fixUrlNull(img)
+                }
+            }
+        }
+        return newHomePageResponse("Latest", items)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val href = this.selectFirst("a")?.attr("href") ?: return null
-        val title = this.selectFirst("h3, h2, .title, .video-title")?.text() ?: return null
-        val img = this.selectFirst("img")?.let {
-            it.attr("data-src").ifBlank { it.attr("src") }
+        val linkEl = selectFirst("a[href]") ?: return null
+        val href = linkEl.attr("href")
+        if (href.isBlank() || href.startsWith("#") || href.startsWith("javascript")) return null
+
+        val title = selectFirst("h3, h2, .title, .video-title, .name")?.text()?.ifBlank { null }
+            ?: linkEl.attr("title").ifBlank { null }
+            ?: linkEl.text().ifBlank { null }
+            ?: return null
+
+        val img = selectFirst("img")?.let {
+            it.attr("data-src").ifBlank { it.attr("data-lazy-src").ifBlank { it.attr("src") } }
         }
-        return newMovieSearchResponse(title, fixUrl(href), TvType.NSFW) {
+
+        return newMovieSearchResponse(title.trim(), fixUrl(href), TvType.NSFW) {
             this.posterUrl = fixUrlNull(img)
         }
     }
 
     // ==================== ARAMA ====================
     override suspend fun search(query: String): List<SearchResponse> {
-        val doc = app.get("$mainUrl/?s=$query", headers = streamHeaders).document
-        return doc.select("div.video-item, article, .item").mapNotNull { it.toSearchResult() }
+        val doc = app.get("$mainUrl/?s=$query", headers = mapOf("User-Agent" to userAgent)).document
+        return doc
+            .select(".video, .item, article, .thumb, .post, .entry, .movie-item, .thumb-block")
+            .mapNotNull { it.toSearchResult() }
     }
 
     // ==================== YÜKLEME ====================
     override suspend fun load(url: String): LoadResponse {
-        val doc = app.get(url, headers = streamHeaders).document
-        val title = doc.selectFirst("h1, .video-title")?.text() ?: "Untitled"
-        val poster = doc.selectFirst("video")?.attr("poster")
+        val doc = app.get(url, headers = mapOf("User-Agent" to userAgent)).document
+        val title = doc.selectFirst("h1, .video-title, .title")?.text()?.trim() ?: "Untitled"
+        val poster = doc.selectFirst("video")?.attr("poster")?.ifBlank { null }
             ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
         val description = doc.selectFirst("meta[name=description]")?.attr("content")
         return newMovieLoadResponse(title, url, TvType.NSFW, url) {
@@ -60,167 +87,105 @@ class PstronSH : MainAPI() {
         }
     }
 
-    // ==================== LİNKLER (DÜZELTİLMİŞ) ====================
+    // ==================== LİNKLER ====================
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val doc = app.get(data, headers = streamHeaders).document
+        val doc = app.get(data, headers = mapOf("User-Agent" to userAgent)).document
         val html = doc.html()
 
-        // Tüm adayları topla: (url, referer)
         val candidates = mutableListOf<Pair<String, String>>()
 
-        // 1) baseurl + video slug -> https://{sub}.{hash}.cfd/patron/{slug}.m3u8
+        // 1) baseurl + videoId -> {baseurl}/patron/{videoId}.m3u8
         val baseUrl = Regex("""baseurl\s*[:=]\s*["']([^"']+)["']""")
             .find(html)?.groupValues?.get(1)
-        val videoSlug = Regex("""(?:videoId|vid|slug|id)\s*[:=]\s*["']([^"']+)["']""")
+        val videoId = Regex("""(?:videoId|vid|slug|video|file|id)\s*[:=]\s*["']([^"']+)["']""")
             .find(html)?.groupValues?.get(1)
-            ?: extractSlugFromUrl(data)
+            ?: Regex("""/([^/]+)/?$""").find(data.trimEnd('/'))?.groupValues?.get(1)
 
-        if (baseUrl != null && videoSlug != null) {
-            candidates += "$baseUrl/patron/$videoSlug.m3u8" to data
+        if (baseUrl != null && videoId != null) {
+            candidates += "$baseUrl/patron/$videoId.m3u8" to data
         }
 
-        // 2) Doğrudan m3u8 / iframe / video kaynakları
-        doc.select("video source, video, iframe[src], a[href]").forEach { el ->
-            val raw = when (el.tagName()) {
-                "source" -> el.attr("src")
-                "video" -> el.attr("src").ifBlank { el.attr("data-src") }
-                "iframe" -> el.attr("src")
-                else -> el.attr("href")
-            }
+        // 2) HTML içindeki tüm m3u8 URL'leri
+        Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""")
+            .findAll(html).forEach { candidates += it.value to data }
+
+        // 3) <video> / <source> / <iframe> etiketleri
+        doc.select("video, video source, iframe[src]").forEach { el ->
+            val raw = el.attr("src").ifBlank { el.attr("data-src") }
             if (raw.isNotBlank()) {
                 val full = fixUrl(raw)
-                if (full.contains(".m3u8") || full.contains(".mp4") || full.contains("bsky")) {
+                if (full.contains(".m3u8") || full.contains(".mp4")) {
                     candidates += full to data
                 }
             }
         }
 
-        // 3) HTML içinde gömülü m3u8'ler
-        Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""")
-            .findAll(html)
-            .forEach { candidates += it.value to data }
+        // 4) Reklamları (bsky dahil) çıkar, tekrarları sil
+        val filtered = candidates.filter { !isAdUrl(it.first) }.distinctBy { it.first }
+        Log.d("Patron", "toplam=${candidates.size} gecerli=${filtered.size}")
 
-        // 4) bsky reklam linklerini ayıkla, tekrarları sil
-        val filtered = candidates
-            .filter { (u, _) -> !isAdUrl(u) }
-            .distinctBy { it.first }
-
-        Log.d("Patron", "Toplam: ${candidates.size}, geçerli aday: ${filtered.size}")
-
-        // 5) Her adayı test et
+        // 5) Her adayı test et; yalnızca gerçekten açılanı kullanıcıya göster
         for ((url, referer) in filtered) {
             if (url.contains(".m3u8")) {
-                if (!isPlayableHls(url, referer, mainUrl)) {
-                    Log.w("Patron", "HLS oynatılamıyor: $url")
+                if (!isPlayableHls(url, referer)) {
+                    Log.w("Patron", "HLS testi basarisiz, atlaniyor: $url")
                     continue
                 }
-                callback(
-                    newExtractorLink(
-                        source = name,
-                        name = name,
-                        url = url,
-                        type = ExtractorLinkType.M3U8
-                    ) {
-                        this.referer = referer
-                        this.headers = streamHeaders
-                    }
-                )
+                callback(newExtractorLink(name, name, url, ExtractorLinkType.M3U8) {
+                    this.referer = referer
+                    this.headers = mapOf("User-Agent" to userAgent)
+                })
                 return true
             } else {
-                callback(
-                    newExtractorLink(
-                        source = name,
-                        name = name,
-                        url = url,
-                        type = ExtractorLinkType.VIDEO
-                    ) {
-                        this.referer = referer
-                        this.headers = streamHeaders
-                    }
-                )
+                callback(newExtractorLink(name, name, url, ExtractorLinkType.VIDEO) {
+                    this.referer = referer
+                    this.headers = mapOf("User-Agent" to userAgent)
+                })
                 return true
             }
         }
-
-        Log.w("Patron", "Geçerli kaynak bulunamadı")
+        Log.w("Patron", "Gecerli kaynak bulunamadi")
         return false
     }
 
-    private fun extractSlugFromUrl(url: String): String? {
-        // https://patronsaha1.cfd/xyz/mono/ -> "mono"
-        return Regex("""/([^/]+)/?$""").find(url.trimEnd('/'))?.groupValues?.get(1)
-    }
-
-    // ==================== REKLAM FİLTRESİ (DÜZELTİLMİŞ) ====================
+    // ==================== REKLAM FİLTRESİ ====================
     private fun isAdUrl(url: String): Boolean {
         val u = url.lowercase()
-        val regex = Regex(
+        if (u.contains("bsky") || u.contains("video.bsky")) return true
+        return Regex(
             "(sayac|ads?|banner|reklam|analytics|googletagmanager|beacon|chat\\.js|/cdn-cgi/|" +
             "preroll|pre-roll|mid-roll|post-roll|vast|vpaid|ima|doubleclick|" +
             "googlesyndication|adserver|advertisement|commercial|promo|sponsor|" +
-            "popunder|popads|trafficjunky|exoclick|juicyads|/ad/|/ads/|bsky|video\\.bsky)"
-        )
-        return regex.containsMatchIn(u)
+            "popunder|popads|trafficjunky|exoclick|juicyads|/ad/|/ads/)"
+        ).containsMatchIn(u)
     }
 
-    // ==================== HLS TESTİ (DÜZELTİLMİŞ) ====================
-    private suspend fun isPlayableHls(url: String, referer: String, origin: String): Boolean {
-        // 1) Sadece User-Agent (bazı CDN'ler Origin/Referer görünce 403 döner)
-        runCatching {
-            app.get(url, headers = mapOf("User-Agent" to browserUserAgent), allowRedirects = true)
-        }.getOrNull()?.let { r ->
-            if (r.code in 200..299) {
-                val body = r.text.trim()
-                if (body.startsWith("#EXTM3U") &&
-                    (body.contains(".ts") || body.contains(".m4s") || body.contains("EXT-X-STREAM-INF"))
-                ) {
-                    Log.d("Patron", "HLS OK (minimal UA): $url")
-                    return true
-                }
+    // ==================== HLS TESTİ ====================
+    private suspend fun isPlayableHls(url: String, referer: String): Boolean {
+        // 3 farklı header kombinasyonu dene — 403'ü aşmak için
+        val attempts = listOf(
+            mapOf("User-Agent" to userAgent),
+            mapOf("User-Agent" to userAgent, "Referer" to referer),
+            mapOf("User-Agent" to userAgent, "Referer" to referer, "Origin" to mainUrl)
+        )
+        for (h in attempts) {
+            val r = runCatching {
+                app.get(url, headers = h, allowRedirects = true)
+            }.getOrNull() ?: continue
+            if (r.code !in 200..299) continue
+            val body = r.text.trim()
+            if (body.startsWith("#EXTM3U") &&
+                (body.contains(".ts") || body.contains(".m4s") || body.contains("EXT-X-STREAM-INF"))
+            ) {
+                Log.d("Patron", "HLS OK: $url")
+                return true
             }
         }
-
-        // 2) User-Agent + Referer + Origin
-        val full = streamHeaders + mapOf("Referer" to referer, "Origin" to origin)
-        runCatching {
-            app.get(url, headers = full, allowRedirects = true)
-        }.getOrNull()?.let { r ->
-            if (r.code in 200..299) {
-                val body = r.text.trim()
-                if (body.startsWith("#EXTM3U") &&
-                    (body.contains(".ts") || body.contains(".m4s") || body.contains("EXT-X-STREAM-INF"))
-                ) {
-                    Log.d("Patron", "HLS OK (full headers): $url")
-                    return true
-                }
-            }
-        }
-
-        // 3) User-Agent + sadece Referer
-        runCatching {
-            app.get(
-                url,
-                headers = mapOf("User-Agent" to browserUserAgent, "Referer" to referer),
-                allowRedirects = true
-            )
-        }.getOrNull()?.let { r ->
-            if (r.code in 200..299) {
-                val body = r.text.trim()
-                if (body.startsWith("#EXTM3U") &&
-                    (body.contains(".ts") || body.contains(".m4s") || body.contains("EXT-X-STREAM-INF"))
-                ) {
-                    Log.d("Patron", "HLS OK (UA+Referer): $url")
-                    return true
-                }
-            }
-        }
-
-        Log.w("Patron", "HLS FAIL: $url")
         return false
     }
 }
