@@ -294,11 +294,13 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun excludedNavigation(anchor: Element): Boolean {
+        // Do not cap the ancestor walk: the site's A-Z block may be nested more
+        // deeply than expected, and its series links must never become page items.
         var node: Element? = anchor
-        repeat(9) {
-            val element = node ?: return false
+        while (node != null) {
+            val element = node
             if (element.tagName().lowercase(Locale.ROOT) in setOf("header", "nav", "footer")) return true
-            // Explicitly exclude the site's A-Z category block; its links are not content cards.
+            // The site's alphabetical index contains series-detail links but is not a content listing.
             if (element.hasClass("alphabetical-category-index")) return true
             val marker = (element.id() + " " + element.className()).lowercase(Locale.ROOT)
             if (Regex("""(^|[\s_-])(navbar|navigation|nav-menu|menu-primary|topmenu|top-menu|quick-menu|alphabet|alfabe|sidebar|widget|footer|header-menu|letter-list)([\s_-]|$)""")
