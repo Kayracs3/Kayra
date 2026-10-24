@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:238c4ae9350301abe8535f872ead28566856467f -->
+### Bump TRDiziIzle version after excluding alphabet index
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [238c4ae](https://github.com/Kayracs3/Kayra/commit/238c4ae9350301abe8535f872ead28566856467f)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:dcec4d5d436dfe7a0f434cadef91e93403a610ec -->
 ### Exclude TRDiziIzle alphabetical category index
 
