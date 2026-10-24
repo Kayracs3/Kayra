@@ -339,62 +339,24 @@ class Beyazelma : MainAPI() {
                 val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull() ?: ""
                 Log.d("Beyazelma", "Slug=$slug")
 
-                // 1) Sayfa içindeki tüm script'lerde ve HTML'de "tr-" ile başlayan gizli slug'ı ara
-                var embedSlug: String? = null
-                val allText = body + doc.select("script:not([src])").joinToString(" ") { it.data() }
-                Regex("""["'](tr-[a-z0-9-]+)["']""").findAll(allText).forEach { m ->
-                    val candidate = m.groupValues[1]
-                    Log.d("Beyazelma", "Gizli slug adayı (HTML/script): $candidate")
-                    if (embedSlug == null) embedSlug = candidate
-                }
+                // 1) Detay API'sinden channelId'yi al
+                val detailsText = runCatching { app.get("$mainUrl/api/channels/$slug", headers = pageHeaders).text }.getOrNull() ?: ""
+                val channelId = Regex(""""_id"\s*:\s*"([^"]+)"""").find(detailsText)?.groupValues?.get(1)
+                Log.d("Beyazelma", "channelId: $channelId")
 
-                // 2) Embed HTML sayfasını doğru başlıklarla dene (slug bilinmiyorsa veya yedek olarak)
-                if (embedSlug == null) {
-                    val embedUrls = listOf(
-                        "https://embed.beyazelma78.com/?slug=$slug",
-                        "https://embed.beyazelma78.com/?id=$slug",
-                        "https://embed.beyazelma78.com/?channel=$slug",
-                        "https://embed.beyazelma78.com/$slug"
-                    )
-                    for (url in embedUrls) {
-                        val resp = runCatching { 
-                            app.get(url, headers = pageHeaders + mapOf(
-                                "Referer" to "https://beyazelma78.com/",
-                                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                            )).text 
-                        }.getOrNull() ?: continue
-                        
-                        Log.d("Beyazelma", "EMBED denemesi: $url → len=${resp.length}")
-                        if (resp.contains("StreamPlayer.mount")) {
-                            Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL).find(resp)?.let { m ->
-                                embedSlug = m.groupValues[1]
-                                Log.d("Beyazelma", "Embed slug bulundu ($url): $embedSlug")
-                                break
-                            }
-                        }
-                    }
-                }
+                // 2) Olası embed slug'ları (siteSlug, channelId ve doğrudan "tr-" ile başlayanlar)
+                val embedSlugs = listOfNotNull(
+                    slug,
+                    channelId,
+                    // Sayfa içinde "tr-" ile başlayan slug'lar varsa onları da ekle
+                    Regex("""["'](tr-[a-z0-9-]+)["']""").findAll(body).map { it.groupValues[1] }.firstOrNull()
+                ).distinct()
 
-                // 3) player.js içindeki mount parametrelerini ara (yedek)
-                if (embedSlug == null) {
-                    val playerJsUrl = "https://embed.beyazelma78.com/player.js"
-                    val playerJs = runCatching {
-                        app.get(playerJsUrl, headers = pageHeaders + mapOf("Referer" to "https://beyazelma78.com/"), allowRedirects = true).text
-                    }.getOrNull()
-                    
-                    if (playerJs != null) {
-                        Log.d("Beyazelma", "player.js indirildi, boyut: ${playerJs.length}")
-                        Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL)
-                            .find(playerJs)?.let { m ->
-                                embedSlug = m.groupValues[1]
-                                Log.d("Beyazelma", "Embed slug player.js'den bulundu: $embedSlug")
-                            }
-                    }
-                }
+                Log.d("Beyazelma", "Denenecek embedSlug adayları: $embedSlugs")
 
-                // 4) embedSlug bulunduysa /api/play/{embedSlug} çağır
-                if (embedSlug != null) {
-                    val apiPlayUrl = "https://embed.beyazelma78.com/api/play/$embedSlug"
+                // 3) Her aday için /api/play/{slug} endpoint'ini dene
+                for (candidate in embedSlugs) {
+                    val apiPlayUrl = "https://embed.beyazelma78.com/api/play/$candidate"
                     Log.d("Beyazelma", "API Play URL: $apiPlayUrl")
                     val apiResp = runCatching {
                         app.get(apiPlayUrl, headers = pageHeaders + mapOf(
