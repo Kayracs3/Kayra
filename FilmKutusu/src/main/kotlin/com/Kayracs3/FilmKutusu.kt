@@ -20,7 +20,14 @@ class FilmKutusu : MainAPI() {
     override val hasMainPage = true
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
-    override val mainPage = mainPageOf("$mainUrl/" to "Ana Sayfa")
+    override val mainPage = mainPageOf(
+        "$mainUrl/" to "Ana Sayfa",
+        "$mainUrl/kategori/macera-filmleri" to "Macera Filmleri",
+        "$mainUrl/kategori/fantastik-filmler" to "Fantastik Filmler",
+        "$mainUrl/kategori/korku-filmleri" to "Korku Filmleri",
+        "$mainUrl/kategori/romantik-filmler" to "Romantik Filmler",
+        "$mainUrl/kategori/komedi-filmleri" to "Komedi Filmleri"
+    )
 
     private val pageHeaders = mapOf(
         "User-Agent" to USER_AGENT,
@@ -120,10 +127,13 @@ class FilmKutusu : MainAPI() {
     //  ANA SAYFA / ARAMA
     // -----------------------------------------------------------------
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = when {
-            page <= 1 -> request.data
-            request.data.endsWith("/") -> request.data.trimEnd('/') + "/sayfa/$page"
-            else -> "$mainUrl/sayfa/$page"
+        val baseUrl = request.data.trimEnd('/')
+        val url = if (page <= 1) {
+            request.data
+        } else if (baseUrl == mainUrl) {
+            "$mainUrl/sayfa/$page"
+        } else {
+            "$baseUrl/sayfa/$page"
         }
         val document = runCatching {
             app.get(url, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
