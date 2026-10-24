@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:a7cd4eb9bd773b332df02633200cd8b59d597ff3 -->
+### Update isAdUrl regex to include video.bsky.app
+
+- Etkilenen alanlar: PatronSH
+- Commit: [a7cd4eb](https://github.com/Kayracs3/Kayra/commit/a7cd4eb9bd773b332df02633200cd8b59d597ff3)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:4a505a829f6a7cd766713dcf148b5b110469d002 -->
 ### Fix non-null extractor referer in PatronSH
 
