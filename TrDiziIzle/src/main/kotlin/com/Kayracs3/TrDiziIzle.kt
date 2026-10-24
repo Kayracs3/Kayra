@@ -24,7 +24,7 @@ class TrDiziIzle : MainAPI() {
     override var lang = "tr"
     override val hasMainPage = true
     override val hasQuickSearch = true
-    override var sequentialMainPage = true
+    override var sequentialMainPage = false
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Movie)
 
     private val tag = "TRDiziIzle"
@@ -38,9 +38,8 @@ class TrDiziIzle : MainAPI() {
     private val browserUserAgent = USER_AGENT
 
     override val mainPage = mainPageOf(
-        "$mainUrl/tr2/" to "Son Eklenen Diziler",
-        "$mainUrl/tum-bolumler/" to "Son Eklenen Bölümler",
-        "$mainUrl/dizi-arsivi-01/" to "Tüm Diziler"
+        "$mainUrl/tum-bolumler/" to "Son Eklenen Diziler",
+        "$mainUrl/dizi-arsivi-01/" to "Dizi Arşivi"
     )
 
     private val episodeRegex = Regex("""(?i)(?:bolum|episode)""")
@@ -193,11 +192,15 @@ class TrDiziIzle : MainAPI() {
         repeat(6) {
             val element = node ?: return anchor
             val hasImage = element.selectFirst("img, picture img, [data-poster], [style*=background-image]") != null
-            val contentCount = element.select("a[href]").count { link ->
-                val candidate = abs(link.attr("href"), link.baseUri().ifBlank { mainUrl })
-                candidate != null && isItem(candidate)
+            // Most archive/menu ancestors have no poster. Do not scan their entire
+            // descendant link tree just to decide whether they are a content card.
+            if (hasImage) {
+                val contentCount = element.select("a[href]").count { link ->
+                    val candidate = abs(link.attr("href"), link.baseUri().ifBlank { mainUrl })
+                    candidate != null && isItem(candidate)
+                }
+                if (contentCount in 1..2) return element
             }
-            if (hasImage && contentCount in 1..2) return element
             node = element.parent()
         }
         return anchor
@@ -253,6 +256,9 @@ class TrDiziIzle : MainAPI() {
     private fun parseItems(document: Document): List<SearchResponse> {
         val output = LinkedHashMap<String, SearchResponse>()
         document.select("a[href]").forEach { anchor ->
+            // A single site page may contain hundreds of archival links plus a huge
+            // A-Z menu. Return a useful first batch instead of parsing the entire tree.
+            if (output.size >= 80) return output.values.toList()
             if (excludedNavigation(anchor)) return@forEach
             val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { mainUrl }) ?: return@forEach
             val anchorLabel = listOfNotNull(
