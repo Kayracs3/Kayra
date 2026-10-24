@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:02f92b01b4599547fb8399eddc3dd0383a337122 -->
+### Clarify return type and format parseChannelsJson
+
+- Etkilenen alanlar: PatronSH
+- Commit: [02f92b0](https://github.com/Kayracs3/Kayra/commit/02f92b01b4599547fb8399eddc3dd0383a337122)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:f9fe7bf6a644eea3b40cbc834b1aa40b70f3f98a -->
 ### Refactor LiveSearchResponse and LiveStreamLoadResponse
 
