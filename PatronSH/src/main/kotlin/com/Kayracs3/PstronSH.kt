@@ -62,7 +62,9 @@ class PatronSaha : MainAPI() {
         host == base || host.endsWith(".$base")
     }.getOrDefault(false)
 
-    private fun isAdUrl(url: String): Boolean = Regex("(?i)(sayac|ads?|banner|reklam|analytics|googletagmanager|beacon|chat\\.js|/cdn-cgi/)").containsMatchIn(url)
+    private fun isAdUrl(url: String): Boolean = Regex(
+    "(?i)(sayac|ads?|banner|reklam|analytics|googletagmanager|beacon|chat\\.js|/cdn-cgi/|video\\.bsky\\.app)"
+).containsMatchIn(url)
 
     // ---------------------------------------------------------------------
     // KANAL LİSTESİ → channels.php API
