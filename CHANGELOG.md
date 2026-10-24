@@ -2,6 +2,23 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:320418c7c36941e9f4d46a54003b1b81d07db2c8 -->
+### Bump TRDiziIzle plugin version for A-Z index fix
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [320418c](https://github.com/Kayracs3/Kayra/commit/320418c7c36941e9f4d46a54003b1b81d07db2c8)
+
+## 2026-10-24
+
+<!-- kayra-commit:3eb90e0f3ec2c7b5ee776877e4704900fbd084f1 -->
+### Fix TRDiziIzle alphabetical index exclusion depth
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [3eb90e0](https://github.com/Kayracs3/Kayra/commit/3eb90e0f3ec2c7b5ee776877e4704900fbd084f1)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:13f41ed08c26d8b73ff07a6c392bd9c2b06676b4 -->
 ### Bump PatronSH version after build and search fixes
 
