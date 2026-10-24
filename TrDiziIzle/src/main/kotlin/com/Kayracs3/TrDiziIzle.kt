@@ -707,7 +707,7 @@ class TrDiziIzle : MainAPI() {
         pages.add(episodeUrl to first.document)
         var found = false
 
-        while (pages.isNotEmpty() && seenPages.size < 10) {
+        while (pages.isNotEmpty() && seenPages.size < 6) {
             val (pageUrl, document) = pages.removeFirst()
             if (!seenPages.add(pageUrl)) continue
             collectSubtitles(document, pageUrl, subtitleCallback)
@@ -716,18 +716,25 @@ class TrDiziIzle : MainAPI() {
                 if (seenCandidates.add(media) && emitMedia(media, pageUrl, callback)) found = true
             }
 
-            // Player sayfasının akış adresini çalıştırılan JavaScript/API içinden alması yaygın.
-            // Harici JS dosyalarını da kontrollü biçimde indirip içlerindeki kaynak/API adreslerini tara.
+            // Önce oynatıcıyla ilişkili dosyaları ara; genel JS dosyalarını sınırlı tut.
+            // Böylece sayfa büyük reklam/tema dosyalarına takılıp dakikalarca beklemez.
             val scriptCandidates = LinkedHashSet<String>()
-            scriptUrls(document, pageUrl).take(8).forEach scriptLoop@ { scriptUrl ->
-                if (seenScripts.size >= 16 || !seenScripts.add(scriptUrl)) return@scriptLoop
+            val allScripts = scriptUrls(document, pageUrl)
+            val playerScripts = allScripts.filter {
+                Regex("""(?i)(player|video|embed|hls|jwplayer|videojs|media|stream|source)""")
+                    .containsMatchIn(it)
+            }
+            val scriptsToInspect = (playerScripts + allScripts.filterNot { it in playerScripts })
+                .distinct().take(5)
+            scriptsToInspect.forEach scriptLoop@ { scriptUrl ->
+                if (seenScripts.size >= 10 || !seenScripts.add(scriptUrl)) return@scriptLoop
                 val scriptResponse = runCatching {
                     app.get(
                         scriptUrl,
                         headers = headers + ("Referer" to pageUrl),
                         referer = pageUrl,
                         allowRedirects = true,
-                        timeout = 10000
+                        timeout = 6000
                     )
                 }.getOrNull() ?: return@scriptLoop
                 if (!scriptResponse.isSuccessful || scriptResponse.text.isBlank()) return@scriptLoop
@@ -780,17 +787,34 @@ class TrDiziIzle : MainAPI() {
 
     private fun playerCandidates(document: Document, rawText: String, base: String): List<String> {
         val out = LinkedHashSet<String>()
-        val attrs = listOf("src", "data-src", "data-lazy-src", "data-url", "data-embed", "data-iframe", "data-file", "data-player", "data-video", "data-hls", "data-stream")
-        document.select("iframe,video,source,[data-src],[data-url],[data-embed],[data-iframe],[data-file],[data-player],[data-video],[data-hls],[data-stream],meta[property=og:video]")
-            .forEach { element ->
-                attrs.forEach attrLoop@ { attr ->
-                    val url = abs(element.attr(attr), base) ?: return@attrLoop
-                    if (playerCandidate(url, element.text() + " " + element.attr("class"))) out.add(url)
-                }
-                if (element.tagName() == "meta") abs(element.attr("content"), base)?.let {
-                    if (playerCandidate(it, "video")) out.add(it)
-                }
+        val attrs = listOf(
+            "src", "data-src", "data-lazy-src", "data-url", "data-embed",
+            "data-embed-url", "data-iframe", "data-file", "data-player",
+            "data-player-url", "data-video", "data-video-url", "data-source",
+            "data-hls", "data-src-hls", "data-stream"
+        )
+        document.select(
+            "iframe,video,source,[data-src],[data-url],[data-embed],[data-embed-url]," +
+                "[data-iframe],[data-file],[data-player],[data-player-url],[data-video]," +
+                "[data-video-url],[data-source],[data-hls],[data-src-hls],[data-stream],meta[property=og:video]"
+        ).forEach { element ->
+            val context = element.tagName() + " " + element.text() + " " +
+                element.attr("id") + " " + element.className() + " " +
+                element.attr("title") + " " + element.attr("aria-label")
+            attrs.forEach attrLoop@ { attr ->
+                val url = abs(element.attr(attr), base) ?: return@attrLoop
+                // A real iframe may use an opaque ID-only URL with no "player/embed" keyword.
+                // Do not discard it merely because its path is not descriptive.
+                val genericIframe = element.tagName() == "iframe" &&
+                    !isIgnoredResource(url) &&
+                    !Regex("""(?i)\.(?:css|mjs?|png|jpe?g|webp|svg|woff2?)(?:$|[?#])""")
+                        .containsMatchIn(url)
+                if (playerCandidate(url, context) || genericIframe) out.add(url)
             }
+            if (element.tagName() == "meta") abs(element.attr("content"), base)?.let {
+                if (playerCandidate(it, "video")) out.add(it)
+            }
+        }
 
         document.select("a[href]").filter {
             Regex("""(?i)(izle|oynat|player|video|kaynak|indir|stream)""")
