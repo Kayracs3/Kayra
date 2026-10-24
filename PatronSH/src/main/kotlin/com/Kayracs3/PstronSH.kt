@@ -82,10 +82,12 @@ class PstronSH : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val title = url.substringAfterLast("#").ifBlank { "Kanal" }
 
-        // apiName parametresi LiveStreamLoadResponse'ta YOK, kaldırıldı
+        // KRİTİK DÜZELTME: apiName ve dataUrl parametreleri eklendi
         return LiveStreamLoadResponse(
             name = title,
             url = url,
+            apiName = this.name,
+            dataUrl = url,
             type = TvType.Live
         )
     }
