@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:d16429627ca41ad7da5666ecd97666f16f771283 -->
+### Refactor embed slug retrieval from player.js to embed URLs
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [d164296](https://github.com/Kayracs3/Kayra/commit/d16429627ca41ad7da5666ecd97666f16f771283)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:b0754fc77c17a6d3e351a92d65e527f7c55c81a8 -->
 ### Simplify channel data retrieval and processing
 
