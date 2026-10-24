@@ -2,6 +2,23 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:b2c4d2f32e6964f3ec4bc02af684eb2feed2a315 -->
+### Update mainUrl to point to Turkish version
+
+- Etkilenen alanlar: Dramix
+- Commit: [b2c4d2f](https://github.com/Kayracs3/Kayra/commit/b2c4d2f32e6964f3ec4bc02af684eb2feed2a315)
+
+## 2026-10-24
+
+<!-- kayra-commit:5538ee9bf957ae5709eb46f19dcb365c9bbd6a20 -->
+### Add URL-generated CloudStream provider: Dramix
+
+- Etkilenen alanlar: Dramix
+- Commit: [5538ee9](https://github.com/Kayracs3/Kayra/commit/5538ee9bf957ae5709eb46f19dcb365c9bbd6a20)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:f671638c42d293bca089a27470122e7acee46b20 -->
 ### Delete Beyazelma directory
 
