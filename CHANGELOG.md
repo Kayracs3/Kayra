@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:bfcb39c0030a02246d12b8833746e2fceb2831a8 -->
+### Probe opaque TRDiziIzle player iframes and bound script requests
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [bfcb39c](https://github.com/Kayracs3/Kayra/commit/bfcb39c0030a02246d12b8833746e2fceb2831a8)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:45d2f47ac051159a5e9e18ac8ccc58e180182a2e -->
 ### Bump TRDiziIzle plugin version after poster fix
 
