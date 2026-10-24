@@ -71,16 +71,38 @@ class TrDiziIzle : MainAPI() {
     private fun host(url: String): String =
         runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.") }.getOrDefault("")
     private fun onSite(url: String) = host(url).isNotBlank() && host(url) == host(mainUrl)
-    private fun isSeries(url: String): Boolean {
+    private fun isTrailerUrl(url: String): Boolean {
         if (!onSite(url)) return false
-        val p = path(url).trim('/').lowercase(Locale.ROOT)
-        return p.startsWith("diziler/") && p.split('/').size == 2
+        val route = path(url).trim('/').lowercase(Locale.ROOT)
+        if (Regex("""(^|/)(?:fragman(?:i)?|trailer|teaser|tanitim|preview)(?:/|$)""").containsMatchIn(route)) {
+            return true
+        }
+        val slug = route.substringAfterLast('/')
+        return Regex("""(?:^|[-_])(?:fragman(?:i)?|trailer|teaser|tanitim|preview)(?:[-_](?:izle|watch))?(?:[-_]\d+)?$""")
+            .containsMatchIn(slug)
+    }
+
+    private fun isTrailerLabel(raw: String): Boolean {
+        val value = norm(raw)
+        return Regex("""(?:^|\s)(?:fragman|fragmani|trailer|teaser|tanitim|preview)(?:\s+(?:izle|watch))?$""")
+            .containsMatchIn(value)
+    }
+
+    private fun isSeries(url: String): Boolean {
+        if (!onSite(url) || isTrailerUrl(url)) return false
+        val parts = path(url).trim('/').split('/').filter { it.isNotBlank() }
+        if (parts.size != 2) return false
+        // The site uses /diziler/<slug>/ for series detail pages and may use
+        // /bolumler/<slug>/ (or /episode/<slug>/) for individual episode pages.
+        return parts[0] == "diziler" ||
+            parts[0] == "bolum" || parts[0] == "bolumler" ||
+            parts[0] == "episode" || parts[0] == "episodes"
     }
 
     private fun isMovie(url: String): Boolean {
-        if (!onSite(url)) return false
-        val p = path(url).trim('/').lowercase(Locale.ROOT)
-        return (p.startsWith("filmler/") || p.startsWith("film/")) && p.split('/').size == 2
+        if (!onSite(url) || isTrailerUrl(url)) return false
+        val parts = path(url).trim('/').split('/').filter { it.isNotBlank() }
+        return parts.size == 2 && (parts[0] == "filmler" || parts[0] == "film")
     }
 
     private fun isEpisode(url: String) = onSite(url) &&
@@ -101,6 +123,7 @@ class TrDiziIzle : MainAPI() {
         .replace(Regex("""(?i)\s*\|\s*Trdiziizle.*$"""), "")
         .replace(Regex("""(?i)\s+(?:son\s+bölüm|son\s+bolum)\s+izle.*$"""), "")
         .replace(Regex("""(?i)\s+(?:fragmanı\s+)?izle\s*$"""), "")
+        .replace(Regex("""(?i)\s*(?:[-|:]\s*)?(?:fragman(?:ı|i)?|trailer|teaser|tanıtım|tanitim|preview)(?:\s+(?:izle|watch))?\s*$"""), "")
         .replace(Regex("""(?i)\s+\d{1,4}\s*\.?\s*bölüm(?:\s+.*)?$"""), "")
         .replace(Regex("""\s+"""), " ")
         .trim(' ', '-', '|', ':', '•')
@@ -138,7 +161,8 @@ class TrDiziIzle : MainAPI() {
                 "ana sayfa", "tum diziler", "tum filmler", "diziler", "filmler",
                 "son eklenenler", "son eklenen diziler", "son eklenen bolumler", "tum bolumler",
                 "dizi arsivi", "tumunu gor", "trdiziizle", "tr dizi izle",
-                "film izle", "dizi izle", "fragmani izle", "oynat", "indir", "poster",
+                "film izle", "dizi izle", "fragman", "fragmani", "fragmani izle",
+                "trailer", "teaser", "preview", "oynat", "indir", "poster",
                 "bolum adi", "yayinlanma tarihi", "uye ol", "uye girisi",
                 "icerik", "content", "unknown", "null"
             ) &&
@@ -233,10 +257,16 @@ class TrDiziIzle : MainAPI() {
         document.select("a[href]").forEach { anchor ->
             if (excludedNavigation(anchor)) return@forEach
             val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { mainUrl }) ?: return@forEach
+            val anchorLabel = listOf(
+                anchor.ownText(), anchor.attr("title"), anchor.attr("aria-label"),
+                anchor.selectFirst("img")?.attr("alt"), anchor.selectFirst("img")?.attr("title")
+            ).filter { it.isNotBlank() }.joinToString(" ")
+            if (isTrailerUrl(url) || isTrailerLabel(anchorLabel)) return@forEach
             if (!isItem(url)) return@forEach
             val card = cardFor(anchor)
             val poster = posterOf(anchor, card, url)
-            if (poster.isNullOrBlank() && card === anchor) return@forEach
+            // Do not discard a legitimate recent episode just because its card uses
+            // a CSS background or the site temporarily omits its thumbnail.
             val title = titleOf(anchor, card, poster)
             if (!validTitle(title)) return@forEach
             val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
@@ -452,7 +482,39 @@ class TrDiziIzle : MainAPI() {
             }
         }
 
-        val episodes = extractEpisodes(document, pageUrl, title, poster)
+        val episodeMap = LinkedHashMap<String, Episode>()
+        extractEpisodes(document, pageUrl, title, poster).forEach { episode ->
+            episodeMap.putIfAbsent(episode.data, episode)
+        }
+
+        // Some series pages expose each season through a separate URL/tab. Fetch those
+        // season pages too, then merge and sort their episodes instead of returning only
+        // the subset visible on the first detail page.
+        seasonUrls(document, pageUrl).filter { it.trimEnd('/') != pageUrl.trimEnd('/') }
+            .take(20).forEach seasonLoop@ { seasonUrl ->
+                val seasonResponse = runCatching {
+                    app.get(
+                        seasonUrl,
+                        headers = headers + ("Referer" to pageUrl),
+                        referer = pageUrl,
+                        allowRedirects = true
+                    )
+                }.onFailure {
+                    Log.d(tag, "Sezon sayfası alınamadı: $seasonUrl", it)
+                }.getOrNull() ?: return@seasonLoop
+                if (!seasonResponse.isSuccessful) return@seasonLoop
+
+                extractEpisodes(
+                    seasonResponse.document, seasonUrl, title, poster,
+                    includeCurrentPageEpisode = false
+                ).forEach { episode ->
+                    episodeMap.putIfAbsent(episode.data, episode)
+                }
+            }
+
+        val episodes = episodeMap.values.sortedWith(
+            compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: Int.MAX_VALUE }
+        )
 
         return newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
             posterUrl = poster
@@ -465,21 +527,30 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun episodeInfo(raw: String): Pair<Int?, Int?>? {
-        val sxe = Regex("""(?i)\bs\s*(\d{1,2})\s*e\s*(\d{1,4})\b""").find(raw)
-        if (sxe != null) {
-            val season = sxe.groupValues[1].toIntOrNull()
-            val number = sxe.groupValues[2].toIntOrNull()
+        val normalized = norm(raw)
+
+        // Supports common forms: S03E08, Season 3 Episode 8, 3. Sezon 8. Bölüm,
+        // 189.Bölüm and the reversed "Bölüm 189" label.
+        val seasonEpisodePatterns = listOf(
+            Regex("""\b(?:s|season)\s*(\d{1,2})\s*[-._ ]*\s*(?:e|ep|episode)\s*(\d{1,4})\b"""),
+            Regex("""\b(\d{1,2})\s*(?:sezon|season)\s*(\d{1,4})\s*(?:bolum|episode)\b"""),
+            Regex("""\b(\d{1,2})\s*(?:sezon|season)\s*(?:bolum|episode)\s*(\d{1,4})\b""")
+        )
+        for (pattern in seasonEpisodePatterns) {
+            val match = pattern.find(normalized) ?: continue
+            val season = match.groupValues[1].toIntOrNull()
+            val number = match.groupValues[2].toIntOrNull()
             if (number != null && number in 1..10000) return season to number
         }
-        val normalized = norm(raw)
-        val match = Regex("""(?:(\d{1,2})\s*sezon\s*)?(\d{1,4})\s*bolum""").find(normalized)
-            ?: Regex("""(?:^|\s)(\d{1,4})\s*episode(?:\s|$)""").find(normalized)
-        if (match != null) {
-            val hasSeasonGroup = match.groupValues.size > 2
-            val season = if (hasSeasonGroup) match.groupValues[1].toIntOrNull() else null
-            val number = if (hasSeasonGroup) match.groupValues[2].toIntOrNull()
-                else match.groupValues[1].toIntOrNull()
-            if (number != null && number in 1..10000) return season to number
+
+        val episodeNumber = Regex("""\b(\d{1,4})\s*(?:bolum|episode)\b""").find(normalized)
+            ?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?: Regex("""\b(?:bolum|episode)\s*(\d{1,4})\b""").find(normalized)
+                ?.groupValues?.getOrNull(1)?.toIntOrNull()
+        if (episodeNumber != null && episodeNumber in 1..10000) {
+            val season = Regex("""\b(\d{1,2})\s*(?:sezon|season)\b""")
+                .find(normalized)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            return season to episodeNumber
         }
         return null
     }
@@ -488,7 +559,8 @@ class TrDiziIzle : MainAPI() {
         document: Document,
         pageUrl: String,
         seriesTitle: String,
-        seriesPoster: String?
+        seriesPoster: String?,
+        includeCurrentPageEpisode: Boolean = true
     ): List<Episode> {
         val output = LinkedHashMap<String, Episode>()
         val titleTerms = norm(seriesTitle).split(' ')
@@ -504,10 +576,12 @@ class TrDiziIzle : MainAPI() {
                     route.contains("/bolumler/") || route.contains("/episode/") ||
                     route.contains("/episodes/"))
             ) continue
+            val rowText = anchor.parent()?.text().orEmpty().take(240)
             val labelRaw = listOf(
                 anchor.text(), anchor.attr("title"), anchor.attr("aria-label"),
-                anchor.attr("data-title"), route.replace('-', ' ')
+                anchor.attr("data-title"), route.replace('-', ' '), rowText
             ).filter { it.isNotBlank() }.joinToString(" ")
+            if (isTrailerLabel(labelRaw)) continue
             val info = episodeInfo(labelRaw) ?: continue
             val number = info.second ?: continue
             val normalizedText = norm(labelRaw)
@@ -518,7 +592,7 @@ class TrDiziIzle : MainAPI() {
 
             val context = labelRaw + " " + anchor.parent()?.text().orEmpty().take(160)
             val season = info.first
-                ?: Regex("""(\d{1,2})\s*sezon""").find(norm(context))
+                ?: Regex("""(\d{1,2})\s*(?:sezon|season)""").find(norm(context))
                     ?.groupValues?.getOrNull(1)?.toIntOrNull()
                 ?: 1
             val label = "$number. Bölüm" +
@@ -538,7 +612,9 @@ class TrDiziIzle : MainAPI() {
         val hasPlayer = document.select(
             "iframe[src],iframe[data-src],iframe[data-iframe],video[src],video source[src],[data-player],[data-embed],[data-video]"
         ).isNotEmpty() || mediaRegex.containsMatchIn(decodeEmbedded(document.html()))
-        if (hasPlayer && output.keys.none { it.trimEnd('/') == pageUrl.trimEnd('/') }) {
+        if (includeCurrentPageEpisode && hasPlayer &&
+            output.keys.none { it.trimEnd('/') == pageUrl.trimEnd('/') }
+        ) {
             val currentInfo = episodeInfo(
                 document.selectFirst("h1")?.text().orEmpty() + " " + document.text().take(2500)
             )
