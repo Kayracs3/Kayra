@@ -19,7 +19,9 @@ dependencyResolutionManagement {
 rootProject.name = "CloudstreamPlugins"
 
 val disabled = setOf(
-    "__Temel"
+    "__Temel",
+    // Adult-content provider is not part of the build.
+    "PatronSH"
 )
 
 rootDir
