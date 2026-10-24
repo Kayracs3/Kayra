@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:b586befc80563e8a071bb8489d045335617ae55e -->
+### Rename PatronSaha to PstronSH and enhance features
+
+- Etkilenen alanlar: PatronSH
+- Commit: [b586bef](https://github.com/Kayracs3/Kayra/commit/b586befc80563e8a071bb8489d045335617ae55e)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:8eec86d8e3bb8616d9f89b60a1b56d85db92679d -->
 ### Fix TrDiziIzle Kotlin compile error and cap network waits
 
