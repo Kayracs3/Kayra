@@ -298,6 +298,8 @@ class TrDiziIzle : MainAPI() {
         repeat(9) {
             val element = node ?: return false
             if (element.tagName().lowercase(Locale.ROOT) in setOf("header", "nav", "footer")) return true
+            // Explicitly exclude the site's A-Z category block; its links are not content cards.
+            if (element.hasClass("alphabetical-category-index")) return true
             val marker = (element.id() + " " + element.className()).lowercase(Locale.ROOT)
             if (Regex("""(^|[\s_-])(navbar|navigation|nav-menu|menu-primary|topmenu|top-menu|quick-menu|alphabet|alfabe|sidebar|widget|footer|header-menu|letter-list)([\s_-]|$)""")
                     .containsMatchIn(marker)
