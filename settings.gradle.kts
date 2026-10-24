@@ -19,9 +19,7 @@ dependencyResolutionManagement {
 rootProject.name = "CloudstreamPlugins"
 
 val disabled = setOf(
-    "__Temel",
-    // Keep the PatronSH provider out of the repository-wide build.
-    "PatronSH"
+    "__Temel"
 )
 
 rootDir
