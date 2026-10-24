@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:24f2b29a5c888bb03ad9d18c5654d3a6112e8a5a -->
+### Refactor HLS functions to handle cookies
+
+- Etkilenen alanlar: PatronSH
+- Commit: [24f2b29](https://github.com/Kayracs3/Kayra/commit/24f2b29a5c888bb03ad9d18c5654d3a6112e8a5a)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:2d3751aed52216db2bce1013cff0cff62b1277d1 -->
 ### Add cookie reading helper and update HLS check
 
