@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:819af1d3554b7d16fafea7b6b62d8f79af252a09 -->
+### Ignore boolean lazy-image attributes in TRDiziIzle
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [819af1d](https://github.com/Kayracs3/Kayra/commit/819af1d3554b7d16fafea7b6b62d8f79af252a09)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:3c37c0389d1862f84d2461559a500a077c8b1f60 -->
 ### Bump TRDiziIzle version for poster fix
 
