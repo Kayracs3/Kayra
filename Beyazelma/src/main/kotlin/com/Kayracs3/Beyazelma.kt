@@ -339,20 +339,23 @@ class Beyazelma : MainAPI() {
                 val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull() ?: ""
                 Log.d("Beyazelma", "Slug=$slug")
 
-                // 1) player.js dosyasını indir ve StreamPlayer.mount içindeki embed slug'ını al
-                val playerJsUrl = "https://embed.beyazelma78.com/player.js"
-                val playerJs = runCatching {
-                    app.get(playerJsUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true).text
-                }.getOrNull()
-
+                // 1) Embed HTML sayfasını indir ve StreamPlayer.mount içindeki gizli slug'ı al
                 var embedSlug: String? = null
-                if (playerJs != null) {
-                    Log.d("Beyazelma", "player.js indirildi, boyut: ${playerJs.length}")
-                    Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL)
-                        .find(playerJs)?.let { m ->
+                val embedUrls = listOf(
+                    "https://embed.beyazelma78.com/?slug=$slug",
+                    "https://embed.beyazelma78.com/?id=$slug",
+                    "https://embed.beyazelma78.com/?channel=$slug",
+                    "https://embed.beyazelma78.com/$slug"
+                )
+                for (url in embedUrls) {
+                    val resp = runCatching { app.get(url, headers = pageHeaders + mapOf("Referer" to "https://beyazelma78.com/")).text }.getOrNull() ?: continue
+                    if (resp.contains("StreamPlayer.mount")) {
+                        Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL).find(resp)?.let { m ->
                             embedSlug = m.groupValues[1]
-                            Log.d("Beyazelma", "Embed slug player.js'den bulundu: $embedSlug")
+                            Log.d("Beyazelma", "Embed slug bulundu ($url): $embedSlug")
+                            break
                         }
+                    }
                 }
 
                 // 2) player.js'deki fetchPlay mantığını taklit et: /api/play/{embedSlug}
