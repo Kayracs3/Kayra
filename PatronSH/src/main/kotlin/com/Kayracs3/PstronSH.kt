@@ -47,18 +47,20 @@ class PstronSH : MainAPI() {
 
         for (i in 0 until root.length()) {
             val item = runCatching { root.getJSONObject(i) }.getOrNull() ?: continue
-            val name = firstNonBlank(item, "name", "title", "channel", "kanal", "adi", "ad") ?: continue
+            val name = firstNonBlank(item, "name", "title", "channel", "kanal", "adi", "ad")
+                ?: continue
             val logo = firstNonBlank(item, "logo", "image", "img", "icon", "resim", "poster")
             val streamUrl = firstNonBlank(item, "url", "stream", "link", "m3u8", "yayin", "adres")
             val data = streamUrl ?: "$channelsUrl#${item.optString("id", name)}"
 
-            result += LiveSearchResponse(
+            // Yardımcı fonksiyon: apiName otomatik atanır, tür uyumsuzluğu riski yok
+            result += newLiveSearchResponse(
                 name = name,
                 url = data,
-                apiName = this.name,
-                type = TvType.Live,
-                posterUrl = logo
-            )
+                type = TvType.Live
+            ) {
+                this.posterUrl = logo
+            }
         }
         Log.d("Patron", "JSON'dan ${result.size} kanal ayrıştırıldı")
         return result
@@ -81,14 +83,11 @@ class PstronSH : MainAPI() {
     // ==================== YÜKLEME ====================
     override suspend fun load(url: String): LoadResponse {
         val title = url.substringAfterLast("#").ifBlank { "Kanal" }
-
-        // KRİTİK DÜZELTME: apiName ve dataUrl parametreleri eklendi
         return LiveStreamLoadResponse(
             name = title,
             url = url,
             apiName = this.name,
-            dataUrl = url,
-            type = TvType.Live
+            dataUrl = url
         )
     }
 
