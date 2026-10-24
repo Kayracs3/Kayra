@@ -17,22 +17,23 @@ class PatronSaha : MainAPI() {
     override val mainPage = mainPageOf("$mainUrl/" to "Canlı Kanallar")
 
     private val channelsApi = "https://patronsports2.cfd/channels.php"
+    private val streamHost = "https://patronsports2.cfd"
 
-    private val browserUserAgent =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+    private val browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 
     private val pageHeaders = mapOf(
         "User-Agent" to browserUserAgent,
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
+        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6",
+        "Referer" to "$streamHost/"
     )
 
     private val streamHeaders = mapOf(
         "User-Agent" to browserUserAgent,
         "Accept" to "*/*",
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Origin" to "https://patronsaha1.cfd",
-        "Referer" to "https://patronsaha1.cfd/",
+        "Origin" to streamHost,
+        "Referer" to "$streamHost/",
         "Sec-Fetch-Dest" to "empty",
         "Sec-Fetch-Mode" to "cors",
         "Sec-Fetch-Site" to "cross-site"
@@ -44,10 +45,8 @@ class PatronSaha : MainAPI() {
     }
 
     private fun fixUrl(raw: String?, base: String = mainUrl): String? {
-        val value = raw?.trim()?.replace("\\/", "/")?.replace("&amp;", "&")?.trim('"', '\'')
-            ?: return null
-        if (value.isBlank() || value == "#" || value.startsWith("javascript:", true) ||
-            value.startsWith("data:", true) || value.startsWith("mailto:", true)) return null
+        val value = raw?.trim()?.replace("\\/", "/")?.replace("&amp;", "&")?.trim('"', '\'') ?: return null
+        if (value.isBlank() || value == "#" || value.startsWith("javascript:", true) || value.startsWith("data:", true) || value.startsWith("mailto:", true)) return null
         return runCatching {
             when {
                 value.startsWith("https://", true) || value.startsWith("http://", true) -> value
@@ -63,87 +62,57 @@ class PatronSaha : MainAPI() {
         host == base || host.endsWith(".$base")
     }.getOrDefault(false)
 
-    private fun isAdUrl(url: String): Boolean =
-        Regex("(?i)(sayac|ads?|banner|reklam|analytics|googletagmanager|beacon|chat\\.js|/cdn-cgi/)")
-            .containsMatchIn(url)
+    private fun isAdUrl(url: String): Boolean = Regex("(?i)(sayac|ads?|banner|reklam|analytics|googletagmanager|beacon|chat\\.js|/cdn-cgi/)").containsMatchIn(url)
 
     // ---------------------------------------------------------------------
-    //  KANAL LİSTESİ → channels.php API
+    // KANAL LİSTESİ → channels.php API
     // ---------------------------------------------------------------------
     private suspend fun fetchChannelsFromApi(): List<SearchResponse> {
         val json = runCatching {
-            app.get(
-                channelsApi,
-                headers = pageHeaders + ("Referer" to "$mainUrl/"),
-                allowRedirects = true
-            ).text
+            app.get(channelsApi, headers = pageHeaders + ("Referer" to "$streamHost/"), allowRedirects = true).text
         }.getOrNull() ?: run {
             Log.w("Patron", "channels.php isteği başarısız")
             return emptyList()
         }
-
         Log.d("Patron", "channels.php uzunluk: ${json.length}")
-
         val macs = Regex(""""Mac"\s*:\s*"([^"]+)"""").findAll(json).map { it.groupValues[1] }.toList()
         val logos = Regex(""""Logo"\s*:\s*"([^"]+)"""").findAll(json).map { it.groupValues[1] }.toList()
         val urls = Regex(""""URL"\s*:\s*"([^"]+)"""").findAll(json).map { it.groupValues[1] }.toList()
-
         Log.d("Patron", "API: ${macs.size} kanal")
-
         if (macs.isEmpty()) return emptyList()
-
         return macs.mapIndexedNotNull { i, name ->
             val cleanName = name.trim()
             if (cleanName.isBlank()) return@mapIndexedNotNull null
-
             val rawUrl = urls.getOrNull(i)?.replace("\\/", "/") ?: "/ch.html?id=${cleanName.lowercase()}"
             val channelUrl = fixUrl(rawUrl, mainUrl) ?: return@mapIndexedNotNull null
-
             val logoPath = logos.getOrNull(i)?.replace("\\/", "/")
             val logo = if (!logoPath.isNullOrBlank()) {
-                fixUrl(logoPath, "https://patronsports2.cfd") ?: liveLogoFor(cleanName)
+                fixUrl(logoPath, streamHost) ?: liveLogoFor(cleanName)
             } else {
                 liveLogoFor(cleanName)
             }
-
-            newMovieSearchResponse(cleanName, channelUrl, TvType.Live) {
-                posterUrl = logo
-            }
+            newMovieSearchResponse(cleanName, channelUrl, TvType.Live) { posterUrl = logo }
         }
     }
 
     private suspend fun fetchChannels(): List<SearchResponse> {
         var items = fetchChannelsFromApi()
-
         if (items.isEmpty()) {
-            val document = runCatching {
-                app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document
-            }.getOrNull()
-
+            val document = runCatching { app.get(mainUrl, headers = pageHeaders, allowRedirects = true).document }.getOrNull()
             if (document != null) {
                 items = document.select("div.channel-item").mapNotNull { el ->
                     if (el.hasClass("channel-ad-item")) return@mapNotNull null
-
                     val dataSrc = el.attr("data-src").trim()
                     if (dataSrc.isBlank()) return@mapNotNull null
-
                     val url = fixUrl(dataSrc) ?: return@mapNotNull null
                     if (!sameSite(url)) return@mapNotNull null
-
-                    val name = el.selectFirst("span.channel-name-text")?.text()?.trim()
-                        ?: return@mapNotNull null
+                    val name = el.selectFirst("span.channel-name-text")?.text()?.trim() ?: return@mapNotNull null
                     if (name.length < 2) return@mapNotNull null
-
-                    val logo = el.selectFirst("img.channel-logo-right")?.attr("src")
-                        ?.let { fixUrl(it, url) } ?: liveLogoFor(name)
-
-                    newMovieSearchResponse(name, url, TvType.Live) {
-                        posterUrl = logo
-                    }
+                    val logo = el.selectFirst("img.channel-logo-right")?.attr("src")?.let { fixUrl(it, url) } ?: liveLogoFor(name)
+                    newMovieSearchResponse(name, url, TvType.Live) { posterUrl = logo }
                 }
             }
         }
-
         return items.distinctBy { it.url }.take(200)
     }
 
@@ -159,25 +128,18 @@ class PatronSaha : MainAPI() {
     }
 
     // ---------------------------------------------------------------------
-    //  KANAL DETAYI — ch.html kendisi oynatıcı sayfasıdır.
-    //  Reklam / geri sayım (sayac.html) iframe'lerini ATLA.
+    // KANAL DETAYI — ch.html kendisi oynatıcı sayfasıdır.
+    // Reklam / geri sayım (sayac.html) iframe'lerini ATLA.
     // ---------------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse? {
         val pageUrl = fixUrl(url) ?: return null
-        val document = runCatching {
-            app.get(pageUrl, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
-        }.getOrNull() ?: return null
-
+        val document = runCatching { app.get(pageUrl, headers = pageHeaders, referer = "$streamHost/", allowRedirects = true).document }.getOrNull() ?: return null
         val title = sequenceOf(
             document.selectFirst("meta[property=og:title]")?.attr("content"),
             document.selectFirst("h1")?.text(),
             document.title()
-        ).mapNotNull { it?.trim() }.firstOrNull { it.length > 1 }
-            ?.substringBefore(" | ")?.trim()
-            ?: return null
+        ).mapNotNull { it?.trim() }.firstOrNull { it.length > 1 }?.substringBefore(" | ")?.trim() ?: return null
 
-        // ch.html zaten oynatıcı sayfasıdır. Sadece oynatıcı iframe'i varsa onu kullan,
-        // sayac.html / ads / banner gibi reklam iframe'lerini ATLA.
         var liveDataUrl = pageUrl
         for (iframe in document.select("iframe[src]")) {
             val iframeUrl = fixUrl(iframe.attr("src"), pageUrl) ?: continue
@@ -189,7 +151,6 @@ class PatronSaha : MainAPI() {
             Log.d("Patron", "Oynatıcı iframe seçildi: $iframeUrl")
             break
         }
-
         Log.d("Patron", "load() → data=$liveDataUrl")
         return newMovieLoadResponse(title, pageUrl, TvType.Live, liveDataUrl) {
             posterUrl = liveLogoFor(title)
@@ -198,15 +159,11 @@ class PatronSaha : MainAPI() {
     }
 
     // ---------------------------------------------------------------------
-    //  HLS OYNATILABİLİRLİK TESTİ
+    // HLS OYNATILABİLİRLİK TESTİ
     // ---------------------------------------------------------------------
     private suspend fun isPlayableHls(url: String, referer: String, origin: String): Boolean {
         val response = runCatching {
-            app.get(
-                url,
-                headers = streamHeaders + mapOf("Referer" to referer, "Origin" to origin),
-                allowRedirects = true
-            )
+            app.get(url, headers = streamHeaders + mapOf("Referer" to referer, "Origin" to origin), allowRedirects = true)
         }.getOrNull() ?: return false
         if (response.code !in 200..299) {
             Log.w("Patron", "HLS HTTP ${response.code}: $url")
@@ -221,71 +178,51 @@ class PatronSaha : MainAPI() {
     }
 
     // ---------------------------------------------------------------------
-    //  CH.HTML → baseurl → mono.m3u8
+    // CH.HTML → baseurl → mono.m3u8
     // ---------------------------------------------------------------------
     private suspend fun extractStreamFromChannelPage(body: String, pageUrl: String): String? {
         val id = runCatching {
             URI(pageUrl).query?.split("&")?.find { it.startsWith("id=") }?.substringAfter("id=")
-        }.getOrNull() ?: Regex("""[?&]id=([^&"']+)""").find(pageUrl)?.groupValues?.getOrNull(1)
-            ?: return null
-
+        }.getOrNull() ?: Regex("""[?&]id=([^&"']+)""").find(pageUrl)?.groupValues?.getOrNull(1) ?: return null
         Log.d("Patron", "extract: id=$id bodyLen=${body.length}")
         Log.d("Patron", "extract body[0..1500]: ${body.take(1500).replace("\n", " ")}")
 
-        val domainUrl = Regex("""domainUrl\s*:\s*['"]([^'"]+)['"]""")
-            .find(body)?.groupValues?.getOrNull(1)
-
-        val inlineBase = Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
-            .find(body)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
-
+        val domainUrl = Regex("""domainUrl\s*:\s*['"]([^'"]+)['"]""").find(body)?.groupValues?.getOrNull(1)
+        val inlineBase = Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""").find(body)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
         val baseUrl: String? = run {
             if (domainUrl != null) {
                 Log.d("Patron", "domainUrl bulundu: $domainUrl")
-                val r = runCatching {
-                    app.get(domainUrl, headers = pageHeaders + ("Referer" to pageUrl), allowRedirects = true).text
-                }.getOrNull()
-                val b = r?.let {
-                    Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
-                        .find(it)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
+                val r = runCatching { app.get(domainUrl, headers = pageHeaders + ("Referer" to pageUrl), allowRedirects = true).text }.getOrNull()
+                val b = r?.let { Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""").find(it)?.groupValues?.getOrNull(1)?.replace("\\/", "/") }
+                if (b != null) {
+                    Log.d("Patron", "baseurl (domainUrl): $b"); return@run b
                 }
-                if (b != null) { Log.d("Patron", "baseurl (domainUrl): $b"); return@run b }
             }
-            if (inlineBase != null) { Log.d("Patron", "baseurl (inline): $inlineBase"); return@run inlineBase }
-
+            if (inlineBase != null) {
+                Log.d("Patron", "baseurl (inline): $inlineBase"); return@run inlineBase
+            }
             val endpoints = linkedSetOf<String>()
-            Regex("""(?:fetch|\$\.get|\$\.ajax|axios\.get)\s*\(\s*['"]([^'"]+)['"]""")
-                .findAll(body).forEach { m -> fixUrl(m.groupValues[1], pageUrl)?.let { endpoints.add(it) } }
-            Regex("""\.open\s*\(\s*['"]GET['"]\s*,\s*['"]([^'"]+)['"]""")
-                .findAll(body).forEach { m -> fixUrl(m.groupValues[1], pageUrl)?.let { endpoints.add(it) } }
-            listOf(
-                "/domain.php", "/api/domain", "/api/domain.php",
-                "/getdomain", "/getdomain.php", "/domain",
-                "/api/baseurl", "/baseurl", "/api/baseurl.php",
-                "/get-baseurl", "/config.php", "/api/config",
-                "/domain.json", "/api/domain.json", "/ch.json"
-            ).forEach { p -> fixUrl(p, mainUrl)?.let { endpoints.add(it) } }
-
+            Regex("""(?:fetch|\$\.get|\$\.ajax|axios\.get)\s*\(\s*['"]([^'"]+)['"]""").findAll(body).forEach { m -> fixUrl(m.groupValues[1], pageUrl)?.let { endpoints.add(it) } }
+            Regex("""\.open\s*\(\s*['"]GET['"]\s*,\s*['"]([^'"]+)['"]""").findAll(body).forEach { m -> fixUrl(m.groupValues[1], pageUrl)?.let { endpoints.add(it) } }
+            listOf("/domain.php", "/api/domain", "/api/domain.php", "/getdomain", "/getdomain.php", "/domain", "/api/baseurl", "/baseurl", "/api/baseurl.php", "/get-baseurl", "/config.php", "/api/config", "/domain.json", "/api/domain.json", "/ch.json").forEach { p -> fixUrl(p, mainUrl)?.let { endpoints.add(it) } }
             Log.d("Patron", "Denenen endpoint: ${endpoints.size}")
             for (ep in endpoints) {
-                val r = runCatching {
-                    app.get(ep, headers = pageHeaders + ("Referer" to pageUrl), allowRedirects = true).text
-                }.getOrNull() ?: continue
-                val b = Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
-                    .find(r)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
-                if (b != null) { Log.d("Patron", "baseurl endpoint=$ep → $b"); return@run b }
+                val r = runCatching { app.get(ep, headers = pageHeaders + ("Referer" to pageUrl), allowRedirects = true).text }.getOrNull() ?: continue
+                val b = Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""").find(r)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
+                if (b != null) {
+                    Log.d("Patron", "baseurl endpoint=$ep → $b"); return@run b
+                }
             }
             null
-        } ?: run { Log.w("Patron", "baseurl BULUNAMADI"); return null }
-
-        val resolvedBaseUrl = baseUrl ?: run {
-            Log.w("Patron", "baseurl boş")
-            return null
+        } ?: run {
+            Log.w("Patron", "baseurl BULUNAMADI"); return null
         }
+        val resolvedBaseUrl = baseUrl ?: run { Log.w("Patron", "baseurl boş"); return null }
         return "${resolvedBaseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
     // ---------------------------------------------------------------------
-    //  LİNK ÇIKARMA
+    // LİNK ÇIKARMA
     // ---------------------------------------------------------------------
     override suspend fun loadLinks(
         data: String,
@@ -301,11 +238,9 @@ class PatronSaha : MainAPI() {
             if (depth > 2 || visited.size >= 8) return
             val pageUrl = fixUrl(pageRaw) ?: return
             if (isAdUrl(pageUrl)) {
-                Log.d("Patron", "Reklam/sayaç atlandı: $pageUrl")
-                return
+                Log.d("Patron", "Reklam/sayaç atlandı: $pageUrl"); return
             }
             if (!visited.add(pageUrl)) return
-
             val response = runCatching {
                 app.get(pageUrl, headers = pageHeaders + ("Referer" to referer), allowRedirects = true)
             }.getOrNull() ?: return
@@ -314,27 +249,27 @@ class PatronSaha : MainAPI() {
             Log.d("Patron", "Tarama: ${pageUrl.substringBefore('?')} (d=$depth)")
 
             if (Regex("(?i)(channel|player|watch|canli|live|ch\\.html)").containsMatchIn(pageUrl) ||
-                body.contains("domainUrl", ignoreCase = true) ||
-                body.contains("baseurl", ignoreCase = true)
-            ) {
+                body.contains("domainUrl", ignoreCase = true) || body.contains("baseurl", ignoreCase = true)) {
                 val streamUrl = extractStreamFromChannelPage(body, pageUrl)
                 if (streamUrl != null) {
-                    val ok = isPlayableHls(streamUrl, "$mainUrl/", mainUrl)
+                    val ok = isPlayableHls(streamUrl, "$streamHost/", streamHost)
                     Log.d("Patron", "HLS testi: $ok → $streamUrl")
                     if (ok && emitted.add(streamUrl)) {
                         callback(
                             newExtractorLink(source = name, name = name, url = streamUrl, type = ExtractorLinkType.M3U8) {
-                                this.referer = "https://patronsaha1.cfd/"
+                                this.referer = "$streamHost/"
                                 this.headers = mapOf(
-                                    "Origin" to "https://patronsaha1.cfd",
-                                    "Referer" to "https://patronsaha1.cfd/",
+                                    "Origin" to streamHost,
+                                    "Referer" to "$streamHost/",
                                     "User-Agent" to browserUserAgent
                                 )
                                 quality = Qualities.Unknown.value
                             }
                         )
                         found = true
-                    } else if (!ok) Log.w("Patron", "HLS oynatılamadı: $streamUrl")
+                    } else if (!ok) {
+                        Log.w("Patron", "HLS oynatılamadı: $streamUrl")
+                    }
                 }
             }
 
@@ -347,37 +282,31 @@ class PatronSaha : MainAPI() {
             }
 
             val candidates = linkedSetOf<String>()
-            document.select(
-                "iframe, video, source, [data-embed], [data-video], [data-player], [data-stream], a[href*='.m3u8'], a[href*='.mp4']"
-            ).forEach { el ->
-                val raw = sequenceOf(
-                    el.attr("src"), el.attr("data-src"), el.attr("data-url"),
-                    el.attr("data-embed"), el.attr("data-video"), el.attr("data-player"),
-                    el.attr("data-stream"), el.attr("href")
-                ).firstOrNull { it.isNotBlank() } ?: return@forEach
+            document.select("iframe, video, source, [data-embed], [data-video], [data-player], [data-stream], a[href*='.m3u8'], a[href*='.mp4']").forEach { el ->
+                val raw = sequenceOf(el.attr("src"), el.attr("data-src"), el.attr("data-url"), el.attr("data-embed"), el.attr("data-video"), el.attr("data-player"), el.attr("data-stream"), el.attr("href")).firstOrNull { it.isNotBlank() } ?: return@forEach
                 fixUrl(raw, pageUrl)?.takeIf { it != pageUrl && !isAdUrl(it) }?.let { candidates.add(it) }
             }
 
             val html = body.replace("""\/""", "/").replace("&quot;", "\"")
-            Regex("""(?i)(?:https?:)?//[^\s"'<>]+\.(?:m3u8|mp4)(?:\?[^\s"'<>]*)?""")
-                .findAll(html).forEach { m -> fixUrl(m.value, pageUrl)?.let { candidates.add(it) } }
+            Regex("""(?i)(?:https?:)?//[^\s"'<>]+\.(?:m3u8|mp4)(?:\?[^\s"'<>]*)?""").findAll(html).forEach { m ->
+                fixUrl(m.value, pageUrl)?.let { candidates.add(it) }
+            }
 
             for (cand in candidates.take(30)) {
                 val path = runCatching { URI(cand).path.orEmpty().lowercase() }.getOrDefault("")
                 val isDirect = path.endsWith(".m3u8") || path.endsWith(".mp4")
                 if (isDirect) {
                     if (path.endsWith(".m3u8")) {
-                        val ok = isPlayableHls(cand, "$mainUrl/", mainUrl)
+                        val ok = isPlayableHls(cand, "$streamHost/", streamHost)
                         if (!ok) continue
                     }
                     if (emitted.add(cand)) {
                         callback(
-                            newExtractorLink(source = name, name = name, url = cand,
-                                type = if (path.endsWith(".mp4")) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8) {
-                                this.referer = "https://patronsaha1.cfd/"
+                            newExtractorLink(source = name, name = name, url = cand, type = if (path.endsWith(".mp4")) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8) {
+                                this.referer = "$streamHost/"
                                 this.headers = mapOf(
-                                    "Origin" to "https://patronsaha1.cfd",
-                                    "Referer" to "https://patronsaha1.cfd/",
+                                    "Origin" to streamHost,
+                                    "Referer" to "$streamHost/",
                                     "User-Agent" to browserUserAgent
                                 )
                                 quality = Qualities.Unknown.value
@@ -388,7 +317,9 @@ class PatronSaha : MainAPI() {
                 } else {
                     runCatching {
                         loadExtractor(cand, pageUrl, subtitleCallback) { link ->
-                            if (emitted.add(link.url)) { callback(link); found = true }
+                            if (emitted.add(link.url)) {
+                                callback(link); found = true
+                            }
                         }
                     }
                     if (depth < 2) scanPage(cand, pageUrl, depth + 1)
@@ -396,7 +327,7 @@ class PatronSaha : MainAPI() {
             }
         }
 
-        scanPage(data, "$mainUrl/", 0)
+        scanPage(data, "$streamHost/", 0)
         if (!found) Log.w("Patron", "Bağlantı bulunamadı. Denenen sayfa=${visited.size}")
         return found
     }
