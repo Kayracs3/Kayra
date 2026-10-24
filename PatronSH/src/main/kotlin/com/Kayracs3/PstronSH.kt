@@ -92,11 +92,10 @@ class PstronSH : MainAPI() {
     // ==================== YÜKLEME ====================
     override suspend fun load(url: String): LoadResponse {
         val title = url.substringAfterLast("#").ifBlank { "Kanal" }
-        return LiveStreamLoadResponse(
+        return newLiveStreamLoadResponse(
             name = title,
             url = url,
-            apiName = this.name,
-            dataUrl = url
+            data = url
         )
     }
 
