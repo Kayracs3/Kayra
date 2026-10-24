@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:f79959302a5740ecf3fdd0f4cb42d68183bee2dc -->
+### Fix nullable anchor label in TrDiziIzle
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [f799593](https://github.com/Kayracs3/Kayra/commit/f79959302a5740ecf3fdd0f4cb42d68183bee2dc)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:b45f88c286f67eab5061685c8209d6e3b413cf5a -->
 ### Fix nullable base URL compile error in PatronSH
 
