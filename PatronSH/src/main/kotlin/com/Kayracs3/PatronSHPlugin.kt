@@ -7,6 +7,6 @@ import com.lagradost.cloudstream3.plugins.Plugin
 @CloudstreamPlugin
 class PatronSHPlugin : Plugin() {
     override fun load(context: Context) {
-        registerMainAPI(PstronSH())
+        registerMainAPI(PatronSaha())
     }
 }
