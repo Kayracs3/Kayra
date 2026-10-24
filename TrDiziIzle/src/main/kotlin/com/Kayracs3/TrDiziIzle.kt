@@ -188,21 +188,24 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun cardFor(anchor: Element): Element {
+        // Avoid scanning every descendant link for every item. The site has a large
+        // A-Z directory on most pages; repeated descendant scans can stall CloudStream
+        // while building the home page on slower Android devices.
         var node: Element? = anchor
-        repeat(6) {
+        repeat(5) {
             val element = node ?: return anchor
-            val hasImage = element.selectFirst("img, picture img, [data-poster], [style*=background-image]") != null
-            // Most archive/menu ancestors have no poster. Do not scan their entire
-            // descendant link tree just to decide whether they are a content card.
-            if (hasImage) {
-                val contentCount = element.select("a[href]").count { link ->
-                    val candidate = abs(link.attr("href"), link.baseUri().ifBlank { mainUrl })
-                    candidate != null && isItem(candidate)
-                }
-                if (contentCount in 1..2) return element
+            val marker = (element.id() + " " + element.className()).lowercase(Locale.ROOT)
+            val looksLikeCard = Regex(
+                """(^|[\\s_-])(card|item|entry|post|video|movie|film|dizi|episode|bolum|box|thumb|thumbnail)([\\s_-]|$)"""
+            ).containsMatchIn(marker)
+            val hasImage = element.selectFirst("img, picture img, [data-poster], [data-image], [style*=background-image]") != null
+            if (hasImage && (looksLikeCard || element.tagName() == "article" || element.tagName() == "li")) {
+                return element
             }
             node = element.parent()
         }
+        // The anchor itself is always the safest fallback; title and poster extractors
+        // still inspect its own metadata and nearby image elements.
         return anchor
     }
 
