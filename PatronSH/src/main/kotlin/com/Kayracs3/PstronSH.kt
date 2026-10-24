@@ -11,8 +11,8 @@ class PstronSH : MainAPI() {
     override var name = "PatronSaha"
     override var lang = "tr"
     override val hasMainPage = true
-    override val hasDownloadSupport = true
-    override val supportedTypes = setOf(TvType.NSFW)
+    override val hasDownloadSupport = false
+    override val supportedTypes = setOf(TvType.Live)
 
     private val channelsUrl = "https://patronsports2.cfd/channels.php"
     private val userAgent =
@@ -37,7 +37,7 @@ class PstronSH : MainAPI() {
     private fun parseChannelsJson(json: String): List<SearchResponse> {
         val result = mutableListOf<SearchResponse>()
         val array = runCatching { JSONArray(json) }.getOrNull()
-        val root = if (array != null) array else {
+        val root: JSONArray = if (array != null) array else {
             runCatching { JSONObject(json) }.getOrNull()?.let { obj ->
                 obj.keys().asSequence()
                     .mapNotNull { key -> runCatching { obj.getJSONArray(key) }.getOrNull() }
@@ -51,7 +51,7 @@ class PstronSH : MainAPI() {
             val logo = firstNonBlank(item, "logo", "image", "img", "icon", "resim", "poster")
             val streamUrl = firstNonBlank(item, "url", "stream", "link", "m3u8", "yayin", "adres")
             val data = streamUrl ?: "$channelsUrl#${item.optString("id", name)}"
-            result += newMovieSearchResponse(name, data, TvType.NSFW) {
+            result += newLiveSearchResponse(name, data, TvType.Live) {
                 this.posterUrl = logo
             }
         }
@@ -76,7 +76,7 @@ class PstronSH : MainAPI() {
     // ==================== YÜKLEME ====================
     override suspend fun load(url: String): LoadResponse {
         val title = url.substringAfterLast("#").ifBlank { "Kanal" }
-        return newMovieLoadResponse(title, url, TvType.NSFW, url) {
+        return newLiveLoadResponse(title, url, TvType.Live, url) {
             this.posterUrl = null
         }
     }
