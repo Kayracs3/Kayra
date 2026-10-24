@@ -1,19 +1,12 @@
 package com.Kayracs3
 
 import com.lagradost.cloudstream3.newEpisode
-
 import com.lagradost.cloudstream3.newHomePageResponse
-
 import com.lagradost.cloudstream3.utils.loadExtractor
-
 import com.lagradost.cloudstream3.utils.ExtractorLink
-
 import com.lagradost.cloudstream3.newMovieSearchResponse
-
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
-
 import com.lagradost.cloudstream3.newMovieLoadResponse
-
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Document
@@ -102,15 +95,13 @@ class Dramix : MainAPI() {
         } ?: return null
         val url = fixUrl(link.attr("href")) ?: return null
         if (!isContentUrl(url)) return null
-
         val title = titleFrom(this, link)
         if (title.length < 2 || title.lowercase() in setOf(
                 "ana sayfa", "home", "filmler", "diziler", "kategoriler", "giriş", "giris",
                 "kayıt ol", "kayit ol", "iletişim", "iletisim", "hakkımızda", "hakkimizda"
             )
         ) return null
-
-        val allText = "${title} ${url} ${text()}"
+        val allText = "$title $url ${text()}"
         val type = if (Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText)) {
             TvType.TvSeries
         } else {
@@ -156,7 +147,7 @@ class Dramix : MainAPI() {
         }
         val document = runCatching {
             app.get(url, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
-        }.getOrNull() ?: return newHomePageResponse(request.name, emptyList(), false)
+        }.getOrNull() ?: return newHomePageResponse(request.name, emptyList<SearchResponse>(), false)
         val items = parseResults(document)
         return newHomePageResponse(request.name, items, items.isNotEmpty() && page < 50)
     }
@@ -195,7 +186,11 @@ class Dramix : MainAPI() {
             }
         }
         val compact = Regex("(?i)\\bs(\\d+)\\s*e(\\d+)\\b").find(value)
-        return compact?.let { it.groupValues[1].toIntOrNull()?.let { s -> it.groupValues[2].toIntOrNull()?.let { e -> s to e } } }
+        return compact?.let {
+            it.groupValues[1].toIntOrNull()?.let { s ->
+                it.groupValues[2].toIntOrNull()?.let { e -> s to e }
+            }
+        }
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -230,10 +225,12 @@ class Dramix : MainAPI() {
 
         val pageText = document.text()
         val year = Regex("\\b(?:19|20)\\d{2}\\b").find(pageText)?.value?.toIntOrNull()
+
         val ratingText = document.selectFirst(".imdb, .rating, .score, [class*=rating], [class*=imdb]")?.text().orEmpty()
         val rating = Regex("(?<!\\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\\d)")
             .find(ratingText)?.groupValues?.getOrNull(1)?.replace(',', '.')
         val score = rating?.let { runCatching { Score.from10(it) }.getOrNull() }
+
         val tags = document.select("a[rel=tag], a[href*=genre], a[href*=tur/]")
             .map { it.text().trim() }
             .filter { it.isNotBlank() }
@@ -242,7 +239,9 @@ class Dramix : MainAPI() {
 
         val episodes = document.select("a[href]").mapNotNull { anchor ->
             val episodeUrl = fixUrl(anchor.attr("href"), pageUrl) ?: return@mapNotNull null
-            if (!sameSite(episodeUrl) || episodeUrl.trimEnd('/') == pageUrl.trimEnd('/')) return@mapNotNull null
+            if (!sameSite(episodeUrl) || episodeUrl.trimEnd('/') == pageUrl.trimEnd('/')) {
+                return@mapNotNull null
+            }
             val episodeName = sequenceOf(anchor.text().trim(), anchor.attr("title").trim())
                 .firstOrNull { it.isNotBlank() }.orEmpty()
             val descriptor = "$episodeUrl $episodeName"
@@ -260,6 +259,7 @@ class Dramix : MainAPI() {
 
         val isSeries = episodes.isNotEmpty() ||
             Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl)
+
         return if (isSeries) {
             newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
                 posterUrl = poster
@@ -313,7 +313,7 @@ class Dramix : MainAPI() {
 
         val html = document.html().replace("\\/", "/").replace("\\u002F", "/", true)
             .replace("\\u0026", "&", true)
-        val mediaPattern = Regex("(?i)(?:https?:)?//[^\\s\\\"'<>]+\\.(?:m3u8|mp4)(?:\\?[^\\s\\\"'<>]*)?")
+        val mediaPattern = Regex("(?i)(?:https?:)?//[^\\s\"'<>]+\\.(?:m3u8|mp4)(?:\\?[^\\s\"'<>]*)?")
         mediaPattern.findAll(html).forEach { match ->
             fixUrl(match.value, data)?.let { candidates.add(it) }
         }
@@ -325,7 +325,11 @@ class Dramix : MainAPI() {
                         source = name,
                         name = name,
                         url = candidate,
-                        type = if (candidate.substringBefore('?').endsWith(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                        type = if (candidate.substringBefore('?').endsWith(".m3u8", true)) {
+                            ExtractorLinkType.M3U8
+                        } else {
+                            ExtractorLinkType.VIDEO
+                        }
                     ) {
                         referer = data
                         quality = Qualities.Unknown.value
@@ -341,6 +345,7 @@ class Dramix : MainAPI() {
                 }
             }
         }
+
         return found
     }
 }
