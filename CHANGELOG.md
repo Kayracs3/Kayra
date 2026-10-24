@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:2cb96e868bc05cfffb70ae23879c0da8b1dec776 -->
+### Delete Dramix directory
+
+- Etkilenen alanlar: Dramix
+- Commit: [2cb96e8](https://github.com/Kayracs3/Kayra/commit/2cb96e868bc05cfffb70ae23879c0da8b1dec776)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:f2fc110752de231fb71a7216a939c3c98ecc2721 -->
 ### Implement blocked titles and path segments
 
