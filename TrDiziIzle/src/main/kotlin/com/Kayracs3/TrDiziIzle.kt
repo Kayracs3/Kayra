@@ -249,7 +249,7 @@ class TrDiziIzle : MainAPI() {
             } else {
                 newMovieSearchResponse(title, url, TvType.Movie) {
                     posterUrl = poster
-                    posterHeaders = this@TRDiziIzle.posterHeaders
+                    posterHeaders = this@TrDiziIzle.posterHeaders
                     score?.let { this.score = Score.from10(it) }
                 }
             }
