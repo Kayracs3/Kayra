@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:42a0e3cffbb5f9f4b61c796a8af779b9b8d67b9c -->
+### Refactor embed slug retrieval and API calls
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [42a0e3c](https://github.com/Kayracs3/Kayra/commit/42a0e3cffbb5f9f4b61c796a8af779b9b8d67b9c)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:6b9bd48f681624092ef1bc105119267ac1c6b1d7 -->
 ### Refactor embed slug extraction logic and comments
 
