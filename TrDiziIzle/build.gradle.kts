@@ -1,4 +1,4 @@
-version = 3
+version = 4
 
 cloudstream {
     description = "TRDiziIzle — dizi ve film sağlayıcısı"
