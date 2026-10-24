@@ -248,7 +248,7 @@ class PatronSaha : MainAPI() {
         val inlineBase = Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
             .find(body)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
 
-        val baseUrl: String? = run {
+        val baseUrl: String = run {
             if (domainUrl != null) {
                 Log.d("Patron", "domainUrl bulundu: $domainUrl")
                 val r = runCatching {
