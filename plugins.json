@@ -356,10 +356,10 @@
     },
     {
         "iconUrl": "https://dramix.tv/favicon.ico",
-        "fileHash": "sha256-602c5e3e42b0345b9fb53801251951aa629e1ae66646103c2195ef1a65e0cc64",
+        "fileHash": "sha256-aaed64eec796d1d47c92ca655219e000948bf83d3bf7b7ecca8cfe95e4780c77",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 23344,
+        "fileSize": 23338,
         "status": 1,
         "language": "tr",
         "authors": [
