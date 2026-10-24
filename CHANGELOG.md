@@ -2,6 +2,31 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:a5ff23fc454013894466f232094d00f597dfea2a -->
+### Add TRDiziIzle plugin module configuration
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [a5ff23f](https://github.com/Kayracs3/Kayra/commit/a5ff23fc454013894466f232094d00f597dfea2a)
+
+## 2026-10-24
+
+<!-- kayra-commit:18899ae8a81ed7af796e48807205eb27168f7116 -->
+### Add TRDiziIzle plugin registration
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [18899ae](https://github.com/Kayracs3/Kayra/commit/18899ae8a81ed7af796e48807205eb27168f7116)
+
+## 2026-10-24
+
+<!-- kayra-commit:e065c32c67972b1f3228fe771a44d8f1df8b57af -->
+### Add TRDiziIzle provider with catalog and player extraction
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [e065c32](https://github.com/Kayracs3/Kayra/commit/e065c32c67972b1f3228fe771a44d8f1df8b57af)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:f5fc13390904489c05a394c637a83710e9a9317c -->
 ### FilmKoridoru ana sayfaya film kategorileri ekle
 
