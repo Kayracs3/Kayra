@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:e935b021ad7e9fc09955dadf47dd0adc5e09622c -->
+### Change download support and supported types
+
+- Etkilenen alanlar: PatronSH
+- Commit: [e935b02](https://github.com/Kayracs3/Kayra/commit/e935b021ad7e9fc09955dadf47dd0adc5e09622c)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:b19c7135b3b8009cdf1ee4452379f5ca6402924e -->
 ### Refactor JSON parsing and improve logging
 
