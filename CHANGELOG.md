@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:1ac93ee254dc43f0757af77ff1dc956dbb7e24cf -->
+### Prioritize iframe links and cap player probing time
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [1ac93ee](https://github.com/Kayracs3/Kayra/commit/1ac93ee254dc43f0757af77ff1dc956dbb7e24cf)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:bfcb39c0030a02246d12b8833746e2fceb2831a8 -->
 ### Probe opaque TRDiziIzle player iframes and bound script requests
 
