@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:0073d72539e0398e1fde5b348d305063b11ec20c -->
+### Bound fallback card search to avoid slow page scans
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [0073d72](https://github.com/Kayracs3/Kayra/commit/0073d72539e0398e1fde5b348d305063b11ec20c)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:78cfb4d7018a336a956d3866613801164f4903bd -->
 ### Restore TRDiziIzle poster extraction without slow card scans
 
