@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:5b84591bb607117ce06d1df5e6f59dcd2d2bce12 -->
+### Enhance FilmKutusu to support TV series
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [5b84591](https://github.com/Kayracs3/Kayra/commit/5b84591bb607117ce06d1df5e6f59dcd2d2bce12)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:2cb96e868bc05cfffb70ae23879c0da8b1dec776 -->
 ### Delete Dramix directory
 
