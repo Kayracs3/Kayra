@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:0ebe4bf256aebcfbd584dd5282266dee827ee841 -->
+### Speed up TrDiziIzle startup and main page parsing
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [0ebe4bf](https://github.com/Kayracs3/Kayra/commit/0ebe4bf256aebcfbd584dd5282266dee827ee841)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:b586befc80563e8a071bb8489d045335617ae55e -->
 ### Rename PatronSaha to PstronSH and enhance features
 
