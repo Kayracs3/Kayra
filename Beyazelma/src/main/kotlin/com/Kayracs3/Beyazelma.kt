@@ -344,18 +344,47 @@ class Beyazelma : MainAPI() {
                 val channelId = Regex(""""_id"\s*:\s*"([^"]+)"""").find(detailsText)?.groupValues?.get(1)
                 Log.d("Beyazelma", "channelId: $channelId")
 
-                // 2) Olası embed slug'ları (siteSlug, channelId ve doğrudan "tr-" ile başlayanlar)
-                val embedSlugs = listOfNotNull(
-                    slug,
-                    channelId,
-                    // Sayfa içinde "tr-" ile başlayan slug'lar varsa onları da ekle
-                    Regex("""["'](tr-[a-z0-9-]+)["']""").findAll(body).map { it.groupValues[1] }.firstOrNull()
-                ).distinct()
+                // 2) api/embed üzerinden HTML'i al ve gizli slug'ı çıkar
+                var embedSlug: String? = null
+                val apiEmbedUrl = "$mainUrl/api/embed"
+                val embedResp = runCatching {
+                    app.get(apiEmbedUrl, headers = pageHeaders + mapOf(
+                        "Referer" to pageUrl,
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    )).text
+                }.getOrNull()
 
-                Log.d("Beyazelma", "Denenecek embedSlug adayları: $embedSlugs")
+                if (embedResp != null) {
+                    Log.d("Beyazelma", "api/embed yanıtı: len=${embedResp.length}")
+                    Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL)
+                        .find(embedResp)?.let { m ->
+                            embedSlug = m.groupValues[1]
+                            Log.d("Beyazelma", "Embed slug bulundu (api/embed): $embedSlug")
+                        }
+                }
 
-                // 3) Her aday için /api/play/{slug} endpoint'ini dene
-                for (candidate in embedSlugs) {
+                // 3) Eğer api/embed başarısız olursa player.js içinden ara (yedek)
+                if (embedSlug == null) {
+                    val playerJsUrl = "https://embed.beyazelma78.com/player.js"
+                    val playerJs = runCatching {
+                        app.get(playerJsUrl, headers = pageHeaders + mapOf("Referer" to "https://beyazelma78.com/"), allowRedirects = true).text
+                    }.getOrNull()
+                    
+                    if (playerJs != null) {
+                        Log.d("Beyazelma", "player.js indirildi, boyut: ${playerJs.length}")
+                        Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL)
+                            .find(playerJs)?.let { m ->
+                                embedSlug = m.groupValues[1]
+                                Log.d("Beyazelma", "Embed slug player.js'den bulundu: $embedSlug")
+                            }
+                    }
+                }
+
+                // 4) Bulunan embedSlug veya channelId ile /api/play çağır
+                val slugsToTry = listOfNotNull(embedSlug, slug, channelId).distinct()
+                Log.d("Beyazelma", "Denenecek API slug'ları: $slugsToTry")
+
+                for (candidate in slugsToTry) {
                     val apiPlayUrl = "https://embed.beyazelma78.com/api/play/$candidate"
                     Log.d("Beyazelma", "API Play URL: $apiPlayUrl")
                     val apiResp = runCatching {
@@ -369,6 +398,8 @@ class Beyazelma : MainAPI() {
                         Log.d("Beyazelma", "API yanıtı: ${apiResp.take(500)}")
                         try {
                             val json = JSONObject(apiResp)
+                            if (json.has("error")) continue
+                            
                             val primary = json.optString("primary", "")
                             if (primary.isNotBlank()) {
                                 Log.d("Beyazelma", "Primary akış bulundu: $primary")
