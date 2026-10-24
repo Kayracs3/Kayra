@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:18a39f8d89157f4fbbfbfaddc7d10144a7047290 -->
+### Exclude adult-content provider from CloudStream build
+
+- Etkilenen alanlar: settings.gradle.kts
+- Commit: [18a39f8](https://github.com/Kayracs3/Kayra/commit/18a39f8d89157f4fbbfbfaddc7d10144a7047290)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:1f5d6f1a68e1b9dcf3fe6cb7ec548f98bc5b4410 -->
 ### Correct TRDiziIzle card class matching
 
