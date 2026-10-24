@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:daa14c76b2c522053a7e36c3facdbe3991f056ec -->
+### Refactor cookie retrieval in PstronSH.kt
+
+- Etkilenen alanlar: PatronSH
+- Commit: [daa14c7](https://github.com/Kayracs3/Kayra/commit/daa14c76b2c522053a7e36c3facdbe3991f056ec)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:24f2b29a5c888bb03ad9d18c5654d3a6112e8a5a -->
 ### Refactor HLS functions to handle cookies
 
