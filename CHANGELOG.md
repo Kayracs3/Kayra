@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:d584007cbf851484e200a68a83bd371f8e6e0b86 -->
+### Refactor Dramix.kt for improved readability and structure
+
+- Etkilenen alanlar: Dramix
+- Commit: [d584007](https://github.com/Kayracs3/Kayra/commit/d584007cbf851484e200a68a83bd371f8e6e0b86)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:b2c4d2f32e6964f3ec4bc02af684eb2feed2a315 -->
 ### Update mainUrl to point to Turkish version
 
