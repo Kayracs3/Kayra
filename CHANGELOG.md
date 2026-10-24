@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:f9fe7bf6a644eea3b40cbc834b1aa40b70f3f98a -->
+### Refactor LiveSearchResponse and LiveStreamLoadResponse
+
+- Etkilenen alanlar: PatronSH
+- Commit: [f9fe7bf](https://github.com/Kayracs3/Kayra/commit/f9fe7bf6a644eea3b40cbc834b1aa40b70f3f98a)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:e935b021ad7e9fc09955dadf47dd0adc5e09622c -->
 ### Change download support and supported types
 
