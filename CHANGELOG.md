@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:3741acd8891965909cc50ace4cd4ad38d8f08a9f -->
+### Fix load method by adding missing parameters
+
+- Etkilenen alanlar: PatronSH
+- Commit: [3741acd](https://github.com/Kayracs3/Kayra/commit/3741acd8891965909cc50ace4cd4ad38d8f08a9f)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:6b03deed09f310e2ed8c5c7b39719fc60ba42952 -->
 ### Refactor parseChannelsJson and update load method
 
