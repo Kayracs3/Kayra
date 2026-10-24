@@ -29,6 +29,29 @@ class Dramix : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
+    // Navigasyon başlıkları (normalize edilmiş, küçük harf)
+    private val blockedTitles = setOf(
+        "ana sayfa", "home", "filmler", "diziler", "kategoriler", "giris", "giriş yap",
+        "kayit ol", "kayıt ol", "iletisim", "iletişim", "hakkimizda", "hakkımızda",
+        "kesfet", "keşfet", "katalogu tamamla", "kataloğu tamamla",
+        "trendler", "trend", "benim listem", "benimlistem", "listem",
+        "tedarikciler", "tedarikçiler", "suppliers", "providers",
+        "tr", "en", "de", "fr", "es", "ru",
+        "dramix", "dramix tv", "dramix.tv",
+        "search", "ara", "arama", "profil", "profile", "hesabim", "hesabım",
+        "giris yap", "giriş", "uyelik", "üyelik", "uygulama", "app"
+    )
+
+    // Navigasyon yolları (URL path segmentleri, küçük harf)
+    private val blockedPathSegments = setOf(
+        "kesfet", "keşfet", "katalog", "katalogu-tamamla", "kataloğu-tamamla",
+        "trendler", "trend", "benim-listem", "benimlistem", "listem",
+        "tedarikciler", "tedarikci", "tedarikçi", "suppliers", "providers",
+        "search", "ara", "arama", "login", "register", "giris", "giriş",
+        "kayit", "kayıt", "profil", "profile", "hesabim", "hesabım",
+        "tr", "en", "de", "fr", "es", "ru"
+    )
+
     private fun fixUrl(raw: String?, base: String = mainUrl): String? {
         val value = raw?.trim()?.replace("\\/", "/")?.replace("&amp;", "&")?.trim('"', '\'')
             ?: return null
@@ -54,8 +77,30 @@ class Dramix : MainAPI() {
         if (!sameSite(url)) return false
         val path = runCatching { URI(url).path.orEmpty() }.getOrDefault("")
         if (path.isBlank() || path == "/") return false
+
+        // Yolun ilk segmenti blocklist'teyse reddet
+        val segments = path.trim('/').split('/').filter { it.isNotBlank() }
+        val firstSegment = segments.firstOrNull()?.lowercase().orEmpty()
+        if (firstSegment in blockedPathSegments) return false
+        // /tr, /en gibi dil kodları
+        if (firstSegment.length == 2 && firstSegment in blockedPathSegments) return false
+
         if (Regex("(?i)^/(?:wp-admin|wp-login|login|logout|register|privacy|privacy-policy|terms|contact|about|search|arama|category|kategori|tag|etiket|genre|tur)(?:/|$)").containsMatchIn(path)) return false
         return true
+    }
+
+    /** Element'in nav/header/footer/menu içinde olup olmadığını kontrol eder. */
+    private fun Element.isInsideNav(): Boolean {
+        var parent = parent()
+        while (parent != null) {
+            val tag = parent.tagName().lowercase()
+            if (tag == "nav" || tag == "header" || tag == "footer" || tag == "aside") return true
+            val classes = parent.className().lowercase()
+            val id = parent.id().lowercase()
+            if (Regex("\\b(nav|navbar|navigation|menu|topbar|top-bar|header|footer|sidebar|side-bar|breadcrumb|drawer|offcanvas|off-canvas)\\b").containsMatchIn("$classes $id")) return true
+            parent = parent.parent()
+        }
+        return false
     }
 
     private fun posterFrom(element: Element, link: Element): String? {
@@ -93,14 +138,26 @@ class Dramix : MainAPI() {
                 resolved != null && isContentUrl(resolved)
             }
         } ?: return null
+
+        // Nav/header/footer içindeyse atla
+        if (this.isInsideNav() || link.isInsideNav()) return null
+
         val url = fixUrl(link.attr("href")) ?: return null
         if (!isContentUrl(url)) return null
+
         val title = titleFrom(this, link)
-        if (title.length < 2 || title.lowercase() in setOf(
-                "ana sayfa", "home", "filmler", "diziler", "kategoriler", "giriş", "giris",
-                "kayıt ol", "kayit ol", "iletişim", "iletisim", "hakkımızda", "hakkimizda"
-            )
-        ) return null
+        val normalizedTitle = title.lowercase().trim()
+
+        // Çok kısa başlık / dil kodu
+        if (normalizedTitle.length < 2) return null
+        if (normalizedTitle in blockedTitles) return null
+
+        // Türkçe karakter normalizasyonu ile de kontrol
+        val normTr = normalizedTitle
+            .replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u')
+            .replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+        if (normTr in blockedTitles) return null
+
         val allText = "$title $url ${text()}"
         val type = if (Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText)) {
             TvType.TvSeries
