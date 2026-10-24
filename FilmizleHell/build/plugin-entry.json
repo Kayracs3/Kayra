@@ -1,0 +1,20 @@
+{
+    "iconUrl": "https://filmizlehell.net/favicon.ico",
+    "fileHash": "sha256-38e8de8278fa3e8da960de064a0d9641ae17680809531903ff77a75b1a87deaf",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 94655,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "Movie"
+    ],
+    "version": 5,
+    "internalName": "FilmizleHell",
+    "description": "FilmizleHell film ar\u015fivi; arama, afi\u015f, IMDb, oyuncu bilgileri ve video kaynaklar\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/FilmizleHell.cs3",
+    "name": "FilmizleHell"
+}

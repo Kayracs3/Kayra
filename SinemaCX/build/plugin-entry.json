@@ -1,0 +1,20 @@
+{
+    "iconUrl": "https://www.google.com/s2/favicons?domain=sinemacc.com&sz=%size%",
+    "fileHash": "sha256-3f2e6966d4d6cdd9dbd1de072bef9e7c75ae1f0f7865013c7068aa63c82971b1",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 55663,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "Movie"
+    ],
+    "version": 23,
+    "internalName": "SinemaCX",
+    "description": "Sinema CC - T\u00fcrk\u00e7e dublaj ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinemaCX.cs3",
+    "name": "SinemaCX"
+}

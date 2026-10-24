@@ -1,0 +1,20 @@
+{
+    "iconUrl": "https://hdfilmcehennemi.nl/favicon.ico",
+    "fileHash": "sha256-1a74d02a175f95ff7d003ac975bc953880bcbea72b656a5bbc523722680a065a",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 74007,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "HDFilmCehennemi",
+    "description": "T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/HDFilmCehennemi.cs3",
+    "name": "HDFilmCehennemi"
+}

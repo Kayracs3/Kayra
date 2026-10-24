@@ -1,0 +1,21 @@
+{
+    "iconUrl": "https://sinezy.si/favicon.ico",
+    "fileHash": "sha256-876049f44ffe22bfaaadf4db3095b56d6f27fa89b5018047d4215ccccb9bc514",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 76508,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "Movie",
+        "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "SinezyTo",
+    "description": "Sinezy.to film ve dizi sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinezyTo.cs3",
+    "name": "SinezyTo"
+}

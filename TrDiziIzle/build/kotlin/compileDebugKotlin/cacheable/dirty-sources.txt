@@ -1,0 +1,2 @@
+/home/runner/work/Kayra/Kayra/TrDiziIzle/src/main/kotlin/com/Kayracs3/TrDiziIzlePlugin.kt
+/home/runner/work/Kayra/Kayra/TrDiziIzle/src/main/kotlin/com/Kayracs3/TrDiziIzle.kt

@@ -1,0 +1,21 @@
+{
+    "iconUrl": "https://dizipal1588.com/favicon.ico",
+    "fileHash": "sha256-9f4e99184d7f9a470e8779ee16453c9883eaa74ee37f7a376ae4540524ab19be",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 91744,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Kayracs3"
+    ],
+    "tvTypes": [
+        "TvSeries",
+        "Movie"
+    ],
+    "version": 18,
+    "internalName": "DiziPal",
+    "description": "Dizipal dizi ve film sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPal.cs3",
+    "name": "DiziPal"
+}

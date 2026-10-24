@@ -1,0 +1,20 @@
+{
+    "iconUrl": "https://www.dramadizilerim.com/favicon.ico",
+    "fileHash": "sha256-d62ac6996c677fe88c125782678907896a4911eb025dde52ee8314bc9094719b",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+    "fileSize": 32666,
+    "status": 1,
+    "language": "tr",
+    "authors": [
+        "Dramadizilerim"
+    ],
+    "tvTypes": [
+        "TvSeries"
+    ],
+    "version": 1,
+    "internalName": "Dramadizilerim",
+    "description": "DiziPal T\u00fcrkiye katalog ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
+    "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dramadizilerim.cs3",
+    "name": "Dramadizilerim"
+}
