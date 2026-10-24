@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:cba99ae89501f7646730f1c058642f74a75f1ff9 -->
+### Fix TRDiziIzle provider class label
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [cba99ae](https://github.com/Kayracs3/Kayra/commit/cba99ae89501f7646730f1c058642f74a75f1ff9)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:a5ff23fc454013894466f232094d00f597dfea2a -->
 ### Add TRDiziIzle plugin module configuration
 
