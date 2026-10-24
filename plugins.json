@@ -563,10 +563,10 @@
     },
     {
         "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg-hdTlaRfTO3bpbNN57otxLOQ1iSvgBNOGkXCnePUFZ5bWcvNQEd4LsTWcckMOTA8WMDUZjgS7cz8Qe1DHnsnMz8KsFjr8jGx7OwGwFmAuhGVhiRbiPrJwHlSj_vT2RGIlKBE7Qw1jXBw0n74mZk5ltikRlLqjH24eBTTbeow_XT9Q3uFfR1lz1esWxQk/s230/logo.png",
-        "fileHash": "sha256-86dca2cd19abbbd80f915d265d9573bff567e56a9fdaf38faeb45be7019339ea",
+        "fileHash": "sha256-8fede83ad4e4d21b40b3a10c2179ff64f522f52d6abaa7e9be557a7d09856c3b",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 29580,
+        "fileSize": 29593,
         "status": 1,
         "language": "tr",
         "authors": [
