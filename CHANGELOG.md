@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:281be358ccb4e5d48cf538cd67b3e8cfc0e336bb -->
+### Refactor link extraction and improve comments
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [281be35](https://github.com/Kayracs3/Kayra/commit/281be358ccb4e5d48cf538cd67b3e8cfc0e336bb)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:0f03ed279f3611001202c037b6205463923cc379 -->
 ### Update URLs and class names for FilmKoridoru
 
