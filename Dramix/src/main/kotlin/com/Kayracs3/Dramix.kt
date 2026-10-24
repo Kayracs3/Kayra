@@ -22,7 +22,7 @@ import java.net.URI
 import java.net.URLEncoder
 
 class Dramix : MainAPI() {
-    override var mainUrl = "https://dramix.tv"
+    override var mainUrl = "https://dramix.tv/tr"
     override var name = "Dramix"
     override var lang = "tr"
     override val hasMainPage = true
