@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:11ccb074ea2234f6cc7ad20abba43221ea306790 -->
+### Refactor URL handling and improve ad detection
+
+- Etkilenen alanlar: PatronSH
+- Commit: [11ccb07](https://github.com/Kayracs3/Kayra/commit/11ccb074ea2234f6cc7ad20abba43221ea306790)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:cba99ae89501f7646730f1c058642f74a75f1ff9 -->
 ### Fix TRDiziIzle provider class label
 
