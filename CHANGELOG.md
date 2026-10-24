@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:8eec86d8e3bb8616d9f89b60a1b56d85db92679d -->
+### Fix TrDiziIzle Kotlin compile error and cap network waits
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [8eec86d](https://github.com/Kayracs3/Kayra/commit/8eec86d8e3bb8616d9f89b60a1b56d85db92679d)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:f79959302a5740ecf3fdd0f4cb42d68183bee2dc -->
 ### Fix nullable anchor label in TrDiziIzle
 
