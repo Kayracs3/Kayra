@@ -355,6 +355,27 @@
         "name": "Dramadizilerim"
     },
     {
+        "iconUrl": "https://dramix.tv/favicon.ico",
+        "fileHash": "sha256-602c5e3e42b0345b9fb53801251951aa629e1ae66646103c2195ef1a65e0cc64",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 23344,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "Dramix",
+        "description": "Dramix otomatik sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dramix.cs3",
+        "name": "Dramix"
+    },
+    {
         "iconUrl": "https://filmizlehell.net/favicon.ico",
         "fileHash": "sha256-38e8de8278fa3e8da960de064a0d9641ae17680809531903ff77a75b1a87deaf",
         "apiVersion": 1,
