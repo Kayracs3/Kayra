@@ -690,6 +690,27 @@
         "name": "SinezyTo"
     },
     {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=trdiziizle.tv&sz=%size%",
+        "fileHash": "sha256-70999cfa81c5ea19bfc9fa570246eb7b3b07e602350af7a4fc655bae37d38dd0",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 49465,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "TrDiziIzle",
+        "description": "TRDiziIzle \u2014 dizi ve film sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/TrDiziIzle.cs3",
+        "name": "TrDiziIzle"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=webdramaturkey2.com&sz=%size%",
         "fileHash": "sha256-59f3fcf11d8aef259d57cae3078500ad165d89ae6e937a16474849c1301058cd",
         "apiVersion": 1,
