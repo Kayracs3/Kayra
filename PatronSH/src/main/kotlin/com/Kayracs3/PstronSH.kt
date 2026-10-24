@@ -64,6 +64,13 @@ class PatronSaha : MainAPI() {
 
     private fun isAdUrl(url: String): Boolean = Regex("(?i)(sayac|ads?|banner|reklam|analytics|googletagmanager|beacon|chat\\.js|/cdn-cgi/)").containsMatchIn(url)
 
+    // Çerezleri güvenli şekilde okumak için yardımcı fonksiyon
+    private suspend fun cookiesFor(url: String): String {
+        return runCatching {
+            app.cookies.getCookies(url).orEmpty()
+        }.getOrDefault("")
+    }
+
     // ---------------------------------------------------------------------
     // KANAL LİSTESİ → channels.php API
     // ---------------------------------------------------------------------
@@ -162,8 +169,14 @@ class PatronSaha : MainAPI() {
     // HLS OYNATILABİLİRLİK TESTİ
     // ---------------------------------------------------------------------
     private suspend fun isPlayableHls(url: String, referer: String, origin: String): Boolean {
+        val cookies = cookiesFor(url)
+        val headers = streamHeaders + mapOf(
+            "Referer" to referer,
+            "Origin" to origin
+        ) + if (cookies.isNotBlank()) mapOf("Cookie" to cookies) else emptyMap()
+
         val response = runCatching {
-            app.get(url, headers = streamHeaders + mapOf("Referer" to referer, "Origin" to origin), allowRedirects = true)
+            app.get(url, headers = headers, allowRedirects = true)
         }.getOrNull() ?: return false
         if (response.code !in 200..299) {
             Log.w("Patron", "HLS HTTP ${response.code}: $url")
@@ -185,7 +198,6 @@ class PatronSaha : MainAPI() {
             URI(pageUrl).query?.split("&")?.find { it.startsWith("id=") }?.substringAfter("id=")
         }.getOrNull() ?: Regex("""[?&]id=([^&"']+)""").find(pageUrl)?.groupValues?.getOrNull(1) ?: return null
         Log.d("Patron", "extract: id=$id bodyLen=${body.length}")
-        Log.d("Patron", "extract body[0..1500]: ${body.take(1500).replace("\n", " ")}")
 
         val domainUrl = Regex("""domainUrl\s*:\s*['"]([^'"]+)['"]""").find(body)?.groupValues?.getOrNull(1)
         val inlineBase = Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""").find(body)?.groupValues?.getOrNull(1)?.replace("\\/", "/")
@@ -234,6 +246,28 @@ class PatronSaha : MainAPI() {
         val emitted = linkedSetOf<String>()
         var found = false
 
+        suspend fun emit(streamUrl: String, isMp4: Boolean) {
+            if (!emitted.add(streamUrl)) return
+            val cookies = cookiesFor(streamUrl)
+            val headers = buildMap {
+                putAll(streamHeaders)
+                if (cookies.isNotBlank()) put("Cookie", cookies)
+            }
+            callback(
+                newExtractorLink(
+                    source = name,
+                    name = name,
+                    url = streamUrl,
+                    type = if (isMp4) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8
+                ) {
+                    this.referer = null
+                    this.headers = headers
+                    quality = Qualities.Unknown.value
+                }
+            )
+            found = true
+        }
+
         suspend fun scanPage(pageRaw: String, referer: String, depth: Int) {
             if (depth > 2 || visited.size >= 8) return
             val pageUrl = fixUrl(pageRaw) ?: return
@@ -254,20 +288,9 @@ class PatronSaha : MainAPI() {
                 if (streamUrl != null) {
                     val ok = isPlayableHls(streamUrl, "$streamHost/", streamHost)
                     Log.d("Patron", "HLS testi: $ok → $streamUrl")
-                    if (ok && emitted.add(streamUrl)) {
-                        callback(
-                            newExtractorLink(source = name, name = name, url = streamUrl, type = ExtractorLinkType.M3U8) {
-                                this.referer = "$streamHost/"
-                                this.headers = mapOf(
-                                    "Origin" to streamHost,
-                                    "Referer" to "$streamHost/",
-                                    "User-Agent" to browserUserAgent
-                                )
-                                quality = Qualities.Unknown.value
-                            }
-                        )
-                        found = true
-                    } else if (!ok) {
+                    if (ok) {
+                        emit(streamUrl, isMp4 = false)
+                    } else {
                         Log.w("Patron", "HLS oynatılamadı: $streamUrl")
                     }
                 }
@@ -300,20 +323,7 @@ class PatronSaha : MainAPI() {
                         val ok = isPlayableHls(cand, "$streamHost/", streamHost)
                         if (!ok) continue
                     }
-                    if (emitted.add(cand)) {
-                        callback(
-                            newExtractorLink(source = name, name = name, url = cand, type = if (path.endsWith(".mp4")) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8) {
-                                this.referer = "$streamHost/"
-                                this.headers = mapOf(
-                                    "Origin" to streamHost,
-                                    "Referer" to "$streamHost/",
-                                    "User-Agent" to browserUserAgent
-                                )
-                                quality = Qualities.Unknown.value
-                            }
-                        )
-                        found = true
-                    }
+                    emit(cand, isMp4 = path.endsWith(".mp4"))
                 } else {
                     runCatching {
                         loadExtractor(cand, pageUrl, subtitleCallback) { link ->
