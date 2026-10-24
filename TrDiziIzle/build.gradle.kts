@@ -1,5 +1,4 @@
-version = 5
-
+version = 6
 cloudstream {
     description = "TRDiziIzle — dizi ve film sağlayıcısı"
     authors = listOf("Kayracs3")
