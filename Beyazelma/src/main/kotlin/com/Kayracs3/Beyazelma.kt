@@ -339,66 +339,23 @@ class Beyazelma : MainAPI() {
                 val slug = runCatching { URI(pageUrl).path.substringAfterLast("/") }.getOrNull() ?: ""
                 Log.d("Beyazelma", "Slug=$slug")
 
-                // 1) Detay API'sinden _id al
-                val detailsText = runCatching { app.get("$mainUrl/api/channels/$slug", headers = pageHeaders).text }.getOrNull() ?: ""
-                val channelId = Regex(""""_id"\s*:\s*"([^"]+)"""").find(detailsText)?.groupValues?.get(1)
-                Log.d("Beyazelma", "channelId: $channelId")
+                // 1) player.js dosyasını indir ve StreamPlayer.mount içindeki embed slug'ını al
+                val playerJsUrl = "https://embed.beyazelma78.com/player.js"
+                val playerJs = runCatching {
+                    app.get(playerJsUrl, headers = pageHeaders + mapOf("Referer" to "https://embed.beyazelma78.com/"), allowRedirects = true).text
+                }.getOrNull()
 
                 var embedSlug: String? = null
-                var primaryUrl: String? = null
-                var fallbacks: List<String> = emptyList()
-
-                // 2) Tüm olası API endpoint'lerini dene
-                val ids = listOfNotNull(slug, channelId)
-                val hosts = listOf("https://beyazelma78.com", "https://embed.beyazelma78.com")
-                val paths = listOf("/api/play/", "/api/stream/", "/api/embed/", "/api/channels/", "/api/play?id=", "/api/stream?id=", "/api/embed?id=")
-
-                for (host in hosts) {
-                    for (id in ids) {
-                        for (path in paths) {
-                            val url = if (path.endsWith("=")) "$host$path$id" else "$host$path$id"
-                            val apiResp = runCatching {
-                                app.get(url, headers = pageHeaders + mapOf(
-                                    "Referer" to "https://embed.beyazelma78.com/",
-                                    "Origin" to "https://embed.beyazelma78.com"
-                                )).text
-                            }.getOrNull() ?: continue
-
-                            // Eğer yanıt HTML ise ve StreamPlayer.mount içeriyorsa slug'ı al
-                            if (apiResp.contains("StreamPlayer.mount")) {
-                                Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL).find(apiResp)?.let {
-                                    embedSlug = it.groupValues[1]
-                                    Log.d("Beyazelma", "Embed slug bulundu ($url): $embedSlug")
-                                }
-                            }
-
-                            // Eğer yanıt JSON ise
-                            if (apiResp.trim().startsWith("{")) {
-                                try {
-                                    val json = JSONObject(apiResp)
-                                    val p = json.optString("primary", "")
-                                    if (p.isNotBlank()) {
-                                        primaryUrl = p
-                                        Log.d("Beyazelma", "Primary akış bulundu ($url): $p")
-                                    }
-                                    val f = json.optJSONArray("fallbacks")
-                                    if (f != null) {
-                                        for (i in 0 until f.length()) {
-                                            val fb = f.optString(i, "")
-                                            if (fb.isNotBlank()) fallbacks += fb
-                                        }
-                                    }
-                                } catch (_: Exception) {}
-                            }
+                if (playerJs != null) {
+                    Log.d("Beyazelma", "player.js indirildi, boyut: ${playerJs.length}")
+                    Regex("""StreamPlayer\.mount\s*\(\s*['"][^'"]+['"]\s*,\s*\{.*?"slug"\s*:\s*"([^"]+)"""", RegexOption.DOT_MATCHES_ALL)
+                        .find(playerJs)?.let { m ->
+                            embedSlug = m.groupValues[1]
+                            Log.d("Beyazelma", "Embed slug player.js'den bulundu: $embedSlug")
                         }
-                    }
                 }
 
-                // 3) Eğer doğrudan primary URL bulunduysa ekle
-                primaryUrl?.let { candidates.add(it) }
-                fallbacks.forEach { candidates.add(it) }
-
-                // 4) Eğer embedSlug bulunduysa, api/play/{embedSlug} çağır
+                // 2) player.js'deki fetchPlay mantığını taklit et: /api/play/{embedSlug}
                 if (embedSlug != null) {
                     val apiPlayUrl = "https://embed.beyazelma78.com/api/play/$embedSlug"
                     Log.d("Beyazelma", "API Play URL: $apiPlayUrl")
@@ -413,18 +370,18 @@ class Beyazelma : MainAPI() {
                         Log.d("Beyazelma", "API yanıtı: ${apiResp.take(500)}")
                         try {
                             val json = JSONObject(apiResp)
-                            val p = json.optString("primary", "")
-                            if (p.isNotBlank()) {
-                                Log.d("Beyazelma", "Embed'den Primary akış bulundu: $p")
-                                candidates.add(p)
+                            val primary = json.optString("primary", "")
+                            if (primary.isNotBlank()) {
+                                Log.d("Beyazelma", "Primary akış bulundu: $primary")
+                                candidates.add(primary)
                             }
-                            val f = json.optJSONArray("fallbacks")
-                            if (f != null) {
-                                for (i in 0 until f.length()) {
-                                    val fb = f.optString(i, "")
-                                    if (fb.isNotBlank()) {
-                                        Log.d("Beyazelma", "Embed'den Fallback akış bulundu: $fb")
-                                        candidates.add(fb)
+                            val fallbacks = json.optJSONArray("fallbacks")
+                            if (fallbacks != null) {
+                                for (i in 0 until fallbacks.length()) {
+                                    val fallback = fallbacks.optString(i, "")
+                                    if (fallback.isNotBlank()) {
+                                        Log.d("Beyazelma", "Fallback akış bulundu: $fallback")
+                                        candidates.add(fallback)
                                     }
                                 }
                             }
