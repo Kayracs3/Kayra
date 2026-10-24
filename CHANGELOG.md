@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:1f5d6f1a68e1b9dcf3fe6cb7ec548f98bc5b4410 -->
+### Correct TRDiziIzle card class matching
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [1f5d6f1](https://github.com/Kayracs3/Kayra/commit/1f5d6f1a68e1b9dcf3fe6cb7ec548f98bc5b4410)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:81bf6000531a082cfb6011b65e7d47a3922cc9b4 -->
 ### Bump TRDiziIzle plugin version for CloudStream update
 
