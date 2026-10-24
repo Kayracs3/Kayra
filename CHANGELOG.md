@@ -2,6 +2,31 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:13f41ed08c26d8b73ff07a6c392bd9c2b06676b4 -->
+### Bump PatronSH version after build and search fixes
+
+- Etkilenen alanlar: PatronSH
+- Commit: [13f41ed](https://github.com/Kayracs3/Kayra/commit/13f41ed08c26d8b73ff07a6c392bd9c2b06676b4)
+
+## 2026-10-24
+
+<!-- kayra-commit:4270f84284f02d2ee10a659ae8d9b758e0c929e1 -->
+### Include PatronSH in repository plugin builds
+
+- Etkilenen alanlar: settings.gradle.kts
+- Commit: [4270f84](https://github.com/Kayracs3/Kayra/commit/4270f84284f02d2ee10a659ae8d9b758e0c929e1)
+
+## 2026-10-24
+
+<!-- kayra-commit:c2b6b6d4647a28720764041fcf234262277fbc02 -->
+### Fix PatronSH channel search compilation
+
+- Etkilenen alanlar: PatronSH
+- Commit: [c2b6b6d](https://github.com/Kayracs3/Kayra/commit/c2b6b6d4647a28720764041fcf234262277fbc02)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:03acb80909f15b75a9ba4d84d964ad052d923240 -->
 ### Exclude PatronSH from repository-wide build
 
