@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-25
+
+<!-- kayra-commit:2d3751aed52216db2bce1013cff0cff62b1277d1 -->
+### Add cookie reading helper and update HLS check
+
+- Etkilenen alanlar: PatronSH
+- Commit: [2d3751a](https://github.com/Kayracs3/Kayra/commit/2d3751aed52216db2bce1013cff0cff62b1277d1)
+
+
 ## 2026-10-24
 
 <!-- kayra-commit:6beaccc4fa97840d75697dc7365946bedc6ea617 -->
