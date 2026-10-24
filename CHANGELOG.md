@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:a793f58bd262c997fd80ad2fee468a9156fecd45 -->
+### Update settings.gradle.kts
+
+- Etkilenen alanlar: settings.gradle.kts
+- Commit: [a793f58](https://github.com/Kayracs3/Kayra/commit/a793f58bd262c997fd80ad2fee468a9156fecd45)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:1ac93ee254dc43f0757af77ff1dc956dbb7e24cf -->
 ### Prioritize iframe links and cap player probing time
 
