@@ -2,6 +2,23 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:857c750c612053c42d92b59f3876e1054303c287 -->
+### Register the correct PatronSH API class
+
+- Etkilenen alanlar: PatronSH
+- Commit: [857c750](https://github.com/Kayracs3/Kayra/commit/857c750c612053c42d92b59f3876e1054303c287)
+
+## 2026-10-24
+
+<!-- kayra-commit:adb0c1c02f450e6dcfeee55f8531ef606d69069d -->
+### Fix PatronSH main page and search compilation
+
+- Etkilenen alanlar: PatronSH
+- Commit: [adb0c1c](https://github.com/Kayracs3/Kayra/commit/adb0c1c02f450e6dcfeee55f8531ef606d69069d)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:f9937083fd4d0738f9d17aa79bce2f1cdc8f5151 -->
 ### Update PstronSH.kt
 
