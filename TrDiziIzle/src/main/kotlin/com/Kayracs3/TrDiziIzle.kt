@@ -210,8 +210,10 @@ class TrDiziIzle : MainAPI() {
 
                 // A compact, unmarked wrapper is also likely to be the poster card.
                 // Inspect it only once; large menus/lists are rejected immediately.
-                val descendantLinks = element.select("a[href]").size
-                if (descendantLinks in 1..4) return element
+                if (element.childrenSize() <= 8) {
+                    val descendantLinks = element.select("a[href]").size
+                    if (descendantLinks in 1..4) return element
+                }
                 return anchor
             }
             node = element.parent()
