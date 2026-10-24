@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:f671638c42d293bca089a27470122e7acee46b20 -->
+### Delete Beyazelma directory
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [f671638](https://github.com/Kayracs3/Kayra/commit/f671638c42d293bca089a27470122e7acee46b20)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:91fe813c559822a6813abbec97b4d05992344c9a -->
 ### Enhance embed slug extraction and fallback mechanism
 
