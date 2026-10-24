@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:2f8a274a016fafed68cdb6ab21bc157bc6e3157c -->
+### Refactor embed URL handling and play link fetching
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [2f8a274](https://github.com/Kayracs3/Kayra/commit/2f8a274a016fafed68cdb6ab21bc157bc6e3157c)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:d16429627ca41ad7da5666ecd97666f16f771283 -->
 ### Refactor embed slug retrieval from player.js to embed URLs
 
