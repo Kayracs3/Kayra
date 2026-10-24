@@ -1,0 +1,2 @@
+/home/runner/work/Kayra/Kayra/PatronSH/src/main/kotlin/com/Kayracs3/PstronSH.kt
+/home/runner/work/Kayra/Kayra/PatronSH/src/main/kotlin/com/Kayracs3/PatronSHPlugin.kt
