@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:b45f88c286f67eab5061685c8209d6e3b413cf5a -->
+### Fix nullable base URL compile error in PatronSH
+
+- Etkilenen alanlar: PatronSH
+- Commit: [b45f88c](https://github.com/Kayracs3/Kayra/commit/b45f88c286f67eab5061685c8209d6e3b413cf5a)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:a0e35ee3df9d995961db67c10277a8bf7005a6e2 -->
 ### Fix TRDiziIzle trailer classification and episode parsing
 
