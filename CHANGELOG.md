@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:0f03ed279f3611001202c037b6205463923cc379 -->
+### Update URLs and class names for FilmKoridoru
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [0f03ed2](https://github.com/Kayracs3/Kayra/commit/0f03ed279f3611001202c037b6205463923cc379)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:5b84591bb607117ce06d1df5e6f59dcd2d2bce12 -->
 ### Enhance FilmKutusu to support TV series
 
