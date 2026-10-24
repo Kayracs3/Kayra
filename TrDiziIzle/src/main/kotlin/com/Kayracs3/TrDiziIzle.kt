@@ -228,13 +228,18 @@ class TrDiziIzle : MainAPI() {
             "data-poster-url", "data-poster-src", "data-poster", "data-cover",
             "data-image-url", "data-image-src", "data-image", "data-original-url",
             "data-original-src", "data-original", "data-lazy-srcset", "data-lazy-src",
-            "data-lazyload", "data-fallback-src", "data-src-url", "data-echo",
+            "data-fallback-src", "data-src-url", "data-echo",
             "data-srcset", "srcset", "data-thumbnail", "data-thumb", "data-bg-image",
             "data-background", "data-bg", "data-src", "src"
         )
         for (attr in imageAttributes) {
             val raw = element.attr(attr).trim()
-            if (raw.isBlank() || raw.startsWith("data:", true)) continue
+            if (raw.isBlank() || raw.startsWith("data:", true) ||
+                raw.lowercase(Locale.ROOT) in setOf(
+                    "true", "false", "yes", "no", "lazy", "loading", "loaded",
+                    "1", "0", "null", "undefined"
+                )
+            ) continue
 
             // srcset entries may contain width/density descriptors after the URL.
             val candidate = if (attr.contains("srcset")) {
