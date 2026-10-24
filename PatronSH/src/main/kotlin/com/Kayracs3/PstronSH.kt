@@ -3,7 +3,8 @@ package com.Kayracs3
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import org.jsoup.nodes.Element
+import org.json.JSONArray
+import org.json.JSONObject
 
 class PstronSH : MainAPI() {
     override var mainUrl = "https://patronsaha1.cfd"
@@ -13,88 +14,114 @@ class PstronSH : MainAPI() {
     override val hasDownloadSupport = true
     override val supportedTypes = setOf(TvType.NSFW)
 
+    private val channelsUrl = "https://patronsports2.cfd/channels.php"
+
     private val userAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 
-    // ==================== ANA SAYFA ====================
+    // ==================== ANA SAYFA (JSON endpoint) ====================
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = if (page <= 1) mainUrl else "$mainUrl/page/$page/"
-        val doc = app.get(url, headers = mapOf("User-Agent" to userAgent)).document
+        val response = app.get(
+            channelsUrl,
+            headers = mapOf(
+                "User-Agent" to userAgent,
+                "Referer" to mainUrl,
+                "Accept" to "application/json"
+            )
+        )
+        val json = response.text
+        Log.d("Patron", "channels.php yanıtı alındı, uzunluk=${json.length}")
 
-        val standard = doc
-            .select(".video, .item, article, .thumb, .post, .entry, .movie-item, .thumb-block")
-            .mapNotNull { it.toSearchResult() }
-
-        val items = if (standard.isNotEmpty()) standard else {
-            // Fallback: resim içeren tüm linkleri tara
-            val seen = mutableSetOf<String>()
-            doc.select("a[href]").mapNotNull { a ->
-                val href = a.attr("href")
-                if (href.isBlank() || href.startsWith("#") || href.startsWith("javascript")) return@mapNotNull null
-                val img = a.selectFirst("img")?.let {
-                    it.attr("data-src").ifBlank { it.attr("src") }
-                }
-                if (img.isNullOrBlank()) return@mapNotNull null
-                val title = a.attr("title").ifBlank { a.text() }.trim()
-                if (title.length < 2) return@mapNotNull null
-                if (!seen.add(href)) return@mapNotNull null
-                newMovieSearchResponse(title, fixUrl(href), TvType.NSFW) {
-                    this.posterUrl = fixUrlNull(img)
-                }
-            }
-        }
-        return newHomePageResponse("Latest", items)
+        val items = parseChannelsJson(json)
+        return newHomePageResponse("Kanallar", items)
     }
 
-    private fun Element.toSearchResult(): SearchResponse? {
-        val linkEl = selectFirst("a[href]") ?: return null
-        val href = linkEl.attr("href")
-        if (href.isBlank() || href.startsWith("#") || href.startsWith("javascript")) return null
+    /**
+     * channels.php JSON yapısını ayrıştırır.
+     * Yapıyı bilmediğim için yaygın anahtarları esnek şekilde kontrol eder.
+     * Eğer JSON'un gerçek yapısı farklıysa sadece bu fonksiyonu güncelle.
+     */
+    private fun parseChannelsJson(json: String): List<SearchResponse> {
+        val result = mutableListOf<SearchResponse>()
+        val array = runCatching { JSONArray(json) }.getOrNull()
+        val root = if (array != null) array else {
+            // JSON bir nesne ise ve içinde dizi varsa (ör. {"channels":[...]})
+            runCatching { JSONObject(json) }.getOrNull()?.let { obj ->
+                obj.keys().asSequence()
+                    .mapNotNull { key -> runCatching { obj.getJSONArray(key) }.getOrNull() }
+                    .firstOrNull()
+            }
+        } ?: return emptyList()
 
-        val title = selectFirst("h3, h2, .title, .video-title, .name")?.text()?.ifBlank { null }
-            ?: linkEl.attr("title").ifBlank { null }
-            ?: linkEl.text().ifBlank { null }
-            ?: return null
+        for (i in 0 until array.length()) {
+            val item = runCatching { array.getJSONObject(i) }.getOrNull() ?: continue
 
-        val img = selectFirst("img")?.let {
-            it.attr("data-src").ifBlank { it.attr("data-lazy-src").ifBlank { it.attr("src") } }
+            // Olası alan adları
+            val name = firstNonBlank(item,
+                "name", "title", "channel", "kanal", "adi", "ad"
+            ) ?: continue
+
+            val logo = firstNonBlank(item,
+                "logo", "image", "img", "icon", "resim", "poster"
+            )
+
+            // Kanalın hedef URL'si: stream, url, link, m3u8 vb.
+            val streamUrl = firstNonBlank(item,
+                "url", "stream", "link", "m3u8", "yayin", "adres"
+            )
+
+            // Eğer doğrudan stream URL'si yoksa, kanal adına göre bir ID oluşturup
+            // loadLinks aşamasında çözmeyi deneyeceğiz.
+            val data = streamUrl ?: "$channelsUrl#${item.optString("id", name)}"
+
+            result += newMovieSearchResponse(name, data, TvType.NSFW) {
+                this.posterUrl = logo
+            }
         }
 
-        return newMovieSearchResponse(title.trim(), fixUrl(href), TvType.NSFW) {
-            this.posterUrl = fixUrlNull(img)
+        Log.d("Patron", "JSON'dan ${result.size} kanal ayrıştırıldı")
+        return result
+    }
+
+    private fun firstNonBlank(obj: JSONObject, vararg keys: String): String? {
+        for (key in keys) {
+            val v = obj.optString(key, "").trim()
+            if (v.isNotBlank()) return v
         }
+        return null
     }
 
     // ==================== ARAMA ====================
     override suspend fun search(query: String): List<SearchResponse> {
-        val doc = app.get("$mainUrl/?s=$query", headers = mapOf("User-Agent" to userAgent)).document
-        return doc
-            .select(".video, .item, article, .thumb, .post, .entry, .movie-item, .thumb-block")
-            .mapNotNull { it.toSearchResult() }
+        val all = getMainPage(1, MainPageRequest("Kanallar", null)).items
+        return all.filter { it.name.contains(query, ignoreCase = true) }
     }
 
     // ==================== YÜKLEME ====================
     override suspend fun load(url: String): LoadResponse {
-        val doc = app.get(url, headers = mapOf("User-Agent" to userAgent)).document
-        val title = doc.selectFirst("h1, .video-title, .title")?.text()?.trim() ?: "Untitled"
-        val poster = doc.selectFirst("video")?.attr("poster")?.ifBlank { null }
-            ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
-        val description = doc.selectFirst("meta[name=description]")?.attr("content")
+        // url zaten kanalın stream adresi veya channels.php#id formatında
+        val title = url.substringAfterLast("#").ifBlank { "Kanal" }
         return newMovieLoadResponse(title, url, TvType.NSFW, url) {
-            this.posterUrl = fixUrlNull(poster)
-            this.plot = description
+            this.posterUrl = null
         }
     }
 
-    // ==================== LİNKLER ====================
+    // ==================== LİNKLER (DÜZELTİLMİŞ) ====================
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val doc = app.get(data, headers = mapOf("User-Agent" to userAgent)).document
+        // Eğer data doğrudan bir m3u8/mp4 ise, sayfa çekmeye gerek yok
+        if (data.contains(".m3u8") || data.contains(".mp4")) {
+            return emitIfPlayable(data, data, callback)
+        }
+
+        // channels.php#id formatındaysa veya sayfa URL'siyse, sayfayı çek
+        val pageUrl = data.substringBefore("#")
+        val doc = app.get(pageUrl, headers = mapOf("User-Agent" to userAgent)).document
         val html = doc.html()
 
         val candidates = mutableListOf<Pair<String, String>>()
@@ -104,23 +131,23 @@ class PstronSH : MainAPI() {
             .find(html)?.groupValues?.get(1)
         val videoId = Regex("""(?:videoId|vid|slug|video|file|id)\s*[:=]\s*["']([^"']+)["']""")
             .find(html)?.groupValues?.get(1)
-            ?: Regex("""/([^/]+)/?$""").find(data.trimEnd('/'))?.groupValues?.get(1)
+            ?: Regex("""/([^/]+)/?$""").find(pageUrl.trimEnd('/'))?.groupValues?.get(1)
 
         if (baseUrl != null && videoId != null) {
-            candidates += "$baseUrl/patron/$videoId.m3u8" to data
+            candidates += "$baseUrl/patron/$videoId.m3u8" to pageUrl
         }
 
-        // 2) HTML içindeki tüm m3u8 URL'leri
+        // 2) HTML içindeki m3u8 URL'leri
         Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""")
-            .findAll(html).forEach { candidates += it.value to data }
+            .findAll(html).forEach { candidates += it.value to pageUrl }
 
-        // 3) <video> / <source> / <iframe> etiketleri
+        // 3) <video> / <source> / <iframe>
         doc.select("video, video source, iframe[src]").forEach { el ->
             val raw = el.attr("src").ifBlank { el.attr("data-src") }
             if (raw.isNotBlank()) {
                 val full = fixUrl(raw)
                 if (full.contains(".m3u8") || full.contains(".mp4")) {
-                    candidates += full to data
+                    candidates += full to pageUrl
                 }
             }
         }
@@ -131,26 +158,36 @@ class PstronSH : MainAPI() {
 
         // 5) Her adayı test et; yalnızca gerçekten açılanı kullanıcıya göster
         for ((url, referer) in filtered) {
-            if (url.contains(".m3u8")) {
-                if (!isPlayableHls(url, referer)) {
-                    Log.w("Patron", "HLS testi basarisiz, atlaniyor: $url")
-                    continue
-                }
-                callback(newExtractorLink(name, name, url, ExtractorLinkType.M3U8) {
-                    this.referer = referer
-                    this.headers = mapOf("User-Agent" to userAgent)
-                })
-                return true
-            } else {
-                callback(newExtractorLink(name, name, url, ExtractorLinkType.VIDEO) {
-                    this.referer = referer
-                    this.headers = mapOf("User-Agent" to userAgent)
-                })
-                return true
-            }
+            if (emitIfPlayable(url, referer, callback)) return true
         }
+
         Log.w("Patron", "Gecerli kaynak bulunamadi")
         return false
+    }
+
+    private suspend fun emitIfPlayable(
+        url: String,
+        referer: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (!url.contains(".m3u8")) {
+            callback(newExtractorLink(name, name, url, ExtractorLinkType.VIDEO) {
+                this.referer = referer
+                this.headers = mapOf("User-Agent" to userAgent)
+            })
+            return true
+        }
+
+        if (!isPlayableHls(url, referer)) {
+            Log.w("Patron", "HLS testi basarisiz: $url")
+            return false
+        }
+
+        callback(newExtractorLink(name, name, url, ExtractorLinkType.M3U8) {
+            this.referer = referer
+            this.headers = mapOf("User-Agent" to userAgent)
+        })
+        return true
     }
 
     // ==================== REKLAM FİLTRESİ ====================
@@ -167,7 +204,6 @@ class PstronSH : MainAPI() {
 
     // ==================== HLS TESTİ ====================
     private suspend fun isPlayableHls(url: String, referer: String): Boolean {
-        // 3 farklı header kombinasyonu dene — 403'ü aşmak için
         val attempts = listOf(
             mapOf("User-Agent" to userAgent),
             mapOf("User-Agent" to userAgent, "Referer" to referer),
