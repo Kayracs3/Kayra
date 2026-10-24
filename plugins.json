@@ -562,26 +562,6 @@
         "name": "JetFilmizle"
     },
     {
-        "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg-hdTlaRfTO3bpbNN57otxLOQ1iSvgBNOGkXCnePUFZ5bWcvNQEd4LsTWcckMOTA8WMDUZjgS7cz8Qe1DHnsnMz8KsFjr8jGx7OwGwFmAuhGVhiRbiPrJwHlSj_vT2RGIlKBE7Qw1jXBw0n74mZk5ltikRlLqjH24eBTTbeow_XT9Q3uFfR1lz1esWxQk/s230/logo.png",
-        "fileHash": "sha256-01409942911a69abec78918eac5ea914832c537e2b97cebe7a1964b1e0d86931",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 26666,
-        "status": 1,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Live"
-        ],
-        "version": 1,
-        "internalName": "PatronSH",
-        "description": "T\u00fcrkiye canl\u0131 yay\u0131n sa\u011flay\u0131c\u0131s\u0131",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/PatronSH.cs3",
-        "name": "PatronSH"
-    },
-    {
         "iconUrl": "https://rectvapk.cc/wp-content/uploads/2023/02/Rec-TV.webp",
         "fileHash": "sha256-659ad3a4cf31c566b4f121a0db71a06cb986abda90d7bb273eb022d1ac36e668",
         "apiVersion": 1,
@@ -691,10 +671,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=trdiziizle.tv&sz=%size%",
-        "fileHash": "sha256-921eb4382ac6c5f2d95855968a07340894ce27122f23478cea9c1ebce4454d65",
+        "fileHash": "sha256-16f12660545c7b97496e59879ca1449808e9dd052d27273d88c33c1e13899b3e",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 52540,
+        "fileSize": 52384,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -704,7 +684,7 @@
             "TvSeries",
             "Movie"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "TrDiziIzle",
         "description": "TRDiziIzle \u2014 dizi ve film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/TrDiziIzle.cs3",
