@@ -75,7 +75,7 @@ class FilmKutusu : MainAPI() {
 
         if (title.length < 2) return null
 
-        // Afiş: poster-wrap içindeki img src
+        // Afiş: poster-wrap içindeki img src (doğrudan tam URL)
         val poster = selectFirst("span.poster-wrap img")?.let { img ->
             fixUrl(img.attr("src"), url)
         } ?: selectFirst("img")?.let { img ->
@@ -85,11 +85,7 @@ class FilmKutusu : MainAPI() {
         val allText = "$title $url ${text()}"
         val type = if (Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)")
                 .containsMatchIn(allText)
-        ) {
-            TvType.TvSeries
-        } else {
-            TvType.Movie
-        }
+        ) TvType.TvSeries else TvType.Movie
 
         val year = selectFirst("small.card-info-line")?.text()?.let {
             Regex("\\b(?:19|20)\\d{2}\\b").find(it)?.value?.toIntOrNull()
@@ -115,7 +111,6 @@ class FilmKutusu : MainAPI() {
     private fun parseResults(document: Document, query: String = ""): List<SearchResponse> {
         val cards = document.select("li.movie-card, .movie-card")
             .mapNotNull { it.toSearchResult() }
-
         return cards.distinctBy { it.url }
             .filter { matchesQuery(query, it.name) }
             .take(100)
@@ -133,7 +128,6 @@ class FilmKutusu : MainAPI() {
         val document = runCatching {
             app.get(url, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
         }.getOrNull() ?: return newHomePageResponse(request.name, emptyList(), false)
-
         val items = parseResults(document)
         return newHomePageResponse(request.name, items, items.isNotEmpty() && page < 50)
     }
@@ -243,9 +237,7 @@ class FilmKutusu : MainAPI() {
     }
 
     // -----------------------------------------------------------------
-    //  LİNK ÇIKARMA
-    //  NOT: filmkoridoru.com detay sayfalarında video kaynağı yok.
-    //  Bu fonksiyon her zaman false döner.
+    //  LİNK ÇIKARMA (VOE destekli)
     // -----------------------------------------------------------------
     override suspend fun loadLinks(
         data: String,
@@ -259,7 +251,7 @@ class FilmKutusu : MainAPI() {
 
         var found = false
 
-        // Altyazılar (varsa)
+        // 1. Altyazılar
         for (track in document.select("track[src], track[data-src]")) {
             val raw = track.attr("src").ifBlank { track.attr("data-src") }
             val subtitleUrl = fixUrl(raw, data) ?: continue
@@ -269,45 +261,63 @@ class FilmKutusu : MainAPI() {
             }
         }
 
-        // Video kaynağı adayları (bu sitede yok, yine de kontrol edilir)
+        // 2. Aday URL'leri topla
         val candidates = linkedSetOf<String>()
+
+        // 2a. iframe / video etiketleri
         for (element in document.select(
-            "iframe[src], iframe[data-src], video[src], video source[src], source[src], " +
-            "a[href*='.m3u8'], a[href*='.mp4']"
+            "iframe[src], iframe[data-src], video[src], video source[src], source[src]"
         )) {
             val raw = when {
                 element.hasAttr("src") -> element.attr("src")
                 element.hasAttr("data-src") -> element.attr("data-src")
-                else -> element.attr("href")
+                else -> continue
             }
             fixUrl(raw, data)?.let { candidates.add(it) }
         }
 
+        // 2b. HTML ve script içindeki VOE / m3u8 / mp4 URL'leri
         val html = document.html().replace("\\/", "/")
             .replace("\\u002F", "/", true)
             .replace("\\u0026", "&", true)
-        val mediaPattern = Regex("(?i)(?:https?:)?//[^\\s\"'<>]+\\.(?:m3u8|mp4)(?:\\?[^\\s\"'<>]*)?")
-        mediaPattern.findAll(html).forEach { m -> fixUrl(m.value, data)?.let { candidates.add(it) } }
 
+        Regex("""(?i)(?:https?:)?//[^\s"'<>\\]*(?:voe\.sx|voe-unblock|voeunblock)[^\s"'<>\\]*""")
+            .findAll(html).forEach { m -> fixUrl(m.value, data)?.let { candidates.add(it) } }
+
+        Regex("""(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
+            .findAll(html).forEach { m -> fixUrl(m.value, data)?.let { candidates.add(it) } }
+
+        // 3. Adayları işle
         for (candidate in candidates) {
-            if (Regex("(?i)\\.(m3u8|mp4)(\\?.*)?$").containsMatchIn(candidate)) {
+            val lower = candidate.lowercase()
+
+            if (lower.contains(".m3u8") || lower.contains(".mp4")) {
                 callback(
                     newExtractorLink(
                         source = name,
                         name = name,
                         url = candidate,
-                        type = if (candidate.substringBefore('?').endsWith(".m3u8", true)) {
-                            ExtractorLinkType.M3U8
-                        } else {
-                            ExtractorLinkType.VIDEO
-                        }
+                        type = if (lower.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                     ) {
                         this.referer = data
                         quality = Qualities.Unknown.value
                     }
                 )
                 found = true
-            } else {
+                continue
+            }
+
+            if (lower.contains("voe.sx") || lower.contains("voe-unblock") || lower.contains("voeunblock")) {
+                runCatching {
+                    loadExtractor(candidate, data, subtitleCallback) { link ->
+                        callback(link)
+                        found = true
+                    }
+                }
+                continue
+            }
+
+            if (!lower.contains("youtube.com") && !lower.contains("youtu.be")) {
                 runCatching {
                     loadExtractor(candidate, data, subtitleCallback) { link ->
                         callback(link)
