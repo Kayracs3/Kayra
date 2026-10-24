@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:a1cfe8f181f13e6cd5a0f03101480da87932112f -->
+### Refactor live search response creation and loading
+
+- Etkilenen alanlar: PatronSH
+- Commit: [a1cfe8f](https://github.com/Kayracs3/Kayra/commit/a1cfe8f181f13e6cd5a0f03101480da87932112f)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:3741acd8891965909cc50ace4cd4ad38d8f08a9f -->
 ### Fix load method by adding missing parameters
 
