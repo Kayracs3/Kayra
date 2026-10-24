@@ -718,23 +718,28 @@ class TrDiziIzle : MainAPI() {
 
             // Önce oynatıcıyla ilişkili dosyaları ara; genel JS dosyalarını sınırlı tut.
             // Böylece sayfa büyük reklam/tema dosyalarına takılıp dakikalarca beklemez.
+            val pageCandidates = playerCandidates(document, rawText, pageUrl)
             val scriptCandidates = LinkedHashSet<String>()
             val allScripts = scriptUrls(document, pageUrl)
             val playerScripts = allScripts.filter {
                 Regex("""(?i)(player|video|embed|hls|jwplayer|videojs|media|stream|source)""")
                     .containsMatchIn(it)
             }
+            val hasExplicitIframe = document.select(
+                "iframe[src],iframe[data-src],iframe[data-embed],iframe[data-player],iframe[data-iframe]"
+            ).isNotEmpty()
+            val scriptLimit = if (hasExplicitIframe) 2 else 4
             val scriptsToInspect = (playerScripts + allScripts.filterNot { it in playerScripts })
-                .distinct().take(5)
+                .distinct().take(scriptLimit)
             scriptsToInspect.forEach scriptLoop@ { scriptUrl ->
-                if (seenScripts.size >= 10 || !seenScripts.add(scriptUrl)) return@scriptLoop
+                if (seenScripts.size >= 6 || !seenScripts.add(scriptUrl)) return@scriptLoop
                 val scriptResponse = runCatching {
                     app.get(
                         scriptUrl,
                         headers = headers + ("Referer" to pageUrl),
                         referer = pageUrl,
                         allowRedirects = true,
-                        timeout = 6000
+                        timeout = 8000
                     )
                 }.getOrNull() ?: return@scriptLoop
                 if (!scriptResponse.isSuccessful || scriptResponse.text.isBlank()) return@scriptLoop
@@ -746,7 +751,7 @@ class TrDiziIzle : MainAPI() {
                 textPlayerCandidates(scriptText, scriptUrl).forEach(scriptCandidates::add)
             }
 
-            val candidates = (playerCandidates(document, rawText, pageUrl) + scriptCandidates).distinct()
+            val candidates = (pageCandidates + scriptCandidates).distinct().take(12)
             candidates.forEach candidateLoop@ { candidate ->
                 if (!seenCandidates.add(candidate)) return@candidateLoop
 
@@ -770,9 +775,9 @@ class TrDiziIzle : MainAPI() {
                     found = true
                     return@candidateLoop
                 }
-                if (seenPages.size < 6) {
+                if (seenPages.size < 4 && pages.size < 3) {
                     val nested = runCatching {
-                        app.get(candidate, headers = headers + ("Referer" to pageUrl), referer = pageUrl, allowRedirects = true, timeout = 10000)
+                        app.get(candidate, headers = headers + ("Referer" to pageUrl), referer = pageUrl, allowRedirects = true, timeout = 8000)
                     }.getOrNull()
                     if (nested != null && nested.isSuccessful && nested.text.isNotBlank()) {
                         pages.add(candidate to nested.document)
