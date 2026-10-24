@@ -51,9 +51,13 @@ class PstronSH : MainAPI() {
             val logo = firstNonBlank(item, "logo", "image", "img", "icon", "resim", "poster")
             val streamUrl = firstNonBlank(item, "url", "stream", "link", "m3u8", "yayin", "adres")
             val data = streamUrl ?: "$channelsUrl#${item.optString("id", name)}"
-            result += newLiveSearchResponse(name, data, TvType.Live) {
-                this.posterUrl = logo
-            }
+            result += LiveSearchResponse(
+                name = name,
+                url = data,
+                apiName = this.name,
+                type = TvType.Live,
+                posterUrl = logo
+            )
         }
         Log.d("Patron", "JSON'dan ${result.size} kanal ayrıştırıldı")
         return result
@@ -76,9 +80,12 @@ class PstronSH : MainAPI() {
     // ==================== YÜKLEME ====================
     override suspend fun load(url: String): LoadResponse {
         val title = url.substringAfterLast("#").ifBlank { "Kanal" }
-        return newLiveLoadResponse(title, url, TvType.Live, url) {
-            this.posterUrl = null
-        }
+        return LiveStreamLoadResponse(
+            name = title,
+            url = url,
+            apiName = this.name,
+            type = TvType.Live
+        )
     }
 
     // ==================== LİNKLER ====================
