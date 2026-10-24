@@ -14,8 +14,8 @@ import java.net.URI
 import java.net.URLEncoder
 
 class FilmKutusu : MainAPI() {
-    override var mainUrl = "https://filmkutusu.com"
-    override var name = "FilmKutusu"
+    override var mainUrl = "https://filmkoridoru.com"
+    override var name = "FilmKoridoru"
     override var lang = "tr"
     override val hasMainPage = true
     override val hasQuickSearch = true
@@ -53,14 +53,13 @@ class FilmKutusu : MainAPI() {
     }.getOrDefault(false)
 
     // -----------------------------------------------------------------
-    //  KART AYRIŞTIRMA  (li.movie-card)
+    //  KART AYRIŞTIRMA (li.movie-card)
     // -----------------------------------------------------------------
     private fun Element.toSearchResult(): SearchResponse? {
         val link = selectFirst("a[href]") ?: return null
         val url = fixUrl(link.attr("href")) ?: return null
         if (!sameSite(url)) return null
 
-        // Başlık: <strong> içindeki "izle" metnini temizle
         val rawTitle = sequenceOf(
             selectFirst("span.card-caption strong")?.text(),
             link.attr("title"),
@@ -76,22 +75,25 @@ class FilmKutusu : MainAPI() {
 
         if (title.length < 2) return null
 
-        // Afiş: doğrudan img src (poster-wrap içinde)
+        // Afiş: poster-wrap içindeki img src
         val poster = selectFirst("span.poster-wrap img")?.let { img ->
             fixUrl(img.attr("src"), url)
         } ?: selectFirst("img")?.let { img ->
             fixUrl(img.attr("src"), url)
         }
 
-        // Tür: data-title veya URL'de dizi/series geçiyorsa TvSeries
         val allText = "$title $url ${text()}"
-        val type = if (Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)").containsMatchIn(allText)) {
+        val type = if (Regex("(?i)(dizi|series|season|sezon|episode|bölüm|bolum)")
+                .containsMatchIn(allText)
+        ) {
             TvType.TvSeries
         } else {
             TvType.Movie
         }
 
-        val year = Regex("\\b(?:19|20)\\d{2}\\b").find(allText)?.value?.toIntOrNull()
+        val year = selectFirst("small.card-info-line")?.text()?.let {
+            Regex("\\b(?:19|20)\\d{2}\\b").find(it)?.value?.toIntOrNull()
+        }
 
         return newMovieSearchResponse(title, url, type) {
             posterUrl = poster
@@ -111,8 +113,7 @@ class FilmKutusu : MainAPI() {
     }
 
     private fun parseResults(document: Document, query: String = ""): List<SearchResponse> {
-        // Sadece film kartlarını al (menü/footer linklerini karıştırmaz)
-        val cards = document.select("li.movie-card, article.movie-card, .movie-card")
+        val cards = document.select("li.movie-card, .movie-card")
             .mapNotNull { it.toSearchResult() }
 
         return cards.distinctBy { it.url }
@@ -169,12 +170,11 @@ class FilmKutusu : MainAPI() {
             ?.trim()
             ?: return null
 
-        // Afiş: og:image → poster img → ilk img
         val poster = sequenceOf(
             document.selectFirst("meta[property=og:image]")?.attr("content"),
             document.selectFirst("meta[name=twitter:image]")?.attr("content")
         ).firstOrNull { !it.isNullOrBlank() }?.let { fixUrl(it, pageUrl) }
-            ?: document.selectFirst("img[class*=poster], .poster img, .movie-poster img")
+            ?: document.selectFirst("img[class*=poster], .poster-wrap img, .movie-poster img")
                 ?.let { fixUrl(it.attr("src"), pageUrl) }
             ?: document.selectFirst("img")?.let { fixUrl(it.attr("src"), pageUrl) }
 
@@ -204,9 +204,9 @@ class FilmKutusu : MainAPI() {
             val epName = sequenceOf(anchor.text().trim(), anchor.attr("title").trim())
                 .firstOrNull { it.isNotBlank() }.orEmpty()
             val descriptor = "$epUrl $epName"
-            if (!Regex("(?i)(bölüm|bolum|episode|/episodes?/|/bolum/|s\\d+\\s*e\\d+)").containsMatchIn(descriptor)) {
-                return@mapNotNull null
-            }
+            if (!Regex("(?i)(bölüm|bolum|episode|/episodes?/|/bolum/|s\\d+\\s*e\\d+)")
+                    .containsMatchIn(descriptor)
+            ) return@mapNotNull null
             val numbers = Regex("(?i)\\bs(\\d+)\\s*e(\\d+)\\b").find(descriptor)?.let {
                 it.groupValues[1].toIntOrNull()?.let { s ->
                     it.groupValues[2].toIntOrNull()?.let { e -> s to e }
@@ -244,9 +244,8 @@ class FilmKutusu : MainAPI() {
 
     // -----------------------------------------------------------------
     //  LİNK ÇIKARMA
-    //  NOT: Bu sitede film detay sayfalarında gerçek bir video
-    //  kaynağı (<video>, <iframe>, .m3u8) bulunmuyor.
-    //  Site yalnızca film bilgisi arşivi gibi çalışıyor.
+    //  NOT: filmkoridoru.com detay sayfalarında video kaynağı yok.
+    //  Bu fonksiyon her zaman false döner.
     // -----------------------------------------------------------------
     override suspend fun loadLinks(
         data: String,
@@ -270,7 +269,7 @@ class FilmKutusu : MainAPI() {
             }
         }
 
-        // Video kaynağı adayları
+        // Video kaynağı adayları (bu sitede yok, yine de kontrol edilir)
         val candidates = linkedSetOf<String>()
         for (element in document.select(
             "iframe[src], iframe[data-src], video[src], video source[src], source[src], " +
