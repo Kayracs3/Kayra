@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:03acb80909f15b75a9ba4d84d964ad052d923240 -->
+### Exclude PatronSH from repository-wide build
+
+- Etkilenen alanlar: settings.gradle.kts
+- Commit: [03acb80](https://github.com/Kayracs3/Kayra/commit/03acb80909f15b75a9ba4d84d964ad052d923240)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:a1cfe8f181f13e6cd5a0f03101480da87932112f -->
 ### Refactor live search response creation and loading
 
