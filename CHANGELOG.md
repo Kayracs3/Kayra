@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:dcec4d5d436dfe7a0f434cadef91e93403a610ec -->
+### Exclude TRDiziIzle alphabetical category index
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [dcec4d5](https://github.com/Kayracs3/Kayra/commit/dcec4d5d436dfe7a0f434cadef91e93403a610ec)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:3dc243cb9a22fefb549cf27010d32cf0acc58454 -->
 ### Refactor main page retrieval and parsing logic
 
