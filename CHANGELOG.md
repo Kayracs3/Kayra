@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:78cfb4d7018a336a956d3866613801164f4903bd -->
+### Restore TRDiziIzle poster extraction without slow card scans
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [78cfb4d](https://github.com/Kayracs3/Kayra/commit/78cfb4d7018a336a956d3866613801164f4903bd)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:18a39f8d89157f4fbbfbfaddc7d10144a7047290 -->
 ### Exclude adult-content provider from CloudStream build
 
