@@ -260,7 +260,7 @@ class TrDiziIzle : MainAPI() {
             val anchorLabel = listOf(
                 anchor.ownText(), anchor.attr("title"), anchor.attr("aria-label"),
                 anchor.selectFirst("img")?.attr("alt"), anchor.selectFirst("img")?.attr("title")
-            ).filter { it.isNotBlank() }.joinToString(" ")
+            ).filterNotNull().filter { it.isNotBlank() }.joinToString(" ")
             if (isTrailerUrl(url) || isTrailerLabel(anchorLabel)) return@forEach
             if (!isItem(url)) return@forEach
             val card = cardFor(anchor)
