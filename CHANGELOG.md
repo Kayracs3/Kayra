@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:8eb7b6d01a433e4a9c374c8140d1f5f318aa1862 -->
+### Fix nullable base URL in PatronSH stream extraction
+
+- Etkilenen alanlar: PatronSH
+- Commit: [8eb7b6d](https://github.com/Kayracs3/Kayra/commit/8eb7b6d01a433e4a9c374c8140d1f5f318aa1862)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:857c750c612053c42d92b59f3876e1054303c287 -->
 ### Register the correct PatronSH API class
 
