@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:6b9bd48f681624092ef1bc105119267ac1c6b1d7 -->
+### Refactor embed slug extraction logic and comments
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [6b9bd48](https://github.com/Kayracs3/Kayra/commit/6b9bd48f681624092ef1bc105119267ac1c6b1d7)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:e9f9b7b2fdaed7572c76e64a267389b177ba5c58 -->
 ### Implement Beyazelma class for streaming API
 
