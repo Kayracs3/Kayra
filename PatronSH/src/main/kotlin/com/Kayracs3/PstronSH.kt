@@ -277,7 +277,11 @@ class PatronSaha : MainAPI() {
             null
         } ?: run { Log.w("Patron", "baseurl BULUNAMADI"); return null }
 
-        return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
+        val resolvedBaseUrl = baseUrl ?: run {
+            Log.w("Patron", "baseurl boş")
+            return null
+        }
+        return "${resolvedBaseUrl.trimEnd('/')}/$id/mono.m3u8"
     }
 
     // ---------------------------------------------------------------------
