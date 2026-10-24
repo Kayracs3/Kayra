@@ -2,6 +2,15 @@
 
 ## 2026-10-24
 
+<!-- kayra-commit:91fe813c559822a6813abbec97b4d05992344c9a -->
+### Enhance embed slug extraction and fallback mechanism
+
+- Etkilenen alanlar: Beyazelma
+- Commit: [91fe813](https://github.com/Kayracs3/Kayra/commit/91fe813c559822a6813abbec97b4d05992344c9a)
+
+
+## 2026-10-24
+
 <!-- kayra-commit:42a0e3cffbb5f9f4b61c796a8af779b9b8d67b9c -->
 ### Refactor embed slug retrieval and API calls
 
