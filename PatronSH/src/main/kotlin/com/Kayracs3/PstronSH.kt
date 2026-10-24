@@ -34,7 +34,6 @@ class PstronSH : MainAPI() {
         return newHomePageResponse("Kanallar", parseChannelsJson(json))
     }
 
-    // DÜZELTME: Dönüş türü List<SearchResponse> olarak netleştirildi
     private fun parseChannelsJson(json: String): List<SearchResponse> {
         val result = mutableListOf<SearchResponse>()
         val array = runCatching { JSONArray(json) }.getOrNull()
@@ -48,8 +47,7 @@ class PstronSH : MainAPI() {
 
         for (i in 0 until root.length()) {
             val item = runCatching { root.getJSONObject(i) }.getOrNull() ?: continue
-            val name = firstNonBlank(item, "name", "title", "channel", "kanal", "adi", "ad")
-                ?: continue
+            val name = firstNonBlank(item, "name", "title", "channel", "kanal", "adi", "ad") ?: continue
             val logo = firstNonBlank(item, "logo", "image", "img", "icon", "resim", "poster")
             val streamUrl = firstNonBlank(item, "url", "stream", "link", "m3u8", "yayin", "adres")
             val data = streamUrl ?: "$channelsUrl#${item.optString("id", name)}"
@@ -83,10 +81,11 @@ class PstronSH : MainAPI() {
     // ==================== YÜKLEME ====================
     override suspend fun load(url: String): LoadResponse {
         val title = url.substringAfterLast("#").ifBlank { "Kanal" }
+
+        // apiName parametresi LiveStreamLoadResponse'ta YOK, kaldırıldı
         return LiveStreamLoadResponse(
             name = title,
             url = url,
-            apiName = this.name,
             type = TvType.Live
         )
     }
