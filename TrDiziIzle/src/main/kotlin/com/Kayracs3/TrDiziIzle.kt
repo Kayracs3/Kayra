@@ -418,10 +418,10 @@ class TrDiziIzle : MainAPI() {
             }
             val marker = (element.id() + " " + element.className()).lowercase(Locale.ROOT)
             val generalNavigationMarker =
-                Regex("""(^|[\\s_-])(navbar|navigation|nav-menu|menu-primary|topmenu|top-menu|quick-menu|sidebar|widget|footer|header-menu)([\\s_-]|$)""")
+                Regex("""(^|[\s_-])(navbar|navigation|nav-menu|menu-primary|topmenu|top-menu|quick-menu|sidebar|widget|footer|header-menu)([\s_-]|$)""")
             if (generalNavigationMarker.containsMatchIn(marker)) return true
             if (!insideAlphabeticalIndex &&
-                Regex("""(^|[\\s_-])(alphabet|alfabe|letter-list)([\\s_-]|$)""").containsMatchIn(marker)
+                Regex("""(^|[\s_-])(alphabet|alfabe|letter-list)([\s_-]|$)""").containsMatchIn(marker)
             ) return true
             node = element.parent()
         }
@@ -431,7 +431,7 @@ class TrDiziIzle : MainAPI() {
     private fun parseItems(
         document: Document,
         includeAlphabeticalIndex: Boolean = false
-    ): List<SearchResponse> {    private fun parseItems(document: Document): List<SearchResponse> {
+    ): List<SearchResponse> {
         // The current site puts a very large A-Z text index before its real poster cards.
         // Collect the whole page and prefer entries for which an actual poster was found.
         // An early "first 80 links" return incorrectly filled the result with posterless A-Z entries.
@@ -1476,7 +1476,7 @@ class TrDiziIzle : MainAPI() {
         val patterns = listOf(
             Regex("""(?i)(?:src|file|source|url|embed|player|hls|playlist|videoUrl|streamUrl|manifest|mediaUrl|apiUrl|endpoint|requestUrl)["']?\s*[:=]\s*["']([^"'<>]{4,1800})["']"""),
             Regex("""(?i)(?:fetch|axios\.(?:get|post)|\.open|\.get|\.post)\s*\(\s*["']([^"'<>]{4,1800})["']"""),
-            Regex("""(?i)["']((?:https?:)?//[^"'\\\s<>]{8,1800}|/(?:api|ajax|player|video|stream|source|playlist|embed|resolve|v[0-9]+)/[^"'\\\s<>]{1,1800})["']""")
+            Regex("""(?i)["']((?:https?:)?//[^"'\\s<>]{8,1800}|/(?:api|ajax|player|video|stream|source|playlist|embed|resolve|v[0-9]+)/[^"'\\s<>]{1,1800})["']""")
         )
         patterns.forEach { pattern ->
             pattern.findAll(text).forEach matchLoop@ { match ->
