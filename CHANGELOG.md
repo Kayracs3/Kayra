@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:6fcfcfad8f02ca442bb79167115a6e331d6d7ca8 -->
+### Fix missing posters on TRDiziIzle latest episodes page
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [6fcfcfa](https://github.com/Kayracs3/Kayra/commit/6fcfcfad8f02ca442bb79167115a6e331d6d7ca8)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:c7caefa1a9369159891b081042c0be8f70926e8e -->
 ### Fix TRDiziIzle episode extraction and lazy-loaded posters
 
