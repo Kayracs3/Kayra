@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:c9f0c74c30e0b199f446beed2dfcc2e59317966e -->
+### Use minimal headers on resolved Yandex storage URL
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [c9f0c74](https://github.com/Kayracs3/Kayra/commit/c9f0c74c30e0b199f446beed2dfcc2e59317966e)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:2fb894cccc8c1d553a47437d45a058e89d5fa2d7 -->
 ### Bump TrDiziIzle to v14
 
