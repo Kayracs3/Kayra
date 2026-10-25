@@ -1532,9 +1532,18 @@ class TrDiziIzle : MainAPI() {
             "Upgrade-Insecure-Requests" to "1"
         )
 
+        // Yandex's downloader endpoint requires a disposition query parameter.
+        // The website-provided URL omits it, causing HTTP 422: No parameter: disposition.
+        val downloadUrl = if (Regex("""(?i)[?&]disposition=""").containsMatchIn(url)) {
+            url
+        } else {
+            url + (if (url.contains("?")) "&" else "?") + "disposition=attachment"
+        }
+        Log.d(tag, "Yandex indirme bağlantısı disposition parametresiyle deneniyor")
+
         val response = runCatching {
             app.get(
-                url,
+                downloadUrl,
                 headers = navigationHeaders,
                 allowRedirects = false,
                 timeout = 8000
@@ -1545,7 +1554,7 @@ class TrDiziIzle : MainAPI() {
 
         val location = response.headers["Location"] ?: response.headers["location"]
         if (response.code in 300..399 && !location.isNullOrBlank()) {
-            val destination = abs(location, url) ?: return null
+            val destination = abs(location, downloadUrl) ?: return null
             val destinationHost = host(destination)
             if (destinationHost.endsWith(".storage.yandex.net") ||
                 destinationHost.endsWith(".storage.yandex.ru")
