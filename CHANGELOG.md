@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:7f37b5076c01c4d2da15af64cf1ecb4798de059b -->
+### Restore escaped URL regex in TRDiziIzle player parser
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [7f37b50](https://github.com/Kayracs3/Kayra/commit/7f37b5076c01c4d2da15af64cf1ecb4798de059b)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:2b8755ef1f9ca0c66f336d184f4868669657aefb -->
 ### Fix TRDiziIzle search parser declaration
 
