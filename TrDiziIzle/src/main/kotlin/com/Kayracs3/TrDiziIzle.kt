@@ -86,6 +86,19 @@ class TrDiziIzle : MainAPI() {
     private fun host(url: String): String =
         runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.") }.getOrDefault("")
     private fun onSite(url: String) = host(url).isNotBlank() && host(url) == host(mainUrl)
+
+    /**
+     * X publishes a multivariant HLS manifest at /pl/<token>.m3u8. It can link
+     * to a separate /pl/mp4a/... audio playlist. Keep this root manifest intact
+     * for ExoPlayer instead of splitting it into video-only variants first.
+     * Do not treat /pl/avc1/... or /pl/mp4a/... renditions as master manifests.
+     */
+    private fun isTwitterMasterPlaylist(url: String): Boolean {
+        if (host(url) !in setOf("video.twimg.com", "video-s.twimg.com")) return false
+        return Regex(
+            """(?i)^/(?:amplify_video/\\d+/pl|ext_tw_video/\\d+/pu/pl|tweet_video/\\d+/pl)/[^/]+\\.m3u8$"""
+        ).matches(path(url))
+    }
     private fun isTrailerUrl(url: String): Boolean {
         if (!onSite(url)) return false
         val route = path(url).trim('/').lowercase(Locale.ROOT)
@@ -1724,7 +1737,7 @@ class TrDiziIzle : MainAPI() {
                 // master.m3u8 and X/Twitter playlist URLs may contain separate audio groups.
                 // Passing them through M3u8Helper can split out a video-only variant and lose audio.
                 // Give the original manifest to ExoPlayer so it can resolve video and audio together.
-                val keepMasterPlaylist = mediaUrl.contains("master.m3u8", ignoreCase = true) ||
+                val keepMasterPlaylist = mediaUrl.contains("master.m3u8", ignoreCase = true) || isTwitterMasterPlaylist(mediaUrl) ||
                     isTwitterVideoCdn
                 if (keepMasterPlaylist) {
                     callback(newExtractorLink(name, "TRDiziIzle HLS", mediaUrl, ExtractorLinkType.M3U8) {
