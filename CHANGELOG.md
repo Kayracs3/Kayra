@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:029e1c765e191b410c2f4944a4e11243515736cf -->
+### Fix PatronSH extractor link type compilation
+
+- Etkilenen alanlar: PatronSH
+- Commit: [029e1c7](https://github.com/Kayracs3/Kayra/commit/029e1c765e191b410c2f4944a4e11243515736cf)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:decf00b61367bec22a316e5742df2f2814001cc2 -->
 ### Add coroutine compile API for TRDiziIzle poster fallback
 
