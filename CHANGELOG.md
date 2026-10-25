@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:11042d06437070c5f3a8b47535a4f0515352621c -->
+### Bump TrDiziIzle to v15
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [11042d0](https://github.com/Kayracs3/Kayra/commit/11042d06437070c5f3a8b47535a4f0515352621c)
+
+## 2026-10-25
+
+<!-- kayra-commit:6e5a891d54d180836f03e8b2f9fc98b8067b5a17 -->
+### Add required disposition to Yandex download request
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [6e5a891](https://github.com/Kayracs3/Kayra/commit/6e5a891d54d180836f03e8b2f9fc98b8067b5a17)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:c9f0c74c30e0b199f446beed2dfcc2e59317966e -->
 ### Use minimal headers on resolved Yandex storage URL
 
