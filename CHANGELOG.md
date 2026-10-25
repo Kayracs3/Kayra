@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:4ed49ad8bedd97b8aac45fae117c790a73b97307 -->
+### Bump TRDiziIzle search fix to version 21
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [4ed49ad](https://github.com/Kayracs3/Kayra/commit/4ed49ad8bedd97b8aac45fae117c790a73b97307)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:7f37b5076c01c4d2da15af64cf1ecb4798de059b -->
 ### Restore escaped URL regex in TRDiziIzle player parser
 
