@@ -110,6 +110,25 @@ class TrDiziIzle : MainAPI() {
 
     private fun isItem(url: String) = isSeries(url) || isMovie(url)
 
+    // The /tum-bolumler/ list links directly to episode pages, sometimes at the
+    // site root (for example: /tuzlu-kahve-7-bolum-izle-full-tek/).
+    private fun isLatestEpisodeUrl(url: String): Boolean {
+        if (!onSite(url) || isTrailerUrl(url) || !isEpisode(url)) return false
+        val routeText = path(url).trim('/').replace('-', ' ').replace('_', ' ')
+        return episodeInfo(routeText) != null
+    }
+
+    private fun episodeSeriesTitleFromUrl(url: String): String {
+        val slug = path(url).trim('/').substringAfterLast('/')
+        val stem = slug.replace(
+            Regex("""(?i)(?:[-_]\\d{1,4})?[-_](?:bolum|episode).*$"""),
+            ""
+        ).replace('-', ' ').replace('_', ' ').trim()
+        return stem.split(Regex("""\\s+"""))
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { it.replaceFirstChar { ch -> ch.titlecase(Locale.ROOT) } }
+    }
+
     private fun norm(value: String): String = value.lowercase(Locale.ROOT)
         .replace('ı', 'i').replace('ş', 's').replace('ğ', 'g')
         .replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')
@@ -362,12 +381,77 @@ class TrDiziIzle : MainAPI() {
         return (if (posterItems.isNotEmpty()) posterItems.values else fallbackItems.values).take(80)
     }
 
+    private fun latestEpisodeTitle(anchor: Element, card: Element, url: String): String? {
+        val image = anchor.selectFirst("img") ?: card.selectFirst("img")
+        val candidates = listOfNotNull(
+            anchor.selectFirst("h1,h2,h3,h4,[class*=title],[class*=name]")?.text(),
+            card.selectFirst("h2,h3,h4,[class*=title],[class*=name]")?.text(),
+            image?.attr("alt"), image?.attr("title"),
+            anchor.attr("title"), anchor.attr("aria-label"),
+            card.attr("data-title"), anchor.ownText(), anchor.text(), card.text()
+        ).map { it.trim() }.filter { it.isNotBlank() }
+
+        // Prefer the episode number from the actual URL so neighboring card text
+        // cannot accidentally assign the number of another episode.
+        val routeText = path(url).trim('/').replace('-', ' ').replace('_', ' ')
+        val info = episodeInfo(routeText)
+            ?: candidates.asSequence().mapNotNull { episodeInfo(it) }.firstOrNull()
+            ?: return null
+        val number = info.second ?: return null
+        val baseTitle = candidates.firstNotNullOfOrNull { raw ->
+            cleanTitle(raw).takeIf { validTitle(it) }
+        }?.takeIf { validTitle(it) }
+            ?: episodeSeriesTitleFromUrl(url)
+        if (!validTitle(baseTitle)) return null
+
+        return if (info.first != null && info.first > 1) {
+            baseTitle + " " + info.first + ". Sezon " + number + ". Bölüm"
+        } else {
+            baseTitle + " " + number + ". Bölüm"
+        }
+    }
+
+    private fun parseLatestEpisodes(document: Document): List<SearchResponse> {
+        // Only this container is the "latest episodes" feed. Do not scan the
+        // global page links, because the A-Z index also contains series names.
+        val container = document.selectFirst("#listehizala .listepisodes") ?: run {
+            Log.w(tag, "Son bölüm alanı bulunamadı: #listehizala .listepisodes")
+            return emptyList()
+        }
+        val items = LinkedHashMap<String, SearchResponse>()
+
+        container.select("a[href]").forEach { anchor ->
+            val listingBase = anchor.baseUri().ifBlank { mainUrl }
+            val url = abs(anchor.attr("href"), listingBase) ?: return@forEach
+            if (!onSite(url) || isTrailerUrl(url)) return@forEach
+
+            val card = cardFor(anchor)
+            val title = latestEpisodeTitle(anchor, card, url) ?: return@forEach
+            val poster = posterOf(anchor, card, listingBase)
+            val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
+            val item = newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
+                posterUrl = poster
+                posterHeaders = this@TrDiziIzle.posterHeaders
+                score?.let { this.score = Score.from10(it) }
+            }
+
+            val old = items[url]
+            if (old == null || (old.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank())) {
+                items[url] = item
+            }
+        }
+
+        Log.d(tag, "Son bölüm alanı #listehizala .listepisodes: " + items.size + " bölüm")
+        return items.values.take(80)
+    }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val isLatestEpisodesPage = path(request.data).trimEnd('/') == "/tum-bolumler"
         for (url in pageCandidates(request.data, page)) {
             val document = runCatching {
                 app.get(url, headers = headers, referer = "$mainUrl/", allowRedirects = true, timeout = 15000).document
             }.onFailure { Log.w(tag, "Ana sayfa alınamadı: " + url, it) }.getOrNull() ?: continue
-            val items = parseItems(document)
+            val items = if (isLatestEpisodesPage) parseLatestEpisodes(document) else parseItems(document)
             if (items.isNotEmpty()) {
                 Log.d(tag, "Ana sayfa " + request.name + ", sayfa " + page + ": " + items.size + " içerik")
                 return newHomePageResponse(request.name, items, page < 100)
@@ -446,7 +530,8 @@ class TrDiziIzle : MainAPI() {
 
         // A route such as /dizi/icerik-wpgovb is an internal ID, not a title.
         // Only use a slug fallback when it really contains a human-readable name.
-        return slugTitle(pageUrl).takeIf { validTitle(it) }
+        val slugFallback = if (isLatestEpisodeUrl(pageUrl)) episodeSeriesTitleFromUrl(pageUrl) else slugTitle(pageUrl)
+        return slugFallback.takeIf { validTitle(it) }
     }
 
     private fun extractActors(document: Document, text: String): List<Actor>? {
@@ -492,8 +577,8 @@ class TrDiziIzle : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         val pageUrl = abs(url, mainUrl) ?: return null
-        if (!isItem(pageUrl)) {
-            Log.w(tag, "İçerik bağlantısı beklenen film/dizi biçiminde değil: $pageUrl")
+        if (!isItem(pageUrl) && !isLatestEpisodeUrl(pageUrl)) {
+            Log.w(tag, "İçerik bağlantısı beklenen film/dizi/bölüm biçiminde değil: $pageUrl")
             return null
         }
 
@@ -687,20 +772,20 @@ class TrDiziIzle : MainAPI() {
         val hasPlayer = document.select(
             "iframe[src],iframe[data-src],iframe[data-iframe],video[src],video source[src],[data-player],[data-embed],[data-video]"
         ).isNotEmpty() || mediaRegex.containsMatchIn(decodeEmbedded(document.html()))
-        if (includeCurrentPageEpisode && hasPlayer &&
+        if (includeCurrentPageEpisode && (hasPlayer || isLatestEpisodeUrl(pageUrl)) &&
             output.keys.none { it.trimEnd('/') == pageUrl.trimEnd('/') }
         ) {
             val currentInfo = episodeInfo(
-                document.selectFirst("h1")?.text().orEmpty() + " " + document.text().take(2500)
+                document.selectFirst("h1")?.text().orEmpty() + " " +
+                    document.text().take(2500) + " " +
+                    path(pageUrl).replace('-', ' ').replace('_', ' ')
             )
             val number = currentInfo?.second
-            if (number == null || output.values.none { it.episode == number }) {
-                output[pageUrl] = newEpisode(pageUrl) {
-                    name = number?.let { "$it. Bölüm" } ?: "Son Bölüm"
-                    season = currentInfo?.first ?: 1
-                    episode = number
-                    posterUrl = seriesPoster
-                }
+            output[pageUrl] = newEpisode(pageUrl) {
+                name = number?.let { "$it. Bölüm" } ?: "Son Bölüm"
+                season = currentInfo?.first ?: 1
+                episode = number
+                posterUrl = seriesPoster
             }
         }
         return output.values.sortedWith(
