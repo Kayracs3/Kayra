@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:c7caefa1a9369159891b081042c0be8f70926e8e -->
+### Fix TRDiziIzle episode extraction and lazy-loaded posters
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [c7caefa](https://github.com/Kayracs3/Kayra/commit/c7caefa1a9369159891b081042c0be8f70926e8e)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:599e9e033c6fb751f6cd83b086fc09dbf6a84642 -->
 ### Fix TRDiziIzle episode poster ancestor matching
 
