@@ -422,36 +422,48 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun parseLatestEpisodes(document: Document): List<SearchResponse> {
-        // Only this container is the "latest episodes" feed. Do not scan the
-        // global page links, because the A-Z index also contains series names.
-        val container = document.selectFirst("#listehizala .listepisodes") ?: run {
+        // The site can render .listepisodes either as the list wrapper or as
+        // repeated episode-card elements. Process EVERY matching element rather
+        // than selectFirst(), which silently kept only the first card when the
+        // class was repeated.
+        val containers = document.select("#listehizala .listepisodes")
+        if (containers.isEmpty()) {
             Log.w(tag, "Son bölüm alanı bulunamadı: #listehizala .listepisodes")
             return emptyList()
         }
+
         val items = LinkedHashMap<String, SearchResponse>()
+        var anchorsSeen = 0
 
-        container.select("a[href]").forEach { anchor ->
-            val listingBase = anchor.baseUri().ifBlank { mainUrl }
-            val url = abs(anchor.attr("href"), listingBase) ?: return@forEach
-            if (!onSite(url) || isTrailerUrl(url)) return@forEach
+        containers.forEach { container ->
+            container.select("a[href]").forEach anchorLoop@ { anchor ->
+                anchorsSeen++
+                val listingBase = anchor.baseUri().ifBlank { mainUrl }
+                val url = abs(anchor.attr("href"), listingBase) ?: return@anchorLoop
+                if (!onSite(url) || isTrailerUrl(url)) return@anchorLoop
 
-            val card = cardFor(anchor)
-            val title = latestEpisodeTitle(anchor, card, url) ?: return@forEach
-            val poster = posterOf(anchor, card, listingBase)
-            val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
-            val item = newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
-                posterUrl = poster
-                posterHeaders = this@TrDiziIzle.posterHeaders
-                score?.let { this.score = Score.from10(it) }
-            }
+                val card = cardFor(anchor)
+                val title = latestEpisodeTitle(anchor, card, url) ?: return@anchorLoop
+                val poster = posterOf(anchor, card, listingBase)
+                val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
+                val item = newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
+                    posterUrl = poster
+                    posterHeaders = this@TrDiziIzle.posterHeaders
+                    score?.let { this.score = Score.from10(it) }
+                }
 
-            val old = items[url]
-            if (old == null || (old.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank())) {
-                items[url] = item
+                val old = items[url]
+                if (old == null || (old.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank())) {
+                    items[url] = item
+                }
             }
         }
 
-        Log.d(tag, "Son bölüm alanı #listehizala .listepisodes: " + items.size + " bölüm")
+        Log.d(
+            tag,
+            "Son bölüm alanı #listehizala .listepisodes: kapsayıcı=" +
+                containers.size + ", bağlantı=" + anchorsSeen + ", benzersiz bölüm=" + items.size
+        )
         return items.values.take(80)
     }
 
