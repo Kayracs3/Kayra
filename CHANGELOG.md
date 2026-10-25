@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:61c8d16ebdaee43a0e603a7ac63a6d9d0679cdd2 -->
+### Bump TRDiziIzle plugin version to 7
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [61c8d16](https://github.com/Kayracs3/Kayra/commit/61c8d16ebdaee43a0e603a7ac63a6d9d0679cdd2)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:344aa8c281206004df12d9e0fdc1a49ffd3ff0da -->
 ### Correct TRDiziIzle regex escaping for latest episodes
 
