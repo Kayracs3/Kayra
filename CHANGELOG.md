@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:71ed5e539a8deb0e0beb77463f0332d97ce29fed -->
+### Reject TRDiziIzle none.png poster placeholder
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [71ed5e5](https://github.com/Kayracs3/Kayra/commit/71ed5e539a8deb0e0beb77463f0332d97ce29fed)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:92edcdf471f6f3c6498251572751fa8f05766aeb -->
 ### Normalize TRDiziIzle OG posters for CloudStream
 
