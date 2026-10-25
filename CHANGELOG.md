@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:decf00b61367bec22a316e5742df2f2814001cc2 -->
+### Add coroutine compile API for TRDiziIzle poster fallback
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [decf00b](https://github.com/Kayracs3/Kayra/commit/decf00b61367bec22a316e5742df2f2814001cc2)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:6fcfcfad8f02ca442bb79167115a6e331d6d7ca8 -->
 ### Fix missing posters on TRDiziIzle latest episodes page
 
