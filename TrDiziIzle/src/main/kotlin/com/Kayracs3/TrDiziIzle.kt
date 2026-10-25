@@ -879,6 +879,74 @@ class TrDiziIzle : MainAPI() {
         }
     }
 
+    /**
+     * Search results can come from the site's text-only A-Z index, where the link
+     * points to a series but has no poster markup. Resolve posters from the detail
+     * page before returning results to CloudStream.
+     */
+    private suspend fun fillMissingSearchPosters(items: List<SearchResponse>): List<SearchResponse> {
+        if (items.isEmpty()) return items
+        val resolved = items.toMutableList()
+        val missingIndices = items.indices
+            .filter { !isUsablePosterUrl(items[it].posterUrl) }
+            .take(25)
+
+        for (batch in missingIndices.chunked(5)) {
+            val updatedItems = coroutineScope {
+                batch.map { index ->
+                    async {
+                        val item = items[index]
+                        val poster = runCatching {
+                            val response = app.get(
+                                item.url,
+                                headers = headers + ("Referer" to "$mainUrl/"),
+                                referer = "$mainUrl/",
+                                allowRedirects = true,
+                                timeout = 7000
+                            )
+                            if (response.isSuccessful) {
+                                posterFromPage(response.document, item.url)
+                                    ?.takeIf(::isUsablePosterUrl)
+                            } else {
+                                null
+                            }
+                        }.onFailure {
+                            Log.d(tag, "Arama sonucunun afişi ayrıştırılamadı: " + item.name, it)
+                        }.getOrNull()
+
+                        val replacement: SearchResponse? = if (poster.isNullOrBlank()) {
+                            null
+                        } else if (isSeries(item.url)) {
+                            newTvSeriesSearchResponse(item.name, item.url, TvType.TvSeries) {
+                                posterUrl = poster
+                                posterHeaders = this@TrDiziIzle.posterHeaders
+                            }
+                        } else if (isMovie(item.url)) {
+                            newMovieSearchResponse(item.name, item.url, TvType.Movie) {
+                                posterUrl = poster
+                                posterHeaders = this@TrDiziIzle.posterHeaders
+                            }
+                        } else {
+                            null
+                        }
+
+                        if (replacement != null) {
+                            Log.d(tag, "Arama afişi bulundu: " + item.name + " -> " + poster)
+                        } else {
+                            Log.d(tag, "Arama afişi hâlâ yok: " + item.name + " / " + item.url)
+                        }
+                        index to replacement
+                    }
+                }.awaitAll()
+            }
+
+            updatedItems.forEach { (index, item) ->
+                if (item != null) resolved[index] = item
+            }
+        }
+        return resolved
+    }
+
     override suspend fun search(query: String): List<SearchResponse> {
         val q = query.trim()
         if (q.length < 2) return emptyList()
@@ -896,7 +964,10 @@ class TrDiziIzle : MainAPI() {
                 .onFailure { Log.d(tag, "Arama isteği başarısız: $url") }.getOrNull() ?: continue
             val results = parseItems(document, includeAlphabeticalIndex = true).filter { matchesQuery(q, it) }
             Log.d(tag, "Arama " + url.substringAfter(mainUrl) + ": " + results.size + " eşleşme")
-            if (results.isNotEmpty()) return results.sortedByDescending { relevance(q, it) }.take(100)
+            if (results.isNotEmpty()) {
+                val ranked = results.sortedByDescending { relevance(q, it) }.take(100)
+                return fillMissingSearchPosters(ranked)
+            }
         }
 
         // The current site sometimes returns the ordinary A-Z page for unsupported
@@ -909,7 +980,10 @@ class TrDiziIzle : MainAPI() {
             val results = parseItems(document, includeAlphabeticalIndex = true)
                 .filter { matchesQuery(q, it) }
             Log.d(tag, "Arama yedeği " + url.substringAfter(mainUrl) + ": " + results.size + " eşleşme")
-            if (results.isNotEmpty()) return results.sortedByDescending { relevance(q, it) }.take(100)
+            if (results.isNotEmpty()) {
+                val ranked = results.sortedByDescending { relevance(q, it) }.take(100)
+                return fillMissingSearchPosters(ranked)
+            }
         }
         return emptyList()
     }
