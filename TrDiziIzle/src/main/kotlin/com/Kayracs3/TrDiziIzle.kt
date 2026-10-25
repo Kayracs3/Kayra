@@ -1577,21 +1577,15 @@ class TrDiziIzle : MainAPI() {
         }
 
         val mediaReferer = if (isYandexDownloader) "https://disk.yandex.ru/" else referer
+        // After the redirect, the storage host is a different site. Keep its request
+        // headers minimal; navigation-only Sec-Fetch headers belong to the resolver request.
         val mediaHeaders = linkedMapOf(
             "User-Agent" to USER_AGENT,
             "Referer" to mediaReferer,
-            "Accept" to if (isYandexDownloader) {
-                "video/mp4,video/*,*/*;q=0.9"
-            } else {
-                "*/*"
-            }
+            "Accept" to "*/*"
         )
         if (isYandexDownloader) {
-            mediaHeaders["Origin"] = "https://disk.yandex.ru"
-            mediaHeaders["Sec-Fetch-Dest"] = "video"
-            mediaHeaders["Sec-Fetch-Mode"] = "no-cors"
-            mediaHeaders["Sec-Fetch-Site"] = "same-site"
-            Log.d(tag, "Yandex medya bağlantısı için Disk oynatıcı başlıkları uygulanıyor")
+            Log.d(tag, "Yandex depolama bağlantısı yönlendirme sonrası oynatmaya veriliyor")
         }
         when {
             mediaUrl.contains(".m3u8", true) || mediaUrl.contains("/hls/", true) -> {
