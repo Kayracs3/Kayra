@@ -252,13 +252,11 @@ class PatronSaha : MainAPI() {
                 putAll(streamHeaders)
                 if (!cookies.isNullOrBlank()) put("Cookie", cookies)
             }
+            val linkType: ExtractorLinkType =
+                if (isMp4) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8
+
             callback(
-                newExtractorLink(
-                    source = name,
-                    name = name,
-                    url = streamUrl,
-                    type = if (isMp4) ExtractorLinkType.VIDEO else ExtractorLinkType.M3U8
-                ) {
+                newExtractorLink(name, name, streamUrl, linkType) {
                     this.referer = "$streamHost/"
                     this.headers = headers
                     quality = Qualities.Unknown.value
