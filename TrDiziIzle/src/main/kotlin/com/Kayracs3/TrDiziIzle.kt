@@ -12,6 +12,9 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -509,13 +512,55 @@ class TrDiziIzle : MainAPI() {
         return items.values.take(80)
     }
 
+    private suspend fun fillMissingLatestPosters(items: List<SearchResponse>): List<SearchResponse> =
+        coroutineScope {
+            // Only missing posters trigger requests. Keep each batch small to avoid
+            // sending dozens of simultaneous requests to the site.
+            items.chunked(5).flatMap { batch ->
+                batch.map { item ->
+                    async {
+                        if (!item.posterUrl.isNullOrBlank()) return@async item
+
+                        val poster = runCatching {
+                            app.get(
+                                item.url,
+                                headers = headers + ("Referer" to "$mainUrl/"),
+                                referer = "$mainUrl/",
+                                allowRedirects = true,
+                                timeout = 5000
+                            ).takeIf { it.isSuccessful }?.document?.let { detail ->
+                                posterFromPage(detail, item.url)
+                            }
+                        }.onFailure {
+                            Log.d(tag, "Son bölüm afişi alınamadı: " + item.url, it)
+                        }.getOrNull()
+
+                        if (poster.isNullOrBlank()) {
+                            item
+                        } else {
+                            Log.d(tag, "Son bölüm afişi tamamlandı: " + item.name + " -> " + poster)
+                            newTvSeriesSearchResponse(item.name, item.url, TvType.TvSeries) {
+                                posterUrl = poster
+                                posterHeaders = this@TrDiziIzle.posterHeaders
+                            }
+                        }
+                    }
+                }.awaitAll()
+            }
+        }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val isLatestEpisodesPage = path(request.data).trimEnd('/') == "/tum-bolumler"
         for (url in pageCandidates(request.data, page)) {
             val document = runCatching {
                 app.get(url, headers = headers, referer = "$mainUrl/", allowRedirects = true, timeout = 15000).document
             }.onFailure { Log.w(tag, "Ana sayfa alınamadı: " + url, it) }.getOrNull() ?: continue
-            val items = if (isLatestEpisodesPage) parseLatestEpisodes(document) else parseItems(document)
+            val parsedItems = if (isLatestEpisodesPage) parseLatestEpisodes(document) else parseItems(document)
+            val items = if (isLatestEpisodesPage && parsedItems.isNotEmpty()) {
+                fillMissingLatestPosters(parsedItems)
+            } else {
+                parsedItems
+            }
             if (items.isNotEmpty()) {
                 Log.d(tag, "Ana sayfa " + request.name + ", sayfa " + page + ": " + items.size + " içerik")
                 return newHomePageResponse(request.name, items, page < 100)
@@ -631,11 +676,19 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun posterFromPage(document: Document, base: String): String? {
-        // TRDiziIzle uses LiteSpeed lazy loading. Its real poster may be in
-        // data-src while src is a placeholder, and the alt text is often "afis".
-        document.select("img[alt*=afis], img[data-src*='/wp-content/uploads/'], " +
-            "img[data-lazy-src*='/wp-content/uploads/'], img[data-original*='/wp-content/uploads/'], " +
-            "img[src*='/wp-content/uploads/']").forEach { image ->
+        // The site's poster is commonly <img alt="afis" data-src="/wp-content/uploads/...">.
+        // Prioritize this marker over OG metadata, logos and theme images.
+        document.select("img[alt*=afis]").forEach { image ->
+            imageUrl(image, base)?.let { return it }
+        }
+
+        document.select(
+            "img[data-src*='/wp-content/uploads/'], " +
+                "img[data-lazy-src*='/wp-content/uploads/'], " +
+                "img[data-original*='/wp-content/uploads/'], " +
+                "img[data-original-src*='/wp-content/uploads/'], " +
+                "img[src*='/wp-content/uploads/']"
+        ).forEach { image ->
             imageUrl(image, base)?.let { return it }
         }
 
@@ -645,7 +698,6 @@ class TrDiziIzle : MainAPI() {
         )
         if (meta != null) abs(meta, base)?.let { return it }
 
-        // Fall back to images inside the content before considering theme images.
         document.select("main img,article img,[class*=poster] img,[class*=afis] img").forEach { image ->
             imageUrl(image, base)?.let { return it }
         }
