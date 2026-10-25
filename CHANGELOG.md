@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:dac9bbae257c94f46af8b88bd435d980219d1095 -->
+### Fix TRDiziIzle latest episode card titles and posters
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [dac9bba](https://github.com/Kayracs3/Kayra/commit/dac9bbae257c94f46af8b88bd435d980219d1095)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:bb98d408732caadf5bb8f0e3d11f8edf5815ff07 -->
 ### Limit TRDiziIzle player redirect loops
 
