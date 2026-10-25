@@ -400,25 +400,38 @@ class TrDiziIzle : MainAPI() {
             .takeIf { validTitle(it) }.orEmpty()
     }
 
-    private fun excludedNavigation(anchor: Element): Boolean {
-        // Do not cap the ancestor walk: the site's A-Z block may be nested more
-        // deeply than expected, and its series links must never become page items.
+    private fun excludedNavigation(
+        anchor: Element,
+        includeAlphabeticalIndex: Boolean = false
+    ): Boolean {
+        // Search may use the site's A-Z list when its search URLs return the homepage.
+        val insideAlphabeticalIndex = includeAlphabeticalIndex &&
+            anchor.parents().any { it.hasClass("alphabetical-category-index") }
         var node: Element? = anchor
         while (node != null) {
             val element = node
             if (element.tagName().lowercase(Locale.ROOT) in setOf("header", "nav", "footer")) return true
-            // The site's alphabetical index contains series-detail links but is not a content listing.
-            if (element.hasClass("alphabetical-category-index")) return true
+            if (element.hasClass("alphabetical-category-index")) {
+                if (!includeAlphabeticalIndex) return true
+                node = element.parent()
+                continue
+            }
             val marker = (element.id() + " " + element.className()).lowercase(Locale.ROOT)
-            if (Regex("""(^|[\s_-])(navbar|navigation|nav-menu|menu-primary|topmenu|top-menu|quick-menu|alphabet|alfabe|sidebar|widget|footer|header-menu|letter-list)([\s_-]|$)""")
-                    .containsMatchIn(marker)
+            val generalNavigationMarker =
+                Regex("""(^|[\\s_-])(navbar|navigation|nav-menu|menu-primary|topmenu|top-menu|quick-menu|sidebar|widget|footer|header-menu)([\\s_-]|$)""")
+            if (generalNavigationMarker.containsMatchIn(marker)) return true
+            if (!insideAlphabeticalIndex &&
+                Regex("""(^|[\\s_-])(alphabet|alfabe|letter-list)([\\s_-]|$)""").containsMatchIn(marker)
             ) return true
             node = element.parent()
         }
         return false
     }
 
-    private fun parseItems(document: Document): List<SearchResponse> {
+    private fun parseItems(
+        document: Document,
+        includeAlphabeticalIndex: Boolean = false
+    ): List<SearchResponse> {    private fun parseItems(document: Document): List<SearchResponse> {
         // The current site puts a very large A-Z text index before its real poster cards.
         // Collect the whole page and prefer entries for which an actual poster was found.
         // An early "first 80 links" return incorrectly filled the result with posterless A-Z entries.
@@ -426,7 +439,7 @@ class TrDiziIzle : MainAPI() {
         val fallbackItems = LinkedHashMap<String, SearchResponse>()
 
         document.select("a[href]").forEach { anchor ->
-            if (excludedNavigation(anchor)) return@forEach
+            if (excludedNavigation(anchor, includeAlphabeticalIndex)) return@forEach
 
             // Resolve relative URLs against the page containing the card, not the item's detail URL.
             val listingBase = anchor.baseUri().ifBlank { mainUrl }
@@ -466,7 +479,16 @@ class TrDiziIzle : MainAPI() {
         }
 
         Log.d(tag, "İçerik kartları: afişli=${posterItems.size}, afişsiz=${fallbackItems.size}")
-        return (if (posterItems.isNotEmpty()) posterItems.values else fallbackItems.values).take(80)
+        if (!includeAlphabeticalIndex) {
+            return (if (posterItems.isNotEmpty()) posterItems.values else fallbackItems.values).take(80)
+        }
+
+        // Keep posterless A-Z entries while searching. Matching must happen before
+        // limiting results, otherwise series later in the alphabet are never returned.
+        val combined = LinkedHashMap<String, SearchResponse>()
+        posterItems.forEach { (url, item) -> combined[url] = item }
+        fallbackItems.forEach { (url, item) -> combined.putIfAbsent(url, item) }
+        return combined.values.toList()
     }
 
     private fun latestEpisodePoster(anchor: Element, base: String): String? {
@@ -859,8 +881,21 @@ class TrDiziIzle : MainAPI() {
         for (url in searchUrls) {
             val document = runCatching { app.get(url, headers = headers, referer = "$mainUrl/", allowRedirects = true, timeout = 10000).document }
                 .onFailure { Log.d(tag, "Arama isteği başarısız: $url") }.getOrNull() ?: continue
-            val results = parseItems(document).filter { matchesQuery(q, it) }
+            val results = parseItems(document, includeAlphabeticalIndex = true).filter { matchesQuery(q, it) }
             Log.d(tag, "Arama " + url.substringAfter(mainUrl) + ": " + results.size + " eşleşme")
+            if (results.isNotEmpty()) return results.sortedByDescending { relevance(q, it) }.take(100)
+        }
+
+        // The current site sometimes returns the ordinary A-Z page for unsupported
+        // search parameters. Fall back to its A-Z index and numbered series archive.
+        val fallbackPages = listOf("$mainUrl/tr2/", "$mainUrl/dizi-arsivi-01/")
+        for (url in fallbackPages) {
+            val document = runCatching {
+                app.get(url, headers = headers, referer = "$mainUrl/", allowRedirects = true, timeout = 10000).document
+            }.onFailure { Log.d(tag, "Arama yedek sayfası açılamadı: $url") }.getOrNull() ?: continue
+            val results = parseItems(document, includeAlphabeticalIndex = true)
+                .filter { matchesQuery(q, it) }
+            Log.d(tag, "Arama yedeği " + url.substringAfter(mainUrl) + ": " + results.size + " eşleşme")
             if (results.isNotEmpty()) return results.sortedByDescending { relevance(q, it) }.take(100)
         }
         return emptyList()
