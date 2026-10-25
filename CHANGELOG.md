@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:6118e11742712c9629ae9e35aacb78fef5f14eaa -->
+### Harden TRDiziIzle episode title parsing
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [6118e11](https://github.com/Kayracs3/Kayra/commit/6118e11742712c9629ae9e35aacb78fef5f14eaa)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:57f9a914271756fd3c60125a6c0f6610cd33f77f -->
 ### Correct TRDiziIzle episode title regexes
 
