@@ -691,10 +691,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=trdiziizle.tv&sz=%size%",
-        "fileHash": "sha256-0748038c69dcb030d83f4fa9834095eed4b4af9f160c9189c195100c4a5ec3c0",
+        "fileHash": "sha256-971e16f3b8b1fbb686c40d52ad210b34221003896dec3ed86c95e4b22b0d3a18",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 81973,
+        "fileSize": 85555,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -704,7 +704,7 @@
             "TvSeries",
             "Movie"
         ],
-        "version": 23,
+        "version": 24,
         "internalName": "TrDiziIzle",
         "description": "TRDiziIzle \u2014 dizi ve film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/TrDiziIzle.cs3",
