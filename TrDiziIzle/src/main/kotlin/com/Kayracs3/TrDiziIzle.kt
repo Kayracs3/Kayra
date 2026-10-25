@@ -391,37 +391,45 @@ class TrDiziIzle : MainAPI() {
                 "[data-original-src], [data-image], [data-image-url], [data-image-src], " +
                 "[data-bg], [data-bg-image], [data-background], [style*=background-image]"
 
-        // First try an image contained by the episode link itself.
-        anchor.selectFirst(imageSelector)?.let { imageUrl(it, base)?.let { url -> return url } }
+        // Posters can be siblings of the episode link, not descendants of the link.
+        anchor.selectFirst(imageSelector)?.let { image ->
+            imageUrl(image, base)?.let { return it }
+        }
+        imageUrl(anchor, base)?.let { return it }
 
-        // Some cards keep the poster and the title link as siblings. Walk up
-        // to the nearest compact card instead of relying on cardFor(), which
-        // may reject wrappers with more than eight children.
+        // Walk outward through compact episode-card wrappers. Do not read images from
+        // the entire feed: that can assign another episode's poster to this episode.
         var node: Element? = anchor.parent()
-        repeat(8) {
-            val parent = node ?: return null
-            val marker = (parent.id() + " " + parent.className()).lowercase(Locale.ROOT)
-            val isEpisodeCard = Regex(
-                """(^|[\s_-])(episode|episodes|bolum|bolumler|listepisodes|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover)([\s_-]|$)"""
-            ).containsMatchIn(marker)
-            val images = parent.select(imageSelector)
-            val links = parent.select("a[href]").size
-            val compactCard = parent.childrenSize() <= 10 && links in 1..4 && images.size in 1..4
+        var depth = 0
+        while (node != null && depth < 8) {
+            val parent = node
+            if (parent.id() == "listehizala") break
 
-            // A .listepisodes element can itself be a poster card. Inspect it
-            // if it is compact; stop when it is the whole multi-card feed.
-            if (images.isNotEmpty() && compactCard && (isEpisodeCard || links <= 4)) {
+            val links = parent.select("a[href]").size
+            val images = parent.select(imageSelector)
+            val marker = (parent.id() + " " + parent.className()).lowercase(Locale.ROOT)
+            val cardLike = Regex(
+                """(^|[\\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover|listepisodes)([\\s_-]|$)"""
+            ).containsMatchIn(marker)
+            val compactCard = parent.childrenSize() <= 14 &&
+                links in 1..4 && images.size in 1..6
+
+            if (images.isNotEmpty() &&
+                (compactCard || (cardLike && links in 1..5 && images.size in 1..8))
+            ) {
                 images.forEach { image ->
                     imageUrl(image, base)?.let { return it }
                 }
-            }
-
-            if (parent.id() == "listehizala" || (parent.hasClass("listepisodes") && !compactCard)) {
+                // We reached the closest genuine card, so do not accidentally use
+                // a poster from a neighbouring card farther up the DOM tree.
                 return null
             }
-            node = parent.parent()
-        }
 
+            // A repeated .listepisodes element may itself be a whole feed.
+            if (parent.hasClass("listepisodes") && (links > 4 || images.size > 6)) break
+            node = parent.parent()
+            depth++
+        }
         return null
     }
 
@@ -435,33 +443,41 @@ class TrDiziIzle : MainAPI() {
             card.attr("data-title"), anchor.ownText(), anchor.text(), card.text()
         ).map { it.trim() }.filter { it.isNotBlank() }
 
-        // Prefer the episode number from the actual URL so neighboring card text
-        // cannot accidentally assign the number of another episode.
+        // Always take the episode number from the URL first; date text on the card
+        // must never be mistaken for the series name.
         val routeText = path(url).trim('/').replace('-', ' ').replace('_', ' ')
         val info = episodeInfo(routeText)
             ?: candidates.asSequence().mapNotNull { episodeInfo(it) }.firstOrNull()
-            ?: return null
+            ?: return episodeSeriesTitleFromUrl(url).takeIf { validTitle(it) }
         val number = info.second ?: return null
+
+        val datePrefix = Regex(
+            """(?i)^\\s*\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}\\s*[-|:•]?\\s*"""
+        )
+        val dateOnly = Regex("""^\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}$""")
         val baseTitle = candidates.firstNotNullOfOrNull { raw ->
             val cleaned = cleanTitle(raw)
                 .replace(
-                    Regex("""(?i)\s*(?:[-|:]?\s*)?(?:son\s+bölüm|son\s+bolum|\d{1,4}\s*\.?\s*(?:bölüm|bolum|episode))(?:\s+.*)?$"""),
+                    Regex("""(?i)\\s*(?:[-|:]?\\s*)?(?:son\\s+bölüm|son\\s+bolum|\\d{1,4}\\s*\\.?\\s*(?:bölüm|bolum|episode))(?:\\s+.*)?$"""),
                     ""
                 )
+                .replace(datePrefix, "")
                 .trim(' ', '-', '|', ':', '•')
             val normalized = norm(cleaned)
             cleaned.takeIf {
                 validTitle(it) &&
-                    normalized !in setOf("son bolum", "bolum", "episode", "son episode")
+                    !dateOnly.matches(it) &&
+                    normalized !in setOf("son bolum", "bolum", "episode", "son episode") &&
+                    !Regex("""^\\d{1,2}\\s+\\d{1,2}\\s+\\d{2,4}$""").matches(normalized)
             }
         } ?: episodeSeriesTitleFromUrl(url)
-        if (!validTitle(baseTitle)) return null
 
+        if (!validTitle(baseTitle)) return null
         val season = info.first
         return if (season != null && season > 1) {
-            baseTitle + " " + season + ". Sezon " + number + ". Bölüm"
+            "$baseTitle $season. Sezon $number. Bölüm"
         } else {
-            baseTitle + " " + number + ". Bölüm"
+            "$baseTitle $number. Bölüm"
         }
     }
 
@@ -1135,7 +1151,9 @@ class TrDiziIzle : MainAPI() {
     private fun playerCandidate(url: String, context: String): Boolean {
         if (!url.startsWith("http", true) || isIgnoredResource(url)) return false
         val lower = url.lowercase(Locale.ROOT)
-        if (listOf(".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".woff", ".woff2").any { lower.endsWith(it) } ||
+        // Ignore static assets even when the URL includes a cache-busting query, e.g. jwplayer.js?v=4.
+        val resourcePath = lower.substringBefore('?').substringBefore('#')
+        if (listOf(".css", ".js", ".mjs", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".woff", ".woff2").any { resourcePath.endsWith(it) } ||
             listOf("favicon", "logo", "avatar", "placeholder").any { lower.contains(it) }
         ) return false
         if (isMedia(url)) return true
