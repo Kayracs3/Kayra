@@ -1496,15 +1496,86 @@ class TrDiziIzle : MainAPI() {
         }
     }
 
+    private suspend fun resolveYandexDownloadUrl(url: String): String? {
+        // /preview/ produces a preview resource, not the original video stream.
+        if (path(url).contains("/preview/")) {
+            Log.d(tag, "Yandex /preview adresi oynatılabilir video değil; kaynak atlanıyor")
+            return null
+        }
+
+        if (!path(url).contains("/disk/")) return null
+
+        val diskHomeHeaders = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
+        )
+        // Initialize Yandex's normal browser session/cookies before resolving its signed URL.
+        runCatching {
+            app.get(
+                "https://disk.yandex.ru/",
+                headers = diskHomeHeaders,
+                allowRedirects = true,
+                timeout = 6000
+            )
+        }
+
+        val navigationHeaders = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer" to "https://disk.yandex.ru/",
+            "Sec-Fetch-Dest" to "iframe",
+            "Sec-Fetch-Mode" to "navigate",
+            "Sec-Fetch-Site" to "same-site",
+            "Sec-Fetch-User" to "?1",
+            "Upgrade-Insecure-Requests" to "1"
+        )
+
+        val response = runCatching {
+            app.get(
+                url,
+                headers = navigationHeaders,
+                allowRedirects = false,
+                timeout = 8000
+            )
+        }.onFailure {
+            Log.w(tag, "Yandex bağlantı yönlendirmesi isteği başarısız", it)
+        }.getOrNull() ?: return null
+
+        val location = response.headers["Location"] ?: response.headers["location"]
+        if (response.code in 300..399 && !location.isNullOrBlank()) {
+            val destination = abs(location, url) ?: return null
+            val destinationHost = host(destination)
+            if (destinationHost.endsWith(".storage.yandex.net") ||
+                destinationHost.endsWith(".storage.yandex.ru")
+            ) {
+                Log.d(tag, "Yandex bağlantısı gerçek depolama sunucusuna yönlendirildi")
+                return destination
+            }
+
+            Log.w(tag, "Yandex beklenmeyen yönlendirme hedefi döndürdü: " + destinationHost)
+            return null
+        }
+
+        val errorBody = response.text.replace(Regex("""\s+"""), " ").take(220)
+        Log.w(tag, "Yandex /disk yönlendirmesi alınamadı: HTTP " + response.code + "; yanıt=" + errorBody)
+        return null
+    }
+
     private suspend fun emitMedia(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
         val mediaHost = host(url)
         val isYandexDownloader = mediaHost == "downloader.disk.yandex.ru" ||
             mediaHost == "downloader.disk.yandex.net"
 
-        // Yandex's generated /disk/ and /preview/ file URLs are served as if requested
-        // from its own player. Reuse the Yandex Disk origin rather than the wrapper
-        // page's Referer; otherwise ExoPlayer can get HTTP 403 even when the wrapper
-        // successfully exposed a signed Yandex URL.
+        // Do not emit Yandex preview URLs as video links. Resolve /disk/ URLs through
+        // Yandex's browser-style redirect first; the final storage URL is the actual media.
+        val mediaUrl = if (isYandexDownloader) {
+            resolveYandexDownloadUrl(url) ?: return false
+        } else {
+            url
+        }
+
         val mediaReferer = if (isYandexDownloader) "https://disk.yandex.ru/" else referer
         val mediaHeaders = linkedMapOf(
             "User-Agent" to USER_AGENT,
@@ -1519,18 +1590,18 @@ class TrDiziIzle : MainAPI() {
             mediaHeaders["Origin"] = "https://disk.yandex.ru"
             mediaHeaders["Sec-Fetch-Dest"] = "video"
             mediaHeaders["Sec-Fetch-Mode"] = "no-cors"
-            mediaHeaders["Sec-Fetch-Site"] = "cross-site"
+            mediaHeaders["Sec-Fetch-Site"] = "same-site"
             Log.d(tag, "Yandex medya bağlantısı için Disk oynatıcı başlıkları uygulanıyor")
         }
         when {
-            url.contains(".m3u8", true) || url.contains("/hls/", true) -> {
+            mediaUrl.contains(".m3u8", true) || mediaUrl.contains("/hls/", true) -> {
                 // master.m3u8 birden fazla varyant ve ayrı bir AUDIO grubu içerebilir.
                 // M3u8Helper kalite varyantlarını ayrı linklere böldüğünde bazı varyantlar
                 // harici ses playlist'ini kaybedip sessiz oynayabilir. Ana HLS manifestini
                 // olduğu gibi vermek, ExoPlayer'ın video ve ses parçalarını beraber seçmesini sağlar.
-                val keepMasterPlaylist = url.contains("master.m3u8", ignoreCase = true)
+                val keepMasterPlaylist = mediaUrl.contains("master.m3u8", ignoreCase = true)
                 if (keepMasterPlaylist) {
-                    callback(newExtractorLink(name, "TRDiziIzle HLS", url, ExtractorLinkType.M3U8) {
+                    callback(newExtractorLink(name, "TRDiziIzle HLS", mediaUrl, ExtractorLinkType.M3U8) {
                         this.referer = mediaReferer
                         this.headers = mediaHeaders
                         this.quality = Qualities.Unknown.value
@@ -1539,26 +1610,36 @@ class TrDiziIzle : MainAPI() {
                 }
 
                 val generated = runCatching {
-                    M3u8Helper.generateM3u8(name, url, mediaReferer, null, mediaHeaders)
+                    M3u8Helper.generateM3u8(name, mediaUrl, mediaReferer, null, mediaHeaders)
                 }.getOrDefault(emptyList())
                 if (generated.isNotEmpty()) generated.forEach(callback)
-                else callback(newExtractorLink(name, "TRDiziIzle HLS", url, ExtractorLinkType.M3U8) {
+                else callback(newExtractorLink(name, "TRDiziIzle HLS", mediaUrl, ExtractorLinkType.M3U8) {
                     this.referer = mediaReferer
                     this.headers = mediaHeaders
                     this.quality = Qualities.Unknown.value
                 })
                 return true
             }
-            url.contains(".mpd", true) -> {
-                callback(newExtractorLink(name, "TRDiziIzle DASH", url, ExtractorLinkType.DASH) {
+            mediaUrl.contains(".mpd", true) -> {
+                callback(newExtractorLink(name, "TRDiziIzle DASH", mediaUrl, ExtractorLinkType.DASH) {
                     this.referer = mediaReferer
                     this.headers = mediaHeaders
                     this.quality = Qualities.Unknown.value
                 })
                 return true
             }
-            Regex("""(?i)\.(?:mp4|m4v|webm)(?:$|[?#])""").containsMatchIn(url) -> {
-                callback(newExtractorLink(name, "TRDiziIzle Video", url, ExtractorLinkType.VIDEO) {
+            isYandexDownloader -> {
+                // The storage redirect URL typically has no .mp4 suffix; the signed
+                // redirect itself is still the video resource and preserves Content-Type.
+                callback(newExtractorLink(name, "TRDiziIzle Video", mediaUrl, ExtractorLinkType.VIDEO) {
+                    this.referer = mediaReferer
+                    this.headers = mediaHeaders
+                    this.quality = Qualities.Unknown.value
+                })
+                return true
+            }
+            Regex("""(?i)\.(?:mp4|m4v|webm)(?:$|[?#])""").containsMatchIn(mediaUrl) -> {
+                callback(newExtractorLink(name, "TRDiziIzle Video", mediaUrl, ExtractorLinkType.VIDEO) {
                     this.referer = mediaReferer
                     this.headers = mediaHeaders
                     this.quality = Qualities.Unknown.value
