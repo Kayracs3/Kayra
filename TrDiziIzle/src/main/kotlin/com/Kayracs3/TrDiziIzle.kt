@@ -397,9 +397,13 @@ class TrDiziIzle : MainAPI() {
         var node: Element? = anchor.parent()
         repeat(8) {
             val parent = node ?: return null
+            // Stop before the feed-level wrapper so we never assign the
+            // first poster in the whole list to every episode link.
+            if (parent.hasClass("listepisodes") || parent.id() == "listehizala") return null
+
             val marker = (parent.id() + " " + parent.className()).lowercase(Locale.ROOT)
             val isEpisodeCard = Regex(
-                """(^|[\\s_-])(episode|episodes|bolum|bolumler|listepisode|listepisodes|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover)([\\s_-]|$)"""
+                """(^|[\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover)([\s_-]|$)"""
             ).containsMatchIn(marker)
             val images = parent.select(imageSelector)
             val links = parent.select("a[href]").size
@@ -414,9 +418,6 @@ class TrDiziIzle : MainAPI() {
                 }
             }
 
-            // Never fall back to an image belonging to an adjacent episode
-            // by searching the entire feed or the page-level list.
-            if (parent.hasClass("listepisodes") || parent.id() == "listehizala") return null
             node = parent.parent()
         }
 
