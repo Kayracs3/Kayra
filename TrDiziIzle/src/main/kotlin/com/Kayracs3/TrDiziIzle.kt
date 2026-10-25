@@ -1531,7 +1531,7 @@ class TrDiziIzle : MainAPI() {
                 val keepMasterPlaylist = url.contains("master.m3u8", ignoreCase = true)
                 if (keepMasterPlaylist) {
                     callback(newExtractorLink(name, "TRDiziIzle HLS", url, ExtractorLinkType.M3U8) {
-                        this.referer = referer
+                        this.referer = mediaReferer
                         this.headers = mediaHeaders
                         this.quality = Qualities.Unknown.value
                     })
@@ -1539,11 +1539,11 @@ class TrDiziIzle : MainAPI() {
                 }
 
                 val generated = runCatching {
-                    M3u8Helper.generateM3u8(name, url, referer, null, mediaHeaders)
+                    M3u8Helper.generateM3u8(name, url, mediaReferer, null, mediaHeaders)
                 }.getOrDefault(emptyList())
                 if (generated.isNotEmpty()) generated.forEach(callback)
                 else callback(newExtractorLink(name, "TRDiziIzle HLS", url, ExtractorLinkType.M3U8) {
-                    this.referer = referer
+                    this.referer = mediaReferer
                     this.headers = mediaHeaders
                     this.quality = Qualities.Unknown.value
                 })
@@ -1551,7 +1551,7 @@ class TrDiziIzle : MainAPI() {
             }
             url.contains(".mpd", true) -> {
                 callback(newExtractorLink(name, "TRDiziIzle DASH", url, ExtractorLinkType.DASH) {
-                    this.referer = referer
+                    this.referer = mediaReferer
                     this.headers = mediaHeaders
                     this.quality = Qualities.Unknown.value
                 })
@@ -1559,7 +1559,7 @@ class TrDiziIzle : MainAPI() {
             }
             Regex("""(?i)\.(?:mp4|m4v|webm)(?:$|[?#])""").containsMatchIn(url) -> {
                 callback(newExtractorLink(name, "TRDiziIzle Video", url, ExtractorLinkType.VIDEO) {
-                    this.referer = referer
+                    this.referer = mediaReferer
                     this.headers = mediaHeaders
                     this.quality = Qualities.Unknown.value
                 })
