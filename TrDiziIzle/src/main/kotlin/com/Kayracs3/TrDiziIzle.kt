@@ -397,27 +397,25 @@ class TrDiziIzle : MainAPI() {
         var node: Element? = anchor.parent()
         repeat(8) {
             val parent = node ?: return null
-            // Stop before the feed-level wrapper so we never assign the
-            // first poster in the whole list to every episode link.
-            if (parent.hasClass("listepisodes") || parent.id() == "listehizala") return null
-
             val marker = (parent.id() + " " + parent.className()).lowercase(Locale.ROOT)
             val isEpisodeCard = Regex(
-                """(^|[\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover)([\s_-]|$)"""
+                """(^|[\s_-])(episode|episodes|bolum|bolumler|listepisodes|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover)([\s_-]|$)"""
             ).containsMatchIn(marker)
             val images = parent.select(imageSelector)
             val links = parent.select("a[href]").size
+            val compactCard = parent.childrenSize() <= 10 && links in 1..4 && images.size in 1..4
 
-            if (images.isNotEmpty() && (
-                    isEpisodeCard ||
-                        (parent.childrenSize() <= 10 && links in 1..4 && images.size <= 4)
-                    )
-            ) {
+            // A .listepisodes element can itself be a poster card. Inspect it
+            // if it is compact; stop when it is the whole multi-card feed.
+            if (images.isNotEmpty() && compactCard && (isEpisodeCard || links <= 4)) {
                 images.forEach { image ->
                     imageUrl(image, base)?.let { return it }
                 }
             }
 
+            if (parent.id() == "listehizala" || (parent.hasClass("listepisodes") && !compactCard)) {
+                return null
+            }
             node = parent.parent()
         }
 
@@ -483,7 +481,7 @@ class TrDiziIzle : MainAPI() {
                 anchorsSeen++
                 val listingBase = anchor.baseUri().ifBlank { mainUrl }
                 val url = abs(anchor.attr("href"), listingBase) ?: return@anchorLoop
-                if (!onSite(url) || isTrailerUrl(url)) return@anchorLoop
+                if (!isLatestEpisodeUrl(url)) return@anchorLoop
 
                 val card = cardFor(anchor)
                 val title = latestEpisodeTitle(anchor, card, url) ?: return@anchorLoop
@@ -633,12 +631,25 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun posterFromPage(document: Document, base: String): String? {
+        // TRDiziIzle uses LiteSpeed lazy loading. Its real poster may be in
+        // data-src while src is a placeholder, and the alt text is often "afis".
+        document.select("img[alt*=afis], img[data-src*='/wp-content/uploads/'], " +
+            "img[data-lazy-src*='/wp-content/uploads/'], img[data-original*='/wp-content/uploads/'], " +
+            "img[src*='/wp-content/uploads/']").forEach { image ->
+            imageUrl(image, base)?.let { return it }
+        }
+
         val meta = firstNonBlank(
             document.selectFirst("meta[property=og:image]")?.attr("content"),
             document.selectFirst("meta[name=twitter:image]")?.attr("content")
         )
         if (meta != null) abs(meta, base)?.let { return it }
-        return document.selectFirst("img[fetchpriority=high],main img,article img,img")?.let { imageUrl(it, base) }
+
+        // Fall back to images inside the content before considering theme images.
+        document.select("main img,article img,[class*=poster] img,[class*=afis] img").forEach { image ->
+            imageUrl(image, base)?.let { return it }
+        }
+        return document.selectFirst("img[fetchpriority=high],img")?.let { imageUrl(it, base) }
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -793,14 +804,23 @@ class TrDiziIzle : MainAPI() {
             .filter { it.length >= 3 }
             .filterNot { it in setOf("son", "bolum", "izle", "dizi", "hd") }
 
-        for (anchor in document.select("a[href]")) {
-            if (excludedNavigation(anchor)) continue
+        // The site lists seasons/episodes in #genel .bolumust2, with the actual
+        // episode link as a direct child; a separate .wpfp-link is only a favorite toggle.
+        val scopedEpisodeAnchors = document.select("#genel .bolumust2 > a[href]")
+        val anchors = if (scopedEpisodeAnchors.isNotEmpty()) {
+            scopedEpisodeAnchors
+        } else {
+            document.select("a[href]")
+        }
+
+        for (anchor in anchors) {
+            if (anchor.hasClass("wpfp-link") || excludedNavigation(anchor)) continue
             val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { pageUrl }) ?: continue
             if (!onSite(url)) continue
             val route = path(url).lowercase(Locale.ROOT)
             if (!(route.contains("/diziler/") || route.contains("/bolum/") ||
                     route.contains("/bolumler/") || route.contains("/episode/") ||
-                    route.contains("/episodes/"))
+                    route.contains("/episodes/") || isLatestEpisodeUrl(url))
             ) continue
             val rowText = anchor.parent()?.text().orEmpty().take(240)
             val labelRaw = listOf(
