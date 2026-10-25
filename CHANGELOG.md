@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:f7252476101262b1908a8f77904b58e4cd413baf -->
+### Bump TrDiziIzle to version 19
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [f725247](https://github.com/Kayracs3/Kayra/commit/f7252476101262b1908a8f77904b58e4cd413baf)
+
+## 2026-10-25
+
+<!-- kayra-commit:3d54655d02835bb3becee7e7c5dd36af97376491 -->
+### Expand nested JWPlayer source discovery
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [3d54655](https://github.com/Kayracs3/Kayra/commit/3d54655d02835bb3becee7e7c5dd36af97376491)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:9183848f58f480f66f0288403ba26b54d6750f23 -->
 ### Bump TrDiziIzle to version 18
 
