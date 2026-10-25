@@ -17,6 +17,7 @@ on:
       - ".github/workflows/Derleyici.yml"
       - ".github/workflows/KayraDoctor.yml"
       - ".github/workflows/DiziSolPosterProbe.yml"
+      - ".github/workflows/TrDiziIzleDerleme.yml"
       - ".github/workflows/RepoYonetimi.yml"
       - ".github/workflows/ReleaseNotes.yml"
       - "README.md"
