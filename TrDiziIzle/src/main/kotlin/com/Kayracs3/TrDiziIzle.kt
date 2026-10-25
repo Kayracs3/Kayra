@@ -516,8 +516,9 @@ class TrDiziIzle : MainAPI() {
         coroutineScope {
             // Only missing posters trigger requests. Keep each batch small to avoid
             // sending dozens of simultaneous requests to the site.
-            items.chunked(5).flatMap { batch ->
-                batch.map { item ->
+            val result = ArrayList<SearchResponse>(items.size)
+            for (batch in items.chunked(5)) {
+                val resolvedBatch = batch.map { item ->
                     async {
                         if (!item.posterUrl.isNullOrBlank()) return@async item
 
@@ -546,7 +547,9 @@ class TrDiziIzle : MainAPI() {
                         }
                     }
                 }.awaitAll()
+                result.addAll(resolvedBatch)
             }
+            result
         }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
