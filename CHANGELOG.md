@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:4bbcce0b3bfde13d2c06f5fe5aade066ad7bb58c -->
+### Correct regex escapes in TRDiziIzle episode title and poster fix
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [4bbcce0](https://github.com/Kayracs3/Kayra/commit/4bbcce0b3bfde13d2c06f5fe5aade066ad7bb58c)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:f708557c166a7c5af87976729c5f80ff1e194d48 -->
 ### Fix TRDiziIzle latest episode titles, posters, and player asset filtering
 
