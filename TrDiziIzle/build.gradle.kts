@@ -1,4 +1,4 @@
-version = 21
+version = 22
 dependencies {
     // Coroutines are provided by CloudStream at runtime; compile against the API only.
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1")
