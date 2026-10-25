@@ -411,7 +411,7 @@ class TrDiziIzle : MainAPI() {
             val images = parent.select(imageSelector)
             val marker = (parent.id() + " " + parent.className()).lowercase(Locale.ROOT)
             val cardLike = Regex(
-                """(^|[\\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover|listepisodes)([\\s_-]|$)"""
+                """(^|[\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover|listepisodes)([\s_-]|$)"""
             ).containsMatchIn(marker)
             val compactCard = parent.childrenSize() <= 14 &&
                 links in 1..4 && images.size in 1..8
@@ -472,19 +472,19 @@ class TrDiziIzle : MainAPI() {
         // Dates such as "25 Eki" were being accepted as valid show names. Remove
         // both numeric dates and Turkish month abbreviations before choosing a title.
         val numericDatePrefix = Regex(
-            """(?i)^\\s*\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}\\s*[-|:•]?\\s*"""
+            """(?i)^\s*\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\s*[-|:•]?\s*"""
         )
         val namedDatePrefix = Regex(
-            """(?i)^\\s*\\d{1,2}\\s+(?:oca(?:k)?|şub(?:at)?|mar(?:t)?|nis(?:an)?|may(?:ıs)?|haz(?:iran)?|tem(?:muz)?|ağu(?:stos)?|eyl(?:ül)?|eki(?:m)?|kas(?:ım)?|ara(?:lık)?)(?:\\s+\\d{4})?\\s*[-|:•]?\\s*"""
+            """(?i)^\s*\d{1,2}\s+(?:oca(?:k)?|şub(?:at)?|mar(?:t)?|nis(?:an)?|may(?:ıs)?|haz(?:iran)?|tem(?:muz)?|ağu(?:stos)?|eyl(?:ül)?|eki(?:m)?|kas(?:ım)?|ara(?:lık)?)(?:\s+\d{4})?\s*[-|:•]?\s*"""
         )
         val dateOnly = Regex(
-            """(?i)^\\s*\\d{1,2}(?:[./-]\\d{1,2}[./-]\\d{2,4}|\\s+(?:oca(?:k)?|şub(?:at)?|mar(?:t)?|nis(?:an)?|may(?:ıs)?|haz(?:iran)?|tem(?:muz)?|ağu(?:stos)?|eyl(?:ül)?|eki(?:m)?|kas(?:ım)?|ara(?:lık)?))(?:\\s+\\d{4})?\\s*$"""
+            """(?i)^\s*\d{1,2}(?:[./-]\d{1,2}[./-]\d{2,4}|\s+(?:oca(?:k)?|şub(?:at)?|mar(?:t)?|nis(?:an)?|may(?:ıs)?|haz(?:iran)?|tem(?:muz)?|ağu(?:stos)?|eyl(?:ül)?|eki(?:m)?|kas(?:ım)?|ara(?:lık)?))(?:\s+\d{4})?\s*$"""
         )
 
         val baseTitle = candidates.firstNotNullOfOrNull { raw ->
             val cleaned = cleanTitle(raw)
                 .replace(
-                    Regex("""(?i)\\s*(?:[-|:]?\\s*)?(?:son\\s+bölüm|son\\s+bolum|\\d{1,4}\\s*\\.?\\s*(?:bölüm|bolum|episode))(?:\\s+.*)?$"""),
+                    Regex("""(?i)\s*(?:[-|:]?\s*)?(?:son\s+bölüm|son\s+bolum|\d{1,4}\s*\.?\s*(?:bölüm|bolum|episode))(?:\s+.*)?$"""),
                     ""
                 )
                 .replace(numericDatePrefix, "")
@@ -495,7 +495,7 @@ class TrDiziIzle : MainAPI() {
                 validTitle(it) &&
                     !dateOnly.matches(it) &&
                     normalized !in setOf("son bolum", "bolum", "episode", "son episode") &&
-                    !Regex("""^\\d{1,2}\\s+\\d{1,2}\\s+\\d{2,4}$""").matches(normalized)
+                    !Regex("""^\d{1,2}\s+\d{1,2}\s+\d{2,4}$""").matches(normalized)
             }
         } ?: episodeSeriesTitleFromUrl(url)
 
