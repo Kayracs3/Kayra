@@ -96,7 +96,7 @@ class TrDiziIzle : MainAPI() {
     private fun isTwitterMasterPlaylist(url: String): Boolean {
         if (host(url) !in setOf("video.twimg.com", "video-s.twimg.com")) return false
         return Regex(
-            """(?i)^/(?:amplify_video/\\d+/pl|ext_tw_video/\\d+/pu/pl|tweet_video/\\d+/pl)/[^/]+\\.m3u8$"""
+            """(?i)^/(?:amplify_video/\d+/pl|ext_tw_video/\d+/pu/pl|tweet_video/\d+/pl)/[^/]+\.m3u8$"""
         ).matches(path(url))
     }
     private fun isTrailerUrl(url: String): Boolean {
