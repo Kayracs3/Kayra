@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:a8c34690faa28f9187267e07c083805e5bc720ae -->
+### Fix nullable baseUrl in Flix stream resolver
+
+- Etkilenen alanlar: Flix
+- Commit: [a8c3469](https://github.com/Kayracs3/Kayra/commit/a8c34690faa28f9187267e07c083805e5bc720ae)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:149b0cd26ecd4feed779b705739dbe402bcc3036 -->
 ### Update print statement from 'Hello' to 'Goodbye'
 
