@@ -1,0 +1,52 @@
+name: TrDiziIzle Derleme Kontrolü
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "TrDiziIzle/**"
+      - ".github/workflows/TrDiziIzleDerleme.yml"
+
+jobs:
+  TrDiziIzleDerle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kaynak kodunu al
+        uses: actions/checkout@v4
+        with:
+          path: src
+          ref: master
+
+      - name: JDK 17 Ayarla
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK Ayarla
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0 platform-tools"
+
+      - name: CloudStream Gradle Plugin Hazırla
+        shell: bash
+        run: |
+          set -e
+          git clone https://github.com/recloudstream/gradle.git /tmp/cloudstream-gradle
+          cd /tmp/cloudstream-gradle
+          git checkout 81b1d424d236a447d9f2e95a229faef79002f761
+          chmod +x gradlew
+          ./gradlew publishToMavenLocal --no-daemon
+
+      - name: Yalnızca TrDiziIzle eklentisini derle
+        shell: bash
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/src"
+          chmod +x gradlew
+          ./gradlew :TrDiziIzle:clean :TrDiziIzle:make --no-daemon --stacktrace
+
+          echo "TrDiziIzle derleme çıktıları:"
+          find TrDiziIzle/build -maxdepth 2 -type f -name "*.cs3" -print
