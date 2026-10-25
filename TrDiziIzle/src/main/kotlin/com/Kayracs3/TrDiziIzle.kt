@@ -225,34 +225,35 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun cardFor(anchor: Element): Element {
-        // The site has a large A-Z index. Find the nearest plausible card without
-        // recounting and reparsing every descendant link at every ancestor level.
+        // Some archive cards put the title link and poster image in sibling elements.
+        // Keep walking past generic wrappers; returning the anchor at the first large
+        // parent caused every card to lose its poster on the archive pages.
         var node: Element? = anchor
-        repeat(6) {
+        repeat(10) {
             val element = node ?: return anchor
             val marker = (element.id() + " " + element.className()).lowercase(Locale.ROOT)
             val looksLikeCard = Regex(
                 """(^|[\s_-])(card|item|entry|post|video|movie|film|dizi|episode|bolum|box|thumb|thumbnail|poster|cover|photo|picture|tile|frame|image)([\s_-]|$)"""
             ).containsMatchIn(marker)
-            val hasImage = element.selectFirst(
-                "img, picture img, source[srcset], [data-poster], [data-poster-url], [data-poster-src], [data-image], [data-image-url], [data-image-src], [data-srcset], [data-lazy-src], [data-cover], [data-bg], [data-bg-image], [data-background], [style*=background-image]"
-            ) != null
+            val imageSelector =
+                "img, picture img, source[srcset], [data-poster], [data-poster-url], [data-poster-src], " +
+                    "[data-image], [data-image-url], [data-image-src], [data-srcset], [data-lazy-src], " +
+                    "[data-lazy-load], [data-lazyload], [data-original], [data-original-src], [data-cover], " +
+                    "[data-bg], [data-bg-url], [data-bg-image], [data-background], [data-background-image], " +
+                    "[style*=background]"
+            val hasImage = element.selectFirst(imageSelector) != null
+            val descendantLinks = element.select("a[href]").size
 
-            if (hasImage) {
+            if (hasImage && descendantLinks in 1..4) {
+                if (element == anchor || element.tagName() == "a") return element
                 if (looksLikeCard || element.tagName() in setOf("article", "li", "figure")) {
                     return element
                 }
-                // An image directly under the link is already the correct poster.
-                if (element.tagName() == "a") return element
-
-                // A compact, unmarked wrapper is also likely to be the poster card.
-                // Inspect it only once; large menus/lists are rejected immediately.
-                if (element.childrenSize() <= 8) {
-                    val descendantLinks = element.select("a[href]").size
-                    if (descendantLinks in 1..4) return element
-                }
-                return anchor
+                // Only accept unmarked compact wrappers that correspond to a single card.
+                if (element.childrenSize() <= 8) return element
             }
+            // Large listing wrappers may contain hundreds of images. Keep walking until
+            // a small item wrapper is found instead of returning an empty anchor too early.
             node = element.parent()
         }
         return anchor
@@ -1650,6 +1651,8 @@ class TrDiziIzle : MainAPI() {
         val mediaHost = host(url)
         val isYandexDownloader = mediaHost == "downloader.disk.yandex.ru" ||
             mediaHost == "downloader.disk.yandex.net"
+        val isTwitterVideoCdn = mediaHost == "video.twimg.com" ||
+            mediaHost == "video-s.twimg.com"
 
         // Do not emit Yandex preview URLs as video links. Resolve /disk/ URLs through
         // Yandex's browser-style redirect first; the final storage URL is the actual media.
@@ -1659,16 +1662,27 @@ class TrDiziIzle : MainAPI() {
             url
         }
 
-        val mediaReferer = if (isYandexDownloader) "https://disk.yandex.ru/" else referer
-        // After the redirect, the storage host is a different site. Keep its request
-        // headers minimal; navigation-only Sec-Fetch headers belong to the resolver request.
+        // X's video CDN returns 403 when the Referer is the embedding third-party site.
+        // Use the platform's own origin for media requests; this also lets ExoPlayer
+        // request the HLS manifest and its nested fMP4 segments with matching headers.
+        val mediaReferer = when {
+            isYandexDownloader -> "https://disk.yandex.ru/"
+            isTwitterVideoCdn -> "https://x.com/"
+            else -> referer
+        }
         val mediaHeaders = linkedMapOf(
             "User-Agent" to USER_AGENT,
             "Referer" to mediaReferer,
             "Accept" to "*/*"
         )
+        if (isTwitterVideoCdn) {
+            mediaHeaders["Origin"] = "https://x.com"
+        }
         if (isYandexDownloader) {
             Log.d(tag, "Yandex depolama bağlantısı yönlendirme sonrası oynatmaya veriliyor")
+        }
+        if (isTwitterVideoCdn) {
+            Log.d(tag, "X video CDN için x.com Referer/Origin başlıkları uygulandı")
         }
         when {
             mediaUrl.contains(".m3u8", true) || mediaUrl.contains("/hls/", true) -> {
