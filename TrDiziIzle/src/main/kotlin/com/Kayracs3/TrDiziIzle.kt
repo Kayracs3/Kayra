@@ -58,7 +58,11 @@ class TrDiziIzle : MainAPI() {
             raw.startsWith("blob:", true) || raw.startsWith("mailto:", true) || raw.startsWith("about:", true)
         ) return null
         raw = raw.replace("&amp;", "&").replace("\\/", "/")
-            .replace("\\u002F", "/").replace("\\u002f", "/").replace("\\u0026", "&")
+            .replace("\\u003A", ":").replace("\\u003a", ":")
+            .replace("\\x3A", ":").replace("\\x3a", ":")
+            .replace("\\u002F", "/").replace("\\u002f", "/")
+            .replace("\\x2F", "/").replace("\\x2f", "/")
+            .replace("\\u0026", "&").replace("\\x26", "&")
             .trim('"', '\'')
         return runCatching {
             val uri = if (raw.startsWith("//")) URI("https:$raw") else URI(base).resolve(raw)
@@ -1227,7 +1231,9 @@ class TrDiziIzle : MainAPI() {
             val hasExplicitIframe = document.select(
                 "iframe[src],iframe[data-src],iframe[data-embed],iframe[data-player],iframe[data-iframe]"
             ).isNotEmpty()
-            val scriptLimit = if (hasExplicitIframe) 2 else 4
+            // The site's /player/oynat/ endpoint can be a wrapper around another player.
+            // Inspect more of its player scripts instead of stopping after the first two.
+            val scriptLimit = if (hasExplicitIframe && !path(pageUrl).contains("/player/oynat/")) 2 else 4
             val scriptsToInspect = (playerScripts + allScripts.filterNot { it in playerScripts })
                 .distinct().take(scriptLimit)
             scriptsToInspect.forEach scriptLoop@ { scriptUrl ->
@@ -1250,7 +1256,18 @@ class TrDiziIzle : MainAPI() {
                 textPlayerCandidates(scriptText, scriptUrl).forEach(scriptCandidates::add)
             }
 
-            val candidates = (pageCandidates + scriptCandidates).distinct().take(12)
+            val candidates = (pageCandidates + scriptCandidates).distinct()
+                .sortedBy { candidate ->
+                    when {
+                        isMedia(candidate) -> 0
+                        onSite(candidate) && path(candidate).contains("/player/oynat/") -> 1
+                        !onSite(candidate) && Regex("""(?i)(player|embed|video|stream|watch|m3u8|playlist|source)""")
+                            .containsMatchIn(path(candidate)) -> 2
+                        !onSite(candidate) -> 3
+                        else -> 4
+                    }
+                }
+                .take(20)
             candidates.forEach candidateLoop@ { candidate ->
                 if (!seenCandidates.add(candidate)) return@candidateLoop
 
@@ -1274,7 +1291,7 @@ class TrDiziIzle : MainAPI() {
                     found = true
                     return@candidateLoop
                 }
-                if (seenPages.size < 4 && pages.size < 3) {
+                if (seenPages.size < 6 && pages.size < 5) {
                     // Follow redirects manually with a small limit. Some /player/oynat/
                     // endpoints loop through redirects until NiceHttp aborts after 20+ hops.
                     var currentUrl = candidate
@@ -1322,6 +1339,13 @@ class TrDiziIzle : MainAPI() {
                         Log.d(tag, "Oynatıcı yönlendirme sınırı: " + candidate.substringAfter(mainUrl))
                     }
                 }
+            }
+            if (!found) {
+                Log.d(
+                    tag,
+                    "Oynatıcı adayları " + pageUrl.substringAfter(mainUrl) + ": " +
+                        candidates.take(8).joinToString(" | ") { host(it) + path(it) }
+                )
             }
             Log.d(tag, "Oynatıcı taraması " + pageUrl.substringAfter(mainUrl) +
                 ": aday=" + candidates.size + ", bulunan=" + found)
@@ -1475,9 +1499,17 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun decodeEmbedded(raw: String): String {
-        var text = raw.replace("\\/", "/").replace("\\u002F", "/").replace("\\u002f", "/")
-            .replace("\\u0026", "&").replace("\\u003d", "=").replace("\\u003D", "=")
-            .replace("\\x2F", "/").replace("&amp;", "&")
+        var text = raw.replace("\\/", "/")
+            .replace("\\u003A", ":").replace("\\u003a", ":")
+            .replace("\\x3A", ":").replace("\\x3a", ":")
+            .replace("\\u002F", "/").replace("\\u002f", "/")
+            .replace("\\x2F", "/").replace("\\x2f", "/")
+            .replace("\\u0026", "&").replace("\\x26", "&")
+            .replace("\\u003d", "=").replace("\\u003D", "=")
+            .replace("\\x3d", "=").replace("\\x3D", "=")
+            .replace("&#x3a;", ":").replace("&#58;", ":")
+            .replace("&#x2f;", "/").replace("&#47;", "/")
+            .replace("&amp;", "&")
         val regex = Regex("""(?i)atob\(\s*["']([A-Za-z0-9+/=]{16,})["']\s*\)""")
         val decoded = regex.findAll(text).mapNotNull { match ->
             runCatching { String(Base64.decode(match.groupValues[1], Base64.DEFAULT), Charsets.UTF_8) }.getOrNull()
