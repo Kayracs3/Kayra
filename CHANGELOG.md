@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:2fb894cccc8c1d553a47437d45a058e89d5fa2d7 -->
+### Bump TrDiziIzle to v14
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [2fb894c](https://github.com/Kayracs3/Kayra/commit/2fb894cccc8c1d553a47437d45a058e89d5fa2d7)
+
+## 2026-10-25
+
+<!-- kayra-commit:a9456a856335643b9d86b368bbf99f440235e935 -->
+### Resolve Yandex video redirect before playback
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [a9456a8](https://github.com/Kayracs3/Kayra/commit/a9456a856335643b9d86b368bbf99f440235e935)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:e6ea42904bbce92b9b310bb63934fef8ae357158 -->
 ### Use Yandex referrer on playback link property
 
