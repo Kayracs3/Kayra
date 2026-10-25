@@ -569,14 +569,17 @@ class TrDiziIzle : MainAPI() {
 
     private fun latestEpisodeSeriesDetailCandidates(
         item: SearchResponse,
-        episodeDocument: Document?
+        episodeDocument: Document?,
+        listingDocument: Document?
     ): List<String> {
         val out = LinkedHashSet<String>()
         val expectedTitle = norm(cleanTitle(item.name))
 
-        // Prefer an explicit related series link found on the episode page.
-        episodeDocument?.select("a[href]")?.forEach { anchor ->
-            val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { item.url }) ?: return@forEach
+        // The /tum-bolumler/ page includes an A-Z index whose real detail links
+        // often look like /diziler/halka-son-bolum-izle-6/, not /diziler/halka/.
+        // Match the visible series name to that actual href before guessing any URL.
+        listingDocument?.select("a[href*='/diziler/']")?.forEach { anchor ->
+            val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { mainUrl }) ?: return@forEach
             val parts = path(url).trim('/').split('/').filter { it.isNotBlank() }
             if (!onSite(url) || parts.size != 2 || parts[0] != "diziler") return@forEach
 
@@ -585,10 +588,11 @@ class TrDiziIzle : MainAPI() {
                 anchor.selectFirst("img")?.attr("alt"),
                 anchor.attr("title"),
                 anchor.attr("aria-label"),
-                anchor.text()
+                anchor.text(),
+                anchor.ownText()
             )?.let(::cleanTitle).orEmpty()
             val normalizedLabel = norm(label)
-            if (normalizedLabel.isNotBlank() &&
+            if (normalizedLabel.isNotBlank() && expectedTitle.isNotBlank() &&
                 (normalizedLabel == expectedTitle ||
                     normalizedLabel.contains(expectedTitle) ||
                     expectedTitle.contains(normalizedLabel))
@@ -597,8 +601,29 @@ class TrDiziIzle : MainAPI() {
             }
         }
 
-        // Most episode URLs are named like /series-name-7-bolum-izle/.
-        // Convert that slug to the site's known /diziler/<slug>/ detail route.
+        // If the episode page itself links to the series detail page, prefer that too.
+        episodeDocument?.select("a[href*='/diziler/']")?.forEach { anchor ->
+            val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { item.url }) ?: return@forEach
+            val parts = path(url).trim('/').split('/').filter { it.isNotBlank() }
+            if (onSite(url) && parts.size == 2 && parts[0] == "diziler") {
+                val label = firstNonBlank(
+                    anchor.selectFirst("img")?.attr("alt"),
+                    anchor.attr("title"),
+                    anchor.attr("aria-label"),
+                    anchor.text()
+                )?.let(::cleanTitle).orEmpty()
+                val normalizedLabel = norm(label)
+                if (normalizedLabel.isNotBlank() &&
+                    (normalizedLabel == expectedTitle ||
+                        normalizedLabel.contains(expectedTitle) ||
+                        expectedTitle.contains(normalizedLabel))
+                ) {
+                    out.add(url)
+                }
+            }
+        }
+
+        // Fallback for episode URLs named /series-name-7-bolum-izle/.
         val routeSlug = path(item.url).trim('/').substringAfterLast('/')
         val seriesSlug = routeSlug.replace(
             Regex("""(?i)(?:[-_]\d{1,4})?[-_](?:bolum|episode).*$"""),
@@ -608,15 +633,17 @@ class TrDiziIzle : MainAPI() {
             out.add("$mainUrl/diziler/$seriesSlug/")
         }
 
-        // Dated episode pages may not carry a numeric "bolum" in their slug.
-        // A cleaned, normalized series title is a final route candidate.
+        // Last fallback for dated pages without an episode number in the URL.
         val titleSlug = expectedTitle.replace(' ', '-')
         if (titleSlug.isNotBlank()) out.add("$mainUrl/diziler/$titleSlug/")
 
-        return out.filter { isSeries(it) }.take(3)
+        return out.filter { isSeries(it) }.take(5)
     }
 
-    private suspend fun fillMissingLatestPosters(items: List<SearchResponse>): List<SearchResponse> =
+    private suspend fun fillMissingLatestPosters(
+        items: List<SearchResponse>,
+        listingDocument: Document
+    ): List<SearchResponse> =
         coroutineScope {
             val result = ArrayList<SearchResponse>(items.size)
             for (batch in items.chunked(5)) {
@@ -627,7 +654,6 @@ class TrDiziIzle : MainAPI() {
                         var poster: String? = null
                         var episodeDocument: Document? = null
 
-                        // First inspect the episode page; its OG image or poster may already be usable.
                         runCatching {
                             val response = app.get(
                                 item.url,
@@ -645,9 +671,13 @@ class TrDiziIzle : MainAPI() {
                             Log.d(tag, "Bölüm sayfasından afiş alınamadı: " + item.url, it)
                         }
 
-                        // If an episode page has no poster, request its actual series detail page.
+                        // The listing page's A-Z index gives the real series URL. Fetch
+                        // that exact route, because the site's series URLs have suffixes.
                         if (!isUsablePosterUrl(poster)) {
-                            val candidates = latestEpisodeSeriesDetailCandidates(item, episodeDocument)
+                            val candidates = latestEpisodeSeriesDetailCandidates(
+                                item, episodeDocument, listingDocument
+                            )
+                            Log.d(tag, "Afiş için dizi sayfası adayları: " + item.name + " -> " + candidates.joinToString())
                             for (seriesUrl in candidates) {
                                 val candidatePoster = runCatching {
                                     app.get(
@@ -696,7 +726,7 @@ class TrDiziIzle : MainAPI() {
             }.onFailure { Log.w(tag, "Ana sayfa alınamadı: " + url, it) }.getOrNull() ?: continue
             val parsedItems = if (isLatestEpisodesPage) parseLatestEpisodes(document) else parseItems(document)
             val items = if (isLatestEpisodesPage && parsedItems.isNotEmpty()) {
-                fillMissingLatestPosters(parsedItems)
+                fillMissingLatestPosters(parsedItems, document)
             } else {
                 parsedItems
             }
