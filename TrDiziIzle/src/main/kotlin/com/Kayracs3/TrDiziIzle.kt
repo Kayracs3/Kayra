@@ -251,8 +251,10 @@ class TrDiziIzle : MainAPI() {
             "data-image-url", "data-image-src", "data-image", "data-original-url",
             "data-original-src", "data-original", "data-lazy-srcset", "data-lazy-src",
             "data-fallback-src", "data-src-url", "data-echo",
-            "data-srcset", "srcset", "data-thumbnail", "data-thumb", "data-bg-image",
-            "data-background", "data-bg", "data-src", "src"
+            "data-lazy-load", "data-lazyload", "data-img", "data-thumb-url",
+            "data-bg-url", "data-background-image", "data-srcset", "srcset",
+            "data-thumbnail", "data-thumb", "data-bg-image", "data-background",
+            "data-bg", "data-src", "src"
         )
         for (attr in imageAttributes) {
             val raw = element.attr(attr).trim()
@@ -385,20 +387,20 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun latestEpisodePoster(anchor: Element, base: String): String? {
+        // Some TRDiziIzle cards render the poster as CSS background:url(...), not <img>.
+        // Include lazy-load data attributes too; the card wrapper can vary between items.
         val imageSelector =
             "img, picture img, source[srcset], [data-poster], [data-poster-url], " +
-                "[data-poster-src], [data-src], [data-lazy-src], [data-original], " +
-                "[data-original-src], [data-image], [data-image-url], [data-image-src], " +
-                "[data-bg], [data-bg-image], [data-background], [style*=background-image]"
+                "[data-poster-src], [data-src], [data-lazy-src], [data-lazy-load], [data-lazyload], " +
+                "[data-original], [data-original-src], [data-image], [data-image-url], " +
+                "[data-image-src], [data-img], [data-bg], [data-bg-url], [data-bg-image], " +
+                "[data-background], [data-background-image], [style*=background], [style*=url]"
 
-        // Posters can be siblings of the episode link, not descendants of the link.
         anchor.selectFirst(imageSelector)?.let { image ->
             imageUrl(image, base)?.let { return it }
         }
         imageUrl(anchor, base)?.let { return it }
 
-        // Walk outward through compact episode-card wrappers. Do not read images from
-        // the entire feed: that can assign another episode's poster to this episode.
         var node: Element? = anchor.parent()
         var depth = 0
         while (node != null && depth < 8) {
@@ -409,24 +411,22 @@ class TrDiziIzle : MainAPI() {
             val images = parent.select(imageSelector)
             val marker = (parent.id() + " " + parent.className()).lowercase(Locale.ROOT)
             val cardLike = Regex(
-                """(^|[\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover|listepisodes)([\s_-]|$)"""
+                """(^|[\\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover|listepisodes)([\\s_-]|$)"""
             ).containsMatchIn(marker)
             val compactCard = parent.childrenSize() <= 14 &&
-                links in 1..4 && images.size in 1..6
+                links in 1..4 && images.size in 1..8
 
             if (images.isNotEmpty() &&
-                (compactCard || (cardLike && links in 1..5 && images.size in 1..8))
+                (compactCard || (cardLike && links in 1..5 && images.size in 1..10))
             ) {
                 images.forEach { image ->
                     imageUrl(image, base)?.let { return it }
                 }
-                // We reached the closest genuine card, so do not accidentally use
-                // a poster from a neighbouring card farther up the DOM tree.
+                // Do not climb into a neighbouring card after reaching the actual one.
                 return null
             }
 
-            // A repeated .listepisodes element may itself be a whole feed.
-            if (parent.hasClass("listepisodes") && (links > 4 || images.size > 6)) break
+            if (parent.hasClass("listepisodes") && (links > 4 || images.size > 8)) break
             node = parent.parent()
             depth++
         }
@@ -435,7 +435,27 @@ class TrDiziIzle : MainAPI() {
 
     private fun latestEpisodeTitle(anchor: Element, card: Element, url: String): String? {
         val image = anchor.selectFirst("img") ?: card.selectFirst("img")
+
+        // A card may contain a separate link to /diziler/<slug>/ alongside its
+        // episode link. Prefer that explicit series title over the date label.
+        val relatedSeriesTitle = card.select("a[href]").asSequence()
+            .filter { it != anchor }
+            .mapNotNull { related ->
+                val base = related.baseUri().ifBlank { mainUrl }
+                val relatedUrl = abs(related.attr("href"), base) ?: return@mapNotNull null
+                val parts = path(relatedUrl).trim('/').split('/').filter { it.isNotBlank() }
+                if (parts.size != 2 || parts[0] != "diziler") return@mapNotNull null
+                firstNonBlank(
+                    related.selectFirst("h1,h2,h3,h4,[class*=title],[class*=name]")?.text(),
+                    related.selectFirst("img")?.attr("alt"),
+                    related.attr("title"),
+                    related.attr("aria-label"),
+                    related.text()
+                )?.let(::cleanTitle)?.takeIf(::validTitle)
+            }.firstOrNull()
+
         val candidates = listOfNotNull(
+            relatedSeriesTitle,
             anchor.selectFirst("h1,h2,h3,h4,[class*=title],[class*=name]")?.text(),
             card.selectFirst("h2,h3,h4,[class*=title],[class*=name]")?.text(),
             image?.attr("alt"), image?.attr("title"),
@@ -443,32 +463,39 @@ class TrDiziIzle : MainAPI() {
             card.attr("data-title"), anchor.ownText(), anchor.text(), card.text()
         ).map { it.trim() }.filter { it.isNotBlank() }
 
-        // Always take the episode number from the URL first; date text on the card
-        // must never be mistaken for the series name.
         val routeText = path(url).trim('/').replace('-', ' ').replace('_', ' ')
         val info = episodeInfo(routeText)
             ?: candidates.asSequence().mapNotNull { episodeInfo(it) }.firstOrNull()
             ?: return episodeSeriesTitleFromUrl(url).takeIf { validTitle(it) }
         val number = info.second ?: return null
 
-        val datePrefix = Regex(
-            """(?i)^\s*\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\s*[-|:•]?\s*"""
+        // Dates such as "25 Eki" were being accepted as valid show names. Remove
+        // both numeric dates and Turkish month abbreviations before choosing a title.
+        val numericDatePrefix = Regex(
+            """(?i)^\\s*\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}\\s*[-|:•]?\\s*"""
         )
-        val dateOnly = Regex("""^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$""")
+        val namedDatePrefix = Regex(
+            """(?i)^\\s*\\d{1,2}\\s+(?:oca(?:k)?|şub(?:at)?|mar(?:t)?|nis(?:an)?|may(?:ıs)?|haz(?:iran)?|tem(?:muz)?|ağu(?:stos)?|eyl(?:ül)?|eki(?:m)?|kas(?:ım)?|ara(?:lık)?)(?:\\s+\\d{4})?\\s*[-|:•]?\\s*"""
+        )
+        val dateOnly = Regex(
+            """(?i)^\\s*\\d{1,2}(?:[./-]\\d{1,2}[./-]\\d{2,4}|\\s+(?:oca(?:k)?|şub(?:at)?|mar(?:t)?|nis(?:an)?|may(?:ıs)?|haz(?:iran)?|tem(?:muz)?|ağu(?:stos)?|eyl(?:ül)?|eki(?:m)?|kas(?:ım)?|ara(?:lık)?))(?:\\s+\\d{4})?\\s*$"""
+        )
+
         val baseTitle = candidates.firstNotNullOfOrNull { raw ->
             val cleaned = cleanTitle(raw)
                 .replace(
-                    Regex("""(?i)\s*(?:[-|:]?\s*)?(?:son\s+bölüm|son\s+bolum|\d{1,4}\s*\.?\s*(?:bölüm|bolum|episode))(?:\s+.*)?$"""),
+                    Regex("""(?i)\\s*(?:[-|:]?\\s*)?(?:son\\s+bölüm|son\\s+bolum|\\d{1,4}\\s*\\.?\\s*(?:bölüm|bolum|episode))(?:\\s+.*)?$"""),
                     ""
                 )
-                .replace(datePrefix, "")
+                .replace(numericDatePrefix, "")
+                .replace(namedDatePrefix, "")
                 .trim(' ', '-', '|', ':', '•')
             val normalized = norm(cleaned)
             cleaned.takeIf {
                 validTitle(it) &&
                     !dateOnly.matches(it) &&
                     normalized !in setOf("son bolum", "bolum", "episode", "son episode") &&
-                    !Regex("""^\d{1,2}\s+\d{1,2}\s+\d{2,4}$""").matches(normalized)
+                    !Regex("""^\\d{1,2}\\s+\\d{1,2}\\s+\\d{2,4}$""").matches(normalized)
             }
         } ?: episodeSeriesTitleFromUrl(url)
 
@@ -504,7 +531,14 @@ class TrDiziIzle : MainAPI() {
 
                 val card = cardFor(anchor)
                 val title = latestEpisodeTitle(anchor, card, url) ?: return@anchorLoop
+                val relatedSeriesAnchor = card.select("a[href]").firstOrNull { related ->
+                    if (related == anchor) return@firstOrNull false
+                    val relatedUrl = abs(related.attr("href"), related.baseUri().ifBlank { listingBase }) ?: return@firstOrNull false
+                    val parts = path(relatedUrl).trim('/').split('/').filter { it.isNotBlank() }
+                    parts.size == 2 && parts[0] == "diziler"
+                }
                 val poster = latestEpisodePoster(anchor, listingBase)
+                    ?: relatedSeriesAnchor?.let { posterOf(it, card, listingBase) }
                     ?: posterOf(anchor, card, listingBase)
                 val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
                 val item = newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
@@ -717,10 +751,17 @@ class TrDiziIzle : MainAPI() {
         )
         if (meta != null) abs(meta, base)?.let { return it }
 
-        document.select("main img,article img,[class*=poster] img,[class*=afis] img").forEach { image ->
+        document.select(
+            "main img,article img,[class*=poster] img,[class*=afis] img," +
+                "[data-poster],[data-poster-url],[data-poster-src],[data-image-url],[data-image-src]," +
+                "[data-bg],[data-bg-image],[data-background],[data-background-image]," +
+                "[style*=background],[style*=url]"
+        ).forEach { image ->
             imageUrl(image, base)?.let { return it }
         }
-        return document.selectFirst("img[fetchpriority=high],img")?.let { imageUrl(it, base) }
+        return document.selectFirst("img[fetchpriority=high],img,[style*=background],[style*=url]")?.let {
+            imageUrl(it, base)
+        }
     }
 
     override suspend fun load(url: String): LoadResponse? {
