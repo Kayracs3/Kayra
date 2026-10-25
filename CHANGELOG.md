@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-26
+
+<!-- kayra-commit:14a60d9eeaa3a2511798ae5449615c2be5f77c9e -->
+### Fix separate X HLS audio by preserving master playlist
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [14a60d9](https://github.com/Kayracs3/Kayra/commit/14a60d9eeaa3a2511798ae5449615c2be5f77c9e)
+
+
 ## 2026-10-25
 
 <!-- kayra-commit:d899a7ea80a53ccdeeda7a26f043b9131a1da73b -->
