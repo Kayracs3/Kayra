@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:0a92ce1a968dcff8de5138427750338164dca834 -->
+### Bump TrDiziIzle to v17
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [0a92ce1](https://github.com/Kayracs3/Kayra/commit/0a92ce1a968dcff8de5138427750338164dca834)
+
+## 2026-10-25
+
+<!-- kayra-commit:02c1a69f265cc1e312aeed81d297bbb713a3540b -->
+### Preserve complete signed media query strings
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [02c1a69](https://github.com/Kayracs3/Kayra/commit/02c1a69f265cc1e312aeed81d297bbb713a3540b)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:bc987b7b83b08e7e2976a7ad48bb320adf264e17 -->
 ### Bump TrDiziIzle to v16
 
