@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:92edcdf471f6f3c6498251572751fa8f05766aeb -->
+### Normalize TRDiziIzle OG posters for CloudStream
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [92edcdf](https://github.com/Kayracs3/Kayra/commit/92edcdf471f6f3c6498251572751fa8f05766aeb)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:174859ee96e50ced32df8036c2e1d161c20f5ca6 -->
 ### Bump TRDiziIzle plugin version to 9 for exact poster lookup
 
