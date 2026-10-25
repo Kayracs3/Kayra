@@ -1721,11 +1721,11 @@ class TrDiziIzle : MainAPI() {
         }
         when {
             mediaUrl.contains(".m3u8", true) || mediaUrl.contains("/hls/", true) -> {
-                // master.m3u8 birden fazla varyant ve ayrı bir AUDIO grubu içerebilir.
-                // M3u8Helper kalite varyantlarını ayrı linklere böldüğünde bazı varyantlar
-                // harici ses playlist'ini kaybedip sessiz oynayabilir. Ana HLS manifestini
-                // olduğu gibi vermek, ExoPlayer'ın video ve ses parçalarını beraber seçmesini sağlar.
-                val keepMasterPlaylist = mediaUrl.contains("master.m3u8", ignoreCase = true)
+                // master.m3u8 and X/Twitter playlist URLs may contain separate audio groups.
+                // Passing them through M3u8Helper can split out a video-only variant and lose audio.
+                // Give the original manifest to ExoPlayer so it can resolve video and audio together.
+                val keepMasterPlaylist = mediaUrl.contains("master.m3u8", ignoreCase = true) ||
+                    isTwitterVideoCdn
                 if (keepMasterPlaylist) {
                     callback(newExtractorLink(name, "TRDiziIzle HLS", mediaUrl, ExtractorLinkType.M3U8) {
                         this.referer = mediaReferer
