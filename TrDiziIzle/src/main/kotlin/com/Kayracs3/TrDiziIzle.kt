@@ -243,6 +243,14 @@ class TrDiziIzle : MainAPI() {
         return anchor
     }
 
+    private fun isUsablePosterUrl(raw: String?): Boolean {
+        val url = abs(raw, mainUrl) ?: return false
+        val lower = url.lowercase(Locale.ROOT)
+        return !Regex(
+            """(?i)(logo|favicon|avatar|placeholder|no[-_]?image|noimage|blank|spacer|pixel|transparent|default[-_/]?poster|\.svg(?:$|[?#]))"""
+        ).containsMatchIn(lower)
+    }
+
     private fun imageUrl(element: Element?, base: String): String? {
         if (element == null) return null
 
@@ -274,10 +282,7 @@ class TrDiziIzle : MainAPI() {
             if (candidate.isBlank()) continue
 
             val url = abs(candidate, base)
-            if (url != null && !Regex(
-                    """(?i)(logo|favicon|avatar|placeholder|blank|spacer|pixel|\.svg$)"""
-                ).containsMatchIn(url)
-            ) return url
+            if (isUsablePosterUrl(url)) return url
         }
 
         val bg = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
@@ -562,34 +567,115 @@ class TrDiziIzle : MainAPI() {
         return items.values.take(80)
     }
 
+    private fun latestEpisodeSeriesDetailCandidates(
+        item: SearchResponse,
+        episodeDocument: Document?
+    ): List<String> {
+        val out = LinkedHashSet<String>()
+        val expectedTitle = norm(cleanTitle(item.name))
+
+        // Prefer an explicit related series link found on the episode page.
+        episodeDocument?.select("a[href]")?.forEach { anchor ->
+            val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { item.url }) ?: return@forEach
+            val parts = path(url).trim('/').split('/').filter { it.isNotBlank() }
+            if (!onSite(url) || parts.size != 2 || parts[0] != "diziler") return@forEach
+
+            val label = firstNonBlank(
+                anchor.selectFirst("h1,h2,h3,h4,[class*=title],[class*=name]")?.text(),
+                anchor.selectFirst("img")?.attr("alt"),
+                anchor.attr("title"),
+                anchor.attr("aria-label"),
+                anchor.text()
+            )?.let(::cleanTitle).orEmpty()
+            val normalizedLabel = norm(label)
+            if (normalizedLabel.isNotBlank() &&
+                (normalizedLabel == expectedTitle ||
+                    normalizedLabel.contains(expectedTitle) ||
+                    expectedTitle.contains(normalizedLabel))
+            ) {
+                out.add(url)
+            }
+        }
+
+        // Most episode URLs are named like /series-name-7-bolum-izle/.
+        // Convert that slug to the site's known /diziler/<slug>/ detail route.
+        val routeSlug = path(item.url).trim('/').substringAfterLast('/')
+        val seriesSlug = routeSlug.replace(
+            Regex("""(?i)(?:[-_]\d{1,4})?[-_](?:bolum|episode).*$"""),
+            ""
+        ).trim('-', '_')
+        if (seriesSlug.isNotBlank() && seriesSlug != routeSlug) {
+            out.add("$mainUrl/diziler/$seriesSlug/")
+        }
+
+        // Dated episode pages may not carry a numeric "bolum" in their slug.
+        // A cleaned, normalized series title is a final route candidate.
+        val titleSlug = expectedTitle.replace(' ', '-')
+        if (titleSlug.isNotBlank()) out.add("$mainUrl/diziler/$titleSlug/")
+
+        return out.filter { isSeries(it) }.take(3)
+    }
+
     private suspend fun fillMissingLatestPosters(items: List<SearchResponse>): List<SearchResponse> =
         coroutineScope {
-            // Only missing posters trigger requests. Keep each batch small to avoid
-            // sending dozens of simultaneous requests to the site.
             val result = ArrayList<SearchResponse>(items.size)
             for (batch in items.chunked(5)) {
                 val resolvedBatch = batch.map { item ->
                     async {
-                        if (!item.posterUrl.isNullOrBlank()) return@async item
+                        if (isUsablePosterUrl(item.posterUrl)) return@async item
 
-                        val poster = runCatching {
-                            app.get(
+                        var poster: String? = null
+                        var episodeDocument: Document? = null
+
+                        // First inspect the episode page; its OG image or poster may already be usable.
+                        runCatching {
+                            val response = app.get(
                                 item.url,
                                 headers = headers + ("Referer" to "$mainUrl/"),
                                 referer = "$mainUrl/",
                                 allowRedirects = true,
-                                timeout = 5000
-                            ).takeIf { it.isSuccessful }?.document?.let { detail ->
-                                posterFromPage(detail, item.url)
+                                timeout = 6000
+                            )
+                            if (response.isSuccessful) {
+                                episodeDocument = response.document
+                                poster = posterFromPage(response.document, item.url)
+                                    ?.takeIf(::isUsablePosterUrl)
                             }
                         }.onFailure {
-                            Log.d(tag, "Son bölüm afişi alınamadı: " + item.url, it)
-                        }.getOrNull()
+                            Log.d(tag, "Bölüm sayfasından afiş alınamadı: " + item.url, it)
+                        }
 
-                        if (poster.isNullOrBlank()) {
+                        // If an episode page has no poster, request its actual series detail page.
+                        if (!isUsablePosterUrl(poster)) {
+                            val candidates = latestEpisodeSeriesDetailCandidates(item, episodeDocument)
+                            for (seriesUrl in candidates) {
+                                val candidatePoster = runCatching {
+                                    app.get(
+                                        seriesUrl,
+                                        headers = headers + ("Referer" to "$mainUrl/"),
+                                        referer = "$mainUrl/",
+                                        allowRedirects = true,
+                                        timeout = 6000
+                                    ).takeIf { it.isSuccessful }?.document?.let { detail ->
+                                        posterFromPage(detail, seriesUrl)
+                                            ?.takeIf(::isUsablePosterUrl)
+                                    }
+                                }.onFailure {
+                                    Log.d(tag, "Dizi afiş sayfası alınamadı: $seriesUrl", it)
+                                }.getOrNull()
+
+                                if (isUsablePosterUrl(candidatePoster)) {
+                                    poster = candidatePoster
+                                    break
+                                }
+                            }
+                        }
+
+                        if (!isUsablePosterUrl(poster)) {
+                            Log.d(tag, "Son bölüm afişi bulunamadı: " + item.name + " / " + item.url)
                             item
                         } else {
-                            Log.d(tag, "Son bölüm afişi tamamlandı: " + item.name + " -> " + poster)
+                            Log.d(tag, "Son bölüm afişi bulundu: " + item.name + " -> " + poster)
                             newTvSeriesSearchResponse(item.name, item.url, TvType.TvSeries) {
                                 posterUrl = poster
                                 posterHeaders = this@TrDiziIzle.posterHeaders
@@ -749,7 +835,7 @@ class TrDiziIzle : MainAPI() {
             document.selectFirst("meta[property=og:image]")?.attr("content"),
             document.selectFirst("meta[name=twitter:image]")?.attr("content")
         )
-        if (meta != null) abs(meta, base)?.let { return it }
+        if (meta != null) abs(meta, base)?.takeIf(::isUsablePosterUrl)?.let { return it }
 
         document.select(
             "main img,article img,[class*=poster] img,[class*=afis] img," +
