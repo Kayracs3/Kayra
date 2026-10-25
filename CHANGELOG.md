@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:344aa8c281206004df12d9e0fdc1a49ffd3ff0da -->
+### Correct TRDiziIzle regex escaping for latest episodes
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [344aa8c](https://github.com/Kayracs3/Kayra/commit/344aa8c281206004df12d9e0fdc1a49ffd3ff0da)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:dac9bbae257c94f46af8b88bd435d980219d1095 -->
 ### Fix TRDiziIzle latest episode card titles and posters
 
