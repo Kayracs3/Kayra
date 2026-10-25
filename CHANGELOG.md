@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:68199ed9ddaa189d4bf3ea8ee94c826cff92214d -->
+### Keep isolated TrDiziIzle check separate from full build
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [68199ed](https://github.com/Kayracs3/Kayra/commit/68199ed9ddaa189d4bf3ea8ee94c826cff92214d)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:49e3633cfe525538ee70f58d0272ea7f69e9e2e7 -->
 ### Add isolated TrDiziIzle compile check
 
