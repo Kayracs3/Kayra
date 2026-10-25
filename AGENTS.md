@@ -31,6 +31,7 @@ These instructions record the maintainer's established preferences and lessons f
 - Keep series metadata and episode playback data separate. Episode names can be correct even if the actual playback or poster fields were dropped during serialization.
 
 ## Artwork and metadata
+- **TRDiziIzle placeholder rule:** never use `https://www.trdiziizle.tv/wp-content/themes/diziplus/images/none.png` (or any file named `none.png`) as a poster, even when it appears in `data-src`. Prefer the real `img[alt*=afis]` artwork from `/wp-content/uploads/...` and inspect both `src` and lazy-load attributes. Run `og:image` and other metadata through the same validation so a placeholder cannot suppress fallback.
 - Use the provider's current artwork fields first; handle aliases, escaped slashes/entities, protocol-relative URLs, and relative paths where appropriate.
 - Treat empty strings, `null`, and `0` as missing artwork values rather than URLs.
 - For episode artwork, prefer episode-specific image fields, then season artwork, then series artwork. Do not overwrite a valid poster with an empty or malformed value.

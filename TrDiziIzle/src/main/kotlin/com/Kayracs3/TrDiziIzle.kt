@@ -246,16 +246,21 @@ class TrDiziIzle : MainAPI() {
     private fun isUsablePosterUrl(raw: String?): Boolean {
         val url = abs(raw, mainUrl) ?: return false
         val uri = runCatching { URI(url) }.getOrNull() ?: return false
-        val lower = url.lowercase(Locale.ROOT)
         val pathValue = uri.path.orEmpty().lowercase(Locale.ROOT)
         val file = pathValue.substringAfterLast('/')
+
+        // LiteSpeed's none.png is an empty placeholder, not a poster.
+        // Reject the URL even when it is present in data-src so fallback can
+        // continue to the real image in /wp-content/uploads/.
+        if (file.equals("none.png", ignoreCase = true) ||
+            pathValue.endsWith("/wp-content/themes/diziplus/images/none.png")
+        ) return false
+
         if (Regex(
                 """(?i)(logo|favicon|avatar|placeholder|no[-_]?image|noimage|blank|spacer|pixel|transparent|default[-_/]?poster)"""
             ).containsMatchIn(file)
         ) return false
 
-        // These commonly produce blank poster tiles in Coil; do not accept them
-        // as final art and thereby suppress the og:image fallback.
         if (listOf(".svg", ".gif", ".ico", ".html", ".htm", ".css", ".js").any { file.endsWith(it) }) {
             return false
         }
@@ -902,9 +907,26 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun posterFromPage(document: Document, base: String): String? {
-        // Open Graph/Twitter metadata is the canonical poster on many episode pages.
-        // Normalize these values before trying card images: raw optimizer/R2 URLs may
-        // be valid HTTP URLs but still render as blank tiles in CloudStream.
+        // Prefer the actual LiteSpeed poster markup (alt="afis") first.
+        // imageUrl validates src/data-src independently, so none.png is skipped
+        // and the same element's real /wp-content/uploads/... image can be used.
+        document.select("img[alt*=afis]").forEach { image ->
+            imageUrl(image, base)?.let { return it }
+        }
+
+        // The site's true poster is commonly an uploaded JPG/WebP/PNG.
+        // Check both src and lazy-loading attributes rather than accepting a placeholder.
+        document.select(
+            "img[src*='/wp-content/uploads/'], " +
+                "img[data-src*='/wp-content/uploads/'], " +
+                "img[data-lazy-src*='/wp-content/uploads/'], " +
+                "img[data-original*='/wp-content/uploads/'], " +
+                "img[data-original-src*='/wp-content/uploads/']"
+        ).forEach { image ->
+            imageUrl(image, base)?.let { return it }
+        }
+
+        // Open Graph/Twitter is a fallback, normalized by the same helper.
         document.select(
             "meta[property=og:image], meta[property=og:image:url], " +
                 "meta[property=og:image:secure_url], meta[name=og:image], " +
@@ -919,21 +941,6 @@ class TrDiziIzle : MainAPI() {
             normalizePosterUrl(raw, base)?.let { return it }
         }
 
-        // The site also uses LiteSpeed lazy-loaded posters, often marked alt="afis".
-        document.select("img[alt*=afis]").forEach { image ->
-            imageUrl(image, base)?.let { return it }
-        }
-
-        document.select(
-            "img[data-src*='/wp-content/uploads/'], " +
-                "img[data-lazy-src*='/wp-content/uploads/'], " +
-                "img[data-original*='/wp-content/uploads/'], " +
-                "img[data-original-src*='/wp-content/uploads/'], " +
-                "img[src*='/wp-content/uploads/']"
-        ).forEach { image ->
-            imageUrl(image, base)?.let { return it }
-        }
-
         document.select(
             "main img,article img,[class*=poster] img,[class*=afis] img," +
                 "[data-poster],[data-poster-url],[data-poster-src],[data-image-url],[data-image-src]," +
@@ -942,9 +949,7 @@ class TrDiziIzle : MainAPI() {
         ).forEach { image ->
             imageUrl(image, base)?.let { return it }
         }
-        return document.selectFirst(
-            "img[fetchpriority=high],img,[style*=background],[style*=url]"
-        )?.let { imageUrl(it, base) }
+        return null
     }
 
     override suspend fun load(url: String): LoadResponse? {
