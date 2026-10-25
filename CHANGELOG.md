@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:e6ea42904bbce92b9b310bb63934fef8ae357158 -->
+### Use Yandex referrer on playback link property
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [e6ea429](https://github.com/Kayracs3/Kayra/commit/e6ea42904bbce92b9b310bb63934fef8ae357158)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:9477d0fe426c30e1d03f5c83084de728483b9ce3 -->
 ### Use Yandex Disk player headers for TRDiziIzle media
 
