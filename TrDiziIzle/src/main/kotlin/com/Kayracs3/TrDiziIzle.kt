@@ -399,9 +399,18 @@ class TrDiziIzle : MainAPI() {
             ?: return null
         val number = info.second ?: return null
         val baseTitle = candidates.firstNotNullOfOrNull { raw ->
-            cleanTitle(raw).takeIf { validTitle(it) }
-        }?.takeIf { validTitle(it) }
-            ?: episodeSeriesTitleFromUrl(url)
+            val cleaned = cleanTitle(raw)
+                .replace(
+                    Regex("""(?i)\\s*(?:[-|:]?\\s*)?(?:son\\s+bölüm|son\\s+bolum|\\d{1,4}\\s*\\.?\\s*(?:bölüm|bolum|episode))(?:\\s+.*)?$"""),
+                    ""
+                )
+                .trim(' ', '-', '|', ':', '•')
+            val normalized = norm(cleaned)
+            cleaned.takeIf {
+                validTitle(it) &&
+                    normalized !in setOf("son bolum", "bolum", "episode", "son episode")
+            }
+        } ?: episodeSeriesTitleFromUrl(url)
         if (!validTitle(baseTitle)) return null
 
         val season = info.first
@@ -776,10 +785,9 @@ class TrDiziIzle : MainAPI() {
         if (includeCurrentPageEpisode && (hasPlayer || isLatestEpisodeUrl(pageUrl)) &&
             output.keys.none { it.trimEnd('/') == pageUrl.trimEnd('/') }
         ) {
-            val currentInfo = episodeInfo(
-                document.selectFirst("h1")?.text().orEmpty() + " " +
-                    document.text().take(2500) + " " +
-                    path(pageUrl).replace('-', ' ').replace('_', ' ')
+            val routeInfo = episodeInfo(path(pageUrl).replace('-', ' ').replace('_', ' '))
+            val currentInfo = routeInfo ?: episodeInfo(
+                document.selectFirst("h1")?.text().orEmpty() + " " + document.text().take(2500)
             )
             val number = currentInfo?.second
             output[pageUrl] = newEpisode(pageUrl) {
