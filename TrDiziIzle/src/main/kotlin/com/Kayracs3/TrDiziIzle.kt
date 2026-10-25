@@ -1497,7 +1497,31 @@ class TrDiziIzle : MainAPI() {
     }
 
     private suspend fun emitMedia(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
-        val mediaHeaders = mapOf("User-Agent" to USER_AGENT, "Referer" to referer, "Accept" to "*/*")
+        val mediaHost = host(url)
+        val isYandexDownloader = mediaHost == "downloader.disk.yandex.ru" ||
+            mediaHost == "downloader.disk.yandex.net"
+
+        // Yandex's generated /disk/ and /preview/ file URLs are served as if requested
+        // from its own player. Reuse the Yandex Disk origin rather than the wrapper
+        // page's Referer; otherwise ExoPlayer can get HTTP 403 even when the wrapper
+        // successfully exposed a signed Yandex URL.
+        val mediaReferer = if (isYandexDownloader) "https://disk.yandex.ru/" else referer
+        val mediaHeaders = linkedMapOf(
+            "User-Agent" to USER_AGENT,
+            "Referer" to mediaReferer,
+            "Accept" to if (isYandexDownloader) {
+                "video/mp4,video/*,*/*;q=0.9"
+            } else {
+                "*/*"
+            }
+        )
+        if (isYandexDownloader) {
+            mediaHeaders["Origin"] = "https://disk.yandex.ru"
+            mediaHeaders["Sec-Fetch-Dest"] = "video"
+            mediaHeaders["Sec-Fetch-Mode"] = "no-cors"
+            mediaHeaders["Sec-Fetch-Site"] = "cross-site"
+            Log.d(tag, "Yandex medya bağlantısı için Disk oynatıcı başlıkları uygulanıyor")
+        }
         when {
             url.contains(".m3u8", true) || url.contains("/hls/", true) -> {
                 // master.m3u8 birden fazla varyant ve ayrı bir AUDIO grubu içerebilir.
