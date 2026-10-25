@@ -1534,12 +1534,18 @@ class TrDiziIzle : MainAPI() {
 
         // Yandex's downloader endpoint requires a disposition query parameter.
         // The website-provided URL omits it, causing HTTP 422: No parameter: disposition.
-        val downloadUrl = if (Regex("""(?i)[?&]disposition=""").containsMatchIn(url)) {
-            url
-        } else {
-            url + (if (url.contains("?")) "&" else "?") + "disposition=attachment"
+        fun withQueryParameter(sourceUrl: String, parameter: String, value: String): String {
+            if (Regex("""(?i)[?&]$parameter=""").containsMatchIn(sourceUrl)) return sourceUrl
+            return sourceUrl + (if (sourceUrl.contains("?")) "&" else "?") + parameter + "=" + value
         }
-        Log.d(tag, "Yandex indirme bağlantısı disposition parametresiyle deneniyor")
+        // Yandex returns HTTP 422 one required query parameter at a time on incomplete URLs.
+        // Preserve existing signed parameters and add the two required download hints only when absent.
+        val downloadUrl = withQueryParameter(
+            withQueryParameter(url, "disposition", "attachment"),
+            "content_type",
+            "video%2Fmp4"
+        )
+        Log.d(tag, "Yandex indirme bağlantısına disposition ve content_type parametreleri uygulandı")
 
         val response = runCatching {
             app.get(
