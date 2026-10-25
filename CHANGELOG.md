@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:d899a7ea80a53ccdeeda7a26f043b9131a1da73b -->
+### Bump TrDiziIzle to version 22
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [d899a7e](https://github.com/Kayracs3/Kayra/commit/d899a7ea80a53ccdeeda7a26f043b9131a1da73b)
+
+## 2026-10-25
+
+<!-- kayra-commit:19648d47628ca635f2838a3114b27eafdc167d6f -->
+### Keep X HLS master playlists intact to preserve audio
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [19648d4](https://github.com/Kayracs3/Kayra/commit/19648d47628ca635f2838a3114b27eafdc167d6f)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:4ed49ad8bedd97b8aac45fae117c790a73b97307 -->
 ### Bump TRDiziIzle search fix to version 21
 
