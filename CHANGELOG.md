@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:c81156aef204b5797e2e2ee43b09cf0f281abe4c -->
+### Improve TRDiziIzle search fallback for A-Z archive
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [c81156a](https://github.com/Kayracs3/Kayra/commit/c81156aef204b5797e2e2ee43b09cf0f281abe4c)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:a8c34690faa28f9187267e07c083805e5bc720ae -->
 ### Fix nullable baseUrl in Flix stream resolver
 
