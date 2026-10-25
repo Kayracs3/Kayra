@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:bb98d408732caadf5bb8f0e3d11f8edf5815ff07 -->
+### Limit TRDiziIzle player redirect loops
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [bb98d40](https://github.com/Kayracs3/Kayra/commit/bb98d408732caadf5bb8f0e3d11f8edf5815ff07)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:4bbcce0b3bfde13d2c06f5fe5aade066ad7bb58c -->
 ### Correct regex escapes in TRDiziIzle episode title and poster fix
 
