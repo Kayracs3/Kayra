@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:f708557c166a7c5af87976729c5f80ff1e194d48 -->
+### Fix TRDiziIzle latest episode titles, posters, and player asset filtering
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [f708557](https://github.com/Kayracs3/Kayra/commit/f708557c166a7c5af87976729c5f80ff1e194d48)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:68199ed9ddaa189d4bf3ea8ee94c826cff92214d -->
 ### Keep isolated TrDiziIzle check separate from full build
 
