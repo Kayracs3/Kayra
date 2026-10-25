@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:b502fb2e5ab25ac136be33044dc8970e45b43e0d -->
+### Fix escaped regex in TRDiziIzle episode titles
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [b502fb2](https://github.com/Kayracs3/Kayra/commit/b502fb2e5ab25ac136be33044dc8970e45b43e0d)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:6118e11742712c9629ae9e35aacb78fef5f14eaa -->
 ### Harden TRDiziIzle episode title parsing
 
