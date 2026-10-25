@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:49e3633cfe525538ee70f58d0272ea7f69e9e2e7 -->
+### Add isolated TrDiziIzle compile check
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [49e3633](https://github.com/Kayracs3/Kayra/commit/49e3633cfe525538ee70f58d0272ea7f69e9e2e7)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:de1318e36059546c55f94f4bfb7ae40b98c636eb -->
 ### Fix TRDiziIzle poster fallback coroutine build
 
