@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:bc987b7b83b08e7e2976a7ad48bb320adf264e17 -->
+### Bump TrDiziIzle to v16
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [bc987b7](https://github.com/Kayracs3/Kayra/commit/bc987b7b83b08e7e2976a7ad48bb320adf264e17)
+
+## 2026-10-25
+
+<!-- kayra-commit:db030a12400621b6977abe23ff94b11a4dd57ffc -->
+### Add required Yandex content type parameter
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [db030a1](https://github.com/Kayracs3/Kayra/commit/db030a12400621b6977abe23ff94b11a4dd57ffc)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:11042d06437070c5f3a8b47535a4f0515352621c -->
 ### Bump TrDiziIzle to v15
 
