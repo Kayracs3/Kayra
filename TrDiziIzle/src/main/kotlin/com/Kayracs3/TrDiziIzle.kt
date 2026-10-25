@@ -245,10 +245,59 @@ class TrDiziIzle : MainAPI() {
 
     private fun isUsablePosterUrl(raw: String?): Boolean {
         val url = abs(raw, mainUrl) ?: return false
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
         val lower = url.lowercase(Locale.ROOT)
-        return !Regex(
-            """(?i)(logo|favicon|avatar|placeholder|no[-_]?image|noimage|blank|spacer|pixel|transparent|default[-_/]?poster|\.svg(?:$|[?#]))"""
-        ).containsMatchIn(lower)
+        val pathValue = uri.path.orEmpty().lowercase(Locale.ROOT)
+        val file = pathValue.substringAfterLast('/')
+        if (Regex(
+                """(?i)(logo|favicon|avatar|placeholder|no[-_]?image|noimage|blank|spacer|pixel|transparent|default[-_/]?poster)"""
+            ).containsMatchIn(file)
+        ) return false
+
+        // These commonly produce blank poster tiles in Coil; do not accept them
+        // as final art and thereby suppress the og:image fallback.
+        if (listOf(".svg", ".gif", ".ico", ".html", ".htm", ".css", ".js").any { file.endsWith(it) }) {
+            return false
+        }
+        return uri.host?.isNotBlank() == true && pathValue.isNotBlank() &&
+            !pathValue.endsWith("/favicon.ico")
+    }
+
+    private fun posterImageProxyUrl(imageUrl: String): String =
+        "https://wsrv.nl/?url=" + URLEncoder.encode(imageUrl, "UTF-8") +
+            "&w=384&output=webp&q=80"
+
+    private fun normalizePosterUrl(rawValue: String?, base: String = mainUrl): String? {
+        var url = abs(rawValue, base) ?: return null
+        var uri = runCatching { URI(url) }.getOrNull() ?: return null
+
+        // Unwrap image optimizers before handing URLs to CloudStream/Coil.
+        if (uri.path.orEmpty().endsWith("/_next/image", ignoreCase = true)) {
+            val encodedImage = uri.rawQuery.orEmpty().split('&')
+                .firstOrNull { it.substringBefore('=').equals("url", true) }
+                ?.substringAfter('=', "")
+                ?.takeIf { it.isNotBlank() } ?: return null
+            val original = runCatching { URLDecoder.decode(encodedImage, "UTF-8") }
+                .getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+            url = abs(original, base) ?: return null
+            uri = runCatching { URI(url) }.getOrNull() ?: return null
+        }
+
+        if (!isUsablePosterUrl(url)) return null
+
+        val imageHost = uri.host.orEmpty().lowercase(Locale.ROOT)
+        val imagePath = uri.path.orEmpty().lowercase(Locale.ROOT)
+        val isPublicR2 = imageHost == "r2.dev" || imageHost.endsWith(".r2.dev")
+        val isPotentiallyUnsupportedFormat =
+            imagePath.endsWith(".avif") || imagePath.endsWith(".heic") || imagePath.endsWith(".heif")
+
+        // Public R2 URLs and AVIF/HEIC files have previously failed in Coil.
+        // Convert only these cases; keep ordinary WordPress JPG/PNG/WebP URLs direct.
+        return if (isPublicR2 || isPotentiallyUnsupportedFormat) {
+            posterImageProxyUrl(url)
+        } else {
+            url
+        }
     }
 
     private fun imageUrl(element: Element?, base: String): String? {
@@ -273,21 +322,29 @@ class TrDiziIzle : MainAPI() {
                 )
             ) continue
 
-            // srcset entries may contain width/density descriptors after the URL.
-            val candidate = if (attr.contains("srcset")) {
-                raw.substringBefore(',').trim().substringBefore(' ').trim()
+            // Choose the largest srcset candidate instead of always taking the first.
+            val candidate = if (attr.contains("srcset", true)) {
+                raw.split(',')
+                    .mapNotNull { entry ->
+                        val pieces = entry.trim().split(Regex("""\s+"""), limit = 2)
+                        val candidateUrl = pieces.firstOrNull().orEmpty()
+                        val descriptor = pieces.getOrNull(1).orEmpty()
+                        val width = Regex("""^(\d+)w$""").matchEntire(descriptor)
+                            ?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+                        candidateUrl.takeIf { it.isNotBlank() }?.let { it to width }
+                    }
+                    .maxByOrNull { it.second }?.first.orEmpty()
             } else {
                 raw
             }
             if (candidate.isBlank()) continue
 
-            val url = abs(candidate, base)
-            if (isUsablePosterUrl(url)) return url
+            normalizePosterUrl(candidate, base)?.let { return it }
         }
 
-        val bg = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
+        val bg = Regex("""(?i)url\(\s*['"]?([^)'\"]+)""")
             .find(element.attr("style"))?.groupValues?.getOrNull(1)
-        return abs(bg, base)
+        return normalizePosterUrl(bg, base)
     }
 
     private fun posterOf(anchor: Element, card: Element, base: String): String? =
@@ -845,8 +902,24 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun posterFromPage(document: Document, base: String): String? {
-        // The site's poster is commonly <img alt="afis" data-src="/wp-content/uploads/...">.
-        // Prioritize this marker over OG metadata, logos and theme images.
+        // Open Graph/Twitter metadata is the canonical poster on many episode pages.
+        // Normalize these values before trying card images: raw optimizer/R2 URLs may
+        // be valid HTTP URLs but still render as blank tiles in CloudStream.
+        document.select(
+            "meta[property=og:image], meta[property=og:image:url], " +
+                "meta[property=og:image:secure_url], meta[name=og:image], " +
+                "meta[name=twitter:image], meta[property=twitter:image], " +
+                "meta[itemprop=image], link[rel=image_src]"
+        ).forEach { element ->
+            val raw = if (element.tagName().equals("link", true)) {
+                element.attr("href")
+            } else {
+                element.attr("content")
+            }
+            normalizePosterUrl(raw, base)?.let { return it }
+        }
+
+        // The site also uses LiteSpeed lazy-loaded posters, often marked alt="afis".
         document.select("img[alt*=afis]").forEach { image ->
             imageUrl(image, base)?.let { return it }
         }
@@ -861,12 +934,6 @@ class TrDiziIzle : MainAPI() {
             imageUrl(image, base)?.let { return it }
         }
 
-        val meta = firstNonBlank(
-            document.selectFirst("meta[property=og:image]")?.attr("content"),
-            document.selectFirst("meta[name=twitter:image]")?.attr("content")
-        )
-        if (meta != null) abs(meta, base)?.takeIf(::isUsablePosterUrl)?.let { return it }
-
         document.select(
             "main img,article img,[class*=poster] img,[class*=afis] img," +
                 "[data-poster],[data-poster-url],[data-poster-src],[data-image-url],[data-image-src]," +
@@ -875,9 +942,9 @@ class TrDiziIzle : MainAPI() {
         ).forEach { image ->
             imageUrl(image, base)?.let { return it }
         }
-        return document.selectFirst("img[fetchpriority=high],img,[style*=background],[style*=url]")?.let {
-            imageUrl(it, base)
-        }
+        return document.selectFirst(
+            "img[fetchpriority=high],img,[style*=background],[style*=url]"
+        )?.let { imageUrl(it, base) }
     }
 
     override suspend fun load(url: String): LoadResponse? {
