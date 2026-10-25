@@ -381,6 +381,48 @@ class TrDiziIzle : MainAPI() {
         return (if (posterItems.isNotEmpty()) posterItems.values else fallbackItems.values).take(80)
     }
 
+    private fun latestEpisodePoster(anchor: Element, base: String): String? {
+        val imageSelector =
+            "img, picture img, source[srcset], [data-poster], [data-poster-url], " +
+                "[data-poster-src], [data-src], [data-lazy-src], [data-original], " +
+                "[data-original-src], [data-image], [data-image-url], [data-image-src], " +
+                "[data-bg], [data-bg-image], [data-background], [style*=background-image]"
+
+        // First try an image contained by the episode link itself.
+        anchor.selectFirst(imageSelector)?.let { imageUrl(it, base)?.let { url -> return url } }
+
+        // Some cards keep the poster and the title link as siblings. Walk up
+        // to the nearest compact card instead of relying on cardFor(), which
+        // may reject wrappers with more than eight children.
+        var node: Element? = anchor.parent()
+        repeat(8) {
+            val parent = node ?: return null
+            val marker = (parent.id() + " " + parent.className()).lowercase(Locale.ROOT)
+            val isEpisodeCard = Regex(
+                """(^|[\\s_-])(episode|episodes|bolum|bolumler|listepisode|listepisodes|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover)([\\s_-]|$)"""
+            ).containsMatchIn(marker)
+            val images = parent.select(imageSelector)
+            val links = parent.select("a[href]").size
+
+            if (images.isNotEmpty() && (
+                    isEpisodeCard ||
+                        (parent.childrenSize() <= 10 && links in 1..4 && images.size <= 4)
+                    )
+            ) {
+                images.forEach { image ->
+                    imageUrl(image, base)?.let { return it }
+                }
+            }
+
+            // Never fall back to an image belonging to an adjacent episode
+            // by searching the entire feed or the page-level list.
+            if (parent.hasClass("listepisodes") || parent.id() == "listehizala") return null
+            node = parent.parent()
+        }
+
+        return null
+    }
+
     private fun latestEpisodeTitle(anchor: Element, card: Element, url: String): String? {
         val image = anchor.selectFirst("img") ?: card.selectFirst("img")
         val candidates = listOfNotNull(
@@ -444,7 +486,8 @@ class TrDiziIzle : MainAPI() {
 
                 val card = cardFor(anchor)
                 val title = latestEpisodeTitle(anchor, card, url) ?: return@anchorLoop
-                val poster = posterOf(anchor, card, listingBase)
+                val poster = latestEpisodePoster(anchor, listingBase)
+                    ?: posterOf(anchor, card, listingBase)
                 val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
                 val item = newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
                     posterUrl = poster
