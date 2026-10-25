@@ -1043,11 +1043,51 @@ class TrDiziIzle : MainAPI() {
                     return@candidateLoop
                 }
                 if (seenPages.size < 4 && pages.size < 3) {
-                    val nested = runCatching {
-                        app.get(candidate, headers = headers + ("Referer" to pageUrl), referer = pageUrl, allowRedirects = true, timeout = 8000)
+                    // Follow redirects manually with a small limit. Some /player/oynat/
+                    // endpoints loop through redirects until NiceHttp aborts after 20+ hops.
+                    var currentUrl = candidate
+                    var requestReferer = pageUrl
+                    val redirectHistory = LinkedHashSet<String>()
+                    var redirectCount = 0
+                    var nested = runCatching {
+                        app.get(
+                            currentUrl,
+                            headers = headers + ("Referer" to requestReferer),
+                            referer = requestReferer,
+                            allowRedirects = false,
+                            timeout = 8000
+                        )
                     }.getOrNull()
+
+                    while (nested != null && nested.code in 300..399 && redirectCount < 5) {
+                        if (!redirectHistory.add(currentUrl)) {
+                            nested = null
+                            break
+                        }
+                        val location = nested.headers["Location"] ?: nested.headers["location"]
+                        val nextUrl = abs(location, currentUrl)
+                        if (nextUrl.isNullOrBlank() || nextUrl in redirectHistory) {
+                            nested = null
+                            break
+                        }
+                        requestReferer = currentUrl
+                        currentUrl = nextUrl
+                        redirectCount++
+                        nested = runCatching {
+                            app.get(
+                                currentUrl,
+                                headers = headers + ("Referer" to requestReferer),
+                                referer = requestReferer,
+                                allowRedirects = false,
+                                timeout = 8000
+                            )
+                        }.getOrNull()
+                    }
+
                     if (nested != null && nested.isSuccessful && nested.text.isNotBlank()) {
-                        pages.add(candidate to nested.document)
+                        pages.add(currentUrl to nested.document)
+                    } else if (redirectCount >= 5) {
+                        Log.d(tag, "Oynatıcı yönlendirme sınırı: " + candidate.substringAfter(mainUrl))
                     }
                 }
             }
