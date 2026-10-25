@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:de1318e36059546c55f94f4bfb7ae40b98c636eb -->
+### Fix TRDiziIzle poster fallback coroutine build
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [de1318e](https://github.com/Kayracs3/Kayra/commit/de1318e36059546c55f94f4bfb7ae40b98c636eb)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:029e1c765e191b410c2f4944a4e11243515736cf -->
 ### Fix PatronSH extractor link type compilation
 
