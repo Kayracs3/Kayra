@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:9183848f58f480f66f0288403ba26b54d6750f23 -->
+### Bump TrDiziIzle to version 18
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [9183848](https://github.com/Kayracs3/Kayra/commit/9183848f58f480f66f0288403ba26b54d6750f23)
+
+## 2026-10-25
+
+<!-- kayra-commit:9d6a03e770fd4ccfdb51f06a6620b318fcaecb92 -->
+### Improve nested player discovery for older episode embeds
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [9d6a03e](https://github.com/Kayracs3/Kayra/commit/9d6a03e770fd4ccfdb51f06a6620b318fcaecb92)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:0a92ce1a968dcff8de5138427750338164dca834 -->
 ### Bump TrDiziIzle to v17
 
