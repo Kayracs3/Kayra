@@ -65,7 +65,16 @@ class TrDiziIzle : MainAPI() {
             .replace("\\u0026", "&").replace("\\x26", "&")
             .trim('"', '\'')
         return runCatching {
-            val uri = if (raw.startsWith("//")) URI("https:$raw") else URI(base).resolve(raw)
+            // Player pages sometimes omit the scheme on an iframe hostname (www.example.com/path).
+            // Resolve that as a host, not as a path relative to /player/oynat/<id>/.
+            val bareHost = Regex(
+                """(?i)^(?:www\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9-]+)+(?:\:\d+)?(?:/|$)"""
+            ).containsMatchIn(raw)
+            val uri = when {
+                raw.startsWith("//") -> URI("https:$raw")
+                bareHost && !raw.contains("://") -> URI("https://$raw")
+                else -> URI(base).resolve(raw)
+            }
             uri.normalize().toString().substringBefore('#')
                 .takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
         }.getOrNull()
@@ -1231,13 +1240,21 @@ class TrDiziIzle : MainAPI() {
             val hasExplicitIframe = document.select(
                 "iframe[src],iframe[data-src],iframe[data-embed],iframe[data-player],iframe[data-iframe]"
             ).isNotEmpty()
-            // The site's /player/oynat/ endpoint can be a wrapper around another player.
-            // Inspect more of its player scripts instead of stopping after the first two.
-            val scriptLimit = if (hasExplicitIframe && !path(pageUrl).contains("/player/oynat/")) 2 else 4
+            // The site's /player/oynat/ page loads the JW Player wrapper and its source
+            // configuration separately. Do not let scripts from the outer episode page
+            // consume the entire inspection budget before this nested page is reached.
+            val currentPath = path(pageUrl)
+            val nestedPlayerPage = currentPath.contains("/player/oynat/") ||
+                currentPath.contains("/jwplayer")
+            val scriptLimit = when {
+                nestedPlayerPage -> 10
+                hasExplicitIframe -> 3
+                else -> 4
+            }
             val scriptsToInspect = (playerScripts + allScripts.filterNot { it in playerScripts })
                 .distinct().take(scriptLimit)
             scriptsToInspect.forEach scriptLoop@ { scriptUrl ->
-                if (seenScripts.size >= 6 || !seenScripts.add(scriptUrl)) return@scriptLoop
+                if (seenScripts.size >= 18 || !seenScripts.add(scriptUrl)) return@scriptLoop
                 val scriptResponse = runCatching {
                     app.get(
                         scriptUrl,
@@ -1345,6 +1362,11 @@ class TrDiziIzle : MainAPI() {
                     tag,
                     "Oynatıcı adayları " + pageUrl.substringAfter(mainUrl) + ": " +
                         candidates.take(8).joinToString(" | ") { host(it) + path(it) }
+                )
+                Log.d(
+                    tag,
+                    "İncelenen oynatıcı betikleri " + pageUrl.substringAfter(mainUrl) + ": " +
+                        scriptsToInspect.take(10).joinToString(" | ") { host(it) + path(it) }
                 )
             }
             Log.d(tag, "Oynatıcı taraması " + pageUrl.substringAfter(mainUrl) +
