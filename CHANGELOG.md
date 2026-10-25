@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:2c9d7f2159f33f7fe796498737089eb23b57f3a4 -->
+### Resolve missing TRDiziIzle episode posters from series detail pages
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [2c9d7f2](https://github.com/Kayracs3/Kayra/commit/2c9d7f2159f33f7fe796498737089eb23b57f3a4)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:61c8d16ebdaee43a0e603a7ac63a6d9d0679cdd2 -->
 ### Bump TRDiziIzle plugin version to 7
 
