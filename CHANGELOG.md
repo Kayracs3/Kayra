@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:47ffa54cff02d0cba8b4d04d3b215703b5109398 -->
+### Fix TRDiziIzle lazy-loaded episode posters
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [47ffa54](https://github.com/Kayracs3/Kayra/commit/47ffa54cff02d0cba8b4d04d3b215703b5109398)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:8cfd25f8b84065e0cff66062c3067c131a3cc679 -->
 ### Fix TRDiziIzle parsing all latest episode cards
 
