@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:2b8755ef1f9ca0c66f336d184f4868669657aefb -->
+### Fix TRDiziIzle search parser declaration
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [2b8755e](https://github.com/Kayracs3/Kayra/commit/2b8755ef1f9ca0c66f336d184f4868669657aefb)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:c81156aef204b5797e2e2ee43b09cf0f281abe4c -->
 ### Improve TRDiziIzle search fallback for A-Z archive
 
