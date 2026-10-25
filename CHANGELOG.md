@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:5aea79a67e16c40ae3cd9c90b3540def0aca2adb -->
+### Bump TrDiziIzle to version 20
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [5aea79a](https://github.com/Kayracs3/Kayra/commit/5aea79a67e16c40ae3cd9c90b3540def0aca2adb)
+
+## 2026-10-25
+
+<!-- kayra-commit:b799ea27d641b03aebbee58e8d21d7d18caea88d -->
+### Fix archive poster lookup and X video CDN headers
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [b799ea2](https://github.com/Kayracs3/Kayra/commit/b799ea27d641b03aebbee58e8d21d7d18caea88d)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:96cdfd3945e947f660944c55b028b99b00ce3cf8 -->
 ### Update print statement from 'Hello' to 'Goodbye'
 
