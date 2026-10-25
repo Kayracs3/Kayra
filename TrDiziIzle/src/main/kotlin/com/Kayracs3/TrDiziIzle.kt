@@ -409,7 +409,7 @@ class TrDiziIzle : MainAPI() {
             val images = parent.select(imageSelector)
             val marker = (parent.id() + " " + parent.className()).lowercase(Locale.ROOT)
             val cardLike = Regex(
-                """(^|[\\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover|listepisodes)([\\s_-]|$)"""
+                """(^|[\s_-])(episode|episodes|bolum|bolumler|item|entry|post|card|video|dizi|box|thumb|thumbnail|poster|cover|listepisodes)([\s_-]|$)"""
             ).containsMatchIn(marker)
             val compactCard = parent.childrenSize() <= 14 &&
                 links in 1..4 && images.size in 1..6
@@ -452,13 +452,13 @@ class TrDiziIzle : MainAPI() {
         val number = info.second ?: return null
 
         val datePrefix = Regex(
-            """(?i)^\\s*\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}\\s*[-|:•]?\\s*"""
+            """(?i)^\s*\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\s*[-|:•]?\s*"""
         )
-        val dateOnly = Regex("""^\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}$""")
+        val dateOnly = Regex("""^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$""")
         val baseTitle = candidates.firstNotNullOfOrNull { raw ->
             val cleaned = cleanTitle(raw)
                 .replace(
-                    Regex("""(?i)\\s*(?:[-|:]?\\s*)?(?:son\\s+bölüm|son\\s+bolum|\\d{1,4}\\s*\\.?\\s*(?:bölüm|bolum|episode))(?:\\s+.*)?$"""),
+                    Regex("""(?i)\s*(?:[-|:]?\s*)?(?:son\s+bölüm|son\s+bolum|\d{1,4}\s*\.?\s*(?:bölüm|bolum|episode))(?:\s+.*)?$"""),
                     ""
                 )
                 .replace(datePrefix, "")
@@ -468,7 +468,7 @@ class TrDiziIzle : MainAPI() {
                 validTitle(it) &&
                     !dateOnly.matches(it) &&
                     normalized !in setOf("son bolum", "bolum", "episode", "son episode") &&
-                    !Regex("""^\\d{1,2}\\s+\\d{1,2}\\s+\\d{2,4}$""").matches(normalized)
+                    !Regex("""^\d{1,2}\s+\d{1,2}\s+\d{2,4}$""").matches(normalized)
             }
         } ?: episodeSeriesTitleFromUrl(url)
 
