@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:4882690c4d5a97aa9bb0faaa310543efd3f4d3c1 -->
+### Correct X master playlist path matching
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [4882690](https://github.com/Kayracs3/Kayra/commit/4882690c4d5a97aa9bb0faaa310543efd3f4d3c1)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:14a60d9eeaa3a2511798ae5449615c2be5f77c9e -->
 ### Fix separate X HLS audio by preserving master playlist
 
