@@ -401,7 +401,7 @@ class TrDiziIzle : MainAPI() {
         val baseTitle = candidates.firstNotNullOfOrNull { raw ->
             val cleaned = cleanTitle(raw)
                 .replace(
-                    Regex("""(?i)\\s*(?:[-|:]?\\s*)?(?:son\\s+bölüm|son\\s+bolum|\\d{1,4}\\s*\\.?\\s*(?:bölüm|bolum|episode))(?:\\s+.*)?$"""),
+                    Regex("""(?i)\s*(?:[-|:]?\s*)?(?:son\s+bölüm|son\s+bolum|\d{1,4}\s*\.?\s*(?:bölüm|bolum|episode))(?:\s+.*)?$"""),
                     ""
                 )
                 .trim(' ', '-', '|', ':', '•')
