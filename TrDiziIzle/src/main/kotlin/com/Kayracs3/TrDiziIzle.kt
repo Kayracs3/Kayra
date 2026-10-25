@@ -121,10 +121,10 @@ class TrDiziIzle : MainAPI() {
     private fun episodeSeriesTitleFromUrl(url: String): String {
         val slug = path(url).trim('/').substringAfterLast('/')
         val stem = slug.replace(
-            Regex("""(?i)(?:[-_]\\d{1,4})?[-_](?:bolum|episode).*$"""),
+            Regex("""(?i)(?:[-_]\d{1,4})?[-_](?:bolum|episode).*$"""),
             ""
         ).replace('-', ' ').replace('_', ' ').trim()
-        return stem.split(Regex("""\\s+"""))
+        return stem.split(Regex("""\s+"""))
             .filter { it.isNotBlank() }
             .joinToString(" ") { it.replaceFirstChar { ch -> ch.titlecase(Locale.ROOT) } }
     }
@@ -404,8 +404,9 @@ class TrDiziIzle : MainAPI() {
             ?: episodeSeriesTitleFromUrl(url)
         if (!validTitle(baseTitle)) return null
 
-        return if (info.first != null && info.first > 1) {
-            baseTitle + " " + info.first + ". Sezon " + number + ". Bölüm"
+        val season = info.first
+        return if (season != null && season > 1) {
+            baseTitle + " " + season + ". Sezon " + number + ". Bölüm"
         } else {
             baseTitle + " " + number + ". Bölüm"
         }
