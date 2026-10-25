@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:9477d0fe426c30e1d03f5c83084de728483b9ce3 -->
+### Use Yandex Disk player headers for TRDiziIzle media
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [9477d0f](https://github.com/Kayracs3/Kayra/commit/9477d0fe426c30e1d03f5c83084de728483b9ce3)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:71ed5e539a8deb0e0beb77463f0332d97ce29fed -->
 ### Reject TRDiziIzle none.png poster placeholder
 
