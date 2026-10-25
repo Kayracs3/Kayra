@@ -2,6 +2,23 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:0bc993e5719331305a80d85ffe76533dbe39ab0a -->
+### Bump TrDiziIzle to version 24
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [0bc993e](https://github.com/Kayracs3/Kayra/commit/0bc993e5719331305a80d85ffe76533dbe39ab0a)
+
+## 2026-10-26
+
+<!-- kayra-commit:28711464e8facbb18cc1fc7b4fb40c6a5eb37fc6 -->
+### Fix missing posters in TrDiziIzle search results
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [2871146](https://github.com/Kayracs3/Kayra/commit/28711464e8facbb18cc1fc7b4fb40c6a5eb37fc6)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:4882690c4d5a97aa9bb0faaa310543efd3f4d3c1 -->
 ### Correct X master playlist path matching
 
