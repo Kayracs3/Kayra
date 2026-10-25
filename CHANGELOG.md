@@ -2,6 +2,15 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:155b46c0fb7919ab24c283f9c683d2461a563d1f -->
+### Fix TRDiziIzle latest episodes selector
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [155b46c](https://github.com/Kayracs3/Kayra/commit/155b46c0fb7919ab24c283f9c683d2461a563d1f)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:a7cd4eb9bd773b332df02633200cd8b59d597ff3 -->
 ### Update isAdUrl regex to include video.bsky.app
 
