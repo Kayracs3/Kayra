@@ -516,7 +516,8 @@ class Flix : MainAPI() {
             return null
         }
 
-        return "${baseUrl.trimEnd('/')}/$id/mono.m3u8"
+        val resolvedBaseUrl = baseUrl?.trimEnd('/') ?: return null
+        return "$resolvedBaseUrl/$id/mono.m3u8"
     }
 
     // ---------------------------------------------------------------------
