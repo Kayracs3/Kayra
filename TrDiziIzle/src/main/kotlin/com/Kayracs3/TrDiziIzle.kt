@@ -47,7 +47,9 @@ class TrDiziIzle : MainAPI() {
 
     private val episodeRegex = Regex("""(?i)(?:bolum|episode)""")
     private val seasonRegex = Regex("""(?i)(?:sezon|season)""")
-    private val mediaRegex = Regex("""(?i)https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd|m4v|webm)(?:\?[^\s"'<>\\]*)?""")
+    // Capture the entire URL first; file extensions can occur inside filename=...mp4.
+    private val mediaRegex = Regex("""(?i)https?://[^\s"'<>\\]+""")
+    private val mediaExtensionRegex = Regex("""(?i)\.(?:m3u8|mp4|mpd|m4v|webm)(?:$|[?#&])""")
     private val subtitleRegex = Regex("""(?i)https?://[^\s"'<>\\]+?\.(?:vtt|srt|ass|ssa)(?:\?[^\s"'<>\\]*)?""")
 
     private fun abs(rawValue: String?, base: String = mainUrl): String? {
@@ -1157,7 +1159,8 @@ class TrDiziIzle : MainAPI() {
 
         val hasPlayer = document.select(
             "iframe[src],iframe[data-src],iframe[data-iframe],video[src],video source[src],[data-player],[data-embed],[data-video]"
-        ).isNotEmpty() || mediaRegex.containsMatchIn(decodeEmbedded(document.html()))
+        ).isNotEmpty() || mediaRegex.findAll(decodeEmbedded(document.html()))
+            .any { isMedia(it.value.trimEnd(')', ']', '}', ';', ',')) }
         if (includeCurrentPageEpisode && (hasPlayer || isLatestEpisodeUrl(pageUrl)) &&
             output.keys.none { it.trimEnd('/') == pageUrl.trimEnd('/') }
         ) {
@@ -1438,23 +1441,34 @@ class TrDiziIzle : MainAPI() {
     }
 
     private fun isMedia(url: String): Boolean =
-        Regex("""(?i)\.(?:m3u8|mp4|mpd|m4v|webm)(?:$|[?#])""").containsMatchIn(url) ||
+        mediaExtensionRegex.containsMatchIn(url) ||
             url.contains("/hls/", true) || url.contains("master.m3u8", true)
 
     private fun scanMedia(raw: String, base: String): List<String> {
         val text = decodeEmbedded(raw)
         val found = LinkedHashSet<String>()
+
+        // Match complete URL tokens. Do not stop at ".mp4" if that substring belongs
+        // to a filename query parameter and signed parameters continue after it.
         mediaRegex.findAll(text).forEach { match ->
-            abs(match.value.trimEnd(')', ']', '}', ';', ','), base)?.let(found::add)
+            val rawUrl = match.value.trimEnd(')', ']', '}', ';', ',')
+            val absoluteUrl = abs(rawUrl, base) ?: return@forEach
+            if (isMedia(absoluteUrl)) found.add(absoluteUrl)
         }
-        Regex("""(?i)//[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd|m4v|webm)(?:\?[^\s"'<>\\]*)?""")
-            .findAll(text).forEach { match ->
-                abs(match.value.trimEnd(')', ']', '}', ';', ','), base)?.let(found::add)
-            }
+
+        // Preserve protocol-relative links with their full query string too.
+        Regex("""(?i)//[^\s"'<>\\]+""").findAll(text).forEach { match ->
+            val rawUrl = match.value.trimEnd(')', ']', '}', ';', ',')
+            val absoluteUrl = abs(rawUrl, base) ?: return@forEach
+            if (isMedia(absoluteUrl)) found.add(absoluteUrl)
+        }
+
         if (text.contains("%3A%2F%2F", true) || text.contains("%2F", true)) {
             val decoded = runCatching { URLDecoder.decode(text, "UTF-8") }.getOrDefault("")
             if (decoded.isNotBlank()) mediaRegex.findAll(decoded).forEach { match ->
-                abs(match.value.trimEnd(')', ']', '}', ';', ','), base)?.let(found::add)
+                val rawUrl = match.value.trimEnd(')', ']', '}', ';', ',')
+                val absoluteUrl = abs(rawUrl, base) ?: return@forEach
+                if (isMedia(absoluteUrl)) found.add(absoluteUrl)
             }
         }
         return found.toList()
