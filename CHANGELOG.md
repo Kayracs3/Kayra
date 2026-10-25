@@ -2,6 +2,23 @@
 
 ## 2026-10-25
 
+<!-- kayra-commit:174859ee96e50ced32df8036c2e1d161c20f5ca6 -->
+### Bump TRDiziIzle plugin version to 9 for exact poster lookup
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [174859e](https://github.com/Kayracs3/Kayra/commit/174859ee96e50ced32df8036c2e1d161c20f5ca6)
+
+## 2026-10-25
+
+<!-- kayra-commit:910386d52c13ea5f092b4a4e097a241e0124d1c7 -->
+### Use actual series detail links to resolve latest episode posters
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [910386d](https://github.com/Kayracs3/Kayra/commit/910386d52c13ea5f092b4a4e097a241e0124d1c7)
+
+
+## 2026-10-25
+
 <!-- kayra-commit:6a58e141bd236d1a780f54f9e75d3f7148474b04 -->
 ### Bump TRDiziIzle plugin version to 8 for poster fix
 
