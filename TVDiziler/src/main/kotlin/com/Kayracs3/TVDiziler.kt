@@ -522,7 +522,7 @@ class TVDiziler : MainAPI() {
         return output.values.sortedWith(compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: Int.MAX_VALUE })
     }
 
-    private fun buildMovieLoad(url: String, document: Document): LoadResponse {
+    private suspend fun buildMovieLoad(url: String, document: Document): LoadResponse {
         val text = document.text()
         val title = cleanTitle(document.selectFirst("h1")?.text()
             ?: document.selectFirst("meta[property=og:title]")?.attr("content")
@@ -634,6 +634,104 @@ class TVDiziler : MainAPI() {
                 Log.d(tag, "Desteklenmeyen içerik rotası: " + pageUrl)
                 null
             }
+        }
+    }
+
+    /**
+     * Parse actual movie/series/episode cards from catalog and search pages.
+     * Navigation, genre, actor and utility links are filtered by isContentUrl().
+     */
+    private fun parseItems(document: Document, base: String): List<SearchResponse> {
+        val items = LinkedHashMap<String, SearchResponse>()
+        val titleSelector = "h1,h2,h3,h4,h5,[itemprop=name],[class*=title],[class*=name]"
+
+        document.select("a[href]").forEach { anchor ->
+            if (isNavigationElement(anchor)) return@forEach
+
+            val listingBase = anchor.baseUri().ifBlank { base.ifBlank { mainUrl } }
+            val url = abs(anchor.attr("href"), listingBase) ?: return@forEach
+            if (!isContentUrl(url)) return@forEach
+
+            val card = cardFor(anchor)
+            val image = anchor.selectFirst("img") ?: card.selectFirst("img")
+            val rawTitleCandidates = listOf(
+                anchor.selectFirst(titleSelector)?.text(),
+                card.selectFirst(titleSelector)?.text(),
+                anchor.attr("data-title"),
+                card.attr("data-title"),
+                image?.attr("alt"),
+                image?.attr("title"),
+                anchor.attr("title"),
+                anchor.attr("aria-label"),
+                anchor.ownText(),
+                anchor.text(),
+                titleFromSlug(url)
+            )
+
+            val title = rawTitleCandidates
+                .map { cleanTitle(it) }
+                .firstOrNull { validTitle(it) }
+                ?: return@forEach
+
+            val poster = posterOf(anchor, card, listingBase)?.takeIf { usablePoster(it) }
+            val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
+            val response = if (isMoviePage(url)) {
+                newMovieSearchResponse(title, url, TvType.Movie) {
+                    posterUrl = poster
+                    posterHeaders = this@TVDiziler.posterHeaders
+                    score?.let { this.score = Score.from10(it) }
+                }
+            } else {
+                newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
+                    posterUrl = poster
+                    posterHeaders = this@TVDiziler.posterHeaders
+                    score?.let { this.score = Score.from10(it) }
+                }
+            }
+
+            val previous = items[url]
+            if (previous == null || (previous.posterUrl.isNullOrBlank() && !response.posterUrl.isNullOrBlank())) {
+                items[url] = response
+            }
+        }
+
+        return items.values
+            .sortedByDescending { usablePoster(it.posterUrl) }
+            .take(100)
+    }
+
+    private fun matchesQuery(query: String, item: SearchResponse): Boolean {
+        val q = norm(query)
+        val title = norm(cleanTitle(item.name))
+        val slug = norm(path(item.url).trim('/').substringAfterLast('/').replace('-', ' ').replace('_', ' '))
+        if (q.isBlank() || title.isBlank()) return false
+        if (title == q || title.contains(q) || slug.contains(q)) return true
+
+        val ignored = setOf("the", "a", "an", "of", "to", "and", "ve", "bir", "ile", "in", "on", "izle", "full")
+        val parts = q.split(' ').filter { it.length >= 2 && it !in ignored }
+        if (parts.isEmpty()) return title.contains(q) || slug.contains(q)
+
+        val words = (title + " " + slug).split(' ').filter { it.isNotBlank() }
+        return parts.all { term ->
+            words.any { word ->
+                word == term ||
+                    (term.length >= 4 && word.length >= 4 &&
+                        (word.startsWith(term) || term.startsWith(word)))
+            }
+        }
+    }
+
+    private fun relevance(query: String, item: SearchResponse): Int {
+        val q = norm(query)
+        val title = norm(cleanTitle(item.name))
+        val slug = norm(path(item.url).trim('/').substringAfterLast('/').replace('-', ' ').replace('_', ' '))
+        return when {
+            title == q -> 1000
+            title.startsWith(q) -> 850
+            title.contains(q) -> 750
+            slug == q -> 700
+            slug.contains(q) -> 600
+            else -> q.split(' ').count { it.length >= 2 && (title.contains(it) || slug.contains(it)) } * 10
         }
     }
 
@@ -846,7 +944,7 @@ class TVDiziler : MainAPI() {
         }
     }
 
-    private fun emitMedia(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun emitMedia(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
         val mediaPath = runCatching { URI(url).path.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         val mediaHeaders = linkedMapOf(
             "User-Agent" to USER_AGENT,
