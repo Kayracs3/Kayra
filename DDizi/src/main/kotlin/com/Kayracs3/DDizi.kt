@@ -390,7 +390,10 @@ class DDizi : MainAPI() {
             fallbackReferer?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
                 ?: mediaReferer
     private fun headersFor(u: String): Map<String, String> =
-        if (isTwimg(u)) emptyMap() else mediaHeaders
+        if (isTwimg(u)) {
+            // Keep X CDN requests consistent for the master playlist, child playlists and segments.
+            mapOf("Origin" to "https://x.com", "Accept" to "*/*")
+        } else mediaHeaders
 
     // Cookies set by Streambox during manifest probing must also reach ExoPlayer.
     // The provider HTTP client and Cronet do not necessarily share the same cookie jar.
@@ -494,6 +497,17 @@ class DDizi : MainAPI() {
         if (directHls != null) {
             if (directHls.contains("/master.txt", ignoreCase = true)) {
                 return resolveMasterTxt(directHls, referer, cookies, callback)
+            }
+            if (isTwimg(directHls)) {
+                // Keep X's original playlist intact: splitting it with generateM3u8 can
+                // detach an audio rendition from its video variant and produce silent playback.
+                callback(newExtractorLink(name, "$name X HLS", directHls, ExtractorLinkType.M3U8) {
+                    this.referer = refererFor(directHls, referer)
+                    this.headers = headersFor(directHls)
+                    this.quality = Qualities.Unknown.value
+                })
+                debug("X HLS passed through unchanged so ExoPlayer can select video and audio together")
+                return true
             }
             val links = M3u8Helper.generateM3u8(
                 "${name} ${hostOf(directHls)}", directHls,
@@ -669,6 +683,17 @@ class DDizi : MainAPI() {
         for (m in m3u8Regex.findAll(all).map { it.value }.distinct()) {
             if (m.contains("/master.txt", ignoreCase = true)) {
                 if (resolveMasterTxt(m, referer, cookies, callback)) found = true
+                continue
+            }
+            if (isTwimg(m)) {
+                // Do not split an X HLS manifest into child links; retain any paired audio rendition.
+                callback(newExtractorLink(name, "$name X HLS", m, ExtractorLinkType.M3U8) {
+                    this.referer = refererFor(m, referer)
+                    this.headers = headersFor(m)
+                    this.quality = Qualities.Unknown.value
+                })
+                found = true
+                debug("X HLS passed through unchanged from embedded page source")
                 continue
             }
             val links = M3u8Helper.generateM3u8(
