@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:e588cb91c8581d16c3b05b470b5312e88472c95d -->
+### Improve TVDiziler embedded player source discovery
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [e588cb9](https://github.com/Kayracs3/Kayra/commit/e588cb91c8581d16c3b05b470b5312e88472c95d)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:9ded29c43c4ad7b3bc16927a6655fa5d539e73ea -->
 ### Fix Turkish İ normalization syntax in TVDiziler search
 
