@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:5868b7d9de0f47efc4eeec8f0bf0fde810e97c72 -->
+### Correct TVDiziler player attribute fallback parser
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [5868b7d](https://github.com/Kayracs3/Kayra/commit/5868b7d9de0f47efc4eeec8f0bf0fde810e97c72)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:9cd038e9146ab9a5ba7a2aa8396707d477f277a2 -->
 ### Fix TVDiziler player endpoint and episode parsing
 
