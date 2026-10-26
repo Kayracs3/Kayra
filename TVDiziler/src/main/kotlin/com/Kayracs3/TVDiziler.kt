@@ -86,6 +86,9 @@ class TVDiziler : MainAPI() {
     private val subtitleUrlRegex = Regex("""(?i)https?://[^\s"'<>\\]+?\.(?:vtt|srt|ass|ssa)(?:\?[^\s"'<>\\]*)?""")
 
     private fun norm(value: String): String = value.lowercase(Locale.ROOT)
+        // Locale.ROOT lowercases capital Turkish İ as i + combining dot; strip the mark
+        // before tokenizing so searches like "İstanbul" and "istanbul" normalize equally.
+        .replace('\u0307', '')
         .replace('ı', 'i').replace('ş', 's').replace('ğ', 'g')
         .replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')
         .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
@@ -641,7 +644,7 @@ class TVDiziler : MainAPI() {
      * Parse actual movie/series/episode cards from catalog and search pages.
      * Navigation, genre, actor and utility links are filtered by isContentUrl().
      */
-    private fun parseItems(document: Document, base: String): List<SearchResponse> {
+    private fun parseItems(document: Document, base: String, maxItems: Int = 100): List<SearchResponse> {
         val items = LinkedHashMap<String, SearchResponse>()
         val titleSelector = "h1,h2,h3,h4,h5,[itemprop=name],[class*=title],[class*=name]"
 
@@ -697,7 +700,7 @@ class TVDiziler : MainAPI() {
 
         return items.values
             .sortedByDescending { usablePoster(it.posterUrl) }
-            .take(100)
+            .take(maxItems)
     }
 
     private fun matchesQuery(query: String, item: SearchResponse): Boolean {
@@ -743,18 +746,24 @@ class TVDiziler : MainAPI() {
             "$mainUrl/?q=$encoded",
             "$mainUrl/?s=$encoded",
             "$mainUrl/?search=$encoded",
+            "$mainUrl/?arama=$encoded",
+            "$mainUrl/?query=$encoded",
             "$mainUrl/search/$encoded/",
             "$mainUrl/search?q=$encoded",
+            "$mainUrl/search?query=$encoded",
             "$mainUrl/arama/$encoded/",
             "$mainUrl/arama?q=$encoded",
+            "$mainUrl/arama?arama=$encoded",
+            "$mainUrl/arama/?arama=$encoded",
             "$mainUrl/ara/$encoded/",
-            "$mainUrl/?ara=$encoded"
+            "$mainUrl/ara?ara=$encoded",
+            "$mainUrl/ara?arama=$encoded"
         ).distinct()
 
         val seen = LinkedHashMap<String, SearchResponse>()
         urls.forEach { searchUrl ->
             val document = fetchDocument(searchUrl) ?: return@forEach
-            parseItems(document, searchUrl).filter { matchesQuery(q, it) }.forEach { item ->
+            parseItems(document, searchUrl, maxItems = 400).filter { matchesQuery(q, it) }.forEach { item ->
                 val current = seen[item.url]
                 if (current == null || (current.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank())) {
                     seen[item.url] = item
@@ -768,7 +777,7 @@ class TVDiziler : MainAPI() {
         // Some versions return the ordinary archive for unsupported search parameters.
         listOf("$mainUrl/dizi-izle", "$mainUrl/film-izle/son-eklenen", "$mainUrl/").forEach { fallback ->
             val document = fetchDocument(fallback) ?: return@forEach
-            parseItems(document, fallback).filter { matchesQuery(q, it) }.forEach { item ->
+            parseItems(document, fallback, maxItems = 400).filter { matchesQuery(q, it) }.forEach { item ->
                 val current = seen[item.url]
                 if (current == null || (current.posterUrl.isNullOrBlank() && !item.posterUrl.isNullOrBlank())) {
                     seen[item.url] = item
@@ -946,12 +955,17 @@ class TVDiziler : MainAPI() {
 
     private suspend fun emitMedia(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
         val mediaPath = runCatching { URI(url).path.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+        val mediaHost = host(url)
+        val isTwitterVideoCdn = mediaHost == "video.twimg.com" || mediaHost == "video-s.twimg.com"
+        // X's CDN may load a separate audio playlist beneath the HLS manifest. Every request
+        // in that playlist needs the platform's Referer/Origin rather than TVDiziler's page.
+        val mediaReferer = if (isTwitterVideoCdn) "https://x.com/" else referer
         val mediaHeaders = linkedMapOf(
             "User-Agent" to USER_AGENT,
-            "Referer" to referer,
+            "Referer" to mediaReferer,
             "Accept" to "*/*"
         )
-        val origin = runCatching { URI(referer).let { it.scheme + "://" + it.host } }.getOrNull()
+        val origin = runCatching { URI(mediaReferer).let { it.scheme + "://" + it.host } }.getOrNull()
         if (!origin.isNullOrBlank()) mediaHeaders["Origin"] = origin
         val type = when {
             mediaPath.endsWith(".m3u8") || mediaPath.contains("/hls/") -> ExtractorLinkType.M3U8
@@ -963,8 +977,11 @@ class TVDiziler : MainAPI() {
             ExtractorLinkType.DASH -> "DASH"
             else -> "Video"
         }
+        if (isTwitterVideoCdn && type == ExtractorLinkType.M3U8) {
+            Log.d(tag, "X HLS manifesti doğrudan korunuyor; ses playlist'i için x.com başlıkları kullanılacak")
+        }
         callback(newExtractorLink(name, "TVDiziler " + label, url, type) {
-            this.referer = referer
+            this.referer = mediaReferer
             this.headers = mediaHeaders
             this.quality = Qualities.Unknown.value
         })
