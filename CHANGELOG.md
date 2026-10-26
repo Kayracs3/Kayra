@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:8149c320bb07f5d800e1d0d41d85688bca581aeb -->
+### Clarify X CDN headers in DDizi
+
+- Etkilenen alanlar: DDizi
+- Commit: [8149c32](https://github.com/Kayracs3/Kayra/commit/8149c320bb07f5d800e1d0d41d85688bca581aeb)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:65770e970b5f16c15777c2c8172f56aeb4b54429 -->
 ### Bump DDizi to version 2 for X HLS audio fix
 
