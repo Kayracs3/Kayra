@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:f43d8ad201c10e51d7a765ff7cee55ad9574b1d2 -->
+### Fix TVDiziler Kotlin compilation and restore search parsing
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [f43d8ad](https://github.com/Kayracs3/Kayra/commit/f43d8ad201c10e51d7a765ff7cee55ad9574b1d2)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:ba926e362fa283cd97405043ff6d305310c9f493 -->
 ### Expand TVDiziler discovery and movie catalog pages
 
