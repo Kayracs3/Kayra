@@ -711,10 +711,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=tvdiziler.tv&sz=%size%",
-        "fileHash": "sha256-8f34753865f1ebc4504ea1b08ea0780a42baafdea36efb82a282d39337332fb6",
+        "fileHash": "sha256-8d3d5342271a83c8f2a93b8ee13f34c46091cad13e8a84a99d80bab58e2420f6",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 60019,
+        "fileSize": 61991,
         "status": 1,
         "language": "tr",
         "authors": [
