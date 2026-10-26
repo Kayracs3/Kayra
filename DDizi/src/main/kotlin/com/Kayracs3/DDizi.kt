@@ -383,7 +383,7 @@ class DDizi : MainAPI() {
     }
 
     // Videolar Twitter/X CDN'inden (video.twimg.com/amplify_video/.../pl/xxx.m3u8) geliyor.
-    // Bu CDN için ddizi Referer/Origin göndermiyoruz; Twitter'ın kendi oynatıcısı gibi x.com kullanıyoruz.
+    // CDN isteklerinde x.com Referer'i korunur ve Origin/Accept başlıkları da gönderilir.
     private fun isTwimg(u: String) = hostOf(u).endsWith("twimg.com")
     private fun refererFor(u: String, fallbackReferer: String? = null): String =
         if (isTwimg(u)) "https://x.com/" else
