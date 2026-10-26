@@ -711,10 +711,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=tvdiziler.tv&sz=%size%",
-        "fileHash": "sha256-a7e4132f7fa217a1997ac805d0d77daadcc13dfb8e4368f232b08b59676fcf45",
+        "fileHash": "sha256-bd64aef9d7de3e124ac8c79b994f4fdc456de4e6dfb44cecd882acfa559f287e",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 57529,
+        "fileSize": 58099,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -724,7 +724,7 @@
             "TvSeries",
             "Movie"
         ],
-        "version": 3,
+        "version": 4,
         "internalName": "TVDiziler",
         "description": "TvDiziler.tv \u2014 dizi, film, oyuncu ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/TVDiziler.cs3",
