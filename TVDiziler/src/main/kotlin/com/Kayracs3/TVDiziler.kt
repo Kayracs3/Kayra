@@ -340,11 +340,8 @@ class TVDiziler : MainAPI() {
                 imageUrl(image, pageUrl)?.let { return it }
             }
         }
-        document.select(
-            "main img, article img, [class*=poster] img, [class*=afis] img, " +
-                "[class*=cover] img, [class*=detail] img, img[itemprop=image]"
-        ).forEach { imageUrl(it, pageUrl)?.let { poster -> return poster } }
-
+        // Prefer the page's canonical artwork before generic main/article images;
+        // otherwise the first cast portrait can accidentally become the series poster.
         document.select(
             "meta[property=og:image], meta[property=og:image:secure_url], meta[name=twitter:image], " +
                 "meta[property=twitter:image], meta[itemprop=image], link[rel=image_src]"
@@ -353,6 +350,12 @@ class TVDiziler : MainAPI() {
             val url = abs(raw, pageUrl)
             if (usablePoster(url)) return url
         }
+
+        document.select(
+            "[class*=poster] img, [class*=afis] img, [class*=cover] img, " +
+                "[class*=backdrop] img, [class*=detail] img, img[itemprop=image], " +
+                "main img[alt], article img[alt]"
+        ).forEach { imageUrl(it, pageUrl)?.let { poster -> return poster } }
 
         document.select(
             "img, [data-poster], [data-poster-url], [data-image-url], [data-src], [data-lazy-src], [style*=background]"
@@ -411,7 +414,10 @@ class TVDiziler : MainAPI() {
 
     private fun actorsFromPage(document: Document): List<Actor>? {
         val actors = LinkedHashMap<String, Actor>()
-        document.select("a[href*='/oyuncu/'], a[href*='/actor/'], a[href*='/person/']").forEach { link ->
+        document.select(
+            "a[href*='/oyuncu/'], a[href*='/oyuncular/'], a[href*='/actor/'], " +
+                "a[href*='/person/'], a[href*='/people/'], a[href*='/kisiler/'], [itemprop=actor] a[href]"
+        ).forEach { link ->
             val name = cleanTitle(link.text().ifBlank { link.attr("title") })
             if (!validTitle(name) || norm(name) in setOf("admin", "oyuncular")) return@forEach
             val image = link.selectFirst("img")?.let { imageUrl(it, link.baseUri().ifBlank { mainUrl }) }
