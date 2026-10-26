@@ -88,7 +88,7 @@ class TVDiziler : MainAPI() {
     private fun norm(value: String): String = value.lowercase(Locale.ROOT)
         // Locale.ROOT lowercases capital Turkish İ as i + combining dot; strip the mark
         // before tokenizing so searches like "İstanbul" and "istanbul" normalize equally.
-        .replace('\u0307', '')
+        .replace("\u0307", "")
         .replace('ı', 'i').replace('ş', 's').replace('ğ', 'g')
         .replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')
         .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
