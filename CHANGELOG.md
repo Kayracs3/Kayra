@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:ff3532422ecf2361a5b5e8fa9efcdbd22136ea3b -->
+### Bump TVDiziler to version 3 after compilation fixes
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [ff35324](https://github.com/Kayracs3/Kayra/commit/ff3532422ecf2361a5b5e8fa9efcdbd22136ea3b)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:f43d8ad201c10e51d7a765ff7cee55ad9574b1d2 -->
 ### Fix TVDiziler Kotlin compilation and restore search parsing
 
