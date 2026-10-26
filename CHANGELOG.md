@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:9ded29c43c4ad7b3bc16927a6655fa5d539e73ea -->
+### Fix Turkish İ normalization syntax in TVDiziler search
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [9ded29c](https://github.com/Kayracs3/Kayra/commit/9ded29c43c4ad7b3bc16927a6655fa5d539e73ea)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:e3697daed7e5b02734b69a882171e61991b448c2 -->
 ### Fix TVDiziler HLS audio headers and search matching
 
