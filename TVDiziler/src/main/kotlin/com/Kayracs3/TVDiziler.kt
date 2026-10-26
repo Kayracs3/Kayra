@@ -482,14 +482,33 @@ class TVDiziler : MainAPI() {
         val output = LinkedHashMap<String, Episode>()
         val titleWords = norm(seriesTitle).split(' ').filter { it.length >= 3 }
             .filterNot { it in setOf("son", "bolum", "izle", "dizi", "hd") }
+        var currentSeason = 1
 
-        document.select("a[href], a[data-navigo][href]").forEach { anchor ->
+        // Walk headings and links in DOM order. TvDiziler lists each season heading
+        // before its episode anchors; carrying the heading number prevents every
+        // season from being incorrectly labeled as season 1.
+        document.select("h1,h2,h3,h4,h5,h6,a[href]").forEach { element ->
+            val elementLabel = norm(
+                element.text() + " " + element.attr("title") + " " + element.attr("aria-label")
+            )
+            Regex("""\\b(\\d{1,2})\\s*\\.?\\s*sezon\\b""").find(elementLabel)
+                ?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?.takeIf { it in 1..100 }
+                ?.let { currentSeason = it }
+
+            if (!element.tagName().equals("a", true)) return@forEach
+            val anchor = element
             val rawLabel = norm(
                 anchor.text() + " " + anchor.attr("title") + " " + anchor.attr("aria-label") + " " +
                     anchor.attr("data-title") + " " + anchor.parent()?.text().orEmpty()
             )
+            // The top-level first/last-episode shortcuts duplicate entries in the season
+            // list and appear before season headings, so don't let them override season data.
+            if (rawLabel.contains("dizinin ilk bolumunu izle") ||
+                rawLabel.contains("dizinin son bolumunu izle")
+            ) return@forEach
             val looksLikeExplicitEpisode = anchor.hasAttr("data-navigo") ||
-                (rawLabel.contains("bolum") && Regex("""(?i)\\b\\d{1,4}\\s*\\.?\\s*bolum\\b""").containsMatchIn(rawLabel))
+                (rawLabel.contains("bolum") && Regex("""\\b\\d{1,4}\\s*\\.?\\s*bolum\\b""").containsMatchIn(rawLabel))
             if (isNavigationElement(anchor) && !looksLikeExplicitEpisode) return@forEach
             val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { pageUrl }) ?: return@forEach
             if (!sameSite(url) || !isEpisodeUrl(url)) return@forEach
@@ -509,9 +528,9 @@ class TVDiziler : MainAPI() {
             }
 
             val season = info.first
-                ?: Regex("""(?i)(\d{1,2})\s*\.?\s*sezon""").find(norm(label)
-                    )?.groupValues?.getOrNull(1)?.toIntOrNull()
-                ?: 1
+                ?: Regex("""(?i)\b(\d{1,2})\s*\.?\s*sezon\b""").find(norm(label))
+                    ?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: currentSeason
             val episodeLabel = "$number. Bölüm" +
                 if (norm(label).contains("sezon finali")) " Sezon Finali" else ""
             val poster = posterOf(anchor, cardFor(anchor), url) ?: seriesPoster
