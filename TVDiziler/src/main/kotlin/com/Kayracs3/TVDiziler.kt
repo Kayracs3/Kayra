@@ -127,8 +127,8 @@ class TVDiziler : MainAPI() {
     private fun isMoviePage(url: String): Boolean {
         if (!sameSite(url) || isEpisodeUrl(url)) return false
         val parts = path(url).trim('/').split('/').filter { it.isNotBlank() }
-        if (parts.size < 2 || parts.firstOrNull() !in setOf("film", "movie", "sinema")) return false
-        if (parts.getOrNull(1) in setOf("tur", "yil", "kategori", "oyuncu")) return false
+        if (parts.size < 2 || parts.firstOrNull().orEmpty() !in setOf("film", "movie", "sinema")) return false
+        if (parts.getOrNull(1).orEmpty() in setOf("tur", "yil", "kategori", "oyuncu")) return false
         return parts.size == 2
     }
 
