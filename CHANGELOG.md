@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:9cd038e9146ab9a5ba7a2aa8396707d477f277a2 -->
+### Fix TVDiziler player endpoint and episode parsing
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [9cd038e](https://github.com/Kayracs3/Kayra/commit/9cd038e9146ab9a5ba7a2aa8396707d477f277a2)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:e588cb91c8581d16c3b05b470b5312e88472c95d -->
 ### Improve TVDiziler embedded player source discovery
 
