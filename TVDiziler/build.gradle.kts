@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 dependencies {
     // Coroutines and the CloudStream API are supplied by the host at runtime.
