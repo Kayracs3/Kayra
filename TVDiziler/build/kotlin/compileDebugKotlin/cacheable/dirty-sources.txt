@@ -1,0 +1,2 @@
+/home/runner/work/Kayra/Kayra/TVDiziler/src/main/kotlin/com/Kayracs3/TVDiziler.kt
+/home/runner/work/Kayra/Kayra/TVDiziler/src/main/kotlin/com/Kayracs3/TVDizilerPlugin.kt
