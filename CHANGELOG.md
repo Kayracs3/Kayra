@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:3180d2660ffa98b7610f88d9f8aaaaf4b6249c3e -->
+### Fix nullable route checks in TVDiziler provider
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [3180d26](https://github.com/Kayracs3/Kayra/commit/3180d2660ffa98b7610f88d9f8aaaaf4b6249c3e)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:a73355080dbfa60b734e62cf43d5f5bbcf7cf353 -->
 ### Add TVDiziler.tv CloudStream provider
 
