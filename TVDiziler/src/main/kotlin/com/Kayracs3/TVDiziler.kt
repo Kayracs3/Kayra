@@ -1008,10 +1008,30 @@ class TVDiziler : MainAPI() {
             if (!seenPages.add(pageUrl)) continue
             subtitleFromDocument(document, pageUrl, subtitleCallback)
 
-            mediaCandidates(document.html(), pageUrl).forEach { media ->
-                if (seenCandidates.add(media)) {
-                    runCatching { emitMedia(media, pageUrl, callback) }
-                        .onSuccess { found = found || it }
+            // Some TvDiziler player alternatives are assembled by inline JavaScript and
+            // are not present as iframe[src] in the initial DOM. Scan script bodies as well
+            // as the serialized document, preserving the episode page as the media referer.
+            val embeddedTexts = buildList {
+                add(document.html())
+                document.select("script:not([src])").forEach { script ->
+                    if (script.data().isNotBlank()) add(script.data())
+                    if (script.html().isNotBlank()) add(script.html())
+                }
+                document.select("video, source, [data-file], [data-video], [data-url], [data-embed], [data-player]")
+                    .forEach { element ->
+                        add(element.outerHtml())
+                        listOf("src", "data-src", "data-file", "data-video", "data-url", "data-embed", "data-player")
+                            .map { element.attr(it) }
+                            .filter { it.isNotBlank() }
+                            .forEach { add(it) }
+                    }
+            }
+            embeddedTexts.forEach { embedded ->
+                mediaCandidates(embedded, pageUrl).forEach { media ->
+                    if (seenCandidates.add(media)) {
+                        runCatching { emitMedia(media, pageUrl, callback) }
+                            .onSuccess { found = found || it }
+                    }
                 }
             }
 
