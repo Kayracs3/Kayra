@@ -954,12 +954,13 @@ class TVDiziler : MainAPI() {
 
         // Some templates write the player attributes into inline HTML/JS after the main
         // player block. Parse them independently instead of relying on a specific tag name.
-        Regex("""(?is)data-hh[ s]?[s]?\\s*=\\s*["']([^"']+)["']""").findAll(document.html()).forEach { match ->
-            match.groupValues.getOrNull(1).orEmpty().split(',').forEach { value ->
-                val url = abs(value.trim(), base) ?: return@forEach
-                if (sameSite(url) && path(url).contains("/vid/ply/")) output.add(url)
+        Regex("""(?is)data-(?:hhs|hs)\s*=\s*["']([^"']+)["']""")
+            .findAll(document.html()).forEach matchLoop@ { match ->
+                match.groupValues.getOrNull(1).orEmpty().split(',').forEach valueLoop@ { value ->
+                    val url = abs(value.trim(), base) ?: return@valueLoop
+                    if (sameSite(url) && path(url).contains("/vid/ply/")) output.add(url)
+                }
             }
-        }
 
         document.select("script[src]").forEach { script ->
             val url = abs(script.attr("src"), base) ?: return@forEach
