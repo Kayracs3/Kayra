@@ -491,7 +491,7 @@ class TVDiziler : MainAPI() {
             val elementLabel = norm(
                 element.text() + " " + element.attr("title") + " " + element.attr("aria-label")
             )
-            Regex("""\\b(\\d{1,2})\\s*\\.?\\s*sezon\\b""").find(elementLabel)
+            Regex("""\b(\d{1,2})\s*\.?\s*sezon\b""").find(elementLabel)
                 ?.groupValues?.getOrNull(1)?.toIntOrNull()
                 ?.takeIf { it in 1..100 }
                 ?.let { currentSeason = it }
@@ -508,7 +508,7 @@ class TVDiziler : MainAPI() {
                 rawLabel.contains("dizinin son bolumunu izle")
             ) return@forEach
             val looksLikeExplicitEpisode = anchor.hasAttr("data-navigo") ||
-                (rawLabel.contains("bolum") && Regex("""\\b\\d{1,4}\\s*\\.?\\s*bolum\\b""").containsMatchIn(rawLabel))
+                (rawLabel.contains("bolum") && Regex("""\b\d{1,4}\s*\.?\s*bolum\b""").containsMatchIn(rawLabel))
             if (isNavigationElement(anchor) && !looksLikeExplicitEpisode) return@forEach
             val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { pageUrl }) ?: return@forEach
             if (!sameSite(url) || !isEpisodeUrl(url)) return@forEach
