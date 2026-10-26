@@ -477,8 +477,14 @@ class TVDiziler : MainAPI() {
         val titleWords = norm(seriesTitle).split(' ').filter { it.length >= 3 }
             .filterNot { it in setOf("son", "bolum", "izle", "dizi", "hd") }
 
-        document.select("a[href]").forEach { anchor ->
-            if (isNavigationElement(anchor)) return@forEach
+        document.select("a[href], a[data-navigo][href]").forEach { anchor ->
+            val rawLabel = norm(
+                anchor.text() + " " + anchor.attr("title") + " " + anchor.attr("aria-label") + " " +
+                    anchor.attr("data-title") + " " + anchor.parent()?.text().orEmpty()
+            )
+            val looksLikeExplicitEpisode = anchor.hasAttr("data-navigo") ||
+                (rawLabel.contains("bolum") && Regex("""(?i)\\b\\d{1,4}\\s*\\.?\\s*bolum\\b""").containsMatchIn(rawLabel))
+            if (isNavigationElement(anchor) && !looksLikeExplicitEpisode) return@forEach
             val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { pageUrl }) ?: return@forEach
             if (!sameSite(url) || !isEpisodeUrl(url)) return@forEach
             val parentText = anchor.parent()?.text().orEmpty().take(240)
@@ -895,7 +901,12 @@ class TVDiziler : MainAPI() {
         }
         val quotedSourceRegex = Regex("""(?i)(?:file|src|source|hls|url)\s*[:=]\s*["']([^"']{8,})["']""")
         quotedSourceRegex.findAll(text).forEach { match ->
-            val url = abs(match.groupValues[1], base) ?: return@forEach
+            val rawSource = match.groupValues[1]
+                .replace("\\\\/", "/")
+                .replace("\\/", "/")
+                .replace("\\u002F", "/").replace("\\u002f", "/")
+                .replace("&amp;", "&")
+            val url = abs(rawSource, base) ?: return@forEach
             if (isMediaUrl(url)) output.add(url)
         }
         return output.toList()
@@ -903,27 +914,53 @@ class TVDiziler : MainAPI() {
 
     private fun playerCandidates(document: Document, base: String): List<String> {
         val output = LinkedHashSet<String>()
+        // TvDiziler stores its playable alternatives in data-hhs/data-hs attributes.
+        // Their values can contain a comma-separated list of /vid/ply/... endpoints;
+        // these endpoints must be fetched before the actual HLS/MP4 URL becomes visible.
         document.select(
             "iframe[src],iframe[data-src],iframe[data-embed],iframe[data-url],iframe[data-player], " +
                 "video[src],video source[src],source[src], [data-file], [data-video], [data-video-url], " +
-                "[data-embed], [data-embed-url], [data-player], [data-player-url], [data-src]"
+                "[data-embed], [data-embed-url], [data-player], [data-player-url], [data-src], " +
+                "[data-hhs], [data-hs]"
         ).forEach { element ->
             val tag = element.tagName()
             val context = (element.attr("id") + " " + element.className() + " " +
-                element.attr("title") + " " + element.attr("aria-label")).lowercase(Locale.ROOT)
+                element.attr("title") + " " + element.attr("aria-label") + " " +
+                element.text()).lowercase(Locale.ROOT)
             val attrs = listOf(
                 "src", "data-src", "data-file", "data-video", "data-video-url",
-                "data-embed", "data-embed-url", "data-player", "data-player-url", "data-url"
+                "data-embed", "data-embed-url", "data-player", "data-player-url", "data-url",
+                "data-hhs", "data-hs"
             )
             attrs.forEach attrLoop@ { attr ->
                 val raw = element.attr(attr).trim()
-                val url = abs(raw, base) ?: return@attrLoop
-                if (isMediaUrl(url) || tag in setOf("iframe", "video", "source") ||
-                    Regex("""(?i)(player|embed|watch|video|stream|play|source|file|hls)""")
-                        .containsMatchIn(context + " " + path(url))
-                ) output.add(url)
+                if (raw.isBlank()) return@attrLoop
+                val values = if (attr == "data-hhs" || attr == "data-hs") {
+                    raw.split(',').map { it.trim() }.filter { it.isNotBlank() }
+                } else listOf(raw)
+
+                values.forEach valueLoop@ { value ->
+                    val url = abs(value, base) ?: return@valueLoop
+                    val route = path(url)
+                    val tvdizilerPly = sameSite(url) && route.contains("/vid/ply/")
+                    if (isMediaUrl(url) || tvdizilerPly ||
+                        tag in setOf("iframe", "video", "source") ||
+                        Regex("""(?i)(player|embed|watch|video|stream|play|source|file|hls|youtube|youtu\.be)""")
+                            .containsMatchIn(context + " " + route)
+                    ) output.add(url)
+                }
             }
         }
+
+        // Some templates write the player attributes into inline HTML/JS after the main
+        // player block. Parse them independently instead of relying on a specific tag name.
+        Regex("""(?is)data-hh[ s]?[s]?\\s*=\\s*["']([^"']+)["']""").findAll(document.html()).forEach { match ->
+            match.groupValues.getOrNull(1).orEmpty().split(',').forEach { value ->
+                val url = abs(value.trim(), base) ?: return@forEach
+                if (sameSite(url) && path(url).contains("/vid/ply/")) output.add(url)
+            }
+        }
+
         document.select("script[src]").forEach { script ->
             val url = abs(script.attr("src"), base) ?: return@forEach
             val p = path(url)
@@ -931,7 +968,7 @@ class TVDiziler : MainAPI() {
                 output.add(url)
             }
         }
-        return output.toList().take(30)
+        return output.toList().take(40)
     }
 
     private fun subtitleFromDocument(document: Document, base: String, callback: (SubtitleFile) -> Unit) {
@@ -956,10 +993,15 @@ class TVDiziler : MainAPI() {
     private suspend fun emitMedia(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
         val mediaPath = runCatching { URI(url).path.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         val mediaHost = host(url)
-        val isTwitterVideoCdn = mediaHost == "video.twimg.com" || mediaHost == "video-s.twimg.com"
-        // X's CDN may load a separate audio playlist beneath the HLS manifest. Every request
-        // in that playlist needs the platform's Referer/Origin rather than TVDiziler's page.
-        val mediaReferer = if (isTwitterVideoCdn) "https://x.com/" else referer
+        val isTwitterVideoCdn = mediaHost == "video.twimg.com" || mediaHost == "video-s.twimg.com" ||
+            mediaHost.endsWith(".twimg.com")
+        // TvDiziler's Twitter Amplify manifests require Twitter request headers; some
+        // Ciner-hosted videos likewise reject the TvDiziler page as their Referer.
+        val mediaReferer = when {
+            isTwitterVideoCdn -> "https://twitter.com/"
+            mediaHost == "ciner.com.tr" || mediaHost.endsWith(".ciner.com.tr") -> "https://www.ciner.com.tr/"
+            else -> referer
+        }
         val mediaHeaders = linkedMapOf(
             "User-Agent" to USER_AGENT,
             "Referer" to mediaReferer,
@@ -978,7 +1020,7 @@ class TVDiziler : MainAPI() {
             else -> "Video"
         }
         if (isTwitterVideoCdn && type == ExtractorLinkType.M3U8) {
-            Log.d(tag, "X HLS manifesti doğrudan korunuyor; ses playlist'i için x.com başlıkları kullanılacak")
+            Log.d(tag, "Twitter HLS manifesti doğrudan korunuyor; alt playlist isteklerinde Twitter başlıkları kullanılacak")
         }
         callback(newExtractorLink(name, "TVDiziler " + label, url, type) {
             this.referer = mediaReferer
