@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:a73355080dbfa60b734e62cf43d5f5bbcf7cf353 -->
+### Add TVDiziler.tv CloudStream provider
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [a733550](https://github.com/Kayracs3/Kayra/commit/a73355080dbfa60b734e62cf43d5f5bbcf7cf353)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:8149c320bb07f5d800e1d0d41d85688bca581aeb -->
 ### Clarify X CDN headers in DDizi
 
