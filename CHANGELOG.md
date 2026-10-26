@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:e6ef19527e674687af4c1eaecbcd83136e808bf2 -->
+### Improve TVDiziler canonical poster and cast parsing
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [e6ef195](https://github.com/Kayracs3/Kayra/commit/e6ef19527e674687af4c1eaecbcd83136e808bf2)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:5868b7d9de0f47efc4eeec8f0bf0fde810e97c72 -->
 ### Correct TVDiziler player attribute fallback parser
 
