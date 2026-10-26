@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:e3697daed7e5b02734b69a882171e61991b448c2 -->
+### Fix TVDiziler HLS audio headers and search matching
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [e3697da](https://github.com/Kayracs3/Kayra/commit/e3697daed7e5b02734b69a882171e61991b448c2)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:314239b52c69509693317f119e691bd6f2676d2d -->
 ### Fix TrDiziIzle series catalog, seasons, episodes and HLS playback
 
