@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:314239b52c69509693317f119e691bd6f2676d2d -->
+### Fix TrDiziIzle series catalog, seasons, episodes and HLS playback
+
+- Etkilenen alanlar: TrDiziIzle
+- Commit: [314239b](https://github.com/Kayracs3/Kayra/commit/314239b52c69509693317f119e691bd6f2676d2d)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:ff3532422ecf2361a5b5e8fa9efcdbd22136ea3b -->
 ### Bump TVDiziler to version 3 after compilation fixes
 
