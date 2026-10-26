@@ -2,6 +2,23 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:65770e970b5f16c15777c2c8172f56aeb4b54429 -->
+### Bump DDizi to version 2 for X HLS audio fix
+
+- Etkilenen alanlar: DDizi
+- Commit: [65770e9](https://github.com/Kayracs3/Kayra/commit/65770e970b5f16c15777c2c8172f56aeb4b54429)
+
+## 2026-10-26
+
+<!-- kayra-commit:a2d759a1339f7e6fb76a5984bb9edce087264b5c -->
+### Fix silent playback for X HLS streams in DDizi
+
+- Etkilenen alanlar: DDizi
+- Commit: [a2d759a](https://github.com/Kayracs3/Kayra/commit/a2d759a1339f7e6fb76a5984bb9edce087264b5c)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:0bc993e5719331305a80d85ffe76533dbe39ab0a -->
 ### Bump TrDiziIzle to version 24
 
