@@ -28,7 +28,7 @@ class TrDiziIzle : MainAPI() {
     override val hasMainPage = true
     override val hasQuickSearch = true
     override var sequentialMainPage = false
-    override val supportedTypes = setOf(TvType.TvSeries, TvType.Movie)
+    override val supportedTypes = setOf(TvType.TvSeries)
 
     private val tag = "TRDiziIzle"
     private val headers = mapOf(
@@ -127,19 +127,20 @@ class TrDiziIzle : MainAPI() {
             parts[0] == "episode" || parts[0] == "episodes"
     }
 
-    private fun isMovie(url: String): Boolean {
-        if (!onSite(url) || isTrailerUrl(url)) return false
-        val parts = path(url).trim('/').split('/').filter { it.isNotBlank() }
-        return parts.size == 2 && (parts[0] == "filmler" || parts[0] == "film")
-    }
-
     private fun isEpisode(url: String) = onSite(url) &&
         (path(url).contains("bolum", true) || path(url).contains("episode", true))
 
-    private fun isSeason(url: String) = onSite(url) &&
-        (path(url).contains("sezon", true) || path(url).contains("season", true))
+    private fun isSeason(url: String): Boolean {
+        if (!onSite(url)) return false
+        val route = path(url)
+        val query = runCatching { URI(url).rawQuery.orEmpty() }.getOrDefault("")
+        return route.contains("sezon", true) ||
+            route.contains("season", true) ||
+            Regex("""(?i)(?:^|&)(?:sezon|season|season_id|seasonid)=\d+""")
+                .containsMatchIn(query)
+    }
 
-    private fun isItem(url: String) = isSeries(url) || isMovie(url)
+    private fun isItem(url: String) = isSeries(url)
 
     // The /tum-bolumler/ list links directly to episode pages, sometimes at the
     // site root (for example: /tuzlu-kahve-7-bolum-izle-full-tek/).
@@ -470,18 +471,10 @@ class TrDiziIzle : MainAPI() {
             if (!validTitle(title)) return@forEach
 
             val score = scoreFrom(card.text() + " " + anchor.attr("aria-label"))
-            val item = if (isSeries(url)) {
-                newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
-                    posterUrl = poster
-                    posterHeaders = this@TrDiziIzle.posterHeaders
-                    score?.let { this.score = Score.from10(it) }
-                }
-            } else {
-                newMovieSearchResponse(title, url, TvType.Movie) {
-                    posterUrl = poster
-                    posterHeaders = this@TrDiziIzle.posterHeaders
-                    score?.let { this.score = Score.from10(it) }
-                }
+            val item = newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
+                posterUrl = poster
+                posterHeaders = this@TrDiziIzle.posterHeaders
+                score?.let { this.score = Score.from10(it) }
             }
 
             val target = if (!poster.isNullOrBlank()) posterItems else fallbackItems
@@ -914,21 +907,15 @@ class TrDiziIzle : MainAPI() {
                             Log.d(tag, "Arama sonucunun afişi ayrıştırılamadı: " + item.name, it)
                         }.getOrNull()
 
-                        val replacement: SearchResponse? = if (poster.isNullOrBlank()) {
-                            null
-                        } else if (isSeries(item.url)) {
-                            newTvSeriesSearchResponse(item.name, item.url, TvType.TvSeries) {
-                                posterUrl = poster
-                                posterHeaders = this@TrDiziIzle.posterHeaders
+                        val replacement: SearchResponse? =
+                            if (poster.isNullOrBlank() || !isSeries(item.url)) {
+                                null
+                            } else {
+                                newTvSeriesSearchResponse(item.name, item.url, TvType.TvSeries) {
+                                    posterUrl = poster
+                                    posterHeaders = this@TrDiziIzle.posterHeaders
+                                }
                             }
-                        } else if (isMovie(item.url)) {
-                            newMovieSearchResponse(item.name, item.url, TvType.Movie) {
-                                posterUrl = poster
-                                posterHeaders = this@TrDiziIzle.posterHeaders
-                            }
-                        } else {
-                            null
-                        }
 
                         if (replacement != null) {
                             Log.d(tag, "Arama afişi bulundu: " + item.name + " -> " + poster)
@@ -1037,9 +1024,26 @@ class TrDiziIzle : MainAPI() {
 
     private fun seasonUrls(document: Document, pageUrl: String): Set<String> {
         val out = LinkedHashSet<String>()
-        document.select("a[href]").forEach { anchor ->
-            val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { pageUrl }) ?: return@forEach
-            if (onSite(url) && isSeason(url)) out.add(url)
+        document.select(
+            "a[href], [data-season-url], [data-season-href], " +
+                "[data-url][class*=season], [data-url][class*=sezon], " +
+                "[data-href][class*=season], [data-href][class*=sezon]"
+        ).forEach { element ->
+            val clickUrl = Regex("""(?i)(?:location\.href|window\.location|url)\s*[:=]\s*['"]([^'"]+)['"]""")
+                .find(element.attr("onclick"))?.groupValues?.getOrNull(1)
+            val raw = firstNonBlank(
+                element.attr("href"), element.attr("data-season-url"),
+                element.attr("data-season-href"), element.attr("data-url"),
+                element.attr("data-href"), clickUrl
+            ) ?: return@forEach
+            val url = abs(raw, element.baseUri().ifBlank { pageUrl }) ?: return@forEach
+            val label = norm(
+                element.text() + " " + element.attr("title") + " " +
+                    element.attr("aria-label") + " " + element.id() + " " + element.className()
+            )
+            if (onSite(url) &&
+                (isSeason(url) || Regex("""\b\d{1,2}\s*(?:sezon|season)\b""").containsMatchIn(label))
+            ) out.add(url)
         }
         return out
     }
@@ -1145,47 +1149,60 @@ class TrDiziIzle : MainAPI() {
         val genres = extractGenres(document, text)
         val actors = extractActors(document, text)
 
-        if (isMovie(pageUrl)) {
-            return newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
-                posterUrl = poster
-                plot = description
-                this.year = year
-                this.tags = genres
-                actors?.let { addActors(it) }
-                score?.let { this.score = Score.from10(it) }
+        val episodeMap = LinkedHashMap<String, Episode>()
+        fun mergeEpisode(episode: Episode) {
+            val old = episodeMap[episode.data]
+            if (old == null ||
+                ((old.season == null || old.season == 1) &&
+                    episode.season != null && episode.season != 1) ||
+                (old.episode == null && episode.episode != null)
+            ) {
+                episodeMap[episode.data] = episode
             }
         }
 
-        val episodeMap = LinkedHashMap<String, Episode>()
-        extractEpisodes(document, pageUrl, title, poster).forEach { episode ->
-            episodeMap.putIfAbsent(episode.data, episode)
-        }
+        extractEpisodes(document, pageUrl, title, poster).forEach(::mergeEpisode)
 
-        // Some series pages expose each season through a separate URL/tab. Fetch those
-        // season pages too, then merge and sort their episodes instead of returning only
-        // the subset visible on the first detail page.
-        seasonUrls(document, pageUrl).filter { it.trimEnd('/') != pageUrl.trimEnd('/') }
-            .take(20).forEach seasonLoop@ { seasonUrl ->
-                val seasonResponse = runCatching {
-                    app.get(
-                        seasonUrl,
-                        headers = headers + ("Referer" to pageUrl),
-                        referer = pageUrl,
-                        allowRedirects = true,
-                        timeout = 10000
-                    )
-                }.onFailure {
-                    Log.d(tag, "Sezon sayfası alınamadı: $seasonUrl", it)
-                }.getOrNull() ?: return@seasonLoop
-                if (!seasonResponse.isSuccessful) return@seasonLoop
+        // Follow season links from the main page and nested season pages. This catches
+        // season lists that are split across multiple tabs/routes without looping forever.
+        val pendingSeasons = ArrayDeque<String>()
+        seasonUrls(document, pageUrl)
+            .filter { it.trimEnd('/') != pageUrl.trimEnd('/') }
+            .forEach { pendingSeasons.addLast(it) }
+        val seenSeasons = LinkedHashSet<String>()
+        while (pendingSeasons.isNotEmpty() && seenSeasons.size < 40) {
+            val seasonUrl = pendingSeasons.removeFirst()
+            val seasonKey = seasonUrl.trimEnd('/')
+            if (!seenSeasons.add(seasonKey)) continue
 
-                extractEpisodes(
-                    seasonResponse.document, seasonUrl, title, poster,
-                    includeCurrentPageEpisode = false
-                ).forEach { episode ->
-                    episodeMap.putIfAbsent(episode.data, episode)
+            val seasonResponse = runCatching {
+                app.get(
+                    seasonUrl,
+                    headers = headers + ("Referer" to pageUrl),
+                    referer = pageUrl,
+                    allowRedirects = true,
+                    timeout = 10000
+                )
+            }.onFailure {
+                Log.d(tag, "Sezon sayfası alınamadı: $seasonUrl", it)
+            }.getOrNull() ?: continue
+            if (!seasonResponse.isSuccessful) continue
+
+            extractEpisodes(
+                seasonResponse.document, seasonUrl, title, poster,
+                includeCurrentPageEpisode = false
+            ).forEach(::mergeEpisode)
+
+            seasonUrls(seasonResponse.document, seasonUrl).forEach { nestedSeason ->
+                val nestedKey = nestedSeason.trimEnd('/')
+                if (nestedKey != pageUrl.trimEnd('/') &&
+                    nestedKey !in seenSeasons &&
+                    pendingSeasons.size < 40
+                ) {
+                    pendingSeasons.addLast(nestedSeason)
                 }
             }
+        }
 
         val episodes = episodeMap.values.sortedWith(
             compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: Int.MAX_VALUE }
@@ -1230,6 +1247,43 @@ class TrDiziIzle : MainAPI() {
         return null
     }
 
+    private fun seasonNumber(raw: String?): Int? {
+        val value = norm(raw.orEmpty())
+        val match = Regex(
+            """(?i)\b(\d{1,2})\s*[._:-]?\s*(?:sezon|season)\b|\b(?:sezon|season)\s*[-_.:# ]*\s*(\d{1,2})\b|(?:^|[/_-])s(\d{1,2})(?:$|[/_-])"""
+        ).find(value) ?: return null
+        return match.groupValues.drop(1).firstNotNullOfOrNull { it.toIntOrNull() }
+            ?.takeIf { it in 1..100 }
+    }
+
+    private fun seasonFromAncestors(anchor: Element): Int? {
+        var node: Element? = anchor
+        var depth = 0
+        while (node != null && depth < 12) {
+            val current = node
+            val direct = listOf(
+                current.attr("data-season"), current.attr("data-season-number"),
+                current.attr("data-sezon"), current.attr("data-season-id")
+            ).firstNotNullOfOrNull { it.toIntOrNull()?.takeIf { number -> number in 1..100 } }
+            if (direct != null) return direct
+
+            val heading = current.selectFirst(
+                "h1,h2,h3,h4,h5,h6,[class*=season-title],[class*=sezon-title]"
+            )?.text().orEmpty()
+            val marker = listOf(
+                current.id(), current.className(), current.attr("aria-label"),
+                current.attr("title"), current.attr("data-season"),
+                current.attr("data-season-number"), current.attr("data-sezon"),
+                current.attr("data-season-id"), heading
+            ).filter { it.isNotBlank() }.joinToString(" ")
+            seasonNumber(marker)?.let { return it }
+
+            node = current.parent()
+            depth++
+        }
+        return null
+    }
+
     private fun extractEpisodes(
         document: Document,
         pageUrl: String,
@@ -1242,18 +1296,39 @@ class TrDiziIzle : MainAPI() {
             .filter { it.length >= 3 }
             .filterNot { it in setOf("son", "bolum", "izle", "dizi", "hd") }
 
-        // The site lists seasons/episodes in #genel .bolumust2, with the actual
-        // episode link as a direct child; a separate .wpfp-link is only a favorite toggle.
-        val scopedEpisodeAnchors = document.select("#genel .bolumust2 > a[href]")
-        val anchors = if (scopedEpisodeAnchors.isNotEmpty()) {
-            scopedEpisodeAnchors
-        } else {
-            document.select("a[href]")
-        }
+        // Prefer known season/episode containers, then scan the full page. The site
+        // sometimes nests anchors more deeply than ".bolumust2 > a", so using that
+        // selector alone can leave older episodes out.
+        val preferredEpisodeAnchors = document.select(
+            "#genel .bolumust2 > a[href], #genel a[href], #bolumler a[href], " +
+                "[id*=sezon] a[href], [class*=sezon] a[href], " +
+                "[id*=season] a[href], [class*=season] a[href], " +
+                "[id*=episode] a[href], [class*=episode] a[href]"
+        )
+        val anchors = preferredEpisodeAnchors.toList() + document.select("a[href]").toList()
+        val seenEpisodeUrls = LinkedHashSet<String>()
+
+        // Infer the season split from explicit "Sezon Finali" markers when the page
+        // combines multiple seasons into one long table without separate headings.
+        val inferredSeasonBoundaries = anchors.mapNotNull { candidate ->
+            val candidateUrl = abs(
+                candidate.attr("href"),
+                candidate.baseUri().ifBlank { pageUrl }
+            ) ?: return@mapNotNull null
+            if (!onSite(candidateUrl) || excludedNavigation(candidate)) return@mapNotNull null
+            val label = listOf(
+                candidate.text(), candidate.attr("title"), candidate.attr("aria-label"),
+                candidate.attr("data-title"), path(candidateUrl).replace('-', ' '),
+                candidate.parent()?.text().orEmpty().take(240)
+            ).filter { it.isNotBlank() }.joinToString(" ")
+            if (!norm(label).contains("sezon finali")) return@mapNotNull null
+            episodeInfo(label)?.second
+        }.toSet()
 
         for (anchor in anchors) {
             if (anchor.hasClass("wpfp-link") || excludedNavigation(anchor)) continue
             val url = abs(anchor.attr("href"), anchor.baseUri().ifBlank { pageUrl }) ?: continue
+            if (!seenEpisodeUrls.add(url)) continue
             if (!onSite(url)) continue
             val route = path(url).lowercase(Locale.ROOT)
             if (!(route.contains("/diziler/") || route.contains("/bolum/") ||
@@ -1276,13 +1351,14 @@ class TrDiziIzle : MainAPI() {
 
             val context = labelRaw + " " + anchor.parent()?.text().orEmpty().take(160)
             val season = info.first
-                ?: Regex("""(\d{1,2})\s*(?:sezon|season)""").find(norm(context))
-                    ?.groupValues?.getOrNull(1)?.toIntOrNull()
-                ?: 1
+                ?: seasonFromAncestors(anchor)
+                ?: seasonNumber(pageUrl)
+                ?: seasonNumber(context)
+                ?: (1 + inferredSeasonBoundaries.count { it < number })
             val label = "$number. Bölüm" +
                 if (norm(context).contains("sezon finali")) " Sezon Finali" else ""
             val card = cardFor(anchor)
-            val poster = posterOf(anchor, card, url) ?: seriesPoster
+            val poster = posterOf(anchor, card, anchor.baseUri().ifBlank { pageUrl }) ?: seriesPoster
             val description = anchor.parent()?.text()?.takeIf { it.length in 50..800 }
             output.putIfAbsent(url, newEpisode(url) {
                 name = label
@@ -1342,7 +1418,7 @@ class TrDiziIzle : MainAPI() {
         pages.add(episodeUrl to first.document)
         var found = false
 
-        while (pages.isNotEmpty() && seenPages.size < 6) {
+        while (pages.isNotEmpty() && seenPages.size < 10) {
             val (pageUrl, document) = pages.removeFirst()
             if (!seenPages.add(pageUrl)) continue
             collectSubtitles(document, pageUrl, subtitleCallback)
@@ -1370,14 +1446,14 @@ class TrDiziIzle : MainAPI() {
             val nestedPlayerPage = currentPath.contains("/player/oynat/") ||
                 currentPath.contains("/jwplayer")
             val scriptLimit = when {
-                nestedPlayerPage -> 10
-                hasExplicitIframe -> 3
-                else -> 4
+                nestedPlayerPage -> 14
+                hasExplicitIframe -> 7
+                else -> 7
             }
             val scriptsToInspect = (playerScripts + allScripts.filterNot { it in playerScripts })
                 .distinct().take(scriptLimit)
             scriptsToInspect.forEach scriptLoop@ { scriptUrl ->
-                if (seenScripts.size >= 18 || !seenScripts.add(scriptUrl)) return@scriptLoop
+                if (seenScripts.size >= 30 || !seenScripts.add(scriptUrl)) return@scriptLoop
                 val scriptResponse = runCatching {
                     app.get(
                         scriptUrl,
@@ -1407,7 +1483,7 @@ class TrDiziIzle : MainAPI() {
                         else -> 4
                     }
                 }
-                .take(20)
+                .take(35)
             candidates.forEach candidateLoop@ { candidate ->
                 if (!seenCandidates.add(candidate)) return@candidateLoop
 
@@ -1431,7 +1507,7 @@ class TrDiziIzle : MainAPI() {
                     found = true
                     return@candidateLoop
                 }
-                if (seenPages.size < 6 && pages.size < 5) {
+                if (seenPages.size < 10 && pages.size < 9) {
                     // Follow redirects manually with a small limit. Some /player/oynat/
                     // endpoints loop through redirects until NiceHttp aborts after 20+ hops.
                     var currentUrl = candidate
@@ -1784,6 +1860,13 @@ class TrDiziIzle : MainAPI() {
             url
         }
 
+        if (isTwitterVideoCdn &&
+            Regex("""(?i)/pl/(?:avc1|mp4a)/""").containsMatchIn(path(mediaUrl))
+        ) {
+            Log.d(tag, "X alt akış listesi tek başına verilmedi; ses ve videoyu birleştiren ana manifest bekleniyor")
+            return false
+        }
+
         // X's video CDN returns 403 when the Referer is the embedding third-party site.
         // Use the platform's own origin for media requests; this also lets ExoPlayer
         // request the HLS manifest and its nested fMP4 segments with matching headers.
@@ -1811,8 +1894,8 @@ class TrDiziIzle : MainAPI() {
                 // master.m3u8 and X/Twitter playlist URLs may contain separate audio groups.
                 // Passing them through M3u8Helper can split out a video-only variant and lose audio.
                 // Give the original manifest to ExoPlayer so it can resolve video and audio together.
-                val keepMasterPlaylist = mediaUrl.contains("master.m3u8", ignoreCase = true) || isTwitterMasterPlaylist(mediaUrl) ||
-                    isTwitterVideoCdn
+                val keepMasterPlaylist = mediaUrl.contains("master.m3u8", ignoreCase = true) ||
+                    isTwitterMasterPlaylist(mediaUrl)
                 if (keepMasterPlaylist) {
                     callback(newExtractorLink(name, "TRDiziIzle HLS", mediaUrl, ExtractorLinkType.M3U8) {
                         this.referer = mediaReferer
