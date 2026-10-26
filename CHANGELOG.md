@@ -2,6 +2,23 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:4f670e4a3fb5b1069f099241e3a677cda4c97632 -->
+### Correct episode season and label regexes
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [4f670e4](https://github.com/Kayracs3/Kayra/commit/4f670e4a3fb5b1069f099241e3a677cda4c97632)
+
+## 2026-10-26
+
+<!-- kayra-commit:d6e041ddf8ee3792732a4050291a7c9277419cfc -->
+### Track TvDiziler season headings while parsing episodes
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [d6e041d](https://github.com/Kayracs3/Kayra/commit/d6e041ddf8ee3792732a4050291a7c9277419cfc)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:e6ef19527e674687af4c1eaecbcd83136e808bf2 -->
 ### Improve TVDiziler canonical poster and cast parsing
 
