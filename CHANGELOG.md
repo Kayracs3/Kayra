@@ -2,6 +2,15 @@
 
 ## 2026-10-26
 
+<!-- kayra-commit:ba926e362fa283cd97405043ff6d305310c9f493 -->
+### Expand TVDiziler discovery and movie catalog pages
+
+- Etkilenen alanlar: TVDiziler
+- Commit: [ba926e3](https://github.com/Kayracs3/Kayra/commit/ba926e362fa283cd97405043ff6d305310c9f493)
+
+
+## 2026-10-26
+
 <!-- kayra-commit:3180d2660ffa98b7610f88d9f8aaaaf4b6249c3e -->
 ### Fix nullable route checks in TVDiziler provider
 
