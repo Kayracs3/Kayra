@@ -1664,7 +1664,7 @@ class FilmizleHell : MainAPI() {
                 }
                 ids.addAll(
                     extractPlayturkaIds(
-                        embedUrl,
+                        scriptResponse.url,
                         scriptDocument,
                         scriptResponse.text
                     )
@@ -1744,7 +1744,11 @@ class FilmizleHell : MainAPI() {
             embeddedPlayturkaPage != null -> embeddedPlayturkaPage
             else -> embedUrl
         }
-        for (id in ids.take(3)) {
+        val orderedIds = LinkedHashSet<String>().apply {
+            addAll(exactMasters.keys)
+            addAll(ids)
+        }
+        for (id in orderedIds.take(3)) {
             // Playturka uses a direct VTT sidecar next to the HLS files:
             // /videos/{videoId}/subtitles/tr.vtt (sometimes cache-busted with ?v=...).
             // Validate the response before exposing it to CloudStream so HTML/404 pages
