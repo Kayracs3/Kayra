@@ -18,12 +18,12 @@
       "If the old domain is fully offline, search can nominate possible domains but cannot authorize a switch without a saved identity profile or explicit identityMarkers."
     ],
     "onSwitch": "Only the affected provider module is changed, its mainUrl and same-provider host references are updated, and its plugin version is incremented. The normal CloudStream build is then dispatched.",
-    "switchRule": "A provider domain may be changed only after the configured URL fails two independent checks with HTTP 404/410, a persistent parked-domain page, permanent DNS-not-found, or connection-refused. Any 2xx/3xx response, including a redirect to another hostname, means the current URL is working and must be retained. 401/403/429/451, Cloudflare challenges, 5xx responses and timeouts never trigger a switch.",
+    "switchRule": "A provider domain may be changed only after two independent checks confirm HTTP 404/410, a persistent parked-domain page, permanent DNS-not-found, connection-refused, or a TLS hostname/common-name mismatch. Any 2xx/3xx response, including a redirect to another hostname, means the current URL is working and must be retained. 401/403/429/451, Cloudflare challenges, generic TLS issuer/expiry errors, 5xx responses and timeouts never trigger a switch.",
     "limits": [
       "Working 2xx/3xx primary domains are immutable to the automatic updater, including domains that redirect.",
       "A confirmed failure must be observed twice before candidate discovery starts.",
       "403/429/Cloudflare protection, generic TLS issuer/expiry errors, timeouts and 5xx responses are not proof that a domain changed.",
-      "A TLS hostname/common-name mismatch is treated as a domain failure only after two independent confirmations.",
+      "A TLS hostname/common-name mismatch is a domain failure only after two independent confirmations.",
       "A replacement must pass identity verification after the primary domain is confirmed dead."
     ],
     "workingDomainRule": "Never rewrite a provider's current domain when it responds successfully or redirects successfully. Only confirmed dead primary domains may enter candidate discovery."
