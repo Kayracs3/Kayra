@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:4aa4540a24f18190e18ae9f70e708a59a0c90ec4 -->
+### Fix Playturka playlist regex escaping
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [4aa4540](https://github.com/Kayracs3/Kayra/commit/4aa4540a24f18190e18ae9f70e708a59a0c90ec4)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:4748a46fa9288194a8c9c856452bfe199cd86e9b -->
 ### Validate Playturka audio sidecars before publishing master
 
