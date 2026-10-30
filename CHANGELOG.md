@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:3a3cb897bd10e938ab6f5aa0ed75df28c08c3e43 -->
+### Fix Dizigecesi popular page posters and exclude flag icons
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [3a3cb89](https://github.com/Kayracs3/Kayra/commit/3a3cb897bd10e938ab6f5aa0ed75df28c08c3e43)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:5d1288801768c259947eaae50b72aac961cf9cfa -->
 ### Auto-update identity-verified provider domains
 
