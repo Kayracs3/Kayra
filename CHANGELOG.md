@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:596438534d96556dd7fbe5a3e4fdc9a278b6846d -->
+### Restore still-working provider domain: DiziLife
+
+- Etkilenen alanlar: DiziLife
+- Commit: [5964385](https://github.com/Kayracs3/Kayra/commit/596438534d96556dd7fbe5a3e4fdc9a278b6846d)
+
+## 2026-10-30
+
+<!-- kayra-commit:db5bb22f9bb5cf9224dd962a5a47e418d748410f -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [db5bb22](https://github.com/Kayracs3/Kayra/commit/db5bb22f9bb5cf9224dd962a5a47e418d748410f)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:8e96c5cc97439c26f73a83116dfd7932da41349b -->
 ### Test that healthy and protected domains are never changed
 
