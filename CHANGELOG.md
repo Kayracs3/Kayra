@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:e0d988d524e8415d810ba9fe9848844ada9a0415 -->
+### Bump FilmizleHell plugin to version 19
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [e0d988d](https://github.com/Kayracs3/Kayra/commit/e0d988d524e8415d810ba9fe9848844ada9a0415)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:4aa4540a24f18190e18ae9f70e708a59a0c90ec4 -->
 ### Fix Playturka playlist regex escaping
 
