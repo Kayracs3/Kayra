@@ -1797,6 +1797,30 @@ class FilmizleHell : MainAPI() {
                 if (scriptHints.isNotBlank()) {
                     Log.d(name, "Playturka kaynak JS: " + safeLogUrl(scriptUrl) + "; hints=" + scriptHints)
                 }
+
+                // Inspect only the public player script for the code path that
+                // transforms the API's opaque JSON string into a signed URL.
+                val decodeTerms = listOf(
+                    "api/video-url", "video-url", "decrypt", "CryptoJS", "crypto.subtle",
+                    "AES", "base64", "atob", "btoa", "TextDecoder", "Uint8Array",
+                    "charCodeAt", "fromCharCode", "fetch(", "XMLHttpRequest", "JSON.parse"
+                )
+                val decodeHints = decodeTerms.mapNotNull { term ->
+                    val at = scriptText.indexOf(term, ignoreCase = true)
+                    if (at < 0) return@mapNotNull null
+                    val from = (at - 220).coerceAtLeast(0)
+                    val until = (at + 380).coerceAtMost(scriptText.length)
+                    val snippet = scriptText.substring(from, until)
+                        .replace(Regex("""\\s+"""), " ")
+                        .replace(Regex("""(?i)https?://[^\\s"'<>]+""")) { match ->
+                            safeLogUrl(match.value)
+                        }
+                    term + " => " + snippet
+                }.joinToString(" || ").take(2600)
+                if (decodeHints.isNotBlank()) {
+                    Log.d(name, "Playturka çözümleme kodu: " + safeLogUrl(scriptUrl) +
+                        "; hints=" + decodeHints)
+                }
                 val scriptDocument = Jsoup.parse("", scriptResponse.url)
                 extractPlayturkaMasterUrls(
                     scriptResponse.url,
