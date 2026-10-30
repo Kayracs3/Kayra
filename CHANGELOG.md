@@ -2,6 +2,23 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:1d3fba2b75e86f7945c9a533c3a4c1385b20bfd5 -->
+### FilmizleHell: version 21
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [1d3fba2](https://github.com/Kayracs3/Kayra/commit/1d3fba2b75e86f7945c9a533c3a4c1385b20bfd5)
+
+## 2026-10-31
+
+<!-- kayra-commit:0988769c9b95a1b945d172c07c9ac55da8db1566 -->
+### Fix Playturka playback request headers
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [0988769](https://github.com/Kayracs3/Kayra/commit/0988769c9b95a1b945d172c07c9ac55da8db1566)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:5999dad4e2f92e223e29de8ccfad52582e385146 -->
 ### Bump FilmizleHell plugin to version 20
 
