@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:4368cfd7e1a12e814fbf398dc5b0172eb3bfa218 -->
+### Bump FilmizleHell version for Playturka HLS source fix
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [4368cfd](https://github.com/Kayracs3/Kayra/commit/4368cfd7e1a12e814fbf398dc5b0172eb3bfa218)
+
+## 2026-10-30
+
+<!-- kayra-commit:f58a3a9627883039955d56cd4d1601fc3c0c994c -->
+### Use player frame referer and ignore cache timestamps as video IDs
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [f58a3a9](https://github.com/Kayracs3/Kayra/commit/f58a3a9627883039955d56cd4d1601fc3c0c994c)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:eb77669b7e2dc43467e4d4cd2c2cc16ae1e1979a -->
 ### Retain signed Playturka master URLs found in HTML and player scripts
 
