@@ -1549,11 +1549,19 @@ class FilmizleHell : MainAPI() {
 
         val playerCookie = response.headers["Set-Cookie"]
         val playerVisitor = playturkaVisitorId(playerCookie)
-            ?: playturkaVisitorFromUrlOrHtml(response.url + " " + response.text)
+            ?: playturkaVisitorFromUrlOrHtml(response.url)
+            ?: findPlayturkaJsonString(
+                response.text, setOf("visitor_id", "visitorId", "AM_VISITOR_ID", "am_vid")
+            )
         val playerSiteKey = playturkaSiteKey(response.url, response.text)
+        val playerShape = runCatching {
+            val normalized = response.text.trimStart('\uFEFF').trim().removePrefix(")]}',").trim()
+            summarizePlayturkaApiValue(org.json.JSONTokener(normalized).nextValue())
+        }.getOrElse { "non-json" }
         Log.d(name, "Playturka player config: id=" + id +
             ", HTTP=" + response.code +
             ", type=" + response.headers["content-type"].orEmpty().take(60) +
+            ", shape=" + playerShape +
             ", visitorIdPresent=" + !playerVisitor.isNullOrBlank() +
             ", siteKeyPresent=" + !playerSiteKey.isNullOrBlank() +
             ", cookieNames=" + playturkaCookieNames(playerCookie))
