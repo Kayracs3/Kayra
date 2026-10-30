@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:0d4c8b0595ba5facf234f78f7fb910b21f6c237f -->
+### FilmizleHell: bump plugin to version 12
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [0d4c8b0](https://github.com/Kayracs3/Kayra/commit/0d4c8b0595ba5facf234f78f7fb910b21f6c237f)
+
+## 2026-10-30
+
+<!-- kayra-commit:4dfda8c1f87361199e8e49326863c2d45562576a -->
+### FilmizleHell: fix site key and visitor cookie parsing
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [4dfda8c](https://github.com/Kayracs3/Kayra/commit/4dfda8c1f87361199e8e49326863c2d45562576a)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:a0f15d2967ef6635e51296b04ccf5997e4350d97 -->
 ### FilmizleHell: send Playturka visitor and site key parameters
 
