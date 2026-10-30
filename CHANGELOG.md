@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:a2027afdc078ae95ab6be65ddb370f89ea48b696 -->
+### FilmizleHell: select primary stream and reject short ad playlists
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [a2027af](https://github.com/Kayracs3/Kayra/commit/a2027afdc078ae95ab6be65ddb370f89ea48b696)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:3fc6e5653410e3beb8342af26b8590c8105f5219 -->
 ### FilmizleHell: bump plugin to version 16
 
