@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:bf65de640ca085c3eb225cb7b6cf318a70c9a084 -->
+### Bump Dizigecesi version for source restriction handling
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [bf65de6](https://github.com/Kayracs3/Kayra/commit/bf65de640ca085c3eb225cb7b6cf318a70c9a084)
+
+## 2026-10-30
+
+<!-- kayra-commit:4f5ae03234fa961ccb4ca5ec838669557b72486e -->
+### Detect restricted player pages on all HTTP responses
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [4f5ae03](https://github.com/Kayracs3/Kayra/commit/4f5ae03234fa961ccb4ca5ec838669557b72486e)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:586701e30f4498f64a35b6becbb3398b86945224 -->
 ### Normalize restricted source labels and lock-page text
 
