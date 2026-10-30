@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:7a4df8f2db1df7e3ccfeccb3d4c625150bbe806e -->
+### Never switch reachable or redirected provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7a4df8f](https://github.com/Kayracs3/Kayra/commit/7a4df8f2db1df7e3ccfeccb3d4c625150bbe806e)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:cd459a09e4a351e06a01ec5468c6c7a7b151fbec -->
 ### Update mainUrl to new website address
 
