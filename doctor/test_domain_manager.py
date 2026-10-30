@@ -218,20 +218,17 @@ class DomainManagerTests(unittest.TestCase):
             self.assertIn('mainUrl = "https://new.example"', kt.read_text(encoding="utf-8"))
             self.assertIn("version = 3", (root / "Demo/build.gradle.kts").read_text(encoding="utf-8"))
 
-    def test_unrecognized_redirect_is_kept_because_primary_url_works(self):
+    def test_parked_200_page_requires_confirmation_and_does_not_match_candidate(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             provider, kt = test_provider(root)
-            redirect = html_response(
-                "https://new.example/",
-                title="Parked domain - Domain for sale",
-            )
-            # An actual redirect that lands on a parked page is a broken service,
-            # so it is not a normal working redirect. The marker must be confirmed.
-            with patch.object(dm, "fetch_page", side_effect=[redirect, redirect, redirect]) as fetch:
+            parked = html_response(title="Parked domain - Domain for sale")
+            with patch.object(dm, "fetch_page", side_effect=[parked, parked]) as fetch, \
+                 patch.object(dm, "configured_candidates", return_value=[]), \
+                 patch.object(dm, "search_candidates", return_value=[]):
                 result = dm.inspect_provider(root, provider, {}, apply=True)
             self.assertEqual(result["status"], "confirmed-dead-no-replacement")
-            self.assertEqual(fetch.call_count, 3)
+            self.assertEqual(fetch.call_count, 2)
             self.assertIn('mainUrl = "https://old.example"', kt.read_text(encoding="utf-8"))
 
     def test_search_results_only_nominate_candidates_for_later_identity_check(self):
