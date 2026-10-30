@@ -2043,6 +2043,66 @@ class FilmizleHell : MainAPI() {
         return variantDurations.minOfOrNull { it.second }
     }
 
+    private data class PlayturkaVideoPlaylistResolution(
+        val isMasterPlaylist: Boolean,
+        val preferredVariantUrl: String?
+    )
+
+    /**
+     * Resolves the exact video rendition that the duration checker validated.
+     * Some Playturka masters report a full-length child playlist but ExoPlayer
+     * still receives a 10-second preview when the master itself is selected.
+     * For masters without separate audio renditions, publish the verified child
+     * playlist directly to avoid that mismatch.
+     */
+    private suspend fun findPlayturkaPreferredVideoVariant(
+        masterUrl: String,
+        referer: String
+    ): PlayturkaVideoPlaylistResolution? {
+        val response = runCatching {
+            app.get(
+                masterUrl,
+                headers = requestHeaders + mapOf("Accept" to "*/*", "Referer" to referer),
+                referer = referer,
+                allowRedirects = true,
+                cacheTime = 0,
+                timeout = 9000
+            )
+        }.onFailure {
+            Log.d(name, "Playturka video varyantı alınamadı: " + safeLogUrl(masterUrl))
+        }.getOrNull() ?: return null
+
+        val body = response.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+        if (!response.isSuccessful || !body.startsWith("#EXTM3U")) return null
+
+        val lines = body.lines()
+        val variants = ArrayList<Pair<Long, String>>()
+        for (index in lines.indices) {
+            val info = lines[index].trim()
+            if (!info.startsWith("#EXT-X-STREAM-INF", true)) continue
+            val uriLine = lines.drop(index + 1).firstOrNull {
+                it.isNotBlank() && !it.trim().startsWith("#")
+            } ?: continue
+            val url = fixUrl(uriLine.trim(), response.url) ?: continue
+            val bandwidth = Regex("""(?i)\\b(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\\d+)""")
+                .find(info)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
+            variants.add(bandwidth to url)
+        }
+
+        if (variants.isEmpty()) {
+            return PlayturkaVideoPlaylistResolution(
+                isMasterPlaylist = false,
+                preferredVariantUrl = null
+            )
+        }
+
+        val preferred = variants.maxByOrNull { it.first }?.second
+        return PlayturkaVideoPlaylistResolution(
+            isMasterPlaylist = true,
+            preferredVariantUrl = preferred
+        )
+    }
+
     private suspend fun isPlausiblePlayturkaMovieStream(
         manifestUrl: String,
         referer: String,
@@ -2412,9 +2472,47 @@ class FilmizleHell : MainAPI() {
                             ", url=" + safeLogUrl(manifest)
                     )
 
-                    // Do not replace the signed master with the unsigned response
-                    // URL; keep the tokenized URL and the manifest's audio group.
-                    publishDirect(manifest, playerReferer, callback)
+                    // Preserve the master when it declares external audio renditions.
+                    // Without a separate audio group, publish the exact video child
+                    // playlist whose full duration was checked above. This avoids
+                    // cases where ExoPlayer receives a 10-second preview from the
+                    // master while the child video playlist is full length.
+                    val playbackUrl = if (audioLines.isEmpty()) {
+                        val resolution = findPlayturkaPreferredVideoVariant(
+                            manifest, playerReferer
+                        )
+                        when {
+                            resolution == null -> {
+                                Log.w(
+                                    name,
+                                    "Playturka video listesi yeniden doğrulanamadı; master oynatılmadı: id=" +
+                                        id
+                                )
+                                continue
+                            }
+                            resolution.isMasterPlaylist &&
+                                resolution.preferredVariantUrl.isNullOrBlank() -> {
+                                Log.w(
+                                    name,
+                                    "Playturka master içinde oynatılabilir video varyantı yok: id=" +
+                                        id
+                                )
+                                continue
+                            }
+                            resolution.isMasterPlaylist -> resolution.preferredVariantUrl!!
+                            else -> manifest
+                        }
+                    } else {
+                        manifest
+                    }
+                    Log.d(
+                        name,
+                        "Playturka oynatma URL seçimi: id=" + id +
+                            ", separateAudio=" + audioLines.isNotEmpty() +
+                            ", directVideoVariant=" + (playbackUrl != manifest) +
+                            ", url=" + safeLogUrl(playbackUrl)
+                    )
+                    publishDirect(playbackUrl, playerReferer, callback)
                     found++
                     break
                 } else {
