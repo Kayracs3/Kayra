@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:bdad9538aeef5d0a312444e8323dcbe3aee8fa99 -->
+### Allow strict provider-brand verification on domain discovery cold start
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [bdad953](https://github.com/Kayracs3/Kayra/commit/bdad9538aeef5d0a312444e8323dcbe3aee8fa99)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:99af194d4959a7248858e63f9a83a0c409a530ed -->
 ### Add identity-verified automatic domain discovery and switching
 
