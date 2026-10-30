@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:c8ea92d72e451c1035340d596bd2e02d391ba7e8 -->
+### FilmizleHell: restore plugin version 15
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [c8ea92d](https://github.com/Kayracs3/Kayra/commit/c8ea92d72e451c1035340d596bd2e02d391ba7e8)
+
+## 2026-10-30
+
+<!-- kayra-commit:b256467a363034016482b98cb1cbe605cb4bcf6d -->
+### FilmizleHell: restore working version 15 source
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [b256467](https://github.com/Kayracs3/Kayra/commit/b256467a363034016482b98cb1cbe605cb4bcf6d)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:12cb07e41000814d0aaabb54b73359fcf3fbc6ab -->
 ### FilmizleHell: bump plugin to version 17
 
