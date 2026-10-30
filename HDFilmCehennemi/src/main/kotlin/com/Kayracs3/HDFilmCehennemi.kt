@@ -44,7 +44,7 @@ import java.util.Locale
 
 class HDFilmCehennemi : MainAPI() {
 
-    override var mainUrl = "https://hdfilmcehennemi4.co"
+    override var mainUrl = "https://www.hdfilmcehennemi.nl/"
     override var name = "HDFilmCehennemi"
     override val hasMainPage = true
     override var lang = "tr"
