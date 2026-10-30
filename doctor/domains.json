@@ -18,13 +18,13 @@
       "If the old domain is fully offline, search can nominate possible domains but cannot authorize a switch without a saved identity profile or explicit identityMarkers."
     ],
     "onSwitch": "Only the affected provider module is changed, its mainUrl and same-provider host references are updated, and its plugin version is incremented. The normal CloudStream build is then dispatched.",
-    "switchRule": "Only change a provider domain after two independent requests confirm HTTP 404/410, a parked-domain page, permanent DNS-not-found, or connection-refused. Any valid 2xx/3xx response, including cross-domain redirects, means the current configured URL is still working and must be kept. 401/403/429/451, Cloudflare challenges, 5xx responses and timeouts never trigger domain discovery or a switch.",
+    "switchRule": "A provider domain may be changed only after the configured URL fails two independent checks with HTTP 404/410, a persistent parked-domain page, permanent DNS-not-found, or connection-refused. Any 2xx/3xx response, including a redirect to another hostname, means the current URL is working and must be retained. 401/403/429/451, Cloudflare challenges, 5xx responses and timeouts never trigger a switch.",
     "limits": [
-      "Healthy 2xx/3xx primary domains are immutable to the automatic updater, including domains that redirect to a new hostname.",
-      "The same hard failure must be seen on two independent requests before candidate discovery starts.",
-      "403/429/451, Cloudflare protection, timeouts and 5xx responses are not proof that a domain changed.",
-      "A candidate replacement must pass identity verification after the current primary domain has been confirmed unavailable.",
-      "If a provider is protected or transiently unavailable, report it without changing its configured domain."
+      "Working 2xx/3xx primary domains are immutable to the automatic updater, including domains that redirect.",
+      "A confirmed failure must be observed twice before candidate discovery starts.",
+      "403/429/Cloudflare protection, generic TLS issuer/expiry errors, timeouts and 5xx responses are not proof that a domain changed.",
+      "A TLS hostname/common-name mismatch is treated as a domain failure only after two independent confirmations.",
+      "A replacement must pass identity verification after the primary domain is confirmed dead."
     ],
     "workingDomainRule": "Never rewrite a provider's current domain when it responds successfully or redirects successfully. Only confirmed dead primary domains may enter candidate discovery."
   },
