@@ -5,9 +5,6 @@ import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -2058,18 +2055,15 @@ class FilmizleHell : MainAPI() {
         val selectedVariants = variants.toList()
         if (selectedVariants.isEmpty() || selectedVariants.size > 8) return null
 
-        val variantDurations = coroutineScope {
-            selectedVariants.map { variant ->
-                async {
-                    val duration = fetchPlayturkaHlsDurationSeconds(
-                        variant,
-                        effectivePlaylistUrl,
-                        depth + 1,
-                        LinkedHashSet(visited)
-                    )
-                    duration?.let { variant to it }
-                }
-            }.awaitAll().filterNotNull()
+        val variantDurations = ArrayList<Pair<String, Double>>()
+        for (variant in selectedVariants) {
+            val duration = fetchPlayturkaHlsDurationSeconds(
+                variant,
+                effectivePlaylistUrl,
+                depth + 1,
+                LinkedHashSet(visited)
+            ) ?: continue
+            variantDurations.add(variant to duration)
         }
 
         val allVariantsVerified = variantDurations.size == selectedVariants.size
@@ -2537,14 +2531,12 @@ class FilmizleHell : MainAPI() {
                     val hasExternalAudioSidecar = audioLines.any {
                         it.contains("URI=", true)
                     }
-                    val audioDurations = coroutineScope {
-                        audioPlaylistUrls.map { audioUrl ->
-                            async {
-                                audioUrl to fetchPlayturkaHlsDurationSeconds(
-                                    audioUrl, playerReferer
-                                )
-                            }
-                        }.awaitAll()
+                    val audioDurations = ArrayList<Pair<String, Double?>>()
+                    for (audioUrl in audioPlaylistUrls) {
+                        val duration = fetchPlayturkaHlsDurationSeconds(
+                            audioUrl, playerReferer
+                        )
+                        audioDurations.add(audioUrl to duration)
                     }
                     val minimumAudioSeconds = maxOf(300.0, videoDurationSeconds * 0.70)
                     val audioSidecarsVerified = !hasExternalAudioSidecar ||
