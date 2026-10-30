@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:38ef9a6d3794e4461e469237257337fa12d466d7 -->
+### Skip Moly VK OK cooldown restriction pages
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [38ef9a6](https://github.com/Kayracs3/Kayra/commit/38ef9a6d3794e4461e469237257337fa12d466d7)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:dc1252ec6350dea1946a1e78dfe2b0290ddd2d1a -->
 ### Limit sibling poster lookup to filters-grid cards
 
