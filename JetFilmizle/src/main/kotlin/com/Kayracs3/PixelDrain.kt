@@ -9,7 +9,7 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 
 class PixelDrain : ExtractorApi() {
     override val name = "PixelDrain"
-    override val mainUrl = "https://jetfilmizle.app"
+    override val mainUrl = "https://jetfilmizle.now"
     override val requiresReferer = true
 
     override suspend fun getUrl(
