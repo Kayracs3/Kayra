@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:1863f5bae6b8af60f770e3f63742c13b2a58ba79 -->
+### Bump Dizigecesi version for poster parsing fix
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [1863f5b](https://github.com/Kayracs3/Kayra/commit/1863f5bae6b8af60f770e3f63742c13b2a58ba79)
+
+## 2026-10-30
+
+<!-- kayra-commit:e996d48fc5f0c8cf5ada424f332a430a6005f5f1 -->
+### Correct flag class matching in poster filter
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [e996d48](https://github.com/Kayracs3/Kayra/commit/e996d48fc5f0c8cf5ada424f332a430a6005f5f1)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:3a3cb897bd10e938ab6f5aa0ed75df28c08c3e43 -->
 ### Fix Dizigecesi popular page posters and exclude flag icons
 
