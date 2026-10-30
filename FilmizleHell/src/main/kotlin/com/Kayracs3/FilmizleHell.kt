@@ -1811,8 +1811,8 @@ class FilmizleHell : MainAPI() {
                     val from = (at - 220).coerceAtLeast(0)
                     val until = (at + 380).coerceAtMost(scriptText.length)
                     val snippet = scriptText.substring(from, until)
-                        .replace(Regex("""\\s+"""), " ")
-                        .replace(Regex("""(?i)https?://[^\\s"'<>]+""")) { match ->
+                        .replace(Regex("""\s+"""), " ")
+                        .replace(Regex("""(?i)https?://[^\s"'<>]+""")) { match ->
                             safeLogUrl(match.value)
                         }
                     term + " => " + snippet
