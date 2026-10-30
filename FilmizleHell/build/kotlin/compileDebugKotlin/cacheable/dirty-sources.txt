@@ -1,0 +1,2 @@
+/home/runner/work/Kayra/Kayra/FilmizleHell/src/main/kotlin/com/Kayracs3/FilmizleHell.kt
+/home/runner/work/Kayra/Kayra/FilmizleHell/src/main/kotlin/com/Kayracs3/FilmizleHellPlugin.kt
