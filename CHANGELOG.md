@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:99cbd9f5ba6ed0590f33b39c0b6ce50f1389ea53 -->
+### Reject unsigned Playturka preview manifests from generic candidate scanning
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [99cbd9f](https://github.com/Kayracs3/Kayra/commit/99cbd9f5ba6ed0590f33b39c0b6ce50f1389ea53)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:3df10cc19e950fa3eaafa82f800fa8b6e633b1eb -->
 ### Reject Playturka source indexes and request signed full-length HLS URLs
 
