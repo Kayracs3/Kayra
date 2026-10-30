@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:b3845f93eb8729c9651ea28d57d137e40d209473 -->
+### FilmizleHell: bump patched release to version 16
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [b3845f9](https://github.com/Kayracs3/Kayra/commit/b3845f93eb8729c9651ea28d57d137e40d209473)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:690ace9ced6a748eb855f89d966c3c7b6a1a8981 -->
 ### FilmizleHell: correct HLS duration parser regex
 
