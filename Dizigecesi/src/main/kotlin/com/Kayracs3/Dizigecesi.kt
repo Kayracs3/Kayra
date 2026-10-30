@@ -719,41 +719,6 @@ class Dizigecesi : MainAPI() {
         return found
     }
 
-    private fun isMolyVkOkSource(url: String, sourceName: String): Boolean {
-        val host = url.substringAfter("://", "")
-            .substringBefore("/")
-            .substringBefore(":")
-            .lowercase(Locale.ROOT)
-        val labelTokens = sourceName.lowercase(Locale.ROOT)
-            .split(Regex("""[^a-z0-9]+"""))
-            .filter { it.isNotBlank() }
-
-        return host.contains("moly") ||
-            host == "ok.ru" || host.endsWith(".ok.ru") ||
-            host.contains("vk.com") || host == "vk.ru" ||
-            host.endsWith(".vk.ru") || host.contains("vkvideo.ru") ||
-            labelTokens.any { it.contains("moly") || it == "vidmoly" } ||
-            labelTokens.any { it == "vk" || it == "vkcom" || it == "ok" || it == "okru" }
-    }
-
-    private fun isTemporarySourceRestriction(html: String): Boolean {
-        if (html.isBlank()) return false
-
-        val visibleText = org.jsoup.Jsoup.parse(html).text()
-            .lowercase(Locale.ROOT)
-            .replace(Regex("""\s+"""), " ")
-
-        val titleMarker = visibleText.contains("telif / bot koruması")
-        val timerMarker = visibleText.contains("bu video alternatifine") &&
-            visibleText.contains("aşağıdaki süre bittiğinde erişebilirsiniz")
-        val providerMarker = visibleText.contains("kısıtlama sadece") &&
-            visibleText.contains("moly") &&
-            visibleText.contains("vk") &&
-            visibleText.contains("ok kaynaklarında")
-
-        return titleMarker || timerMarker || providerMarker
-    }
-
     private suspend fun resolvePlayer(
         candidate: String,
         referer: String,
@@ -780,36 +745,6 @@ class Dizigecesi : MainAPI() {
             return true
         }
 
-        // Moly/VK/OK kaynakları bazen site tarafından süreli telif/bot
-        // kısıtlamasına alınır. Bu korumayı aşmaya çalışmıyoruz; kilit sayfasını
-        // video bağlantısı sanıp CloudStream'e eklemek yerine bu adayı atlıyoruz.
-        // Böylece loadLinks diğer alternatif kaynakları denemeye devam eder.
-        val sourceProbe = if (isMolyVkOkSource(normalized, sourceName)) {
-            runCatching {
-                app.get(
-                    normalized,
-                    headers = browserHeaders + mapOf("Referer" to referer),
-                    referer = referer,
-                    allowRedirects = true,
-                    cacheTime = 0
-                )
-            }.getOrNull()
-        } else {
-            null
-        }
-
-        if (
-            sourceProbe != null &&
-            isTemporarySourceRestriction(sourceProbe.text)
-        ) {
-            Log.w(
-                DG_TAG,
-                "Moly/VK/OK kaynağı süreli site kısıtlamasında; bu alternatif atlandı: " +
-                    normalized
-            )
-            return false
-        }
-
         runCatching {
             loadExtractor(
                 normalized,
@@ -823,7 +758,7 @@ class Dizigecesi : MainAPI() {
 
         if (found) return true
 
-        val response = sourceProbe?.takeIf { it.isSuccessful } ?: runCatching {
+        val response = runCatching {
             app.get(
                 normalized,
                 headers = browserHeaders + mapOf("Referer" to referer),
