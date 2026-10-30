@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:f30cda95946a7b470720fd924633f90dacd7d32e -->
+### Prioritize real Playturka master IDs over unrelated page IDs
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [f30cda9](https://github.com/Kayracs3/Kayra/commit/f30cda95946a7b470720fd924633f90dacd7d32e)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:fd4a2f5c9e4cd1312b0960b342f7e55b62f8f4d3 -->
 ### Do not fall back from signed Playturka URLs to unsigned ad candidates
 
