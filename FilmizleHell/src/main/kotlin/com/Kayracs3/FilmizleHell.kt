@@ -2016,14 +2016,31 @@ class FilmizleHell : MainAPI() {
             }
         }
 
-        var longest: Double? = null
-        for (variant in variants.take(4)) {
+        // Do not accept a master just because one quality is long: the player may
+        // select another rendition (including a short ad/preview). Every video
+        // rendition must be fetched and must meet the movie-duration threshold.
+        val selectedVariants = variants.toList()
+        if (selectedVariants.isEmpty() || selectedVariants.size > 8) return null
+
+        val variantDurations = ArrayList<Pair<String, Double>>()
+        for (variant in selectedVariants) {
             val duration = fetchPlayturkaHlsDurationSeconds(
                 variant, response.url, depth + 1, visited
             ) ?: continue
-            if (duration > (longest ?: Double.NEGATIVE_INFINITY)) longest = duration
+            variantDurations.add(variant to duration)
         }
-        return longest
+
+        val allVariantsVerified = variantDurations.size == selectedVariants.size
+        Log.d(
+            name,
+            "Playturka video varyant süreleri: checked=" + variantDurations.size +
+                ", total=" + selectedVariants.size +
+                ", details=" + variantDurations.joinToString(" | ") {
+                    safeLogUrl(it.first) + "=" + it.second.toLong() + "s"
+                }
+        )
+        if (!allVariantsVerified) return null
+        return variantDurations.minOfOrNull { it.second }
     }
 
     private suspend fun isPlausiblePlayturkaMovieStream(
@@ -2588,8 +2605,30 @@ class FilmizleHell : MainAPI() {
         }
         var found = false
         val expectedRuntimeMinutes = parseRuntime(page.document, detailContext(page.document))
-        // FilmizleHell sources are selected client-side; inspect the source metadata on the movie page too.
-        if (publishPlayturkaManifestCandidates(
+        val pageHost = runCatching { URI(page.url).host.orEmpty().lowercase(Locale.ROOT) }
+            .getOrDefault("")
+        val hasDedicatedPlayturkaEmbed = embeds.any { candidate ->
+            runCatching { URI(candidate).host.orEmpty().equals("p.playturka.space", true) }
+                .getOrDefault(false)
+        }
+        val pageHasSignedPlayturkaMaster = extractPlayturkaMasterUrls(
+            page.url, page.document, page.text
+        ).any { (id, url) -> isSignedPlayturkaMaster(url, id) }
+        // When the movie page already points to a dedicated Playturka player,
+        // resolve that player page only. Resolving the movie page first can emit
+        // a second signed token for the same ID, and CloudStream may select that
+        // first (incorrect/stale) link instead of the actual iframe result.
+        val resolvePlayturkaOnMoviePage =
+            pageHost.equals("p.playturka.space", true) ||
+                !hasDedicatedPlayturkaEmbed || pageHasSignedPlayturkaMaster
+        Log.d(
+            name,
+            "Playturka sayfa çözümleme: pageHost=" + pageHost +
+                ", dedicatedEmbed=" + hasDedicatedPlayturkaEmbed +
+                ", signedMasterInPage=" + pageHasSignedPlayturkaMaster +
+                ", resolveMoviePage=" + resolvePlayturkaOnMoviePage
+        )
+        if (resolvePlayturkaOnMoviePage && publishPlayturkaManifestCandidates(
                 page.url, page.document, page.text, seenSubtitles, emitSubtitle, callback,
                 expectedRuntimeMinutes
             ) > 0
