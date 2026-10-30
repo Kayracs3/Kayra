@@ -1626,6 +1626,44 @@ class FilmizleHell : MainAPI() {
         }
     }
 
+    private fun playturkaParam(raw: String, name: String): String? {
+        val uri = runCatching { URI(raw) }.getOrNull()
+        val parts = listOf(uri?.rawQuery.orEmpty(), uri?.rawFragment.orEmpty(), raw)
+        for (part in parts) {
+            val normalized = part.removePrefix("#").replace('&', '&')
+            val match = Regex(
+                """(?i)(?:^|[?&#])""" + Regex.escape(name) + """=([^&#"'\\s]+)"""
+            ).find(normalized) ?: continue
+            val value = match.groupValues.getOrNull(1).orEmpty()
+            val decoded = runCatching { java.net.URLDecoder.decode(value, "UTF-8") }
+                .getOrDefault(value).trim()
+            if (decoded.isNotBlank()) return decoded
+        }
+        return null
+    }
+
+    private fun playturkaSiteKey(referer: String, html: String): String? {
+        playturkaParam(referer, "sk")?.let { return it }
+        playturkaParam(html, "sk")?.let { return it }
+        val patterns = listOf(
+            Regex("""(?i)["']?(?:site_key|siteKey|AM_SITE_KEY)["']?\\s*[:=]\\s*["']([^"'\\s]{4,300})["']"""),
+            Regex("""(?i)(?:[?&#])sk=([^&#"'\\s]{4,300})""")
+        )
+        for (pattern in patterns) {
+            pattern.find(html)?.groupValues?.getOrNull(1)?.let { raw ->
+                val value = runCatching { java.net.URLDecoder.decode(raw, "UTF-8") }
+                    .getOrDefault(raw).trim()
+                if (value.isNotBlank()) return value
+            }
+        }
+        return null
+    }
+
+    private fun playturkaVisitorId(setCookie: String?): String? =
+        Regex("""(?i)(?:^|[,;]\\s*)am_visitor_id=([^;,\\s]+)""")
+            .find(setCookie.orEmpty())?.groupValues?.getOrNull(1)
+            ?.takeIf { it.isNotBlank() }
+
     // Keep API diagnostics useful without leaking signed playback credentials.
     private fun safePlayturkaApiPreview(raw: String): String {
         var preview = decode(raw).take(420)
@@ -1663,15 +1701,42 @@ class FilmizleHell : MainAPI() {
     }
 
     private suspend fun fetchPlayturkaSignedMaster(id: String, referer: String): String? {
-        val endpoint = "https://p.playturka.space/api/video-url?id=" +
-            URLEncoder.encode(id, "UTF-8")
+        // The public player bundle adds visitor_id and site_key when both are present.
+        // Bootstrap the player origin to receive its am_visitor_id cookie first.
+        val bootstrap = runCatching {
+            app.get(
+                referer.substringBefore("#").ifBlank { "https://p.playturka.space/" },
+                headers = requestHeaders + ("Referer" to referer),
+                referer = referer,
+                allowRedirects = true,
+                cacheTime = 0,
+                timeout = 7000
+            )
+        }.getOrNull()
+        val visitorId = playturkaVisitorId(bootstrap?.headers?.get("Set-Cookie"))
+        val siteKey = playturkaSiteKey(referer, bootstrap?.text.orEmpty())
+        val endpoint = buildString {
+            append("https://p.playturka.space/api/video-url?id=")
+            append(URLEncoder.encode(id, "UTF-8"))
+            if (!visitorId.isNullOrBlank() && !siteKey.isNullOrBlank()) {
+                append("&visitor_id=").append(URLEncoder.encode(visitorId, "UTF-8"))
+                append("&site_key=").append(URLEncoder.encode(siteKey, "UTF-8"))
+            }
+        }
+        val apiHeaders = buildMap {
+            putAll(requestHeaders)
+            put("Accept", "application/json,text/plain,*/*")
+            put("Referer", referer)
+            if (!visitorId.isNullOrBlank()) put("Cookie", "am_visitor_id=$visitorId")
+        }
+        Log.d(name, "Playturka API kimlik bilgileri: id=" + id +
+            ", visitorIdPresent=" + !visitorId.isNullOrBlank() +
+            ", siteKeyPresent=" + !siteKey.isNullOrBlank() +
+            ", bootstrapCookie=" + !bootstrap?.headers?.get("Set-Cookie").isNullOrBlank())
         val response = runCatching {
             app.get(
                 endpoint,
-                headers = requestHeaders + mapOf(
-                    "Accept" to "application/json,text/plain,*/*",
-                    "Referer" to referer
-                ),
+                headers = apiHeaders,
                 referer = referer,
                 allowRedirects = true,
                 cacheTime = 0,
@@ -1801,22 +1866,24 @@ class FilmizleHell : MainAPI() {
                 // Inspect only the public player script for the code path that
                 // transforms the API's opaque JSON string into a signed URL.
                 val decodeTerms = listOf(
-                    "api/video-url", "video-url", "decrypt", "CryptoJS", "crypto.subtle",
-                    "AES", "base64", "atob", "btoa", "TextDecoder", "Uint8Array",
-                    "charCodeAt", "fromCharCode", "fetch(", "XMLHttpRequest", "JSON.parse"
+                    "api/video-url", "video-url", "getVideoUrl", "decrypt", "charMapping",
+                    "reverseMapping", "siteKey", "AM_SITE_KEY", "am_visitor_id", "visitor_id",
+                    "site_key", "sk=", "CryptoJS", "crypto.subtle", "AES", "base64", "atob",
+                    "btoa", "TextDecoder", "Uint8Array", "charCodeAt", "fromCharCode",
+                    "fetch(", "XMLHttpRequest", "JSON.parse"
                 )
                 val decodeHints = decodeTerms.mapNotNull { term ->
                     val at = scriptText.indexOf(term, ignoreCase = true)
                     if (at < 0) return@mapNotNull null
-                    val from = (at - 220).coerceAtLeast(0)
-                    val until = (at + 380).coerceAtMost(scriptText.length)
+                    val from = (at - 380).coerceAtLeast(0)
+                    val until = (at + 1050).coerceAtMost(scriptText.length)
                     val snippet = scriptText.substring(from, until)
                         .replace(Regex("""\s+"""), " ")
                         .replace(Regex("""(?i)https?://[^\s"'<>]+""")) { match ->
                             safeLogUrl(match.value)
                         }
                     term + " => " + snippet
-                }.joinToString(" || ").take(2600)
+                }.joinToString(" || ").take(8500)
                 val matchedDecodeTerms = decodeTerms.filter { term ->
                     scriptText.contains(term, ignoreCase = true)
                 }
