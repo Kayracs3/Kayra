@@ -2558,9 +2558,20 @@ class FilmizleHell : MainAPI() {
                             ", directVideoVariant=" + (playbackUrl != manifest) +
                             ", url=" + safeLogUrl(playbackUrl)
                     )
+                    // Match the headers used by the manifest validator. The
+                    // generic site headers advertise HTML; some player/CDN paths
+                    // may serve a short preview playlist when ExoPlayer inherits it.
                     val playbackHeaders = buildMap {
+                        put("Accept", "*/*")
+                        put("Cache-Control", "no-cache")
+                        put("Pragma", "no-cache")
                         playerConfig.playbackCookie?.let { put("Cookie", it) }
                     }
+                    Log.d(
+                        name,
+                        "Playturka oynatma HTTP başlıkları: accept=*/*, cacheBypass=true, cookiePresent=" +
+                            playbackHeaders.containsKey("Cookie")
+                    )
                     publishDirect(playbackUrl, playerReferer, callback, playbackHeaders)
                     found++
                     break
