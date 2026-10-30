@@ -2845,13 +2845,20 @@ class FilmizleHell : MainAPI() {
                 return
             }
 
-            runCatching {
-                loadExtractor(candidate, referer, emitSubtitle) {
-                    found = true
-                    callback(it)
+            val candidateHost = runCatching {
+                URI(candidate).host.orEmpty().lowercase(Locale.ROOT)
+            }.getOrDefault("")
+            // Playturka has a dedicated resolver below; probing generic extractors
+            // first only adds requests and does not contribute a usable source.
+            if (!candidateHost.equals("p.playturka.space", true)) {
+                runCatching {
+                    loadExtractor(candidate, referer, emitSubtitle) {
+                        found = true
+                        callback(it)
+                    }
+                }.onFailure {
+                    Log.d(name, "Extractor başarısız: " + safeLogUrl(candidate) + " (" + it.javaClass.simpleName + ")")
                 }
-            }.onFailure {
-                Log.d(name, "Extractor başarısız: " + safeLogUrl(candidate) + " (" + it.javaClass.simpleName + ")")
             }
 
             if (depth >= 2) return
@@ -2870,20 +2877,29 @@ class FilmizleHell : MainAPI() {
                 ", length=" + nested.text.length + ", type=" + nested.headers["content-type"].orEmpty())
             if (!nested.isSuccessful || nested.text.isBlank() || nested.text.length > 4_000_000) return
             publishSubtitles(nested.document, nested.text, nested.url, seenSubtitles, emitSubtitle)
-            if (runCatching { URI(nested.url).host.orEmpty().equals("p.playturka.space", true) }
-                    .getOrDefault(false)
-            ) {
+            val isPlayturkaPage = runCatching {
+                URI(nested.url).host.orEmpty().equals("p.playturka.space", true)
+            }.getOrDefault(false)
+            var playturkaResolved = false
+            if (isPlayturkaPage) {
                 val playturkaFound = publishPlayturkaManifestCandidates(
                     nested.url, nested.document, nested.text, seenSubtitles, emitSubtitle, callback,
                     expectedRuntimeMinutes
                 )
-                if (playturkaFound > 0) found = true
+                if (playturkaFound > 0) {
+                    found = true
+                    playturkaResolved = true
+                }
             }
             val (nextDirect, nextEmbeds) = collectPlayerCandidates(nested.document, nested.text, nested.url)
-            val (jsDirect, jsEmbeds) =
+            val (jsDirect, jsEmbeds) = if (playturkaResolved) {
+                Log.d(name, "Playturka kaynakları çözüldü: iç içe JS taraması atlandı")
+                emptySet<String>() to emptySet<String>()
+            } else {
                 collectExternalScriptCandidates(
                     nested.document, nested.url, nested.url, visitedScripts, seenSubtitles, emitSubtitle
                 )
+            }
             val nestedDirect = LinkedHashSet<String>().apply {
                 addAll(nextDirect)
                 addAll(jsDirect)
