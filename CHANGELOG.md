@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:3fc6e5653410e3beb8342af26b8590c8105f5219 -->
+### FilmizleHell: bump plugin to version 16
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [3fc6e56](https://github.com/Kayracs3/Kayra/commit/3fc6e5653410e3beb8342af26b8590c8105f5219)
+
+## 2026-10-30
+
+<!-- kayra-commit:fc597ca037ae1f1e82436f84e4366b2569b79067 -->
+### FilmizleHell: filter Playturka ad preview source
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [fc597ca](https://github.com/Kayracs3/Kayra/commit/fc597ca037ae1f1e82436f84e4366b2569b79067)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:a736aaac02e9a455547af8d933d31ecb6bac3ea3 -->
 ### FilmizleHell: bump plugin to version 15
 
