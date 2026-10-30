@@ -944,6 +944,24 @@ class FilmizleHell : MainAPI() {
         if (value.isBlank() || value.length > 1800) return
         val fixed = fixUrl(value, base) ?: return
         if (isRejectedPlayerCandidate(value, fixed) || isStaticAsset(fixed)) return
+
+        // Never expose an unsigned Playturka master directly. The raw path can
+        // resolve to a short preview; only its per-video signed URL is a valid
+        // full playback candidate.
+        val fixedHost = runCatching { URI(fixed).host.orEmpty().lowercase(Locale.ROOT) }
+            .getOrDefault("")
+        val playturkaId = Regex("""(?i)^/videos/([A-Za-z0-9_-]{5,64})/master\\.m3u8$""")
+            .find(pathOf(fixed))
+            ?.groupValues?.getOrNull(1)
+        if (
+            fixedHost == "p.playturka.space" &&
+            playturkaId != null &&
+            !isSignedPlayturkaMaster(fixed, playturkaId)
+        ) {
+            Log.d(name, "İmzasız Playturka master atlandı: " + safeLogUrl(fixed))
+            return
+        }
+
         if (isDirectMedia(fixed)) {
             if (!fixed.contains("site.webm", true) && !fixed.contains("logo.webm", true)) direct += fixed
             return
@@ -1656,9 +1674,11 @@ class FilmizleHell : MainAPI() {
         if (host != "p.playturka.space" && !html.contains("p.playturka.space", true)) return 0
 
         val exactMasters = LinkedHashMap<String, String>()
-        extractPlayturkaMasterUrls(embedUrl, document, html).forEach { (id, url) ->
-            exactMasters.putIfAbsent(id, url)
-        }
+        extractPlayturkaMasterUrls(embedUrl, document, html)
+            .filter { (id, url) -> isSignedPlayturkaMaster(url, id) }
+            .forEach { (id, url) ->
+                exactMasters.putIfAbsent(id, url)
+            }
         val ids = LinkedHashSet<String>()
         // Signed master URLs contain the real video ID and must be tried before
         // generic IDs found in buttons or unrelated page elements.
@@ -1715,7 +1735,9 @@ class FilmizleHell : MainAPI() {
                     scriptResponse.url,
                     scriptDocument,
                     scriptResponse.text
-                ).forEach { (id, signedMaster) ->
+                ).filter { (id, signedMaster) ->
+                    isSignedPlayturkaMaster(signedMaster, id)
+                }.forEach { (id, signedMaster) ->
                     exactMasters.putIfAbsent(id, signedMaster)
                     ids.add(id)
                 }
