@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:100babdb8064ae2f114b9de962cb678041317037 -->
+### FilmizleHell: trace Playturka API response decoder in player scripts
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [100babd](https://github.com/Kayracs3/Kayra/commit/100babdb8064ae2f114b9de962cb678041317037)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:aa6d7811b5cef9444d9a3237196e738138dc15af -->
 ### FilmizleHell: bump version to 9 for API response diagnostics
 
