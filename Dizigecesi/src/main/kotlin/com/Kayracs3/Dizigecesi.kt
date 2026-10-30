@@ -724,16 +724,16 @@ class Dizigecesi : MainAPI() {
             .substringBefore("/")
             .substringBefore(":")
             .lowercase(Locale.ROOT)
-        val label = sourceName.lowercase(Locale.ROOT)
+        val labelTokens = sourceName.lowercase(Locale.ROOT)
+            .split(Regex("""[^a-z0-9]+"""))
+            .filter { it.isNotBlank() }
 
         return host.contains("moly") ||
             host == "ok.ru" || host.endsWith(".ok.ru") ||
             host.contains("vk.com") ||
             host.endsWith(".vk.ru") ||
-            label.contains("moly") ||
-            label.contains("vidmoly") ||
-            Regex("""\\bvk\\b|\\bvkcom\\b""").containsMatchIn(label) ||
-            Regex("""\\bok\\b|\\bokru\\b""").containsMatchIn(label)
+            labelTokens.any { it.contains("moly") || it == "vidmoly" } ||
+            labelTokens.any { it == "vk" || it == "vkcom" || it == "ok" || it == "okru" }
     }
 
     private fun isTemporarySourceRestriction(html: String): Boolean {
@@ -741,7 +741,7 @@ class Dizigecesi : MainAPI() {
 
         val visibleText = org.jsoup.Jsoup.parse(html).text()
             .lowercase(Locale.ROOT)
-            .replace(Regex("""\\s+"""), " ")
+            .replace(Regex("""\s+"""), " ")
 
         val titleMarker = visibleText.contains("telif / bot koruması")
         val timerMarker = visibleText.contains("bu video alternatifine") &&
