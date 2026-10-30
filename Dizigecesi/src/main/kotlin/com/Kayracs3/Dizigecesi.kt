@@ -107,12 +107,15 @@ class Dizigecesi : MainAPI() {
         return newHomePageResponse(request.name, items, hasNext = items.isNotEmpty())
     }
 
-    private fun toSearchResult(element: Element): SearchResponse? {
+    private fun toSearchResult(
+        element: Element,
+        scopeRoot: Element? = null
+    ): SearchResponse? {
         val href = fixUrlNull(element.attr("href")) ?: return null
         if (!href.contains("/dizi/") && !href.contains("/film/")) return null
         if (isEpisodeUrl(href)) return null
 
-        val img = element.selectFirst("img.card-series__image-media, img")
+        val img = posterImageFor(element, scopeRoot)
         val title = cleanTitle(
             element.selectFirst(".card-series__content-title")?.text(),
             img?.attr("alt"),
@@ -215,13 +218,16 @@ class Dizigecesi : MainAPI() {
     }
 
     fun parseSearchResults(document: Document): List<SearchResponse> {
-        // Arama ve ana sayfa kartlarının class adı aynı olmayabiliyor.
-        // URL türüne göre bağlantıları topla; toSearchResult geçersiz linkleri ayıklar.
-        val elements = document.select(
+        // Popüler sayfadaki kartlar .filters-grid kapsayıcısında bulunuyor.
+        // Bu kapsayıcı varsa yalnızca içindeki dizi/film bağlantılarını tara.
+        // Afiş bazı kartlarda bağlantının içinde değil, kartın kardeş öğesi olabilir.
+        val filtersGrid = document.selectFirst(".filters-grid")
+        val scope = filtersGrid ?: document
+        val elements = scope.select(
             "a[href*='/dizi/'], a[href*='/film/']"
         )
 
-        return elements.mapNotNull { toSearchResult(it) }
+        return elements.mapNotNull { toSearchResult(it, filtersGrid) }
             .distinctBy { it.url }
     }
 
@@ -936,15 +942,81 @@ class Dizigecesi : MainAPI() {
         )?.let(::fixUrlNull)
     }
 
-    private fun imageUrl(image: Element): String? {
-        return firstNonBlank(
+    private fun posterImageFor(
+        element: Element,
+        scopeRoot: Element?
+    ): Element? {
+        // Önce bağlantının kendi içindeki afişi bul.
+        element.select("img")
+            .firstOrNull { !isFlagImage(it) }
+            ?.let { return it }
+
+        // Bazı kartlarda görsel ve başlık bağlantısı kardeş öğeler.
+        // Yalnızca aynı kartın üst kapsayıcılarında ara; .filters-grid'in
+        // geneline çıkıp başka bir dizinin afişini yanlışlıkla alma.
+        var parent = element.parent()
+        var depth = 0
+        while (parent != null && parent != scopeRoot && depth < 5) {
+            val images = parent.select("img").filterNot { isFlagImage(it) }
+            if (images.isNotEmpty()) {
+                val preferred = images.firstOrNull { image ->
+                    val hints = (
+                        image.className() + " " +
+                            image.attr("id") + " " +
+                            image.attr("data-role")
+                        ).lowercase(Locale.ROOT)
+                    Regex("""poster|cover|thumbnail|card[-_ ]?image|image[-_ ]?card""")
+                        .containsMatchIn(hints)
+                }
+                if (preferred != null) return preferred
+                if (images.size == 1) return images.first()
+            }
+            parent = parent.parent()
+            depth++
+        }
+        return null
+    }
+
+    private fun isFlagUrl(raw: String): Boolean {
+        val value = raw.trim().lowercase(Locale.ROOT)
+        return value.contains("flagicons.lipis.dev") ||
+            Regex("""(?:^|/)flags/4x3/[^/?#]+\.svg(?:[?#]|$)""")
+                .containsMatchIn(value)
+    }
+
+    private fun isFlagImage(image: Element): Boolean {
+        if (image.attr("alt").trim().equals("flag", true)) return true
+
+        val classes = image.className().lowercase(Locale.ROOT)
+        if (Regex("""(?:^|[\\s_-])flag(?:$|[\\s_-])""").containsMatchIn(classes)) {
+            return true
+        }
+
+        return listOf(
             image.attr("data-src"),
             image.attr("data-lazy-src"),
             image.attr("data-original"),
             image.attr("data-wpfc-original-src"),
             image.attr("data-poster"),
             image.attr("src")
-        )?.let(::fixUrlNull)
+        ).any(::isFlagUrl)
+    }
+
+    private fun imageUrl(image: Element): String? {
+        if (isFlagImage(image)) return null
+
+        return listOf(
+            image.attr("data-src"),
+            image.attr("data-lazy-src"),
+            image.attr("data-original"),
+            image.attr("data-wpfc-original-src"),
+            image.attr("data-poster"),
+            image.attr("src")
+        ).firstOrNull { candidate ->
+            candidate.isNotBlank() &&
+                !candidate.startsWith("data:", true) &&
+                !isFlagUrl(candidate)
+        }?.let(::fixUrlNull)
     }
 
     private fun normalizeForMatch(value: String?): String {
