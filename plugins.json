@@ -212,11 +212,11 @@
         "name": "DiziKorea"
     },
     {
-        "iconUrl": "https://dizi82.life/favicon.ico",
-        "fileHash": "sha256-cde3eddc73019f8f8d26235fa4f7c0cf8b88613e65c04849787d9ee266260ad1",
+        "iconUrl": "https://dizi79.life/favicon.ico",
+        "fileHash": "sha256-41c0c9aa40ab34292ddad8adba3d1f6825ceb2725d08348ad62a3de8a9c31274",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 50109,
+        "fileSize": 50107,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -226,7 +226,7 @@
             "TvSeries",
             "Movie"
         ],
-        "version": 8,
+        "version": 9,
         "internalName": "DiziLife",
         "description": "DiziLife \u2014 dizi ve film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziLife.cs3",
@@ -541,11 +541,11 @@
         "name": "InatBoxYedek"
     },
     {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=jetfilmizle.app&sz=%size%",
-        "fileHash": "sha256-6114f6fc9359a4e6927dbea1ad82ff1c4c0f143a377659ca90324a1c472d2c4c",
+        "iconUrl": "https://www.google.com/s2/favicons?domain=jetfilmizle.now&sz=%size%",
+        "fileHash": "sha256-a57dc84ac4265591116679e2edf02203fd52204963fc4c01b62e659be8fa6f17",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 36956,
+        "fileSize": 36957,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -555,7 +555,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 24,
+        "version": 25,
         "internalName": "JetFilmizle",
         "description": "Jet Film - T\u00fcrk\u00e7e dublajl\u0131 ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/JetFilmizle.cs3",
