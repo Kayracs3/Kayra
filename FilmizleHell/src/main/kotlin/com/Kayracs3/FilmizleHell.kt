@@ -946,20 +946,11 @@ class FilmizleHell : MainAPI() {
         val fixed = fixUrl(value, base) ?: return
         if (isRejectedPlayerCandidate(value, fixed) || isStaticAsset(fixed)) return
 
-        // Never expose an unsigned Playturka master directly. The raw path can
-        // resolve to a short preview; only its per-video signed URL is a valid
-        // full playback candidate.
-        val fixedHost = runCatching { URI(fixed).host.orEmpty().lowercase(Locale.ROOT) }
-            .getOrDefault("")
-        val playturkaId = Regex("""(?i)^/videos/([A-Za-z0-9_-]{5,64})/master\.m3u8$""")
-            .find(pathOf(fixed))
-            ?.groupValues?.getOrNull(1)
-        if (
-            fixedHost == "p.playturka.space" &&
-            playturkaId != null &&
-            !isSignedPlayturkaMaster(fixed, playturkaId)
-        ) {
-            Log.d(name, "İmzasız Playturka master atlandı: " + safeLogUrl(fixed))
+        // Playturka's ad slot can use /videos/2/master.m3u8 (and similar
+        // very short IDs). Only accept the full-length video ID with a valid
+        // per-video signature; all other masters are teaser/ad candidates.
+        if (!isAllowedPlayturkaMaster(fixed)) {
+            Log.d(name, "Playturka reklam/önizleme kaynağı atlandı: " + safeLogUrl(fixed))
             return
         }
 
@@ -1813,6 +1804,21 @@ class FilmizleHell : MainAPI() {
         return preview.replace(Regex("""\s+"""), " ").trim()
     }
 
+    private fun isAllowedPlayturkaMaster(url: String): Boolean {
+        val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }
+            .getOrDefault("")
+        if (host != "p.playturka.space") return true
+
+        val match = Regex("""(?i)^/videos/([^/]+)/master\.m3u8$""")
+            .find(pathOf(url)) ?: return true
+        val videoId = match.groupValues.getOrNull(1).orEmpty()
+
+        // Playturka uses short numeric source slots (for example "2") for
+        // previews/ads. Real video IDs are opaque keys and need a signed URL.
+        if (!Regex("""^[A-Za-z0-9_-]{5,64}$""").matches(videoId)) return false
+        return isSignedPlayturkaMaster(url, videoId)
+    }
+
     private fun isSignedPlayturkaMaster(url: String, expectedId: String): Boolean {
         return runCatching {
             val uri = URI(url)
@@ -2366,6 +2372,10 @@ class FilmizleHell : MainAPI() {
 
     private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+        if (!isAllowedPlayturkaMaster(url)) {
+            Log.d(name, "Playturka reklam/önizleme bağlantısı yayınlanmadı: " + safeLogUrl(url))
+            return
+        }
         if (host.isBlank() || !isDirectMedia(url) || isRejectedPlayerCandidate(url, url) || isStaticAsset(url)) {
             Log.d(name, "Geçersiz/fragman medya bağlantısı atlandı: " + safeLogUrl(url))
             return
