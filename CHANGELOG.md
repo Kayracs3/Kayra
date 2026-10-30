@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:8e96c5cc97439c26f73a83116dfd7932da41349b -->
+### Test that healthy and protected domains are never changed
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [8e96c5c](https://github.com/Kayracs3/Kayra/commit/8e96c5cc97439c26f73a83116dfd7932da41349b)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:7a4df8f2db1df7e3ccfeccb3d4c625150bbe806e -->
 ### Never switch reachable or redirected provider domains
 
