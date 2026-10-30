@@ -1558,7 +1558,7 @@ class FilmizleHell : MainAPI() {
             val normalized = response.text.trimStart('\uFEFF').trim().removePrefix(")]}',").trim()
             summarizePlayturkaApiValue(org.json.JSONTokener(normalized).nextValue())
         }.getOrElse { "non-json" }
-        val shortPlayerBody = response.text.trim().replace(Regex("""\\s+"""), " ")
+        val shortPlayerBody = response.text.trim().replace(Regex("""\s+"""), " ")
             .takeIf { response.text.length <= 24 } ?: "<omitted>"
         Log.d(name, "Playturka player config: id=" + id +
             ", HTTP=" + response.code +
@@ -1996,11 +1996,11 @@ class FilmizleHell : MainAPI() {
                         val from = (position - 220).coerceAtLeast(0)
                         val until = (position + 1900).coerceAtMost(scriptText.length)
                         val mappingSnippet = scriptText.substring(from, until)
-                            .replace(Regex("""\\s+"""), " ")
-                            .replace(Regex("""(?i)https?://[^\\s"'<>]+""")) { match ->
+                            .replace(Regex("""\s+"""), " ")
+                            .replace(Regex("""(?i)https?://[^\s"'<>]+""")) { match ->
                                 safeLogUrl(match.value)
                             }
-                            .replace(Regex("""([?&][\\w-]{1,40}=)[^&\\s"'<>]+""")) { match ->
+                            .replace(Regex("""([?&][\w-]{1,40}=)[^&\s"'<>]+""")) { match ->
                                 match.groupValues[1] + "*"
                             }
                         Log.d(name, "Playturka JS eşleme ayrıntısı: term=" + mappingTerm +
