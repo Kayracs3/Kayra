@@ -730,8 +730,8 @@ class Dizigecesi : MainAPI() {
 
         return host.contains("moly") ||
             host == "ok.ru" || host.endsWith(".ok.ru") ||
-            host.contains("vk.com") ||
-            host.endsWith(".vk.ru") ||
+            host.contains("vk.com") || host == "vk.ru" ||
+            host.endsWith(".vk.ru") || host.contains("vkvideo.ru") ||
             labelTokens.any { it.contains("moly") || it == "vidmoly" } ||
             labelTokens.any { it == "vk" || it == "vkcom" || it == "ok" || it == "okru" }
     }
@@ -800,7 +800,6 @@ class Dizigecesi : MainAPI() {
 
         if (
             sourceProbe != null &&
-            sourceProbe.isSuccessful &&
             isTemporarySourceRestriction(sourceProbe.text)
         ) {
             Log.w(
