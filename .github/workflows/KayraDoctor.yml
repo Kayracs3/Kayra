@@ -4,6 +4,9 @@ on:
     branches: [master]
     paths-ignore:
       - "doctor/dizisol_poster_probe.py"
+      - "doctor/domain_manager.py"
+      - "doctor/test_domain_manager.py"
+      - ".github/workflows/DomainAutoUpdate.yml"
       - "doctor/domains.json"
       - "doctor/repo_catalog.py"
       - ".github/workflows/RepoYonetimi.yml"
