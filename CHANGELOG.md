@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:eb77669b7e2dc43467e4d4cd2c2cc16ae1e1979a -->
+### Retain signed Playturka master URLs found in HTML and player scripts
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [eb77669](https://github.com/Kayracs3/Kayra/commit/eb77669b7e2dc43467e4d4cd2c2cc16ae1e1979a)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:927a29b764c2290a10160bad156f935610e64efc -->
 ### Prioritize signed Playturka master HLS with audio renditions
 
