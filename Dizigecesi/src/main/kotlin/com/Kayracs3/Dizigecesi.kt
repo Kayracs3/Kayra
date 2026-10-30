@@ -951,6 +951,10 @@ class Dizigecesi : MainAPI() {
             .firstOrNull { !isFlagImage(it) }
             ?.let { return it }
 
+        // .filters-grid olmayan arama/dizi sayfalarında eski davranışı koru:
+        // ilgisiz üst kapsayıcılardan başka kartların görselini çekme.
+        if (scopeRoot == null) return null
+
         // Bazı kartlarda görsel ve başlık bağlantısı kardeş öğeler.
         // Yalnızca aynı kartın üst kapsayıcılarında ara; .filters-grid'in
         // geneline çıkıp başka bir dizinin afişini yanlışlıkla alma.
