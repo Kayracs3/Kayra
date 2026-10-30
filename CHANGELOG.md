@@ -2,6 +2,23 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:25d619531de4cfbcad32b69f286e336d8a1aae06 -->
+### Bump FilmizleHell plugin to version 17
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [25d6195](https://github.com/Kayracs3/Kayra/commit/25d619531de4cfbcad32b69f286e336d8a1aae06)
+
+## 2026-10-31
+
+<!-- kayra-commit:40b85568f0ee0572be0d14a29e325df9f2fd5983 -->
+### FilmizleHell: reject short HLS renditions and avoid duplicate Playturka links
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [40b8556](https://github.com/Kayracs3/Kayra/commit/40b85568f0ee0572be0d14a29e325df9f2fd5983)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:b3845f93eb8729c9651ea28d57d137e40d209473 -->
 ### FilmizleHell: bump patched release to version 16
 
