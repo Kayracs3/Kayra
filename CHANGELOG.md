@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:99af194d4959a7248858e63f9a83a0c409a530ed -->
+### Add identity-verified automatic domain discovery and switching
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [99af194](https://github.com/Kayracs3/Kayra/commit/99af194d4959a7248858e63f9a83a0c409a530ed)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:ca11410aa294322b707c467fc7237c74133b715b -->
 ### Record safe automatic domain switching policy
 
