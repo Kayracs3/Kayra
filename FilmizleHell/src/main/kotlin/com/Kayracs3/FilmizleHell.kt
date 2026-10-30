@@ -1039,7 +1039,7 @@ class FilmizleHell : MainAPI() {
         val result = LinkedHashMap<String, String>()
         val decoded = decode(html)
         val absolutePattern = Regex(
-            """(?i)(?:https?:)?//p\\.playturka\\.space/videos/([A-Za-z0-9_-]{1,64})/master\\.m3u8(?:\\?[^"'<>\\s]*)?"""
+            """(?i)(?:https?:)?//p\.playturka\.space/videos/([A-Za-z0-9_-]{1,64})/master\.m3u8(?:\?[^\s"'<>]*)?"""
         )
 
         absolutePattern.findAll(decoded).forEach { match ->
@@ -1054,7 +1054,7 @@ class FilmizleHell : MainAPI() {
         }.getOrDefault("")
         if (host == "p.playturka.space") {
             val relativePattern = Regex(
-                """(?i)(/videos/([A-Za-z0-9_-]{1,64})/master\\.m3u8(?:\\?[^"'<>\\s]*)?)"""
+                """(?i)(/videos/([A-Za-z0-9_-]{1,64})/master\.m3u8(?:\?[^\s"'<>]*)?)"""
             )
             relativePattern.findAll(decoded).forEach { match ->
                 val fixed = fixUrl(match.groupValues[1], embedUrl) ?: return@forEach
@@ -1075,7 +1075,7 @@ class FilmizleHell : MainAPI() {
                             it.contains("/master.m3u8", true)
                     } ?: return@forEach
                 val fixed = fixUrl(raw, embedUrl) ?: return@forEach
-                val id = Regex("""(?i)/videos/([A-Za-z0-9_-]{1,64})/master\\.m3u8""")
+                val id = Regex("""(?i)/videos/([A-Za-z0-9_-]{1,64})/master\.m3u8""")
                     .find(fixed)?.groupValues?.getOrNull(1).orEmpty()
                 if (id.isNotBlank()) result.putIfAbsent(id, fixed)
             }
@@ -1595,13 +1595,16 @@ class FilmizleHell : MainAPI() {
         val host = runCatching { URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host != "p.playturka.space" && !html.contains("p.playturka.space", true)) return 0
 
-        val exactMasters = extractPlayturkaMasterUrls(embedUrl, document, html)
+        val exactMasters = LinkedHashMap<String, String>()
+        extractPlayturkaMasterUrls(embedUrl, document, html).forEach { (id, url) ->
+            exactMasters.putIfAbsent(id, url)
+        }
         val ids = LinkedHashSet<String>()
         // Signed master URLs contain the real video ID and must be tried before
         // generic IDs found in buttons or unrelated page elements.
-        exactMasters.forEach { (id, _) -> ids.add(id) }
+        ids.addAll(exactMasters.keys)
         ids.addAll(extractPlayturkaIds(embedUrl, document, html))
-        if (ids.isEmpty()) {
+        if (exactMasters.isEmpty()) {
             val scriptUrls = document.select("script[src]")
                 .mapNotNull { fixUrl(it.attr("src"), embedUrl) }
                 .distinct()
@@ -1647,15 +1650,24 @@ class FilmizleHell : MainAPI() {
                 if (scriptHints.isNotBlank()) {
                     Log.d(name, "Playturka kaynak JS: " + safeLogUrl(scriptUrl) + "; hints=" + scriptHints)
                 }
+                val scriptDocument = Jsoup.parse("", scriptResponse.url)
+                extractPlayturkaMasterUrls(
+                    scriptResponse.url,
+                    scriptDocument,
+                    scriptResponse.text
+                ).forEach { (id, signedMaster) ->
+                    exactMasters.putIfAbsent(id, signedMaster)
+                    ids.add(id)
+                }
                 ids.addAll(
                     extractPlayturkaIds(
                         embedUrl,
-                        Jsoup.parse("", scriptResponse.url),
+                        scriptDocument,
                         scriptResponse.text
                     )
                 )
-                if (ids.isNotEmpty()) {
-                    Log.d(name, "Playturka ID JS dosyasından bulundu: " + safeLogUrl(scriptUrl))
+                if (exactMasters.isNotEmpty()) {
+                    Log.d(name, "Playturka imzalı master URL'si JS dosyasından bulundu: " + safeLogUrl(scriptUrl))
                     break
                 }
             }
@@ -1771,7 +1783,7 @@ class FilmizleHell : MainAPI() {
             // the ID drops token/expiry parameters and can lead to a fallback or
             // advertisement manifest instead of the actual film stream.
             val manifests = LinkedHashSet<String>()
-            exactMasters.filter { it.first == id }.forEach { manifests.add(it.second) }
+            exactMasters[id]?.let { manifests.add(it) }
             manifests.add("https://p.playturka.space/videos/" + id + "/master.m3u8")
             manifests.add("https://p.playturka.space/videos/" + id + "/index.m3u8")
 
@@ -1797,7 +1809,7 @@ class FilmizleHell : MainAPI() {
                     // Master playlist must stay intact: audio can be a separate
                     // EXT-X-MEDIA rendition such as playlist_aud0.m3u8. Passing
                     // only the first video variant would silently drop that track.
-                    val audioLines = Regex("""(?im)^#EXT-X-MEDIA:[^\\r\\n]*TYPE=AUDIO[^\\r\\n]*$""")
+                    val audioLines = Regex("""(?im)^#EXT-X-MEDIA:[^\r\n]*TYPE=AUDIO[^\r\n]*$""")
                         .findAll(body)
                         .map { it.value }
                         .toList()
@@ -2090,7 +2102,7 @@ class FilmizleHell : MainAPI() {
             val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
             val path = pathOf(candidate)
             if (host.equals("p.playturka.space", true) &&
-                Regex("""(?i)^/videos/[A-Za-z0-9_-]{1,64}/master\\.m3u8$""").matches(path)
+                Regex("""(?i)^/videos/[A-Za-z0-9_-]{1,64}/master\.m3u8$""").matches(path)
             ) 0 else 1
         }
         for (candidate in orderedCandidates.take(20)) resolve(candidate, page.url, 0)
