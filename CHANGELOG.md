@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:d66e33960ddbf0eb7948d80a23e6c90ba260bc68 -->
+### Bump FilmizleHell version for signed Playturka stream fix
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [d66e339](https://github.com/Kayracs3/Kayra/commit/d66e33960ddbf0eb7948d80a23e6c90ba260bc68)
+
+## 2026-10-30
+
+<!-- kayra-commit:5597e61f19a7dd436ba4175f964741f26813c4cd -->
+### Fix Playturka master URL path matching
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [5597e61](https://github.com/Kayracs3/Kayra/commit/5597e61f19a7dd436ba4175f964741f26813c4cd)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:99cbd9f5ba6ed0590f33b39c0b6ce50f1389ea53 -->
 ### Reject unsigned Playturka preview manifests from generic candidate scanning
 
