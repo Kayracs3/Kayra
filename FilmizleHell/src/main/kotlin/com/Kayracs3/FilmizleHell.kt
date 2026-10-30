@@ -1515,12 +1515,33 @@ class FilmizleHell : MainAPI() {
         return emitted.size
     }
 
+    private data class PlayturkaPlayerConfig(
+        val subtitleCount: Int,
+        val visitorId: String?,
+        val siteKey: String?,
+        val playbackCookie: String?
+    )
+
+    private fun playturkaCookieHeader(setCookie: String?): String? {
+        val source = setCookie.orEmpty()
+        val names = listOf("PHPSESSID", "am_visitor_id")
+        val cookies = names.mapNotNull { cookieName ->
+            val pattern = Regex(
+                """(?i)(?:^|[,;]\\s*)""" + Regex.escape(cookieName) + """=([^;,\\s]+)"""
+            )
+            pattern.find(source)?.groupValues?.getOrNull(1)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { cookieName + "=" + it }
+        }
+        return cookies.takeIf { it.isNotEmpty() }?.joinToString("; ")
+    }
+
     private suspend fun publishPlayturkaApiSubtitles(
         id: String,
         referer: String,
         seenSubtitles: MutableSet<String>,
         subtitleCallback: (SubtitleFile) -> Unit
-    ): Triple<Int, String?, String?> {
+    ): PlayturkaPlayerConfig {
         // The visible Playturka player can expose subtitle tracks in its HTML/JS
         // player page even when its master.m3u8 contains no EXT-X-MEDIA entries.
         // Read only the public player page and its ordinary JS assets; don't try
@@ -1537,7 +1558,7 @@ class FilmizleHell : MainAPI() {
             )
         }.onFailure {
             Log.d(name, "Playturka player sayfası alınamadı: " + safeLogUrl(playerUrl))
-        }.getOrNull() ?: return Triple(0, null, null)
+        }.getOrNull() ?: return PlayturkaPlayerConfig(0, null, null, null)
 
         if (!response.isSuccessful || response.text.isBlank() || response.text.length > 4_000_000) {
             Log.d(
@@ -1545,10 +1566,11 @@ class FilmizleHell : MainAPI() {
                 "Playturka player sayfası atlandı: " + safeLogUrl(playerUrl) +
                     ", HTTP=" + response.code
             )
-            return Triple(0, null, null)
+            return PlayturkaPlayerConfig(0, null, null, null)
         }
 
         val playerCookie = response.headers["Set-Cookie"]
+        val playbackCookie = playturkaCookieHeader(playerCookie)
         val playerVisitor = playturkaVisitorId(playerCookie)
             ?: playturkaVisitorFromUrlOrHtml(response.url)
             ?: findPlayturkaJsonString(
@@ -1568,7 +1590,8 @@ class FilmizleHell : MainAPI() {
             ", shortBody=" + shortPlayerBody +
             ", visitorIdPresent=" + !playerVisitor.isNullOrBlank() +
             ", siteKeyPresent=" + !playerSiteKey.isNullOrBlank() +
-            ", cookieNames=" + playturkaCookieNames(playerCookie))
+            ", cookieNames=" + playturkaCookieNames(playerCookie) +
+            ", playbackCookiePresent=" + !playbackCookie.isNullOrBlank())
 
         publishSubtitles(
             response.document,
@@ -1618,7 +1641,7 @@ class FilmizleHell : MainAPI() {
 
         val added = seenSubtitles.size - before
         Log.d(name, "Playturka player altyazı taraması: id=" + id + ", yeni=" + added)
-        return Triple(added, playerVisitor, playerSiteKey)
+        return PlayturkaPlayerConfig(added, playerVisitor, playerSiteKey, playbackCookie)
     }
 
     // Diagnostic-only JSON summary: reveal response structure without printing signed tokens.
@@ -2400,7 +2423,7 @@ class FilmizleHell : MainAPI() {
             // in the page or one of its player scripts.
             val signedMaster = exactMasters[id]
                 ?.takeIf { isSignedPlayturkaMaster(it, id) }
-                ?: fetchPlayturkaSignedMaster(id, playerReferer, playerConfig.second, playerConfig.third)
+                ?: fetchPlayturkaSignedMaster(id, playerReferer, playerConfig.visitorId, playerConfig.siteKey)
 
             val manifests = LinkedHashSet<String>()
             if (signedMaster != null) {
@@ -2535,7 +2558,10 @@ class FilmizleHell : MainAPI() {
                             ", directVideoVariant=" + (playbackUrl != manifest) +
                             ", url=" + safeLogUrl(playbackUrl)
                     )
-                    publishDirect(playbackUrl, playerReferer, callback)
+                    val playbackHeaders = buildMap {
+                        playerConfig.playbackCookie?.let { put("Cookie", it) }
+                    }
+                    publishDirect(playbackUrl, playerReferer, callback, playbackHeaders)
                     found++
                     break
                 } else {
@@ -2611,7 +2637,12 @@ class FilmizleHell : MainAPI() {
         return direct to embeds
     }
 
-    private suspend fun publishDirect(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun publishDirect(
+        url: String,
+        referer: String,
+        callback: (ExtractorLink) -> Unit,
+        extraHeaders: Map<String, String> = emptyMap()
+    ) {
         val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host.isBlank() || !isDirectMedia(url) || isRejectedPlayerCandidate(url, url) || isStaticAsset(url)) {
             Log.d(name, "Geçersiz/fragman medya bağlantısı atlandı: " + safeLogUrl(url))
@@ -2627,7 +2658,7 @@ class FilmizleHell : MainAPI() {
                 this.referer = referer
                 this.quality = Regex("""(?i)(2160|1440|1080|720|480|360)""")
                     .find(url)?.groupValues?.get(1)?.toIntOrNull() ?: Qualities.Unknown.value
-                this.headers = requestHeaders + ("Referer" to referer)
+                this.headers = requestHeaders + ("Referer" to referer) + extraHeaders
             }
         )
     }
