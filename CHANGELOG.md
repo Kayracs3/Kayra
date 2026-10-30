@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:690ace9ced6a748eb855f89d966c3c7b6a1a8981 -->
+### FilmizleHell: correct HLS duration parser regex
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [690ace9](https://github.com/Kayracs3/Kayra/commit/690ace9ced6a748eb855f89d966c3c7b6a1a8981)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:1c9e0db38dc41a81af1b114f6a5407648e504c4c -->
 ### FilmizleHell: reject short Playturka ad playlists
 
