@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:6295c0107832984257ab0db25c22151202318d65 -->
+### Retry domain profile pushes after concurrent master updates
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [6295c01](https://github.com/Kayracs3/Kayra/commit/6295c0107832984257ab0db25c22151202318d65)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:bdad9538aeef5d0a312444e8323dcbe3aee8fa99 -->
 ### Allow strict provider-brand verification on domain discovery cold start
 
