@@ -169,14 +169,12 @@
           "yeni"
         ]
       },
-      "lastDomainRestore": {
-        "currentDomain": "https://dizi79.life",
-        "restoredFrom": "https://dizi82.life",
-        "reason": "Re-evaluating previous working redirect target after user reported ERR_CERT_COMMON_NAME_INVALID on dizi79.life."
-      },
-      "candidateDomains": [
-        "https://dizi82.life"
-      ]
+      "candidateDomains": [],
+      "lastSwitch": {
+        "from": "https://dizi79.life",
+        "to": "https://dizi82.life",
+        "reason": "Restored previously identity-verified DiziLife host after the maintainer reported ERR_CERT_COMMON_NAME_INVALID on dizi79.life; homepage and service-status records for dizi82.life were checked."
+      }
     },
     "DiziPal": {},
     "DiziPod": {},
