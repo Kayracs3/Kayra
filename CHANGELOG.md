@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:e7a98da8f4bf8a8f8ac986c32d11afd4e08864a1 -->
+### FilmizleHell: bump version to 11 for decoder scan diagnostics
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [e7a98da](https://github.com/Kayracs3/Kayra/commit/e7a98da8f4bf8a8f8ac986c32d11afd4e08864a1)
+
+## 2026-10-30
+
+<!-- kayra-commit:480877556b95ad18f7d0b9e9477c3a419a470f95 -->
+### FilmizleHell: report decoder scan even when no terms match
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [4808775](https://github.com/Kayracs3/Kayra/commit/480877556b95ad18f7d0b9e9477c3a419a470f95)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:5b99686b3689ae77bb9231f1ca690111c17d86b6 -->
 ### FilmizleHell: bump to version 10 for Playturka decoder tracing
 
