@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:6184cf6b1ae7e798df0be8813928b44737df6038 -->
+### Keep Dizigecesi version at last confirmed poster fix
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [6184cf6](https://github.com/Kayracs3/Kayra/commit/6184cf6b1ae7e798df0be8813928b44737df6038)
+
+## 2026-10-30
+
+<!-- kayra-commit:e8c14a0995e0b7356239cf0f9d9daa260ad7b932 -->
+### Keep source resolver unchanged for site cooldown restrictions
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [e8c14a0](https://github.com/Kayracs3/Kayra/commit/e8c14a0995e0b7356239cf0f9d9daa260ad7b932)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:bf65de640ca085c3eb225cb7b6cf318a70c9a084 -->
 ### Bump Dizigecesi version for source restriction handling
 
