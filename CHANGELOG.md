@@ -2,6 +2,111 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:5d1288801768c259947eaae50b72aac961cf9cfa -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [5d12888](https://github.com/Kayracs3/Kayra/commit/5d1288801768c259947eaae50b72aac961cf9cfa)
+
+## 2026-10-30
+
+<!-- kayra-commit:eec560beb73785843e7bf7bc9f6c32d63aa7b9c2 -->
+### Document safe handling of TLS hostname mismatch
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [eec560b](https://github.com/Kayracs3/Kayra/commit/eec560beb73785843e7bf7bc9f6c32d63aa7b9c2)
+
+## 2026-10-30
+
+<!-- kayra-commit:df8d5f18b10c588b81061fbb74cd8227b047aa8c -->
+### Document confirmed TLS hostname mismatch as domain failure
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [df8d5f1](https://github.com/Kayracs3/Kayra/commit/df8d5f18b10c588b81061fbb74cd8227b047aa8c)
+
+## 2026-10-30
+
+<!-- kayra-commit:f2a457116be42ab44a91799289d7b91157b7108c -->
+### Keep domain policy documentation aligned with TLS recovery
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [f2a4571](https://github.com/Kayracs3/Kayra/commit/f2a457116be42ab44a91799289d7b91157b7108c)
+
+## 2026-10-30
+
+<!-- kayra-commit:5e099cc38d582af6bc79f239287bd37ee3d093bc -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [5e099cc](https://github.com/Kayracs3/Kayra/commit/5e099cc38d582af6bc79f239287bd37ee3d093bc)
+
+## 2026-10-30
+
+<!-- kayra-commit:7da1c04d832ec1a9eb6dca5814b58ca0a67bc058 -->
+### Record DiziLife TLS recovery domain
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7da1c04](https://github.com/Kayracs3/Kayra/commit/7da1c04d832ec1a9eb6dca5814b58ca0a67bc058)
+
+## 2026-10-30
+
+<!-- kayra-commit:4b9bccee0ae06895dfbedb4ab50c65e1a1cc6e3f -->
+### Switch DiziLife away from its invalid TLS hostname
+
+- Etkilenen alanlar: DiziLife
+- Commit: [4b9bcce](https://github.com/Kayracs3/Kayra/commit/4b9bccee0ae06895dfbedb4ab50c65e1a1cc6e3f)
+
+## 2026-10-30
+
+<!-- kayra-commit:296c7a6746467a14c3600839da20c5a236b352e1 -->
+### Switch DiziLife away from its invalid TLS hostname
+
+- Etkilenen alanlar: DiziLife
+- Commit: [296c7a6](https://github.com/Kayracs3/Kayra/commit/296c7a6746467a14c3600839da20c5a236b352e1)
+
+## 2026-10-30
+
+<!-- kayra-commit:c32afc5e3aca96e4e9a9c2f2f880e34463c8825d -->
+### Switch DiziLife away from its invalid TLS hostname
+
+- Etkilenen alanlar: DiziLife
+- Commit: [c32afc5](https://github.com/Kayracs3/Kayra/commit/c32afc5e3aca96e4e9a9c2f2f880e34463c8825d)
+
+## 2026-10-30
+
+<!-- kayra-commit:e98f2298df1618b040cf92bdd47ee8a6b528547d -->
+### Document TLS hostname mismatch recovery rule
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [e98f229](https://github.com/Kayracs3/Kayra/commit/e98f2298df1618b040cf92bdd47ee8a6b528547d)
+
+## 2026-10-30
+
+<!-- kayra-commit:ab4c86bce041a6e75600b4b1c123364705f172ae -->
+### Register verified DiziLife alternative for TLS failure recovery
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [ab4c86b](https://github.com/Kayracs3/Kayra/commit/ab4c86bce041a6e75600b4b1c123364705f172ae)
+
+## 2026-10-30
+
+<!-- kayra-commit:dd9fa654537973f584b16faf32922658ef91c65f -->
+### Test confirmed TLS hostname mismatch domain recovery
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [dd9fa65](https://github.com/Kayracs3/Kayra/commit/dd9fa654537973f584b16faf32922658ef91c65f)
+
+## 2026-10-30
+
+<!-- kayra-commit:d2637966365436b8ef488134cbc5196281494690 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [d263796](https://github.com/Kayracs3/Kayra/commit/d2637966365436b8ef488134cbc5196281494690)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:4a4cf87ea267024a7e7afb8a84a394f9224c515c -->
 ### Treat repeated TLS hostname mismatch as provider domain failure
 
