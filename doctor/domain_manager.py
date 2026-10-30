@@ -421,6 +421,20 @@ def inspect_provider(root: Path, provider: dict[str, str], registry_entry: dict[
             continue
         candidate_page = parse_page(probe["body"], probe["finalUrl"])
         matched, identity_reason = identity_match(profile, candidate_page, markers)
+        # On the first scan a provider may already be offline, so no live
+        # identity profile could have been learned. In that case only accept
+        # a candidate whose page title/H1/site-name contains the exact module
+        # brand (compact comparison handles camel case and punctuation).
+        if not matched and not profile and not markers:
+            brand = normalize_text(provider.get("name", "")).replace(" ", "")
+            header = normalize_text(" ".join([
+                candidate_page.get("title", ""),
+                candidate_page.get("h1", ""),
+                candidate_page.get("siteName", ""),
+            ])).replace(" ", "")
+            if len(brand) >= 6 and brand in header:
+                matched = True
+                identity_reason = "provider module brand matched candidate page header"
         if not matched:
             result.setdefault("rejectedCandidates", []).append({
                 "url": candidate_url, "reason": f"{identity_reason}; discovered by {discovery_reason}"
@@ -487,7 +501,7 @@ def main() -> int:
         "return a substantial HTML page and match saved identityProfile or all configured identityMarkers."
     )
     policy["limits"] = [
-        "If the old domain is fully offline and no trusted candidateDomains/discoveryUrls exist, the new domain cannot be discovered reliably; report it for curation.",
+        "If the old domain is fully offline and no saved profile or provider-brand marker can verify a search nominee, report it for curation instead of guessing.",
         "403/429/Cloudflare protection is not treated as proof that a domain changed.",
         "A successful HTTP response alone never authorizes a domain switch.",
     ]
