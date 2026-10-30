@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:4a4cf87ea267024a7e7afb8a84a394f9224c515c -->
+### Treat repeated TLS hostname mismatch as provider domain failure
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [4a4cf87](https://github.com/Kayracs3/Kayra/commit/4a4cf87ea267024a7e7afb8a84a394f9224c515c)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:7693ed651b0afe28be65399a24d06f2bd8155ca1 -->
 ### Set strict protection for working provider domains
 
