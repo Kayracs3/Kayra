@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-31
+
+<!-- kayra-commit:1c9e0db38dc41a81af1b114f6a5407648e504c4c -->
+### FilmizleHell: reject short Playturka ad playlists
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [1c9e0db](https://github.com/Kayracs3/Kayra/commit/1c9e0db38dc41a81af1b114f6a5407648e504c4c)
+
+
 ## 2026-10-30
 
 <!-- kayra-commit:c8ea92d72e451c1035340d596bd2e02d391ba7e8 -->
