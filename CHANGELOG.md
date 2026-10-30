@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:a0f15d2967ef6635e51296b04ccf5997e4350d97 -->
+### FilmizleHell: send Playturka visitor and site key parameters
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [a0f15d2](https://github.com/Kayracs3/Kayra/commit/a0f15d2967ef6635e51296b04ccf5997e4350d97)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:e7a98da8f4bf8a8f8ac986c32d11afd4e08864a1 -->
 ### FilmizleHell: bump version to 11 for decoder scan diagnostics
 
