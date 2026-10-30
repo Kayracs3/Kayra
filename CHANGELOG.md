@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:1edde17454d210d7daf010d1179863deeb7481cb -->
+### Speed up FilmizleHell Playturka link loading
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [1edde17](https://github.com/Kayracs3/Kayra/commit/1edde17454d210d7daf010d1179863deeb7481cb)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:1d3fba2b75e86f7945c9a533c3a4c1385b20bfd5 -->
 ### FilmizleHell: version 21
 
