@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:a736aaac02e9a455547af8d933d31ecb6bac3ea3 -->
+### FilmizleHell: bump plugin to version 15
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [a736aaa](https://github.com/Kayracs3/Kayra/commit/a736aaac02e9a455547af8d933d31ecb6bac3ea3)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:d9b05b9d65259935f8170c6c7c0869cb90f3f5a1 -->
 ### FilmizleHell: decode Playturka signed video API response
 
