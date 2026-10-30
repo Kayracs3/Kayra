@@ -2,6 +2,39 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:60e31677198991d24291d68cbb3f1f2d73a5fcfa -->
+### Restore still-working provider domain: JetFilmizle
+
+- Etkilenen alanlar: JetFilmizle
+- Commit: [60e3167](https://github.com/Kayracs3/Kayra/commit/60e31677198991d24291d68cbb3f1f2d73a5fcfa)
+
+## 2026-10-30
+
+<!-- kayra-commit:77e8e2e39a51eb9f8ba4a708a15f9852349a9dac -->
+### Restore still-working provider domain: JetFilmizle
+
+- Etkilenen alanlar: JetFilmizle
+- Commit: [77e8e2e](https://github.com/Kayracs3/Kayra/commit/77e8e2e39a51eb9f8ba4a708a15f9852349a9dac)
+
+## 2026-10-30
+
+<!-- kayra-commit:228e599ce8f60b2cced84a9d37004c44150880da -->
+### Restore still-working provider domain: JetFilmizle
+
+- Etkilenen alanlar: JetFilmizle
+- Commit: [228e599](https://github.com/Kayracs3/Kayra/commit/228e599ce8f60b2cced84a9d37004c44150880da)
+
+## 2026-10-30
+
+<!-- kayra-commit:54c452de475604c93aa13d217201ed20c6575ece -->
+### Restore still-working provider domain: DiziLife
+
+- Etkilenen alanlar: DiziLife
+- Commit: [54c452d](https://github.com/Kayracs3/Kayra/commit/54c452de475604c93aa13d217201ed20c6575ece)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:596438534d96556dd7fbe5a3e4fdc9a278b6846d -->
 ### Restore still-working provider domain: DiziLife
 
