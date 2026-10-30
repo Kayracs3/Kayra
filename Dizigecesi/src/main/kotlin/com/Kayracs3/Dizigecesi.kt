@@ -988,7 +988,7 @@ class Dizigecesi : MainAPI() {
         if (image.attr("alt").trim().equals("flag", true)) return true
 
         val classes = image.className().lowercase(Locale.ROOT)
-        if (Regex("""(?:^|[\\s_-])flag(?:$|[\\s_-])""").containsMatchIn(classes)) {
+        if (Regex("""(?:^|[\s_-])flag(?:$|[\s_-])""").containsMatchIn(classes)) {
             return true
         }
 
