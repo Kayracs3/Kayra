@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:3df10cc19e950fa3eaafa82f800fa8b6e633b1eb -->
+### Reject Playturka source indexes and request signed full-length HLS URLs
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [3df10cc](https://github.com/Kayracs3/Kayra/commit/3df10cc19e950fa3eaafa82f800fa8b6e633b1eb)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:f30cda95946a7b470720fd924633f90dacd7d32e -->
 ### Prioritize real Playturka master IDs over unrelated page IDs
 
