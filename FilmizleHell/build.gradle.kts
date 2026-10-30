@@ -1,5 +1,4 @@
-version = 5
-
+version = 6
 cloudstream {
     description = "FilmizleHell film arşivi; arama, afiş, IMDb, oyuncu bilgileri ve video kaynakları"
     authors = listOf("Kayracs3")
