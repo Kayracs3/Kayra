@@ -19,7 +19,7 @@ import java.util.Locale
 import java.util.ArrayDeque
 
 class DiziLife : MainAPI() {
-    override var mainUrl = "https://dizi82.life"
+    override var mainUrl = "https://dizi79.life"
     override var name = "DiziLife"
     override var lang = "tr"
     override val hasMainPage = true
