@@ -2,6 +2,39 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:7693ed651b0afe28be65399a24d06f2bd8155ca1 -->
+### Set strict protection for working provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7693ed6](https://github.com/Kayracs3/Kayra/commit/7693ed651b0afe28be65399a24d06f2bd8155ca1)
+
+## 2026-10-30
+
+<!-- kayra-commit:dda610492f18e63e9fa54fb64b17cecb30b1c513 -->
+### Document the no-change rule for working provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [dda6104](https://github.com/Kayracs3/Kayra/commit/dda610492f18e63e9fa54fb64b17cecb30b1c513)
+
+## 2026-10-30
+
+<!-- kayra-commit:9682562a3b98f99f7e6a813a18d6a22b0521c75b -->
+### Keep working provider domains and record restored URLs
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [9682562](https://github.com/Kayracs3/Kayra/commit/9682562a3b98f99f7e6a813a18d6a22b0521c75b)
+
+## 2026-10-30
+
+<!-- kayra-commit:40ba2c5a8e2045b074071f576869a862f845bf3d -->
+### Test that healthy and protected domains are never changed
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [40ba2c5](https://github.com/Kayracs3/Kayra/commit/40ba2c5a8e2045b074071f576869a862f845bf3d)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:60e31677198991d24291d68cbb3f1f2d73a5fcfa -->
 ### Restore still-working provider domain: JetFilmizle
 
