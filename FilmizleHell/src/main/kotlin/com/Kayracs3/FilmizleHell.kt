@@ -2055,25 +2055,12 @@ class FilmizleHell : MainAPI() {
      * For masters without separate audio renditions, publish the verified child
      * playlist directly to avoid that mismatch.
      */
-    private suspend fun findPlayturkaPreferredVideoVariant(
+    private fun findPlayturkaPreferredVideoVariant(
         masterUrl: String,
-        referer: String
+        masterBody: String
     ): PlayturkaVideoPlaylistResolution? {
-        val response = runCatching {
-            app.get(
-                masterUrl,
-                headers = requestHeaders + mapOf("Accept" to "*/*", "Referer" to referer),
-                referer = referer,
-                allowRedirects = true,
-                cacheTime = 0,
-                timeout = 9000
-            )
-        }.onFailure {
-            Log.d(name, "Playturka video varyantı alınamadı: " + safeLogUrl(masterUrl))
-        }.getOrNull() ?: return null
-
-        val body = response.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
-        if (!response.isSuccessful || !body.startsWith("#EXTM3U")) return null
+        val body = masterBody.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+        if (!body.startsWith("#EXTM3U")) return null
 
         val lines = body.lines()
         val variants = ArrayList<Pair<Long, String>>()
@@ -2083,8 +2070,8 @@ class FilmizleHell : MainAPI() {
             val uriLine = lines.drop(index + 1).firstOrNull {
                 it.isNotBlank() && !it.trim().startsWith("#")
             } ?: continue
-            val url = fixUrl(uriLine.trim(), response.url) ?: continue
-            val bandwidth = Regex("""(?i)\b(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\d+)""")
+            val url = fixUrl(uriLine.trim(), masterUrl) ?: continue
+            val bandwidth = Regex("""(?i)\\b(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\\d+)""")
                 .find(info)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
             variants.add(bandwidth to url)
         }
@@ -2096,19 +2083,18 @@ class FilmizleHell : MainAPI() {
             )
         }
 
-        val preferred = variants.maxByOrNull { it.first }?.second
         return PlayturkaVideoPlaylistResolution(
             isMasterPlaylist = true,
-            preferredVariantUrl = preferred
+            preferredVariantUrl = variants.maxByOrNull { it.first }?.second
         )
     }
 
-    private suspend fun isPlausiblePlayturkaMovieStream(
+    private suspend fun validatePlayturkaMovieStreamDuration(
         manifestUrl: String,
         referer: String,
         videoId: String,
         expectedRuntimeMinutes: Int?
-    ): Boolean {
+    ): Double? {
         val duration = fetchPlayturkaHlsDurationSeconds(manifestUrl, referer)
         val minimumSeconds = expectedRuntimeMinutes
             ?.takeIf { it in 10..600 }
@@ -2124,7 +2110,7 @@ class FilmizleHell : MainAPI() {
                 ", minimumSeconds=" + minimumSeconds.toLong() +
                 ", accepted=" + accepted
         )
-        return accepted
+        return duration.takeIf { accepted }
     }
 
     private suspend fun publishPlayturkaManifestCandidates(
@@ -2439,10 +2425,10 @@ class FilmizleHell : MainAPI() {
                 val body = response.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
                 val contentType = response.headers["content-type"].orEmpty()
                 if (response.isSuccessful && body.startsWith("#EXTM3U")) {
-                    val plausibleMovie = isPlausiblePlayturkaMovieStream(
+                    val videoDurationSeconds = validatePlayturkaMovieStreamDuration(
                         manifest, playerReferer, id, expectedRuntimeMinutes
                     )
-                    if (!plausibleMovie) {
+                    if (videoDurationSeconds == null) {
                         Log.w(
                             name,
                             "Kısa/reklam veya süresi doğrulanamayan Playturka akışı atlandı: id=" +
@@ -2472,39 +2458,76 @@ class FilmizleHell : MainAPI() {
                             ", url=" + safeLogUrl(manifest)
                     )
 
-                    // Preserve the master when it declares external audio renditions.
-                    // Without a separate audio group, publish the exact video child
-                    // playlist whose full duration was checked above. This avoids
-                    // cases where ExoPlayer receives a 10-second preview from the
-                    // master while the child video playlist is full length.
-                    val playbackUrl = if (audioLines.isEmpty()) {
-                        val resolution = findPlayturkaPreferredVideoVariant(
-                            manifest, playerReferer
-                        )
-                        when {
-                            resolution == null -> {
-                                Log.w(
-                                    name,
-                                    "Playturka video listesi yeniden doğrulanamadı; master oynatılmadı: id=" +
-                                        id
-                                )
-                                continue
-                            }
-                            resolution.isMasterPlaylist &&
-                                resolution.preferredVariantUrl.isNullOrBlank() -> {
-                                Log.w(
-                                    name,
-                                    "Playturka master içinde oynatılabilir video varyantı yok: id=" +
-                                        id
-                                )
-                                continue
-                            }
-                            resolution.isMasterPlaylist -> resolution.preferredVariantUrl!!
-                            else -> manifest
+                    // A full-length video rendition is not enough: the master may
+                    // point to a 10-second audio/ad sidecar. Verify every external
+                    // audio rendition against the already-validated video duration.
+                    val resolution = findPlayturkaPreferredVideoVariant(manifest, body)
+                    val videoPlaybackUrl = when {
+                        resolution == null -> {
+                            Log.w(
+                                name,
+                                "Playturka video listesi çözümlenemedi; akış oynatılmadı: id=" + id
+                            )
+                            continue
                         }
-                    } else {
-                        manifest
+                        resolution.isMasterPlaylist &&
+                            resolution.preferredVariantUrl.isNullOrBlank() -> {
+                            Log.w(
+                                name,
+                                "Playturka master içinde oynatılabilir video varyantı yok: id=" + id
+                            )
+                            continue
+                        }
+                        resolution.isMasterPlaylist -> resolution.preferredVariantUrl!!
+                        else -> manifest
                     }
+
+                    val audioPlaylistUrls = audioLines.mapNotNull { audioLine ->
+                        val rawUri = Regex("""(?i)\\bURI\\s*=\\s*["']([^"']+)["']""")
+                            .find(audioLine)?.groupValues?.getOrNull(1)
+                            ?: return@mapNotNull null
+                        fixUrl(rawUri, manifest)
+                    }.distinct()
+                    val hasExternalAudioSidecar = audioLines.any {
+                        it.contains("URI=", true)
+                    }
+                    val audioDurations = ArrayList<Pair<String, Double?>>()
+                    for (audioUrl in audioPlaylistUrls) {
+                        val audioDuration = fetchPlayturkaHlsDurationSeconds(
+                            audioUrl, playerReferer
+                        )
+                        audioDurations.add(audioUrl to audioDuration)
+                    }
+                    val minimumAudioSeconds = maxOf(300.0, videoDurationSeconds * 0.70)
+                    val audioSidecarsVerified = !hasExternalAudioSidecar ||
+                        (
+                            audioPlaylistUrls.isNotEmpty() &&
+                                audioDurations.size == audioPlaylistUrls.size &&
+                                audioDurations.all { (_, duration) ->
+                                    duration != null && duration >= minimumAudioSeconds
+                                }
+                            )
+                    val keepMasterWithAudio = audioLines.isNotEmpty() && audioSidecarsVerified
+
+                    Log.d(
+                        name,
+                        "Playturka ses varyant kontrolü: id=" + id +
+                            ", videoSeconds=" + videoDurationSeconds.toLong() +
+                            ", checked=" + audioDurations.count { it.second != null } +
+                            ", total=" + audioPlaylistUrls.size +
+                            ", minimumAudioSeconds=" + minimumAudioSeconds.toLong() +
+                            ", details=" + audioDurations.joinToString(" | ") {
+                                safeLogUrl(it.first) + "=" + (it.second?.toLong()?.toString() ?: "unavailable") + "s"
+                            } +
+                            ", masterAudioAccepted=" + audioSidecarsVerified
+                    )
+
+                    // Keep a master only when its external audio tracks are also
+                    // full-length. Otherwise give ExoPlayer the exact long video
+                    // rendition and avoid a short ad/audio sidecar determining the
+                    // playback duration. If the playlist is already a media playlist,
+                    // the original URL remains the correct source.
+                    val playbackUrl = if (keepMasterWithAudio) manifest else videoPlaybackUrl
                     Log.d(
                         name,
                         "Playturka oynatma URL seçimi: id=" + id +
