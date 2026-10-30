@@ -2,6 +2,23 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:1d3d3ccd0c1a06e68e4872786417729eb7e615ff -->
+### Bump FilmizleHell plugin to v23
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [1d3d3cc](https://github.com/Kayracs3/Kayra/commit/1d3d3ccd0c1a06e68e4872786417729eb7e615ff)
+
+## 2026-10-31
+
+<!-- kayra-commit:441dbc6afb6c7b820070ef6ca1bb17001a1a46d6 -->
+### Fix FilmizleHell coroutine compile errors
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [441dbc6](https://github.com/Kayracs3/Kayra/commit/441dbc6afb6c7b820070ef6ca1bb17001a1a46d6)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:59faafed1a19ccb464f88e26c6a30169b71af977 -->
 ### Bump FilmizleHell plugin to v22
 
