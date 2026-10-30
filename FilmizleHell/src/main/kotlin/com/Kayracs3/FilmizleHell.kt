@@ -1558,10 +1558,13 @@ class FilmizleHell : MainAPI() {
             val normalized = response.text.trimStart('\uFEFF').trim().removePrefix(")]}',").trim()
             summarizePlayturkaApiValue(org.json.JSONTokener(normalized).nextValue())
         }.getOrElse { "non-json" }
+        val shortPlayerBody = response.text.trim().replace(Regex("""\\s+"""), " ")
+            .takeIf { response.text.length <= 24 } ?: "<omitted>"
         Log.d(name, "Playturka player config: id=" + id +
             ", HTTP=" + response.code +
             ", type=" + response.headers["content-type"].orEmpty().take(60) +
             ", shape=" + playerShape +
+            ", shortBody=" + shortPlayerBody +
             ", visitorIdPresent=" + !playerVisitor.isNullOrBlank() +
             ", siteKeyPresent=" + !playerSiteKey.isNullOrBlank() +
             ", cookieNames=" + playturkaCookieNames(playerCookie))
@@ -1976,6 +1979,34 @@ class FilmizleHell : MainAPI() {
                     ", scriptLength=" + scriptText.length +
                     ", matchedTerms=" + matchedDecodeTerms.joinToString(",") +
                     ", hints=" + decodeHints)
+
+                // Print short, bounded slices around the mapping declarations/usages.
+                // This identifies the real substitution table without logging signed URLs.
+                for (mappingTerm in listOf("charMapping", "reverseMapping")) {
+                    val occurrences = Regex(Regex.escape(mappingTerm), RegexOption.IGNORE_CASE)
+                        .findAll(scriptText)
+                        .map { it.range.first }
+                        .take(20)
+                        .toList()
+                    val selectedPositions = if (occurrences.size <= 4) occurrences else
+                        listOf(occurrences.first(), occurrences[1], occurrences[occurrences.size - 2], occurrences.last()).distinct()
+                    Log.d(name, "Playturka JS eşleme konumları: term=" + mappingTerm +
+                        ", positions=" + occurrences.joinToString(","))
+                    selectedPositions.forEachIndexed { snippetIndex, position ->
+                        val from = (position - 220).coerceAtLeast(0)
+                        val until = (position + 1900).coerceAtMost(scriptText.length)
+                        val mappingSnippet = scriptText.substring(from, until)
+                            .replace(Regex("""\\s+"""), " ")
+                            .replace(Regex("""(?i)https?://[^\\s"'<>]+""")) { match ->
+                                safeLogUrl(match.value)
+                            }
+                            .replace(Regex("""([?&][\\w-]{1,40}=)[^&\\s"'<>]+""")) { match ->
+                                match.groupValues[1] + "*"
+                            }
+                        Log.d(name, "Playturka JS eşleme ayrıntısı: term=" + mappingTerm +
+                            ", part=" + snippetIndex + ", code=" + mappingSnippet.take(2100))
+                    }
+                }
                 val scriptDocument = Jsoup.parse("", scriptResponse.url)
                 extractPlayturkaMasterUrls(
                     scriptResponse.url,
