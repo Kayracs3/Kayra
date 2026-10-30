@@ -1803,9 +1803,15 @@ class FilmizleHell : MainAPI() {
             // the ID drops token/expiry parameters and can lead to a fallback or
             // advertisement manifest instead of the actual film stream.
             val manifests = LinkedHashSet<String>()
-            exactMasters[id]?.let { manifests.add(it) }
-            manifests.add("https://p.playturka.space/videos/" + id + "/master.m3u8")
-            manifests.add("https://p.playturka.space/videos/" + id + "/index.m3u8")
+            val signedMaster = exactMasters[id]
+            if (signedMaster != null) {
+                // If the signed master fails, do not retry an unsigned path that
+                // may resolve to a generic/ad playlist.
+                manifests.add(signedMaster)
+            } else {
+                manifests.add("https://p.playturka.space/videos/" + id + "/master.m3u8")
+                manifests.add("https://p.playturka.space/videos/" + id + "/index.m3u8")
+            }
 
             for (manifest in manifests) {
                 val response = runCatching {
