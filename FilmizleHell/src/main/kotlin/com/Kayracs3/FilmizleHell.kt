@@ -1629,20 +1629,20 @@ class FilmizleHell : MainAPI() {
     // Keep API diagnostics useful without leaking signed playback credentials.
     private fun safePlayturkaApiPreview(raw: String): String {
         var preview = decode(raw).take(420)
-        preview = Regex("""(?i)https?://[^\\s"'<>]+""").replace(preview) { match ->
+        preview = Regex("""(?i)https?://[^\s"'<>]+""").replace(preview) { match ->
             safeLogUrl(match.value)
         }
         preview = Regex(
-            """(?i)(["']?(?:access_token|refresh_token|token|signature|sig|authorization|auth|secret|password|api_key|apikey|key|exp|expires)["']?\\s*[:=]\\s*["']?)[^"'&,\\s}]+"""
+            """(?i)(["']?(?:access_token|refresh_token|token|signature|sig|authorization|auth|secret|password|api_key|apikey|key|exp|expires)["']?\s*[:=]\s*["']?)[^"'&,\s}]+"""
         ).replace(preview) { match ->
             match.groupValues[1] + "*"
         }
         preview = Regex(
-            """(?i)([?&](?:access_token|token|signature|sig|auth|key|api_key|apikey|exp|expires)=)[^&#\\s"'<>]+"""
+            """(?i)([?&](?:access_token|token|signature|sig|auth|key|api_key|apikey|exp|expires)=)[^&#\s"'<>]+"""
         ).replace(preview) { match ->
             match.groupValues[1] + "*"
         }
-        return preview.replace(Regex("""\\s+"""), " ").trim()
+        return preview.replace(Regex("""\s+"""), " ").trim()
     }
 
     private fun isSignedPlayturkaMaster(url: String, expectedId: String): Boolean {
@@ -1690,7 +1690,7 @@ class FilmizleHell : MainAPI() {
 
         val decodedBody = decode(response.text)
         val responseShape = runCatching {
-            val normalizedBody = response.text.trimStart('\\uFEFF').trim()
+            val normalizedBody = response.text.trimStart('\uFEFF').trim()
                 .removePrefix(")]}',").trim()
             summarizePlayturkaApiValue(org.json.JSONTokener(normalizedBody).nextValue())
         }.getOrElse {
