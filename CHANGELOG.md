@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:586701e30f4498f64a35b6becbb3398b86945224 -->
+### Normalize restricted source labels and lock-page text
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [586701e](https://github.com/Kayracs3/Kayra/commit/586701e30f4498f64a35b6becbb3398b86945224)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:38ef9a6d3794e4461e469237257337fa12d466d7 -->
 ### Skip Moly VK OK cooldown restriction pages
 
