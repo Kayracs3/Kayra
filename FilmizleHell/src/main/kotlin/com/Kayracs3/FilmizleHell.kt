@@ -1817,10 +1817,13 @@ class FilmizleHell : MainAPI() {
                         }
                     term + " => " + snippet
                 }.joinToString(" || ").take(2600)
-                if (decodeHints.isNotBlank()) {
-                    Log.d(name, "Playturka çözümleme kodu: " + safeLogUrl(scriptUrl) +
-                        "; hints=" + decodeHints)
+                val matchedDecodeTerms = decodeTerms.filter { term ->
+                    scriptText.contains(term, ignoreCase = true)
                 }
+                Log.d(name, "Playturka çözümleme taraması: " + safeLogUrl(scriptUrl) +
+                    ", scriptLength=" + scriptText.length +
+                    ", matchedTerms=" + matchedDecodeTerms.joinToString(",") +
+                    ", hints=" + decodeHints)
                 val scriptDocument = Jsoup.parse("", scriptResponse.url)
                 extractPlayturkaMasterUrls(
                     scriptResponse.url,
