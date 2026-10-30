@@ -1675,7 +1675,7 @@ class FilmizleHell : MainAPI() {
         }.getOrElse {
             "json-parse-failed"
         }
-        val urlHints = Regex("""(?i)(?:https?:)?//[^"'<>\\s]{10,1200}""")
+        val urlHints = Regex("""(?i)(?:https?:)?//[^"'<>\\\s]{10,1200}""")
             .findAll(decodedBody)
             .mapNotNull { match -> fixUrl(match.value, response.url)?.let { safeLogUrl(it) } }
             .distinct()
