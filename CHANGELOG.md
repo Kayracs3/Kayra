@@ -1,5 +1,30 @@
 # Kayra Güncelleme Notları
 
+## 2026-10-30
+
+<!-- kayra-commit:ca11410aa294322b707c467fc7237c74133b715b -->
+### Record safe automatic domain switching policy
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [ca11410](https://github.com/Kayracs3/Kayra/commit/ca11410aa294322b707c467fc7237c74133b715b)
+
+## 2026-10-30
+
+<!-- kayra-commit:3c962a31881a646e61046f59f2fd1fa5a46f7026 -->
+### Exclude standalone domain manager from emulator doctor workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [3c962a3](https://github.com/Kayracs3/Kayra/commit/3c962a31881a646e61046f59f2fd1fa5a46f7026)
+
+## 2026-10-30
+
+<!-- kayra-commit:015fc055115826346b8e496e70ac3b47d8782225 -->
+### Document verified automatic domain updates
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [015fc05](https://github.com/Kayracs3/Kayra/commit/015fc055115826346b8e496e70ac3b47d8782225)
+
+
 ## 2026-10-26
 
 <!-- kayra-commit:4f670e4a3fb5b1069f099241e3a677cda4c97632 -->
