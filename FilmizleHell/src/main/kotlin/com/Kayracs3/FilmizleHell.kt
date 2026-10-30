@@ -1598,6 +1598,34 @@ class FilmizleHell : MainAPI() {
         return added
     }
 
+    // Diagnostic-only JSON summary: reveal response structure without printing signed tokens.
+    private fun summarizePlayturkaApiValue(value: Any?, depth: Int = 0): String {
+        if (depth > 3) return "…"
+        return when (value) {
+            is JSONObject -> {
+                val keys = value.keys().asSequence().toList().sorted().take(16)
+                keys.joinToString(prefix = "{", postfix = "}") { key ->
+                    key + "=" + summarizePlayturkaApiValue(value.opt(key), depth + 1)
+                }
+            }
+            is org.json.JSONArray -> {
+                (0 until minOf(value.length(), 5)).joinToString(prefix = "[", postfix = "]") { index ->
+                    summarizePlayturkaApiValue(value.opt(index), depth + 1)
+                }
+            }
+            is String -> {
+                val text = value.trim()
+                when {
+                    text.isEmpty() -> "string(empty)"
+                    text.startsWith("http://", true) || text.startsWith("https://", true) ->
+                        safeLogUrl(text)
+                    else -> "string(len=" + text.length + ")"
+                }
+            }
+            else -> if (value == JSONObject.NULL) "null" else value.toString().take(32)
+        }
+    }
+
     private fun isSignedPlayturkaMaster(url: String, expectedId: String): Boolean {
         return runCatching {
             val uri = URI(url)
@@ -1640,6 +1668,22 @@ class FilmizleHell : MainAPI() {
                 ", HTTP=" + response.code + ", length=" + response.text.length)
             return null
         }
+
+        val decodedBody = decode(response.text)
+        val responseShape = runCatching {
+            summarizePlayturkaApiValue(JSONObject(response.text))
+        }.getOrElse {
+            "json-parse-failed"
+        }
+        val urlHints = Regex("""(?i)(?:https?:)?//[^"'<>\\s]{10,1200}""")
+            .findAll(decodedBody)
+            .mapNotNull { match -> fixUrl(match.value, response.url)?.let { safeLogUrl(it) } }
+            .distinct()
+            .take(5)
+            .toList()
+        Log.d(name, "Playturka API yanıt yapısı: id=" + id +
+            ", shape=" + responseShape +
+            ", urlHints=" + urlHints.joinToString("|"))
 
         val candidates = LinkedHashSet<String>()
         if (isDirectMedia(response.url)) candidates.add(response.url)
