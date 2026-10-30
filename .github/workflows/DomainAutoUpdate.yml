@@ -1,0 +1,111 @@
+name: Domain Otomatik Bul ve Güncelle
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 */6 * * *"
+  push:
+    branches: [master]
+    paths:
+      - "doctor/domain_manager.py"
+      - "doctor/test_domain_manager.py"
+      - ".github/workflows/DomainAutoUpdate.yml"
+
+concurrency:
+  group: kayra-domain-auto-update-master
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  domain-auto-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kaynak kodu al
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Python hazırla
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python sözdizimi ve birim testleri
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile doctor/domain_manager.py doctor/test_domain_manager.py
+          python3 -m unittest discover -s doctor -p 'test_domain_manager.py' -v
+
+      - name: Domainleri bul ve doğrulanmış değişiklikleri uygula
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 doctor/domain_manager.py \
+            --root . \
+            --apply \
+            --workers 6 \
+            --report "$RUNNER_TEMP/domain-report.json"
+
+      - name: Değişiklikleri incele ve gönder
+        id: commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git diff --check
+
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "verified_domain_source_changed=false" >> "$GITHUB_OUTPUT"
+            echo "Yeni değişiklik yok. Domain sağlık raporu üretildi."
+            exit 0
+          fi
+
+          git config user.name "Kayra Domain Manager"
+          git config user.email "actions@github.com"
+          git add -A -- doctor/domains.json
+          git add -u
+
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "verified_domain_source_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --cached --name-only | grep -Eq '^[^/]+/(src/main/kotlin/.*\.kt|build\.gradle\.kts)$'; then
+            echo "verified_domain_source_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "verified_domain_source_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          git commit -m "Auto-update identity-verified provider domains"
+          git push origin HEAD:master
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Domain değişikliği sonrası CloudStream derlemesini başlat
+        if: steps.commit.outputs.pushed == 'true' && steps.commit.outputs.verified_domain_source_changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run Derleyici.yml --repo "$GITHUB_REPOSITORY" --ref master
+          echo "Doğrulanmış domain değişikliği gönderildi; CloudStream derleme workflow'u başlatıldı."
+
+      - name: Domain raporunu yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kayra-domain-report-${{ github.run_id }}
+          path: ${{ runner.temp }}/domain-report.json
+          if-no-files-found: ignore
+          retention-days: 30

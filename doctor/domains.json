@@ -1,10 +1,23 @@
 {
-  "version": 1,
+  "version": 2,
   "policy": {
-    "primaryDomain": "The mainUrl in each provider Kotlin file is authoritative.",
-    "aliases": "Only approvedAliases listed below are checked.",
-    "automaticSwitching": false,
-    "approval": "Never change provider mainUrl automatically just because a different hostname responds. Domain switches must be reviewed because site structure, redirects, and playback hosts may differ."
+    "primaryDomain": "The mainUrl in each provider Kotlin file is authoritative and is updated only after verification.",
+    "automaticSwitching": true,
+    "discovery": [
+      "HTTP redirects issued by the provider's currently configured domain",
+      "cross-domain canonical or og:url metadata from the currently configured domain",
+      "candidateDomains explicitly registered by the maintainer",
+      "links found on explicitly trusted discoveryUrls registered by the maintainer",
+      "last-resort search-engine results used only as untrusted candidate nominations"
+    ],
+    "verification": "A candidate must return a substantial HTML page and match the saved identityProfile or every configured identityMarker. Search results only nominate candidates and never authorize a change by themselves. A successful HTTP response alone is never enough.",
+    "safety": [
+      "Search results are untrusted candidates; lookalike, parked, placeholder, and protection pages are rejected.",
+      "403, 429, Cloudflare challenges, and transient timeouts are not proof of a domain change.",
+      "A candidate is not automatically applied if site identity cannot be verified.",
+      "If the old domain is fully offline, search can nominate possible domains but cannot authorize a switch without a saved identity profile or explicit identityMarkers."
+    ],
+    "onSwitch": "Only the affected provider module is changed, its mainUrl and same-provider host references are updated, and its plugin version is incremented. The normal CloudStream build is then dispatched."
   },
   "providers": {}
 }
