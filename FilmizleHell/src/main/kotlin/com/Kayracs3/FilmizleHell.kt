@@ -1519,7 +1519,7 @@ class FilmizleHell : MainAPI() {
         referer: String,
         seenSubtitles: MutableSet<String>,
         subtitleCallback: (SubtitleFile) -> Unit
-    ): Int {
+    ): Triple<Int, String?, String?> {
         // The visible Playturka player can expose subtitle tracks in its HTML/JS
         // player page even when its master.m3u8 contains no EXT-X-MEDIA entries.
         // Read only the public player page and its ordinary JS assets; don't try
@@ -1536,7 +1536,7 @@ class FilmizleHell : MainAPI() {
             )
         }.onFailure {
             Log.d(name, "Playturka player sayfası alınamadı: " + safeLogUrl(playerUrl))
-        }.getOrNull() ?: return 0
+        }.getOrNull() ?: return Triple(0, null, null)
 
         if (!response.isSuccessful || response.text.isBlank() || response.text.length > 4_000_000) {
             Log.d(
@@ -1544,8 +1544,19 @@ class FilmizleHell : MainAPI() {
                 "Playturka player sayfası atlandı: " + safeLogUrl(playerUrl) +
                     ", HTTP=" + response.code
             )
-            return 0
+            return Triple(0, null, null)
         }
+
+        val playerCookie = response.headers["Set-Cookie"]
+        val playerVisitor = playturkaVisitorId(playerCookie)
+            ?: playturkaVisitorFromUrlOrHtml(response.url + " " + response.text)
+        val playerSiteKey = playturkaSiteKey(response.url, response.text)
+        Log.d(name, "Playturka player config: id=" + id +
+            ", HTTP=" + response.code +
+            ", type=" + response.headers["content-type"].orEmpty().take(60) +
+            ", visitorIdPresent=" + !playerVisitor.isNullOrBlank() +
+            ", siteKeyPresent=" + !playerSiteKey.isNullOrBlank() +
+            ", cookieNames=" + playturkaCookieNames(playerCookie))
 
         publishSubtitles(
             response.document,
@@ -1595,7 +1606,7 @@ class FilmizleHell : MainAPI() {
 
         val added = seenSubtitles.size - before
         Log.d(name, "Playturka player altyazı taraması: id=" + id + ", yeni=" + added)
-        return added
+        return Triple(added, playerVisitor, playerSiteKey)
     }
 
     // Diagnostic-only JSON summary: reveal response structure without printing signed tokens.
@@ -1626,6 +1637,50 @@ class FilmizleHell : MainAPI() {
         }
     }
 
+    private fun findPlayturkaJsonString(raw: String, names: Set<String>): String? {
+        val parsed = runCatching {
+            org.json.JSONTokener(raw.trimStart('\uFEFF').trim()).nextValue()
+        }.getOrNull() ?: return null
+        val targetNames = names.map { it.lowercase(Locale.ROOT) }.toSet()
+
+        fun walk(value: Any?, depth: Int): String? {
+            if (depth > 5) return null
+            when (value) {
+                is JSONObject -> {
+                    val keys = value.keys().asSequence().toList()
+                    for (key in keys) {
+                        val item = value.opt(key)
+                        if (key.lowercase(Locale.ROOT) in targetNames) {
+                            val text = item?.toString()?.trim().orEmpty()
+                            if (text.isNotBlank() && text != "null" &&
+                                !text.startsWith("{") && !text.startsWith("[")
+                            ) return text
+                        }
+                        walk(item, depth + 1)?.let { return it }
+                    }
+                }
+                is org.json.JSONArray -> {
+                    for (index in 0 until value.length()) {
+                        walk(value.opt(index), depth + 1)?.let { return it }
+                    }
+                }
+            }
+            return null
+        }
+        return walk(parsed, 0)
+    }
+
+    private fun playturkaCookieNames(raw: String?): String {
+        val excluded = setOf("path", "domain", "expires", "max-age", "samesite", "secure", "httponly", "priority")
+        return Regex("""(?:^|[,;]\s*)([A-Za-z0-9_-]{2,50})=""")
+            .findAll(raw.orEmpty())
+            .map { it.groupValues[1] }
+            .filterNot { it.lowercase(Locale.ROOT) in excluded }
+            .distinct()
+            .take(8)
+            .joinToString(",")
+    }
+
     private fun playturkaParam(raw: String, name: String): String? {
         val uri = runCatching { URI(raw) }.getOrNull()
         val parts = listOf(uri?.rawQuery.orEmpty(), uri?.rawFragment.orEmpty(), raw)
@@ -1643,11 +1698,15 @@ class FilmizleHell : MainAPI() {
     }
 
     private fun playturkaSiteKey(referer: String, html: String): String? {
-        playturkaParam(referer, "sk")?.let { return it }
-        playturkaParam(html, "sk")?.let { return it }
+        listOf("site_key", "am_sk").forEach { key ->
+            playturkaParam(referer, key)?.let { return it }
+            playturkaParam(html, key)?.let { return it }
+        }
+        findPlayturkaJsonString(html, setOf("site_key", "siteKey", "AM_SITE_KEY", "am_sk"))
+            ?.let { return it }
         val patterns = listOf(
-            Regex("""(?i)["']?(?:site_key|siteKey|AM_SITE_KEY)["']?\s*[:=]\s*["']([^"'\s]{4,300})["']"""),
-            Regex("""(?i)(?:[?&#])sk=([^&#"'\s]{4,300})""")
+            Regex("""(?i)["']?(?:site_key|siteKey|AM_SITE_KEY|am_sk)["']?\s*[:=]\s*["']([^"'\s]{4,300})["']"""),
+            Regex("""(?i)(?:[?&#])(?:site_key|am_sk)=([^&#"'\s]{4,300})""")
         )
         for (pattern in patterns) {
             pattern.find(html)?.groupValues?.getOrNull(1)?.let { raw ->
@@ -1663,6 +1722,15 @@ class FilmizleHell : MainAPI() {
         Regex("""(?i)(?:^|[,;]\s*)am_visitor_id=([^;,\s]+)""")
             .find(setCookie.orEmpty())?.groupValues?.getOrNull(1)
             ?.takeIf { it.isNotBlank() }
+
+    private fun playturkaVisitorFromUrlOrHtml(value: String): String? {
+        listOf("visitor_id", "am_vid").forEach { key ->
+            playturkaParam(value, key)?.let { return it }
+        }
+        return findPlayturkaJsonString(
+            value, setOf("visitor_id", "visitorId", "AM_VISITOR_ID", "am_vid")
+        )
+    }
 
     // Keep API diagnostics useful without leaking signed playback credentials.
     private fun safePlayturkaApiPreview(raw: String): String {
@@ -1700,7 +1768,12 @@ class FilmizleHell : MainAPI() {
         }.getOrDefault(false)
     }
 
-    private suspend fun fetchPlayturkaSignedMaster(id: String, referer: String): String? {
+    private suspend fun fetchPlayturkaSignedMaster(
+        id: String,
+        referer: String,
+        playerVisitorId: String? = null,
+        playerSiteKey: String? = null
+    ): String? {
         // The public player bundle adds visitor_id and site_key when both are present.
         // Bootstrap the player origin to receive its am_visitor_id cookie first.
         val bootstrap = runCatching {
@@ -1713,8 +1786,11 @@ class FilmizleHell : MainAPI() {
                 timeout = 7000
             )
         }.getOrNull()
-        val visitorId = playturkaVisitorId(bootstrap?.headers?.get("Set-Cookie"))
-        val siteKey = playturkaSiteKey(referer, bootstrap?.text.orEmpty())
+        val visitorId = playerVisitorId
+            ?: playturkaVisitorId(bootstrap?.headers?.get("Set-Cookie"))
+            ?: playturkaVisitorFromUrlOrHtml(referer)
+        val siteKey = playerSiteKey
+            ?: playturkaSiteKey(referer, bootstrap?.text.orEmpty())
         val endpoint = buildString {
             append("https://p.playturka.space/api/video-url?id=")
             append(URLEncoder.encode(id, "UTF-8"))
@@ -1732,7 +1808,8 @@ class FilmizleHell : MainAPI() {
         Log.d(name, "Playturka API kimlik bilgileri: id=" + id +
             ", visitorIdPresent=" + !visitorId.isNullOrBlank() +
             ", siteKeyPresent=" + !siteKey.isNullOrBlank() +
-            ", bootstrapCookie=" + !bootstrap?.headers?.get("Set-Cookie").isNullOrBlank())
+            ", bootstrapCookie=" + !bootstrap?.headers?.get("Set-Cookie").isNullOrBlank() +
+            ", bootstrapCookieNames=" + playturkaCookieNames(bootstrap?.headers?.get("Set-Cookie")))
         val response = runCatching {
             app.get(
                 endpoint,
@@ -2042,7 +2119,9 @@ class FilmizleHell : MainAPI() {
                 Log.d(name, "Playturka doğrudan Türkçe VTT bulunamadı: id=" + id)
             }
 
-            publishPlayturkaApiSubtitles(id, playerReferer, seenSubtitles, subtitleCallback)
+            val playerConfig = publishPlayturkaApiSubtitles(
+                id, playerReferer, seenSubtitles, subtitleCallback
+            )
 
             // The unsigned /videos/{id}/master.m3u8 path can return a short
             // 10-second preview. Obtain the signed URL from the same public endpoint
@@ -2050,7 +2129,7 @@ class FilmizleHell : MainAPI() {
             // in the page or one of its player scripts.
             val signedMaster = exactMasters[id]
                 ?.takeIf { isSignedPlayturkaMaster(it, id) }
-                ?: fetchPlayturkaSignedMaster(id, playerReferer)
+                ?: fetchPlayturkaSignedMaster(id, playerReferer, playerConfig.second, playerConfig.third)
 
             val manifests = LinkedHashSet<String>()
             if (signedMaster != null) {
