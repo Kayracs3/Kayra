@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:a09d85b0bd4e534c298a1c186dfae31461316515 -->
+### FilmizleHell: inspect Playturka API response safely
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [a09d85b](https://github.com/Kayracs3/Kayra/commit/a09d85b0bd4e534c298a1c186dfae31461316515)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:d6256add16886c094643aa711964aae70a63d31d -->
 ### FilmizleHell: correct API URL diagnostic matcher
 
