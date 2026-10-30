@@ -1,4 +1,4 @@
-version = 7
+version = 8
 
 cloudstream {
     description = "DiziLife — dizi ve film sağlayıcısı"
@@ -6,5 +6,5 @@ cloudstream {
     status = 1
     tvTypes = listOf("TvSeries", "Movie")
     language = "tr"
-    iconUrl = "https://dizi79.life/favicon.ico"
+    iconUrl = "https://dizi82.life/favicon.ico"
 }

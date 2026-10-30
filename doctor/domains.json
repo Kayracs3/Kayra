@@ -17,7 +17,530 @@
       "A candidate is not automatically applied if site identity cannot be verified.",
       "If the old domain is fully offline, search can nominate possible domains but cannot authorize a switch without a saved identity profile or explicit identityMarkers."
     ],
-    "onSwitch": "Only the affected provider module is changed, its mainUrl and same-provider host references are updated, and its plugin version is incremented. The normal CloudStream build is then dispatched."
+    "onSwitch": "Only the affected provider module is changed, its mainUrl and same-provider host references are updated, and its plugin version is incremented. The normal CloudStream build is then dispatched.",
+    "switchRule": "HTTP redirect, cross-domain canonical/og:url, configured candidateDomains/discoveryUrls, and last-resort search results may nominate a host. Search results are never trusted by themselves: the candidate must return a substantial HTML page and match saved identityProfile or all configured identityMarkers.",
+    "limits": [
+      "If the old domain is fully offline and no saved profile or provider-brand marker can verify a search nominee, report it for curation instead of guessing.",
+      "403/429/Cloudflare protection is not treated as proof that a domain changed.",
+      "A successful HTTP response alone never authorizes a domain switch."
+    ]
   },
-  "providers": {}
+  "providers": {
+    "AsyaFilmIzle": {},
+    "AsyaLuna": {
+      "identityProfile": {
+        "title": "En Sevilen Asya Dizileri – Kore, Çin, Japon, Tayland & Tayvan Yapımları",
+        "h1": "",
+        "siteName": "AsyaLuna Asya Dizileri",
+        "description": "En yeni, en popüler Asya Dizileri",
+        "tokens": [
+          "asya",
+          "asyaluna",
+          "cin",
+          "dizileri",
+          "japon",
+          "kore",
+          "mlar",
+          "populer",
+          "sevilen",
+          "tayland",
+          "tayvan",
+          "yap",
+          "yeni"
+        ]
+      }
+    },
+    "AsyaWatch": {},
+    "CineStream": {
+      "identityProfile": {
+        "title": "Simkl - Watch and Track Movies, Anime, TV Shows",
+        "h1": "",
+        "siteName": "Simkl",
+        "description": "Simkl automatically tracks what you’re watching, tells you how many episodes you’ve missed, and connects you to what your friends are into",
+        "tokens": [
+          "and",
+          "anime",
+          "are",
+          "automatically",
+          "connects",
+          "episodes",
+          "friends",
+          "how",
+          "into",
+          "many",
+          "missed",
+          "movies",
+          "shows",
+          "simkl",
+          "tells",
+          "track",
+          "tracks",
+          "watch",
+          "watching",
+          "what",
+          "you",
+          "your"
+        ]
+      }
+    },
+    "DDizi": {
+      "identityProfile": {
+        "title": "Ddizi, dizi izle, dizi seyret, dizi, canlı dizi, ddizi.tel",
+        "h1": "",
+        "siteName": "",
+        "description": "Ddizi, dizi izle, dizi seyret, yerli dizi izle, canlı dizi, türk dizi izle, dizi izle full, diziizle, eski diziler",
+        "tokens": [
+          "canl",
+          "ddizi",
+          "dizi",
+          "diziizle",
+          "diziler",
+          "eski",
+          "full",
+          "izle",
+          "seyret",
+          "tel",
+          "turk",
+          "yerli"
+        ]
+      }
+    },
+    "DiziAsya": {},
+    "DiziDad": {},
+    "DiziKorea": {
+      "identityProfile": {
+        "title": "DiziKorea - En Güncel Asya ve Kore Dizileri izleme Sitesi",
+        "h1": "",
+        "siteName": "",
+        "description": "Kore Dizileri izle, Dizikorea size en yeni ve güncel romantik komedi, okul tarzında ki Kore Asya Dizilerini Full HD Türkçe Altyazılı izleme şansı verir.",
+        "tokens": [
+          "altyaz",
+          "asya",
+          "dizikorea",
+          "dizileri",
+          "dizilerini",
+          "full",
+          "guncel",
+          "izle",
+          "izleme",
+          "komedi",
+          "kore",
+          "nda",
+          "okul",
+          "romantik",
+          "sans",
+          "sitesi",
+          "size",
+          "tarz",
+          "turkce",
+          "verir",
+          "yeni"
+        ]
+      }
+    },
+    "DiziLife": {
+      "history": [
+        {
+          "from": "https://dizi79.life",
+          "to": "https://dizi82.life",
+          "reason": "HTTP redirect from primary domain to https://dizi82.life/; provider module brand matched candidate page header"
+        }
+      ],
+      "identityProfile": {
+        "title": "dizi.life — Diziler ve Filmler",
+        "h1": "Dizi.life — Türkçe dizi ve film izleme platformu",
+        "siteName": "dizi.life",
+        "description": "Dizi.life Türkçe dizi/film izleme platformu — yabancı diziler, yeni filmler, son bölümler.",
+        "tokens": [
+          "bolumler",
+          "dizi",
+          "diziler",
+          "film",
+          "filmler",
+          "izleme",
+          "life",
+          "platformu",
+          "son",
+          "turkce",
+          "yabanc",
+          "yeni"
+        ]
+      },
+      "lastSwitch": {
+        "from": "https://dizi79.life",
+        "to": "https://dizi82.life",
+        "reason": "HTTP redirect from primary domain to https://dizi82.life/; provider module brand matched candidate page header"
+      }
+    },
+    "DiziPal": {},
+    "DiziPod": {},
+    "DiziSol": {},
+    "DiziYou": {},
+    "Dizigecesi": {},
+    "Dizilla": {},
+    "Dramadizilerim": {
+      "identityProfile": {
+        "title": "Drama Dizilerim - Dikey Mini Dizi & Kısa Dizi İzle",
+        "h1": "Drama Dizilerim — Dikey Mini Dizi, Kısa Dizi ve Drama Dizileri İzle",
+        "siteName": "Drama Dizilerim",
+        "description": "ReelShort, DramaBox, ShortMax ve DramaWave dikey mini dizilerini Full HD Türkçe dublaj ve altyazılı seçenekleriyle ücretsiz izleyin. En popüler kısa diziler ve TikTok dramaları Drama Dizilerim'de!",
+        "tokens": [
+          "altyaz",
+          "dikey",
+          "dizi",
+          "diziler",
+          "dizileri",
+          "dizilerim",
+          "dizilerini",
+          "drama",
+          "dramabox",
+          "dramalar",
+          "dramawave",
+          "dublaj",
+          "full",
+          "izle",
+          "izleyin",
+          "mini",
+          "populer",
+          "reelshort",
+          "secenekleriyle",
+          "shortmax",
+          "tiktok",
+          "turkce",
+          "ucretsiz"
+        ]
+      }
+    },
+    "FilmKutusu": {},
+    "FilmMakinesi": {},
+    "FilmModu": {
+      "identityProfile": {
+        "title": "Filmmodu: Film izle, 1080p Kalitesinde HD Film izle",
+        "h1": "",
+        "siteName": "",
+        "description": "Film modun geldiyse yüksek kalitede hd film izle, 1080p izleyebileceğiniz reklamsız ve hızlı film sitesi.",
+        "tokens": [
+          "1080p",
+          "film",
+          "filmmodu",
+          "geldiyse",
+          "izle",
+          "izleyebileceginiz",
+          "kalitede",
+          "kalitesinde",
+          "modun",
+          "reklams",
+          "sitesi",
+          "yuksek"
+        ]
+      }
+    },
+    "FilmizleHell": {},
+    "Flix": {
+      "identityProfile": {
+        "title": "Fixbet TV | Canlı Maç izle, Beinsports izle",
+        "h1": "BEIN SPORTS 1",
+        "siteName": "",
+        "description": "Fixbet TV online ve hd canlı maç izlemenin vazgeçilmez adresi. Fixbet TV ile tüm süper lig maçlarını kesintisiz bir şekilde hd ve donmadan izleyebilirsiniz.",
+        "tokens": [
+          "adresi",
+          "bein",
+          "beinsports",
+          "bir",
+          "canl",
+          "donmadan",
+          "fixbet",
+          "ile",
+          "izle",
+          "izlemenin",
+          "izleyebilirsiniz",
+          "kesintisiz",
+          "lig",
+          "mac",
+          "maclar",
+          "online",
+          "sekilde",
+          "sports",
+          "super",
+          "tum",
+          "vazgecilmez"
+        ]
+      }
+    },
+    "FullHDFilmizlesene": {},
+    "HDFilmCehennemi": {
+      "history": [
+        {
+          "from": "https://www.hdfilmcehennemi.nl",
+          "to": "https://hdfilmcehennemi4.co",
+          "reason": "web search nomination for '\"HDFilmCehennemi\" official site'; provider module brand matched candidate page header"
+        }
+      ],
+      "identityProfile": {
+        "title": "HDFilmcehennemi | Film izle - Full HD 1080p",
+        "h1": "HDFilmcehennemi | Film izle - Full HD 1080p",
+        "siteName": "HDFilmcehennemi",
+        "description": "HDFilmcehennemi ile en yeni yerli ve yabancı filmleri Full HD 1080p kalitesinde izleyin. Türkçe dublaj ve altyazılı film izle, kesintisiz donmadan film keyfi.",
+        "tokens": [
+          "1080p",
+          "altyaz",
+          "donmadan",
+          "dublaj",
+          "film",
+          "filmleri",
+          "full",
+          "hdfilmcehennemi",
+          "ile",
+          "izle",
+          "izleyin",
+          "kalitesinde",
+          "kesintisiz",
+          "keyfi",
+          "turkce",
+          "yabanc",
+          "yeni",
+          "yerli"
+        ]
+      },
+      "lastSwitch": {
+        "from": "https://www.hdfilmcehennemi.nl",
+        "to": "https://hdfilmcehennemi4.co",
+        "reason": "web search nomination for '\"HDFilmCehennemi\" official site'; provider module brand matched candidate page header"
+      }
+    },
+    "JetFilmizle": {
+      "history": [
+        {
+          "from": "https://jetfilmizle.now",
+          "to": "https://jetfilmizle.app",
+          "reason": "HTTP redirect from primary domain to https://jetfilmizle.app/; provider module brand matched candidate page header"
+        }
+      ],
+      "identityProfile": {
+        "title": "JetFilmizle - Film İzle, Türkçe Dublaj, Altyazılı ve Yerli Filmler",
+        "h1": "Film İzle - Türkçe Dublaj, Altyazılı, Yerli Filmler",
+        "siteName": "JetFilmizle",
+        "description": "Film izle arayanlar için yeni filmler, popüler yapımlar, yıl ve tür filtreleri, Türkçe dublaj ve altyazılı seçenekler tek yerde.",
+        "tokens": [
+          "altyaz",
+          "arayanlar",
+          "dublaj",
+          "film",
+          "filmler",
+          "filtreleri",
+          "icin",
+          "izle",
+          "jetfilmizle",
+          "mlar",
+          "populer",
+          "secenekler",
+          "tek",
+          "tur",
+          "turkce",
+          "yap",
+          "yeni",
+          "yerde",
+          "yerli"
+        ]
+      },
+      "lastSwitch": {
+        "from": "https://jetfilmizle.now",
+        "to": "https://jetfilmizle.app",
+        "reason": "HTTP redirect from primary domain to https://jetfilmizle.app/; provider module brand matched candidate page header"
+      }
+    },
+    "PatronSH": {
+      "identityProfile": {
+        "title": "Patronspor",
+        "h1": "",
+        "siteName": "",
+        "description": "Yüksek çözünürlükte canlı maç izle deneyimi için Patronspor ve Taraftarium24 yayınları burada. Futbol ve basketbol heyecanını şifresiz yaşayın.",
+        "tokens": [
+          "basketbol",
+          "burada",
+          "canl",
+          "cozunurlukte",
+          "deneyimi",
+          "futbol",
+          "heyecan",
+          "icin",
+          "izle",
+          "mac",
+          "nlar",
+          "patronspor",
+          "sifresiz",
+          "taraftarium24",
+          "yasay",
+          "yay",
+          "yuksek"
+        ]
+      }
+    },
+    "RecTV": {},
+    "Reelpulse": {},
+    "SetFilmIzle": {
+      "identityProfile": {
+        "title": "Set Film izle | HD Film | Yabancı Dizi Ara Sonraki sayfa",
+        "h1": "SetFilmizle — Film ve dizi izlemenin en kolay yolu.",
+        "siteName": "Set Film izle",
+        "description": "Setfilmizle ile en yeni filmleri ve yabancı dizileri 1080p Full HD kalitesinde, Türkçe dublaj veya altyazılı seçenekleriyle donmadan izleyin. Üyelik gerektirmeden, kesintisiz film keyfi sizi bekliyor.",
+        "tokens": [
+          "1080p",
+          "altyaz",
+          "ara",
+          "bekliyor",
+          "dizi",
+          "dizileri",
+          "donmadan",
+          "dublaj",
+          "film",
+          "filmleri",
+          "full",
+          "gerektirmeden",
+          "ile",
+          "izle",
+          "izlemenin",
+          "izleyin",
+          "kalitesinde",
+          "kesintisiz",
+          "keyfi",
+          "kolay",
+          "sayfa",
+          "secenekleriyle",
+          "set",
+          "setfilmizle",
+          "sizi",
+          "sonraki",
+          "turkce",
+          "uyelik",
+          "veya",
+          "yabanc",
+          "yeni",
+          "yolu"
+        ]
+      }
+    },
+    "SinezyTo": {
+      "identityProfile": {
+        "title": "Sinezy: Film İzle, Full HD Yabancı Filmler",
+        "h1": "Film İzle: sinezy ile Binlerce Kaliteli Film Arşivi",
+        "siteName": "Yabancı Film İzleme Sitesi",
+        "description": "Yerli ve yabancı film izle! Türkçe Dublaj ve Alt Yazılı Seçenekleriyle full hd film izlemek için En çok tercih edilen adres!",
+        "tokens": [
+          "adres",
+          "alt",
+          "arsivi",
+          "binlerce",
+          "cok",
+          "dublaj",
+          "edilen",
+          "film",
+          "filmler",
+          "full",
+          "icin",
+          "ile",
+          "izle",
+          "izleme",
+          "izlemek",
+          "kaliteli",
+          "secenekleriyle",
+          "sinezy",
+          "sitesi",
+          "tercih",
+          "turkce",
+          "yabanc",
+          "yaz",
+          "yerli"
+        ]
+      }
+    },
+    "TVDiziler": {
+      "identityProfile": {
+        "title": "Dizi izle, Yerli ve Full HD Diziler, Dizi Seyret | TvDiziler.tv",
+        "h1": "",
+        "siteName": "",
+        "description": "Ücretsiz yerli dizi izleme sitesi en popüler tv diziler tek parça hd kalitesiyle ve reklamsız olarak son bölüm tv dizileri izleyin.",
+        "tokens": [
+          "bolum",
+          "dizi",
+          "diziler",
+          "dizileri",
+          "full",
+          "izle",
+          "izleme",
+          "izleyin",
+          "kalitesiyle",
+          "olarak",
+          "parca",
+          "populer",
+          "reklams",
+          "seyret",
+          "sitesi",
+          "son",
+          "tek",
+          "tvdiziler",
+          "ucretsiz",
+          "yerli"
+        ]
+      }
+    },
+    "TrDiziIzle": {
+      "identityProfile": {
+        "title": "Dizi izle, Yerli diziler, Full dizi, Mobil dizi izle, Dizi tr2, Trdiziizle",
+        "h1": "Son Eklenen Diziler",
+        "siteName": "Trdiziizle",
+        "description": "Full hd ve tek parça hemde reklamsız yerli dizi izlemek mi istiyorsunuz. O halde bu site sorunsuz ve canlı dizi izle meniz için tam size göre tr2",
+        "tokens": [
+          "canl",
+          "dizi",
+          "diziler",
+          "eklenen",
+          "full",
+          "gore",
+          "halde",
+          "hemde",
+          "icin",
+          "istiyorsunuz",
+          "izle",
+          "izlemek",
+          "meniz",
+          "mobil",
+          "parca",
+          "reklams",
+          "site",
+          "size",
+          "son",
+          "sorunsuz",
+          "tam",
+          "tek",
+          "tr2",
+          "trdiziizle",
+          "yerli"
+        ]
+      }
+    },
+    "WebDramaTurkey": {
+      "identityProfile": {
+        "title": "Web Drama Turkey - Kore, Çin, Japon Dizileri İzle",
+        "h1": "",
+        "siteName": "webdramaturkey",
+        "description": "Kore dizisi izle, çin dizisi izle, japon dizisi izle, kore dizileri izle, kore filmleri, asya dizileri, çin filmleri, japon filmleri, bl dizi izle, asya dizisi izle, web drama izle.",
+        "tokens": [
+          "asya",
+          "cin",
+          "dizi",
+          "dizileri",
+          "dizisi",
+          "drama",
+          "filmleri",
+          "izle",
+          "japon",
+          "kore",
+          "turkey",
+          "web",
+          "webdramaturkey"
+        ]
+      }
+    }
+  }
 }
