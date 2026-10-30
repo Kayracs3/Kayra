@@ -1031,6 +1031,59 @@ class FilmizleHell : MainAPI() {
             (uri.host.orEmpty() + uri.path.orEmpty() + queryHint).take(260)
         }.getOrDefault(raw.substringBefore('?').take(240))
 
+    private fun extractPlayturkaMasterUrls(
+        embedUrl: String,
+        document: Document,
+        html: String
+    ): List<Pair<String, String>> {
+        val result = LinkedHashMap<String, String>()
+        val decoded = decode(html)
+        val absolutePattern = Regex(
+            """(?i)(?:https?:)?//p\\.playturka\\.space/videos/([A-Za-z0-9_-]{1,64})/master\\.m3u8(?:\\?[^"'<>\\s]*)?"""
+        )
+
+        absolutePattern.findAll(decoded).forEach { match ->
+            val rawUrl = match.value
+            val id = match.groupValues.getOrNull(1).orEmpty()
+            val fixed = fixUrl(rawUrl, embedUrl) ?: return@forEach
+            if (id.isNotBlank() && isDirectMedia(fixed)) result.putIfAbsent(id, fixed)
+        }
+
+        val host = runCatching {
+            URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT)
+        }.getOrDefault("")
+        if (host == "p.playturka.space") {
+            val relativePattern = Regex(
+                """(?i)(/videos/([A-Za-z0-9_-]{1,64})/master\\.m3u8(?:\\?[^"'<>\\s]*)?)"""
+            )
+            relativePattern.findAll(decoded).forEach { match ->
+                val fixed = fixUrl(match.groupValues[1], embedUrl) ?: return@forEach
+                val id = match.groupValues.getOrNull(2).orEmpty()
+                if (id.isNotBlank() && isDirectMedia(fixed)) result.putIfAbsent(id, fixed)
+            }
+
+            document.select(
+                "a[href], iframe[src], iframe[data-src], video[src], source[src], " +
+                    "[data-src], [data-url], [data-hls], [data-file]"
+            ).forEach { element ->
+                val raw = listOf(
+                    "href", "src", "data-src", "data-url", "data-hls", "data-file"
+                ).asSequence()
+                    .map { element.attr(it).trim() }
+                    .firstOrNull {
+                        it.contains("/videos/", true) &&
+                            it.contains("/master.m3u8", true)
+                    } ?: return@forEach
+                val fixed = fixUrl(raw, embedUrl) ?: return@forEach
+                val id = Regex("""(?i)/videos/([A-Za-z0-9_-]{1,64})/master\\.m3u8""")
+                    .find(fixed)?.groupValues?.getOrNull(1).orEmpty()
+                if (id.isNotBlank()) result.putIfAbsent(id, fixed)
+            }
+        }
+
+        return result.map { (id, url) -> id to url }
+    }
+
     private fun extractPlayturkaIds(embedUrl: String, document: Document, html: String): Set<String> {
         val host = runCatching { URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host != "p.playturka.space" && !html.contains("p.playturka.space", true)) return emptySet()
@@ -1044,9 +1097,10 @@ class FilmizleHell : MainAPI() {
         Regex("""(?i)(?:video[_-]?id|source[_-]?id|stream[_-]?id)=([A-Za-z0-9_-]{5,64})""")
             .find(decodedFragment)?.groupValues?.getOrNull(1)?.let { if (acceptedId.matches(it)) ids.add(it) }
         val longId = Regex("""^[A-Za-z0-9_-]{5,24}$""")
+        // Do not treat authentication tokens or cache-busting timestamps as video IDs.
         val queryNames = setOf(
-            "id", "v", "vid", "video", "video_id", "videoid", "source", "source_id",
-            "sourceid", "stream", "stream_id", "streamid", "media", "media_id", "key", "token"
+            "id", "vid", "video", "video_id", "videoid", "source", "source_id",
+            "sourceid", "stream", "stream_id", "streamid", "media", "media_id"
         )
         runCatching { URI(embedUrl).rawQuery.orEmpty() }.getOrDefault("")
             .split('&')
@@ -1541,7 +1595,12 @@ class FilmizleHell : MainAPI() {
         val host = runCatching { URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host != "p.playturka.space" && !html.contains("p.playturka.space", true)) return 0
 
-        val ids = LinkedHashSet(extractPlayturkaIds(embedUrl, document, html))
+        val exactMasters = extractPlayturkaMasterUrls(embedUrl, document, html)
+        val ids = LinkedHashSet<String>()
+        // Signed master URLs contain the real video ID and must be tried before
+        // generic IDs found in buttons or unrelated page elements.
+        exactMasters.forEach { (id, _) -> ids.add(id) }
+        ids.addAll(extractPlayturkaIds(embedUrl, document, html))
         if (ids.isEmpty()) {
             val scriptUrls = document.select("script[src]")
                 .mapNotNull { fixUrl(it.attr("src"), embedUrl) }
@@ -1707,8 +1766,16 @@ class FilmizleHell : MainAPI() {
             }
 
             publishPlayturkaApiSubtitles(id, playerReferer, seenSubtitles, subtitleCallback)
-            for (fileName in listOf("master.m3u8", "index.m3u8")) {
-                val manifest = "https://p.playturka.space/videos/" + id + "/" + fileName
+
+            // Keep the exact signed master URL from the page. Rebuilding it from
+            // the ID drops token/expiry parameters and can lead to a fallback or
+            // advertisement manifest instead of the actual film stream.
+            val manifests = LinkedHashSet<String>()
+            exactMasters.filter { it.first == id }.forEach { manifests.add(it.second) }
+            manifests.add("https://p.playturka.space/videos/" + id + "/master.m3u8")
+            manifests.add("https://p.playturka.space/videos/" + id + "/index.m3u8")
+
+            for (manifest in manifests) {
                 val response = runCatching {
                     app.get(
                         manifest,
@@ -1722,17 +1789,31 @@ class FilmizleHell : MainAPI() {
                 }.getOrNull() ?: continue
                 val body = response.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
                 val contentType = response.headers["content-type"].orEmpty()
-                if (response.isSuccessful &&
-                    (body.startsWith("#EXTM3U") ||
-                        contentType.contains("mpegurl", true) ||
-                        contentType.contains("m3u8", true))
-                ) {
+                if (response.isSuccessful && body.startsWith("#EXTM3U")) {
                     if (body.startsWith("#EXTM3U")) {
                         publishHlsSubtitleTracks(manifest, body, seenSubtitles, subtitleCallback)
                     }
-                    val resolved = response.url.takeIf { isDirectMedia(it) } ?: manifest
-                    publishDirect(resolved, playerReferer, callback)
-                    Log.d(name, "Playturka manifest doğrulandı: id=" + id + ", url=" + safeLogUrl(resolved))
+
+                    // Master playlist must stay intact: audio can be a separate
+                    // EXT-X-MEDIA rendition such as playlist_aud0.m3u8. Passing
+                    // only the first video variant would silently drop that track.
+                    val audioLines = Regex("""(?im)^#EXT-X-MEDIA:[^\\r\\n]*TYPE=AUDIO[^\\r\\n]*$""")
+                        .findAll(body)
+                        .map { it.value }
+                        .toList()
+                    val referencesAudioSidecar = body.contains("playlist_aud0.m3u8", true)
+                    Log.d(
+                        name,
+                        "Playturka master doğrulandı: id=" + id +
+                            ", signed=" + manifest.contains("token=", true) +
+                            ", audioRenditions=" + audioLines.size +
+                            ", aud0Sidecar=" + referencesAudioSidecar +
+                            ", url=" + safeLogUrl(manifest)
+                    )
+
+                    // Do not replace the signed master with the unsigned response
+                    // URL; keep the tokenized URL and the manifest's audio group.
+                    publishDirect(manifest, playerReferer, callback)
                     found++
                     break
                 } else {
@@ -2003,7 +2084,16 @@ class FilmizleHell : MainAPI() {
             }
         }
 
-        for (candidate in allCandidates.take(20)) resolve(candidate, page.url, 0)
+        // Prefer the actual Playturka master before generic media candidates,
+        // which can include teaser/ad playlists embedded by the page or its scripts.
+        val orderedCandidates = allCandidates.sortedBy { candidate ->
+            val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
+            val path = pathOf(candidate)
+            if (host.equals("p.playturka.space", true) &&
+                Regex("""(?i)^/videos/[A-Za-z0-9_-]{1,64}/master\\.m3u8$""").matches(path)
+            ) 0 else 1
+        }
+        for (candidate in orderedCandidates.take(20)) resolve(candidate, page.url, 0)
 
         Log.d(name, "loadLinks: found=" + found + ", visited=" + visited.size + ", candidates=" + allCandidates.size)
         return found
