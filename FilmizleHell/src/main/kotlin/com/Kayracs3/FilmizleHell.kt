@@ -1986,7 +1986,7 @@ class FilmizleHell : MainAPI() {
             return null
         }
 
-        val mediaDuration = Regex("""(?im)^#EXTINF:([0-9]+(?:\\.[0-9]+)?)(?:,|$)""")
+        val mediaDuration = Regex("""(?im)^#EXTINF:([0-9]+(?:\.[0-9]+)?)(?:,|$)""")
             .findAll(body)
             .mapNotNull { it.groupValues.getOrNull(1)?.toDoubleOrNull() }
             .sum()
@@ -2003,7 +2003,7 @@ class FilmizleHell : MainAPI() {
         }
 
         if (variants.isEmpty()) {
-            val audioUris = Regex("""(?im)^#EXT-X-MEDIA:[^\\r\\n]*TYPE=AUDIO[^\\r\\n]*URI="([^"]+)"""")
+            val audioUris = Regex("""(?im)^#EXT-X-MEDIA:[^\r\n]*TYPE=AUDIO[^\r\n]*URI="([^"]+)"""")
                 .findAll(body)
                 .mapNotNull { it.groupValues.getOrNull(1) }
                 .toSet()
@@ -2021,7 +2021,7 @@ class FilmizleHell : MainAPI() {
             val duration = fetchPlayturkaHlsDurationSeconds(
                 variant, response.url, depth + 1, visited
             ) ?: continue
-            if (longest == null || duration > longest) longest = duration
+            if (duration > (longest ?: Double.NEGATIVE_INFINITY)) longest = duration
         }
         return longest
     }
