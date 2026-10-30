@@ -5,6 +5,9 @@ import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -1540,7 +1543,8 @@ class FilmizleHell : MainAPI() {
         id: String,
         referer: String,
         seenSubtitles: MutableSet<String>,
-        subtitleCallback: (SubtitleFile) -> Unit
+        subtitleCallback: (SubtitleFile) -> Unit,
+        scanScripts: Boolean = true
     ): PlayturkaPlayerConfig {
         // The visible Playturka player can expose subtitle tracks in its HTML/JS
         // player page even when its master.m3u8 contains no EXT-X-MEDIA entries.
@@ -1605,38 +1609,44 @@ class FilmizleHell : MainAPI() {
         // placing <track> elements in the initial HTML. Search the small set of
         // player-related scripts explicitly, because filenames such as bundle.js
         // may not contain the words "subtitle" or "player".
-        val scriptUrls = response.document.select("script[src]")
-            .mapNotNull { fixUrl(it.attr("src"), response.url) }
-            .distinct()
-            .filter { pathOf(it).substringBefore('?').endsWith(".js", true) }
-            .sortedByDescending { scriptUrl ->
-                val path = pathOf(scriptUrl).lowercase(Locale.ROOT)
-                listOf("subtitle", "caption", "track", "player", "video", "bundle", "fm", "source", "app")
-                    .count { path.contains(it) }
-            }
-            .take(5)
-
-        for (scriptUrl in scriptUrls) {
-            val script = runCatching {
-                app.get(
-                    scriptUrl,
-                    headers = requestHeaders + ("Referer" to response.url),
-                    referer = response.url,
-                    allowRedirects = true,
-                    timeout = 7000
+        if (scanScripts) {
+            val scriptUrls = response.document.select("script[src]")
+                .mapNotNull { fixUrl(it.attr("src"), response.url) }
+                .distinct()
+                .filter { pathOf(it).substringBefore('?').endsWith(".js", true) }
+                .sortedByDescending { scriptUrl ->
+                    val path = pathOf(scriptUrl).lowercase(Locale.ROOT)
+                    listOf("subtitle", "caption", "track", "player", "video", "bundle", "fm", "source", "app")
+                        .count { path.contains(it) }
+                }
+                .take(5)
+    
+            for (scriptUrl in scriptUrls) {
+                val script = runCatching {
+                    app.get(
+                        scriptUrl,
+                        headers = requestHeaders + ("Referer" to response.url),
+                        referer = response.url,
+                        allowRedirects = true,
+                        timeout = 7000
+                    )
+                }.onFailure {
+                    Log.d(name, "Playturka altyazı JS alınamadı: " + safeLogUrl(scriptUrl))
+                }.getOrNull() ?: continue
+    
+                if (!script.isSuccessful || script.text.isBlank() || script.text.length > 2_000_000) continue
+                publishSubtitles(
+                    Jsoup.parse("", script.url),
+                    script.text,
+                    script.url,
+                    seenSubtitles,
+                    subtitleCallback
                 )
-            }.onFailure {
-                Log.d(name, "Playturka altyazı JS alınamadı: " + safeLogUrl(scriptUrl))
-            }.getOrNull() ?: continue
-
-            if (!script.isSuccessful || script.text.isBlank() || script.text.length > 2_000_000) continue
-            publishSubtitles(
-                Jsoup.parse("", script.url),
-                script.text,
-                script.url,
-                seenSubtitles,
-                subtitleCallback
-            )
+            }
+    
+    
+        } else {
+            Log.d(name, "Playturka altyazı JS taraması atlandı: doğrudan Türkçe VTT mevcut")
         }
 
         val added = seenSubtitles.size - before
@@ -1982,11 +1992,12 @@ class FilmizleHell : MainAPI() {
         playlistUrl: String,
         referer: String,
         depth: Int = 0,
-        visited: MutableSet<String> = LinkedHashSet()
+        visited: MutableSet<String> = LinkedHashSet(),
+        initialBody: String? = null
     ): Double? {
         if (depth > 2 || !visited.add(playlistUrl)) return null
 
-        val response = runCatching {
+        val response = if (initialBody == null) runCatching {
             app.get(
                 playlistUrl,
                 headers = requestHeaders + mapOf("Accept" to "*/*", "Referer" to referer),
@@ -1997,14 +2008,17 @@ class FilmizleHell : MainAPI() {
             )
         }.onFailure {
             Log.d(name, "Playturka süre kontrolü isteği başarısız: " + safeLogUrl(playlistUrl))
-        }.getOrNull() ?: return null
+        }.getOrNull() else null
 
-        val body = response.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
-        if (!response.isSuccessful || !body.startsWith("#EXTM3U")) {
+        if (initialBody == null && response == null) return null
+        val effectivePlaylistUrl = response?.url ?: playlistUrl
+        val body = (initialBody ?: response?.text.orEmpty())
+            .trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+        if ((initialBody == null && response?.isSuccessful != true) || !body.startsWith("#EXTM3U")) {
             Log.d(
                 name,
                 "Playturka süre kontrolü playlist değil: " + safeLogUrl(playlistUrl) +
-                    ", HTTP=" + response.code
+                    ", HTTP=" + (response?.code ?: 0)
             )
             return null
         }
@@ -2022,7 +2036,7 @@ class FilmizleHell : MainAPI() {
             val uriLine = lines.drop(index + 1).firstOrNull {
                 it.isNotBlank() && !it.trim().startsWith("#")
             } ?: continue
-            fixUrl(uriLine.trim(), response.url)?.let(variants::add)
+            fixUrl(uriLine.trim(), effectivePlaylistUrl)?.let(variants::add)
         }
 
         if (variants.isEmpty()) {
@@ -2035,22 +2049,27 @@ class FilmizleHell : MainAPI() {
                 if (line.isBlank() || line.startsWith("#") ||
                     !line.contains(".m3u8", true) || line in audioUris
                 ) return@forEach
-                fixUrl(line, response.url)?.let(variants::add)
+                fixUrl(line, effectivePlaylistUrl)?.let(variants::add)
             }
         }
 
-        // Do not accept a master just because one quality is long: the player may
-        // select another rendition (including a short ad/preview). Every video
-        // rendition must be fetched and must meet the movie-duration threshold.
+        // Every video rendition is still checked, but independent child playlists
+        // are fetched concurrently. Each branch gets its own visited set.
         val selectedVariants = variants.toList()
         if (selectedVariants.isEmpty() || selectedVariants.size > 8) return null
 
-        val variantDurations = ArrayList<Pair<String, Double>>()
-        for (variant in selectedVariants) {
-            val duration = fetchPlayturkaHlsDurationSeconds(
-                variant, response.url, depth + 1, visited
-            ) ?: continue
-            variantDurations.add(variant to duration)
+        val variantDurations = coroutineScope {
+            selectedVariants.map { variant ->
+                async {
+                    val duration = fetchPlayturkaHlsDurationSeconds(
+                        variant,
+                        effectivePlaylistUrl,
+                        depth + 1,
+                        LinkedHashSet(visited)
+                    )
+                    duration?.let { variant to it }
+                }
+            }.awaitAll().filterNotNull()
         }
 
         val allVariantsVerified = variantDurations.size == selectedVariants.size
@@ -2116,9 +2135,12 @@ class FilmizleHell : MainAPI() {
         manifestUrl: String,
         referer: String,
         videoId: String,
-        expectedRuntimeMinutes: Int?
+        expectedRuntimeMinutes: Int?,
+        initialBody: String? = null
     ): Double? {
-        val duration = fetchPlayturkaHlsDurationSeconds(manifestUrl, referer)
+        val duration = fetchPlayturkaHlsDurationSeconds(
+            manifestUrl, referer, initialBody = initialBody
+        )
         val minimumSeconds = expectedRuntimeMinutes
             ?.takeIf { it in 10..600 }
             ?.let { it * 60.0 * 0.55 }
@@ -2159,7 +2181,7 @@ class FilmizleHell : MainAPI() {
         // generic IDs found in buttons or unrelated page elements.
         ids.addAll(exactMasters.keys)
         ids.addAll(extractPlayturkaIds(embedUrl, document, html))
-        if (exactMasters.isEmpty()) {
+        if (exactMasters.isEmpty() && ids.isEmpty()) {
             val scriptUrls = document.select("script[src]")
                 .mapNotNull { fixUrl(it.attr("src"), embedUrl) }
                 .distinct()
@@ -2414,7 +2436,8 @@ class FilmizleHell : MainAPI() {
             }
 
             val playerConfig = publishPlayturkaApiSubtitles(
-                id, playerReferer, seenSubtitles, subtitleCallback
+                id, playerReferer, seenSubtitles, subtitleCallback,
+                scanScripts = !directSubtitleAdded
             )
 
             // The unsigned /videos/{id}/master.m3u8 path can return a short
@@ -2449,7 +2472,7 @@ class FilmizleHell : MainAPI() {
                 val contentType = response.headers["content-type"].orEmpty()
                 if (response.isSuccessful && body.startsWith("#EXTM3U")) {
                     val videoDurationSeconds = validatePlayturkaMovieStreamDuration(
-                        manifest, playerReferer, id, expectedRuntimeMinutes
+                        manifest, playerReferer, id, expectedRuntimeMinutes, body
                     )
                     if (videoDurationSeconds == null) {
                         Log.w(
@@ -2514,12 +2537,14 @@ class FilmizleHell : MainAPI() {
                     val hasExternalAudioSidecar = audioLines.any {
                         it.contains("URI=", true)
                     }
-                    val audioDurations = ArrayList<Pair<String, Double?>>()
-                    for (audioUrl in audioPlaylistUrls) {
-                        val audioDuration = fetchPlayturkaHlsDurationSeconds(
-                            audioUrl, playerReferer
-                        )
-                        audioDurations.add(audioUrl to audioDuration)
+                    val audioDurations = coroutineScope {
+                        audioPlaylistUrls.map { audioUrl ->
+                            async {
+                                audioUrl to fetchPlayturkaHlsDurationSeconds(
+                                    audioUrl, playerReferer
+                                )
+                            }
+                        }.awaitAll()
                     }
                     val minimumAudioSeconds = maxOf(300.0, videoDurationSeconds * 0.70)
                     val audioSidecarsVerified = !hasExternalAudioSidecar ||
@@ -2746,18 +2771,21 @@ class FilmizleHell : MainAPI() {
         }
         publishSubtitles(page.document, page.text, page.url, seenSubtitles, emitSubtitle)
 
-        // Fetch catalogue subtitles before spending time resolving player embeds.
-        val fallbackCount = publishFallbackTurkishSubtitles(data, seenSubtitles, emitSubtitle)
-        Log.d(name, "Erken harici Türkçe altyazı yedeği: count=" + fallbackCount +
-            ", embeddedEmitted=" + emittedSubtitleCount)
-
         val visited = HashSet<String>()
         val visitedScripts = HashSet<String>()
         val (pageDirect, pageEmbeds) = collectPlayerCandidates(page.document, page.text, page.url)
-        val (scriptDirect, scriptEmbeds) =
-                collectExternalScriptCandidates(
+        val hasPagePlayturkaEmbed = pageEmbeds.any { candidate ->
+            runCatching { URI(candidate).host.orEmpty().equals("p.playturka.space", true) }
+                .getOrDefault(false)
+        }
+        val (scriptDirect, scriptEmbeds) = if (hasPagePlayturkaEmbed) {
+            Log.d(name, "Film sayfası JS taraması atlandı: Playturka iframe doğrudan bulundu")
+            emptySet<String>() to emptySet<String>()
+        } else {
+            collectExternalScriptCandidates(
                 page.document, page.url, page.url, visitedScripts, seenSubtitles, emitSubtitle
-                )
+            )
+        }
         val direct = LinkedHashSet<String>().apply {
             addAll(pageDirect)
             addAll(scriptDirect)
@@ -2770,10 +2798,11 @@ class FilmizleHell : MainAPI() {
         val expectedRuntimeMinutes = parseRuntime(page.document, detailContext(page.document))
         val pageHost = runCatching { URI(page.url).host.orEmpty().lowercase(Locale.ROOT) }
             .getOrDefault("")
-        val hasDedicatedPlayturkaEmbed = embeds.any { candidate ->
-            runCatching { URI(candidate).host.orEmpty().equals("p.playturka.space", true) }
-                .getOrDefault(false)
-        }
+        val hasDedicatedPlayturkaEmbed = hasPagePlayturkaEmbed ||
+            embeds.any { candidate ->
+                runCatching { URI(candidate).host.orEmpty().equals("p.playturka.space", true) }
+                    .getOrDefault(false)
+            }
         val pageHasSignedPlayturkaMaster = extractPlayturkaMasterUrls(
             page.url, page.document, page.text
         ).any { (id, url) -> isSignedPlayturkaMaster(url, id) }
@@ -2886,6 +2915,32 @@ class FilmizleHell : MainAPI() {
             ) 0 else 1
         }
         for (candidate in orderedCandidates.take(20)) resolve(candidate, page.url, 0)
+
+        // If the iframe was present but the normal Playturka path failed, retain
+        // the generic JavaScript-source fallback rather than dropping alternatives.
+        if (!found && hasDedicatedPlayturkaEmbed) {
+            val (fallbackDirect, fallbackEmbeds) = collectExternalScriptCandidates(
+                page.document, page.url, page.url, visitedScripts, seenSubtitles, emitSubtitle
+            )
+            for (url in fallbackDirect) {
+                if (isDirectMedia(url)) {
+                    publishDirect(url, page.url, callback)
+                    found = true
+                }
+            }
+            for (candidate in fallbackEmbeds.take(12)) {
+                resolve(candidate, page.url, 0)
+            }
+        }
+
+        // Prefer native captions. The external catalogue is optional and only
+        // searched when the page/player yielded no subtitle at all.
+        if (emittedSubtitleCount == 0) {
+            val fallbackCount = publishFallbackTurkishSubtitles(data, seenSubtitles, emitSubtitle)
+            Log.d(name, "Harici Türkçe altyazı yedeği: count=" + fallbackCount)
+        } else {
+            Log.d(name, "Harici altyazı araması atlandı: gömülü altyazı mevcut")
+        }
 
         Log.d(name, "loadLinks: found=" + found + ", visited=" + visited.size + ", candidates=" + allCandidates.size)
         return found
