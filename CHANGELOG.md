@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:fd4a2f5c9e4cd1312b0960b342f7e55b62f8f4d3 -->
+### Do not fall back from signed Playturka URLs to unsigned ad candidates
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [fd4a2f5](https://github.com/Kayracs3/Kayra/commit/fd4a2f5c9e4cd1312b0960b342f7e55b62f8f4d3)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:4368cfd7e1a12e814fbf398dc5b0172eb3bfa218 -->
 ### Bump FilmizleHell version for Playturka HLS source fix
 
