@@ -642,10 +642,11 @@ def main() -> int:
     policy = registry.setdefault("policy", {})
     policy["automaticSwitching"] = True
     policy["switchRule"] = (
-        "A provider domain may be changed only after the configured URL fails two independent checks with "
-        "HTTP 404/410, a persistent parked-domain page, permanent DNS-not-found, or connection-refused. "
+        "A provider domain may be changed only after two independent checks confirm HTTP 404/410, a persistent "
+        "parked-domain page, permanent DNS-not-found, connection-refused, or a TLS hostname/common-name mismatch. "
         "Any 2xx/3xx response, including a redirect to another hostname, means the current URL is working and "
-        "must be retained. 401/403/429/451, Cloudflare challenges, 5xx responses and timeouts never trigger a switch."
+        "must be retained. 401/403/429/451, Cloudflare challenges, generic TLS issuer/expiry errors, 5xx responses "
+        "and timeouts never trigger a switch."
     )
     policy["limits"] = [
         "Working 2xx/3xx primary domains are immutable to the automatic updater, including domains that redirect.",
