@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:cd459a09e4a351e06a01ec5468c6c7a7b151fbec -->
+### Update mainUrl to new website address
+
+- Etkilenen alanlar: HDFilmCehennemi
+- Commit: [cd459a0](https://github.com/Kayracs3/Kayra/commit/cd459a09e4a351e06a01ec5468c6c7a7b151fbec)
+
+## 2026-10-30
+
+<!-- kayra-commit:cc2d5e7f8e317ea9f411cd2861a08a49966b81ca -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: DiziLife, HDFilmCehennemi, JetFilmizle, Repo / CI
+- Commit: [cc2d5e7](https://github.com/Kayracs3/Kayra/commit/cc2d5e7f8e317ea9f411cd2861a08a49966b81ca)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:6295c0107832984257ab0db25c22151202318d65 -->
 ### Retry domain profile pushes after concurrent master updates
 
