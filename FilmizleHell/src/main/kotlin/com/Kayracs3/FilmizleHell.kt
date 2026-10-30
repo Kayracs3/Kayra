@@ -1105,12 +1105,15 @@ class FilmizleHell : MainAPI() {
         runCatching { URI(embedUrl).rawQuery.orEmpty() }.getOrDefault("")
             .split('&')
             .forEach { pair ->
-                val key = pair.substringBefore('=')
-                if (key.lowercase(Locale.ROOT) in queryNames) {
+                val key = pair.substringBefore('=').lowercase(Locale.ROOT)
+                if (key in queryNames || key == "v") {
                     val rawValue = pair.substringAfter('=', "")
                     val value = runCatching { java.net.URLDecoder.decode(rawValue, "UTF-8") }
                         .getOrDefault(rawValue).trim()
-                    if (acceptedId.matches(value)) ids += value
+                    // A v= parameter may be a video key on older players, but
+                    // long numeric values are cache-busting timestamps, not IDs.
+                    val isTimestamp = key == "v" && value.all { it.isDigit() } && value.length >= 9
+                    if (!isTimestamp && acceptedId.matches(value)) ids += value
                 }
             }
 
@@ -1723,7 +1726,24 @@ class FilmizleHell : MainAPI() {
         }
 
         var found = 0
-        val playerReferer = if (host == "p.playturka.space") embedUrl else "https://p.playturka.space/"
+        val embeddedPlayturkaPage = document.select(
+            "iframe[src], iframe[data-src], iframe[data-url], [data-src], [data-url]"
+        ).mapNotNull { element ->
+            fixUrl(
+                element.attr("data-src").ifBlank {
+                    element.attr("data-url").ifBlank { element.attr("src") }
+                },
+                embedUrl
+            )
+        }.firstOrNull { candidate ->
+            runCatching { URI(candidate).host.orEmpty().equals("p.playturka.space", true) }
+                .getOrDefault(false)
+        }
+        val playerReferer = when {
+            host == "p.playturka.space" -> embedUrl
+            embeddedPlayturkaPage != null -> embeddedPlayturkaPage
+            else -> embedUrl
+        }
         for (id in ids.take(3)) {
             // Playturka uses a direct VTT sidecar next to the HLS files:
             // /videos/{videoId}/subtitles/tr.vtt (sometimes cache-busted with ?v=...).
