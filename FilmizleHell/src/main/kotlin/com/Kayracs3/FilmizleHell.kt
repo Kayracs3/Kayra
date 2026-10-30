@@ -1954,13 +1954,110 @@ class FilmizleHell : MainAPI() {
         return selected
     }
 
+
+    private suspend fun fetchPlayturkaHlsDurationSeconds(
+        playlistUrl: String,
+        referer: String,
+        depth: Int = 0,
+        visited: MutableSet<String> = LinkedHashSet()
+    ): Double? {
+        if (depth > 2 || !visited.add(playlistUrl)) return null
+
+        val response = runCatching {
+            app.get(
+                playlistUrl,
+                headers = requestHeaders + mapOf("Accept" to "*/*", "Referer" to referer),
+                referer = referer,
+                allowRedirects = true,
+                cacheTime = 0,
+                timeout = 9000
+            )
+        }.onFailure {
+            Log.d(name, "Playturka süre kontrolü isteği başarısız: " + safeLogUrl(playlistUrl))
+        }.getOrNull() ?: return null
+
+        val body = response.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+        if (!response.isSuccessful || !body.startsWith("#EXTM3U")) {
+            Log.d(
+                name,
+                "Playturka süre kontrolü playlist değil: " + safeLogUrl(playlistUrl) +
+                    ", HTTP=" + response.code
+            )
+            return null
+        }
+
+        val mediaDuration = Regex("""(?im)^#EXTINF:([0-9]+(?:\\.[0-9]+)?)(?:,|$)""")
+            .findAll(body)
+            .mapNotNull { it.groupValues.getOrNull(1)?.toDoubleOrNull() }
+            .sum()
+        if (mediaDuration > 0.0) return mediaDuration
+
+        val lines = body.lines()
+        val variants = LinkedHashSet<String>()
+        for (index in lines.indices) {
+            if (!lines[index].trim().startsWith("#EXT-X-STREAM-INF", true)) continue
+            val uriLine = lines.drop(index + 1).firstOrNull {
+                it.isNotBlank() && !it.trim().startsWith("#")
+            } ?: continue
+            fixUrl(uriLine.trim(), response.url)?.let(variants::add)
+        }
+
+        if (variants.isEmpty()) {
+            val audioUris = Regex("""(?im)^#EXT-X-MEDIA:[^\\r\\n]*TYPE=AUDIO[^\\r\\n]*URI="([^"]+)"""")
+                .findAll(body)
+                .mapNotNull { it.groupValues.getOrNull(1) }
+                .toSet()
+            lines.forEach { rawLine ->
+                val line = rawLine.trim()
+                if (line.isBlank() || line.startsWith("#") ||
+                    !line.contains(".m3u8", true) || line in audioUris
+                ) return@forEach
+                fixUrl(line, response.url)?.let(variants::add)
+            }
+        }
+
+        var longest: Double? = null
+        for (variant in variants.take(4)) {
+            val duration = fetchPlayturkaHlsDurationSeconds(
+                variant, response.url, depth + 1, visited
+            ) ?: continue
+            if (longest == null || duration > longest) longest = duration
+        }
+        return longest
+    }
+
+    private suspend fun isPlausiblePlayturkaMovieStream(
+        manifestUrl: String,
+        referer: String,
+        videoId: String,
+        expectedRuntimeMinutes: Int?
+    ): Boolean {
+        val duration = fetchPlayturkaHlsDurationSeconds(manifestUrl, referer)
+        val minimumSeconds = expectedRuntimeMinutes
+            ?.takeIf { it in 10..600 }
+            ?.let { it * 60.0 * 0.55 }
+            ?: 300.0
+
+        val accepted = duration != null && duration >= minimumSeconds
+        Log.d(
+            name,
+            "Playturka film süresi kontrolü: id=" + videoId +
+                ", actualSeconds=" + (duration?.toLong()?.toString() ?: "unavailable") +
+                ", expectedMinutes=" + (expectedRuntimeMinutes?.toString() ?: "unknown") +
+                ", minimumSeconds=" + minimumSeconds.toLong() +
+                ", accepted=" + accepted
+        )
+        return accepted
+    }
+
     private suspend fun publishPlayturkaManifestCandidates(
         embedUrl: String,
         document: Document,
         html: String,
         seenSubtitles: MutableSet<String>,
         subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
+        callback: (ExtractorLink) -> Unit,
+        expectedRuntimeMinutes: Int? = null
     ): Int {
         val host = runCatching { URI(embedUrl).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host != "p.playturka.space" && !html.contains("p.playturka.space", true)) return 0
@@ -2265,6 +2362,18 @@ class FilmizleHell : MainAPI() {
                 val body = response.text.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
                 val contentType = response.headers["content-type"].orEmpty()
                 if (response.isSuccessful && body.startsWith("#EXTM3U")) {
+                    val plausibleMovie = isPlausiblePlayturkaMovieStream(
+                        manifest, playerReferer, id, expectedRuntimeMinutes
+                    )
+                    if (!plausibleMovie) {
+                        Log.w(
+                            name,
+                            "Kısa/reklam veya süresi doğrulanamayan Playturka akışı atlandı: id=" +
+                                id + ", url=" + safeLogUrl(manifest)
+                        )
+                        continue
+                    }
+
                     if (body.startsWith("#EXTM3U")) {
                         publishHlsSubtitleTracks(manifest, body, seenSubtitles, subtitleCallback)
                     }
@@ -2478,8 +2587,13 @@ class FilmizleHell : MainAPI() {
             addAll(scriptEmbeds)
         }
         var found = false
+        val expectedRuntimeMinutes = parseRuntime(page.document, detailContext(page.document))
         // FilmizleHell sources are selected client-side; inspect the source metadata on the movie page too.
-        if (publishPlayturkaManifestCandidates(page.url, page.document, page.text, seenSubtitles, emitSubtitle, callback) > 0) {
+        if (publishPlayturkaManifestCandidates(
+                page.url, page.document, page.text, seenSubtitles, emitSubtitle, callback,
+                expectedRuntimeMinutes
+            ) > 0
+        ) {
             found = true
         }
         val allCandidates = LinkedHashSet<String>().apply {
@@ -2529,7 +2643,8 @@ class FilmizleHell : MainAPI() {
                     .getOrDefault(false)
             ) {
                 val playturkaFound = publishPlayturkaManifestCandidates(
-                    nested.url, nested.document, nested.text, seenSubtitles, emitSubtitle, callback
+                    nested.url, nested.document, nested.text, seenSubtitles, emitSubtitle, callback,
+                    expectedRuntimeMinutes
                 )
                 if (playturkaFound > 0) found = true
             }
