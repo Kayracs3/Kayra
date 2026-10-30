@@ -49,6 +49,12 @@ These instructions record the maintainer's established preferences and lessons f
 - AsyaWatch currently has a provider-specific requirement to expose only Turkish and English subtitle options. Do not apply that filter globally to other providers.
 - Preserve working subtitle URLs and request context; distinguish text subtitles (such as VTT/SRT) from subtitle HLS playlists where relevant.
 
+## Automatic domain updates
+- `DomainAutoUpdate.yml` runs on a schedule and can also be started manually. It learns site identity while configured domains are healthy.
+- A new domain is applied only when discovered through an old-domain redirect, canonical/og:url, or a maintainer-configured `candidateDomains` / `discoveryUrls` entry, and the candidate passes identity verification.
+- Never treat HTTP 403/429, Cloudflare challenges, or a responsive lookalike domain as proof of a domain change. If no trusted candidate is available, report the provider for manual curation rather than guessing.
+- A confirmed switch updates only that provider's Kotlin host references, increments its plugin version, and dispatches the normal CloudStream compiler.
+
 ## Suggested check after every provider change
 1. Review the edited Kotlin source and the provider version.
 2. Check GitHub Actions for compilation and generated artifacts.
