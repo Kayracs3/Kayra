@@ -179,7 +179,11 @@ def fetch_page(url: str, timeout: int = 12) -> dict[str, Any]:
             final_url = response.geturl()
             status = getattr(response, "status", 200)
             content_type = response.headers.get("Content-Type", "")
-            return {"status": status, "finalUrl": final_url, "contentType": content_type, "body": body, "error": ""}
+            return {
+                "status": status, "finalUrl": final_url, "contentType": content_type,
+                "location": response.headers.get("Location", ""),
+                "body": body, "error": "",
+            }
     except HTTPError as exc:
         try:
             body = exc.read(MAX_BODY_BYTES)
@@ -188,10 +192,82 @@ def fetch_page(url: str, timeout: int = 12) -> dict[str, Any]:
         return {
             "status": exc.code, "finalUrl": exc.geturl(),
             "contentType": exc.headers.get("Content-Type", "") if exc.headers else "",
+            "location": exc.headers.get("Location", "") if exc.headers else "",
             "body": body, "error": str(exc),
         }
     except (URLError, TimeoutError, OSError) as exc:
-        return {"status": None, "finalUrl": url, "contentType": "", "body": b"", "error": str(exc)}
+        return {
+            "status": None, "finalUrl": url, "contentType": "",
+            "location": "", "body": b"", "error": str(exc),
+        }
+
+
+PROTECTION_PAGE_MARKERS = (
+    "just a moment", "attention required", "checking your browser",
+    "verify you are human", "access denied", "security check",
+    "captcha", "bot verification",
+)
+PARKED_PAGE_MARKERS = (
+    "domain for sale", "buy this domain", "parked domain",
+    "domain parking", "site not configured", "this domain is for sale",
+)
+
+
+def classify_primary_failure(response: dict[str, Any]) -> str | None:
+    """Return a failure category only for clear, persistent site/domain failures.
+
+    2xx/3xx responses are considered working unless they are an explicit parked
+    domain page. Access challenges, rate limits, server errors and timeouts are
+    deliberately not considered proof that a domain has changed.
+    """
+    status = response.get("status")
+    body = response.get("body", b"")
+    if isinstance(body, bytes):
+        body_text = body[:120_000].decode("utf-8", errors="ignore").lower()
+    else:
+        body_text = str(body).lower()
+
+    if status in {404, 410}:
+        if any(marker in body_text for marker in PROTECTION_PAGE_MARKERS):
+            return None
+        return f"http-{status}"
+
+    if status is not None and 200 <= int(status) < 400:
+        if any(marker in body_text for marker in PARKED_PAGE_MARKERS):
+            return "parked-page"
+        return None
+
+    if status is None:
+        error = str(response.get("error", "")).lower()
+        # Only permanent-looking DNS errors qualify. "Temporary failure in
+        # name resolution" and generic getaddrinfo failures are not sufficient.
+        permanent_dns = (
+            "name or service not known",
+            "nodename nor servname provided",
+            "no such host is known",
+            "no such host",
+            "no address associated with hostname",
+            "non-existent domain",
+            "nxdomain",
+            "errno 11001",
+        )
+        if any(marker in error for marker in permanent_dns):
+            return "dns-not-found"
+        if "connection refused" in error or "actively refused" in error:
+            return "connection-refused"
+    return None
+
+
+def confirm_primary_failure(url: str, first_response: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
+    """Require two matching independent failures before discovering a replacement."""
+    first_kind = classify_primary_failure(first_response)
+    if not first_kind:
+        return None, None
+    second_response = fetch_page(url, timeout=8)
+    second_kind = classify_primary_failure(second_response)
+    if second_kind != first_kind:
+        return None, second_response
+    return first_kind, second_response
 
 
 def discover_modules(root: Path) -> list[dict[str, str]]:
@@ -352,15 +428,18 @@ def inspect_provider(root: Path, provider: dict[str, str], registry_entry: dict[
         "status": "unknown", "candidate": None, "reason": "",
         "changedFiles": [],
     }
+
     current = fetch_page(old_url)
-    status = current["status"]
-    final_url = current["finalUrl"]
-    redirected_host = host_of(final_url) if final_url else old_host
-    page = parse_page(current["body"], final_url or old_url) if current["body"] else None
+    status = current.get("status")
+    final_url = current.get("finalUrl") or old_url
+    redirected_host = host_of(final_url) or old_host
+    page = parse_page(current["body"], final_url) if current.get("body") else None
 
     profile = registry_entry.get("identityProfile")
-    if not profile and status and 200 <= status < 300 and page and redirected_host == old_host:
-        identity_header = normalize_text(" ".join([page.get("title", ""), page.get("h1", ""), page.get("siteName", "")]))
+    if not profile and status is not None and 200 <= int(status) < 400 and page:
+        identity_header = normalize_text(" ".join([
+            page.get("title", ""), page.get("h1", ""), page.get("siteName", "")
+        ]))
         is_block_page = any(marker in identity_header for marker in BLOCK_PAGE_MARKERS)
         if len(page.get("tokens", [])) >= 3 and not is_block_page:
             registry_entry["identityProfile"] = {
@@ -369,36 +448,75 @@ def inspect_provider(root: Path, provider: dict[str, str], registry_entry: dict[
             profile = registry_entry["identityProfile"]
             result["identityProfileSaved"] = True
 
-    candidates: list[tuple[str, str]] = []
-    if redirected_host and redirected_host != old_host:
-        candidate = normalize_candidate(final_url, old_url)
-        if candidate:
-            candidates.append((candidate, f"HTTP redirect from primary domain to {final_url}"))
+    # A live primary URL is never replaced. This includes ordinary HTTP
+    # redirects: CloudStream follows them, so the configured domain still works.
+    failure_kind = classify_primary_failure(current)
+    if status is not None and 200 <= int(status) < 400 and failure_kind is None:
+        result["status"] = "ok-redirected" if redirected_host != old_host else "ok"
+        result["reason"] = (
+            f"primary domain responds and redirects to {final_url}; existing URL retained"
+            if redirected_host != old_host
+            else "primary domain responds; existing URL retained"
+        )
+        return result
 
+    # Protection/rate-limit pages and transient server errors do not indicate
+    # a dead domain. Never search for or apply another host in these cases.
+    body_text = current.get("body", b"")
+    if isinstance(body_text, bytes):
+        body_text = body_text[:120_000].decode("utf-8", errors="ignore").lower()
+    else:
+        body_text = str(body_text).lower()
+
+    if status in {401, 403, 407, 408, 425, 429, 451} or any(
+        marker in body_text for marker in PROTECTION_PAGE_MARKERS
+    ):
+        result["status"] = "protected"
+        result["reason"] = current.get("error") or f"primary domain returned HTTP {status} or a protection challenge; no change made"
+        return result
+
+    if status is not None and 500 <= int(status) <= 599:
+        result["status"] = "inconclusive"
+        result["reason"] = f"primary domain returned temporary server error HTTP {status}; no change made"
+        return result
+
+    # A 404/410, persistent parked-domain page, permanent DNS failure or
+    # connection refusal must happen twice before a new domain can be considered.
+    confirmed_kind, confirmation = confirm_primary_failure(old_url, current)
+    if not confirmed_kind:
+        if status is None:
+            result["status"] = "inconclusive"
+        else:
+            result["status"] = "inconclusive"
+        result["reason"] = (
+            "primary-domain failure was not confirmed by a second independent request; "
+            "domain retained. " + (current.get("error") or f"HTTP {status}")
+        )
+        return result
+
+    result["primaryFailureConfirmed"] = confirmed_kind
+    result["reason"] = f"primary domain failure confirmed twice ({confirmed_kind})"
+    if confirmation and confirmation.get("status") is not None:
+        result["confirmationHttpStatus"] = confirmation.get("status")
+
+    # Redirects and canonical links are not used as migration evidence while
+    # the primary URL is still responding; they are considered only after the
+    # old domain has failed twice.
+    candidates: list[tuple[str, str]] = []
     if page:
         for canonical in page.get("canonicalUrls", []):
             candidate = normalize_candidate(canonical, old_url)
             if candidate:
-                candidates.append((candidate, f"cross-domain canonical/og:url discovered on {old_url}"))
+                candidates.append((candidate, f"cross-domain canonical/og:url discovered on failed primary domain {old_url}"))
 
-    # If the old endpoint still serves a healthy page on the original hostname,
-    # do not switch merely because an unrelated candidate happens to respond.
-    current_is_healthy = bool(
-        status and 200 <= status < 300 and len(current["body"]) >= MIN_BODY_BYTES
-        and "html" in (current["contentType"] or "text/html").lower()
-        and redirected_host == old_host
-    )
+    registry_candidates = configured_candidates(registry_entry, old_url)
+    candidates.extend(registry_candidates)
 
-    if current_is_healthy:
-        result["status"] = "ok"
-        result["reason"] = "primary domain is healthy; no switch needed"
-        return result
-
-    candidates.extend(configured_candidates(registry_entry, old_url))
-    # Last-resort discovery: the search engine only nominates hosts. The same
-    # saved identity profile / explicit markers below must still validate them.
+    # Search results are a last resort and only nominate candidates. A failed
+    # old domain is mandatory before this code can run.
     if not candidates:
         candidates.extend(search_candidates(provider, profile, old_url))
+
     unique: dict[str, str] = {}
     for candidate, reason in candidates:
         unique.setdefault(candidate, reason)
@@ -406,25 +524,35 @@ def inspect_provider(root: Path, provider: dict[str, str], registry_entry: dict[
     markers = registry_entry.get("identityMarkers", [])
     for candidate_url, discovery_reason in unique.items():
         probe = fetch_page(candidate_url)
-        probe_status = probe["status"]
-        if not (probe_status and 200 <= probe_status < 300):
+        probe_status = probe.get("status")
+        if not (probe_status is not None and 200 <= int(probe_status) < 400):
             result.setdefault("rejectedCandidates", []).append({
-                "url": candidate_url, "reason": f"candidate HTTP status {probe_status}; {probe.get('error', '')}".strip()
+                "url": candidate_url,
+                "reason": f"candidate HTTP status {probe_status}; {probe.get('error', '')}".strip(),
             })
             continue
-        if len(probe["body"]) < MIN_BODY_BYTES or "html" not in (probe["contentType"] or "text/html").lower():
-            result.setdefault("rejectedCandidates", []).append({"url": candidate_url, "reason": "candidate is not a substantial HTML page"})
+        if classify_primary_failure(probe) is not None:
+            result.setdefault("rejectedCandidates", []).append({
+                "url": candidate_url, "reason": "candidate page is parked or unavailable"
+            })
             continue
-        candidate_host = host_of(probe["finalUrl"])
+        if len(probe.get("body", b"")) < MIN_BODY_BYTES:
+            result.setdefault("rejectedCandidates", []).append({
+                "url": candidate_url, "reason": "candidate page is too small to verify"
+            })
+            continue
+        candidate_host = host_of(probe.get("finalUrl", ""))
         if not candidate_host or candidate_host == old_host:
-            result.setdefault("rejectedCandidates", []).append({"url": candidate_url, "reason": "candidate redirects back to old domain"})
+            result.setdefault("rejectedCandidates", []).append({
+                "url": candidate_url, "reason": "candidate redirects back to old domain"
+            })
             continue
+
         candidate_page = parse_page(probe["body"], probe["finalUrl"])
         matched, identity_reason = identity_match(profile, candidate_page, markers)
-        # On the first scan a provider may already be offline, so no live
-        # identity profile could have been learned. In that case only accept
-        # a candidate whose page title/H1/site-name contains the exact module
-        # brand (compact comparison handles camel case and punctuation).
+        # Cold-start fallback is allowed only after the old domain has failed
+        # twice. A provider name in the actual page header is then an extra
+        # signal, never a substitute for proving that the old host is dead.
         if not matched and not profile and not markers:
             brand = normalize_text(provider.get("name", "")).replace(" ", "")
             header = normalize_text(" ".join([
@@ -434,7 +562,7 @@ def inspect_provider(root: Path, provider: dict[str, str], registry_entry: dict[
             ])).replace(" ", "")
             if len(brand) >= 6 and brand in header:
                 matched = True
-                identity_reason = "provider module brand matched candidate page header"
+                identity_reason = "provider module brand matched candidate page header after confirmed primary-domain failure"
         if not matched:
             result.setdefault("rejectedCandidates", []).append({
                 "url": candidate_url, "reason": f"{identity_reason}; discovered by {discovery_reason}"
@@ -443,8 +571,8 @@ def inspect_provider(root: Path, provider: dict[str, str], registry_entry: dict[
 
         new_url = origin_of(probe["finalUrl"])
         result.update({
-            "status": "verified-candidate", "candidate": new_url,
-            "reason": f"{discovery_reason}; {identity_reason}",
+            "candidate": new_url,
+            "reason": f"confirmed primary-domain failure ({confirmed_kind}); {discovery_reason}; {identity_reason}",
         })
         if apply and registry_entry.get("automaticSwitch", True):
             changed = update_module_domain(root, provider, old_url, new_url)
@@ -457,21 +585,18 @@ def inspect_provider(root: Path, provider: dict[str, str], registry_entry: dict[
             registry_entry["identityProfile"] = {
                 key: candidate_page[key] for key in ("title", "h1", "siteName", "description", "tokens")
             }
-            registry_entry["lastSwitch"] = {"from": old_url, "to": new_url, "reason": result["reason"]}
+            registry_entry["lastSwitch"] = {
+                "from": old_url, "to": new_url, "reason": result["reason"]
+            }
             result["status"] = "switched" if changed else "verified-no-source-change"
         elif not registry_entry.get("automaticSwitch", True):
             result["status"] = "verified-awaiting-manual-switch"
+        else:
+            result["status"] = "verified-candidate"
         return result
 
-    if current["status"] is None:
-        result["status"] = "inconclusive"
-    elif current["status"] in {401, 403, 429, 451, 503}:
-        result["status"] = "protected"
-    else:
-        result["status"] = "unavailable"
-    result["reason"] = current.get("error") or f"primary domain returned HTTP {status}; no identity-verified candidate found"
-    if not profile and not markers:
-        result["reason"] += "; identity baseline unavailable, so automatic switching is disabled for safety"
+    result["status"] = "confirmed-dead-no-replacement" if confirmed_kind else "unavailable"
+    result["reason"] += "; no identity-verified replacement found, so current source was retained"
     return result
 
 
@@ -496,21 +621,24 @@ def main() -> int:
     policy = registry.setdefault("policy", {})
     policy["automaticSwitching"] = True
     policy["switchRule"] = (
-        "HTTP redirect, cross-domain canonical/og:url, configured candidateDomains/discoveryUrls, and last-resort "
-        "search results may nominate a host. Search results are never trusted by themselves: the candidate must "
-        "return a substantial HTML page and match saved identityProfile or all configured identityMarkers."
+        "A provider domain may be changed only after the configured URL fails two independent checks with "
+        "HTTP 404/410, a persistent parked-domain page, permanent DNS-not-found, or connection-refused. "
+        "Any 2xx/3xx response, including a redirect to another hostname, means the current URL is working and "
+        "must be retained. 401/403/429/451, Cloudflare challenges, 5xx responses and timeouts never trigger a switch."
     )
     policy["limits"] = [
-        "If the old domain is fully offline and no saved profile or provider-brand marker can verify a search nominee, report it for curation instead of guessing.",
-        "403/429/Cloudflare protection is not treated as proof that a domain changed.",
-        "A successful HTTP response alone never authorizes a domain switch.",
+        "Working 2xx/3xx primary domains are immutable to the automatic updater, including domains that redirect.",
+        "A confirmed failure must be observed twice before candidate discovery starts.",
+        "403/429/Cloudflare protection, timeouts and 5xx responses are not proof that a domain changed.",
+        "A replacement must pass identity verification after the primary domain is confirmed dead.",
     ]
     providers_cfg = registry.setdefault("providers", {})
     providers = discover_modules(root)
     results: list[dict[str, Any]] = []
 
     # Every provider gets a registry entry so identity can be learned while its
-    # currently configured domain is still healthy.
+    # currently configured domain is healthy. A healthy or redirected primary
+    # URL is retained and never replaced.
     with ThreadPoolExecutor(max_workers=max(1, min(args.workers, 12))) as pool:
         future_map = {}
         for provider in providers:
