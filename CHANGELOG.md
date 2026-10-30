@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:dc1252ec6350dea1946a1e78dfe2b0290ddd2d1a -->
+### Limit sibling poster lookup to filters-grid cards
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [dc1252e](https://github.com/Kayracs3/Kayra/commit/dc1252ec6350dea1946a1e78dfe2b0290ddd2d1a)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:1863f5bae6b8af60f770e3f63742c13b2a58ba79 -->
 ### Bump Dizigecesi version for poster parsing fix
 
