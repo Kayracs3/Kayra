@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:4c85138cbd8de498d539834f5eb1ce1f7c875f93 -->
+### FilmizleHell: inspect Playturka player config auth fields
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [4c85138](https://github.com/Kayracs3/Kayra/commit/4c85138cbd8de498d539834f5eb1ce1f7c875f93)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:9d4429bab75dc56ec31b24d3673c0a26e6230737 -->
 ### FilmizleHell: read Playturka player config auth parameters
 
