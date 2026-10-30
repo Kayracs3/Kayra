@@ -35,7 +35,7 @@ private const val JET_UA =
         "(KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
 
 class JetFilmizle : MainAPI() {
-    override var mainUrl = "https://jetfilmizle.app"
+    override var mainUrl = "https://jetfilmizle.now"
     override var name = "JetFilmizle"
     override var lang = "tr"
     override val hasMainPage = true
