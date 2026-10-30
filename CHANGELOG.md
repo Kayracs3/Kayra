@@ -2,6 +2,31 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:d6256add16886c094643aa711964aae70a63d31d -->
+### FilmizleHell: correct API URL diagnostic matcher
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [d6256ad](https://github.com/Kayracs3/Kayra/commit/d6256add16886c094643aa711964aae70a63d31d)
+
+## 2026-10-30
+
+<!-- kayra-commit:96c04cb4a75ffcc4222d6afccfde0a992640bc02 -->
+### FilmizleHell: bump version to 8 for API diagnostics
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [96c04cb](https://github.com/Kayracs3/Kayra/commit/96c04cb4a75ffcc4222d6afccfde0a992640bc02)
+
+## 2026-10-30
+
+<!-- kayra-commit:60a72dbcf665bf9446dc674ecc3dc34128f16e67 -->
+### FilmizleHell: log Playturka API response shape safely
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [60a72db](https://github.com/Kayracs3/Kayra/commit/60a72dbcf665bf9446dc674ecc3dc34128f16e67)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:d66e33960ddbf0eb7948d80a23e6c90ba260bc68 -->
 ### Bump FilmizleHell version for signed Playturka stream fix
 
