@@ -2,6 +2,23 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:5b99686b3689ae77bb9231f1ca690111c17d86b6 -->
+### FilmizleHell: bump to version 10 for Playturka decoder tracing
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [5b99686](https://github.com/Kayracs3/Kayra/commit/5b99686b3689ae77bb9231f1ca690111c17d86b6)
+
+## 2026-10-30
+
+<!-- kayra-commit:9aa2c61fc47977ef92878af5518c5569030921dc -->
+### FilmizleHell: correct player script diagnostic regexes
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [9aa2c61](https://github.com/Kayracs3/Kayra/commit/9aa2c61fc47977ef92878af5518c5569030921dc)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:100babdb8064ae2f114b9de962cb678041317037 -->
 ### FilmizleHell: trace Playturka API response decoder in player scripts
 
