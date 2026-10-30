@@ -2071,7 +2071,7 @@ class FilmizleHell : MainAPI() {
                 it.isNotBlank() && !it.trim().startsWith("#")
             } ?: continue
             val url = fixUrl(uriLine.trim(), masterUrl) ?: continue
-            val bandwidth = Regex("""(?i)\\b(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\\d+)""")
+            val bandwidth = Regex("""(?i)\b(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\d+)""")
                 .find(info)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
             variants.add(bandwidth to url)
         }
@@ -2483,7 +2483,7 @@ class FilmizleHell : MainAPI() {
                     }
 
                     val audioPlaylistUrls = audioLines.mapNotNull { audioLine ->
-                        val rawUri = Regex("""(?i)\\bURI\\s*=\\s*["']([^"']+)["']""")
+                        val rawUri = Regex("""(?i)\bURI\s*=\s*["]([^"]+)["]""")
                             .find(audioLine)?.groupValues?.getOrNull(1)
                             ?: return@mapNotNull null
                         fixUrl(rawUri, manifest)
