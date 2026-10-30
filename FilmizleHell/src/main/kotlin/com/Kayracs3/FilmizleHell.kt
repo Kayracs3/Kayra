@@ -950,7 +950,7 @@ class FilmizleHell : MainAPI() {
         // full playback candidate.
         val fixedHost = runCatching { URI(fixed).host.orEmpty().lowercase(Locale.ROOT) }
             .getOrDefault("")
-        val playturkaId = Regex("""(?i)^/videos/([A-Za-z0-9_-]{5,64})/master\\.m3u8$""")
+        val playturkaId = Regex("""(?i)^/videos/([A-Za-z0-9_-]{5,64})/master\.m3u8$""")
             .find(pathOf(fixed))
             ?.groupValues?.getOrNull(1)
         if (
