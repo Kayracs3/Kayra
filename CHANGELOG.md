@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:ebbb6a31162a8c68369bf528507672e87ebe8c17 -->
+### FilmizleHell: bump plugin to version 13
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [ebbb6a3](https://github.com/Kayracs3/Kayra/commit/ebbb6a31162a8c68369bf528507672e87ebe8c17)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:4c85138cbd8de498d539834f5eb1ce1f7c875f93 -->
 ### FilmizleHell: inspect Playturka player config auth fields
 
