@@ -2,6 +2,31 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:34acac4571275c0676d9527d3040c3deeac1b0a1 -->
+### Bump FilmizleHell plugin to version 18
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [34acac4](https://github.com/Kayracs3/Kayra/commit/34acac4571275c0676d9527d3040c3deeac1b0a1)
+
+## 2026-10-31
+
+<!-- kayra-commit:6b4e851aa11a82d34379f66f44e78a8e117b96de -->
+### Fix Playturka HLS bandwidth regex
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [6b4e851](https://github.com/Kayracs3/Kayra/commit/6b4e851aa11a82d34379f66f44e78a8e117b96de)
+
+## 2026-10-31
+
+<!-- kayra-commit:e16aa7aaef9b3538cbf953001b79b84cb6b2e9c2 -->
+### FilmizleHell: play verified video variant when master has no separate audio
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [e16aa7a](https://github.com/Kayracs3/Kayra/commit/e16aa7aaef9b3538cbf953001b79b84cb6b2e9c2)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:25d619531de4cfbcad32b69f286e336d8a1aae06 -->
 ### Bump FilmizleHell plugin to version 17
 
