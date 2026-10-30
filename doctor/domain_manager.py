@@ -255,6 +255,24 @@ def classify_primary_failure(response: dict[str, Any]) -> str | None:
             return "dns-not-found"
         if "connection refused" in error or "actively refused" in error:
             return "connection-refused"
+
+        # A hostname/common-name mismatch means the server presented a TLS
+        # certificate for a different hostname. The HTTPS origin users open
+        # is therefore not usable; only this specific certificate error is
+        # treated as a hard failure. Generic SSL issuer/expiry errors are not.
+        # A second independent request is still required before switching.
+        hostname_mismatch = (
+            "hostname mismatch",
+            "doesn't match",
+            "does not match",
+            "not valid for",
+            "common name invalid",
+            "err_cert_common_name_invalid",
+            "certificate subject name",
+            "certificate is not valid for",
+        )
+        if any(marker in error for marker in hostname_mismatch):
+            return "tls-hostname-mismatch"
     return None
 
 
@@ -629,7 +647,8 @@ def main() -> int:
     policy["limits"] = [
         "Working 2xx/3xx primary domains are immutable to the automatic updater, including domains that redirect.",
         "A confirmed failure must be observed twice before candidate discovery starts.",
-        "403/429/Cloudflare protection, timeouts and 5xx responses are not proof that a domain changed.",
+        "403/429/Cloudflare protection, generic TLS issuer/expiry errors, timeouts and 5xx responses are not proof that a domain changed.",
+        "A TLS hostname/common-name mismatch is treated as a domain failure only after two independent confirmations.",
         "A replacement must pass identity verification after the primary domain is confirmed dead.",
     ]
     providers_cfg = registry.setdefault("providers", {})
