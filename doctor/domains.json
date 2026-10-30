@@ -23,8 +23,8 @@
       "Working 2xx/3xx primary domains are immutable to the automatic updater, including domains that redirect.",
       "A confirmed failure must be observed twice before candidate discovery starts.",
       "403/429/Cloudflare protection, generic TLS issuer/expiry errors, timeouts and 5xx responses are not proof that a domain changed.",
-      "A TLS hostname/common-name mismatch is treated as a domain failure only after two independent confirmations.",
-      "A replacement must pass identity verification after the primary domain is confirmed dead."
+      "A replacement must pass identity verification after the primary domain is confirmed dead.",
+      "A TLS hostname/common-name mismatch on the current domain is a hard failure only after two independent confirmations; generic SSL issuer/expiry errors are not."
     ],
     "workingDomainRule": "Never rewrite a provider's current domain when it responds successfully or redirects successfully. Only confirmed dead primary domains may enter candidate discovery."
   },
@@ -172,8 +172,11 @@
       "lastDomainRestore": {
         "currentDomain": "https://dizi79.life",
         "restoredFrom": "https://dizi82.life",
-        "reason": "Previous domain remains reachable; the old URL is retained instead of replacing it based on a redirect."
-      }
+        "reason": "Re-evaluating previous working redirect target after user reported ERR_CERT_COMMON_NAME_INVALID on dizi79.life."
+      },
+      "candidateDomains": [
+        "https://dizi82.life"
+      ]
     },
     "DiziPal": {},
     "DiziPod": {},
