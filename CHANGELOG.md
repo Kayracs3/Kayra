@@ -2,6 +2,23 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:59faafed1a19ccb464f88e26c6a30169b71af977 -->
+### Bump FilmizleHell plugin to v22
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [59faafe](https://github.com/Kayracs3/Kayra/commit/59faafed1a19ccb464f88e26c6a30169b71af977)
+
+## 2026-10-31
+
+<!-- kayra-commit:f7b1fa862d784032042bb0a826ce4e038c116c96 -->
+### Skip redundant FilmizleHell Playturka extractor scans
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [f7b1fa8](https://github.com/Kayracs3/Kayra/commit/f7b1fa862d784032042bb0a826ce4e038c116c96)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:1edde17454d210d7daf010d1179863deeb7481cb -->
 ### Speed up FilmizleHell Playturka link loading
 
