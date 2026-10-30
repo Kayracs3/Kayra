@@ -1527,7 +1527,7 @@ class FilmizleHell : MainAPI() {
         val names = listOf("PHPSESSID", "am_visitor_id")
         val cookies = names.mapNotNull { cookieName ->
             val pattern = Regex(
-                """(?i)(?:^|[,;]\\s*)""" + Regex.escape(cookieName) + """=([^;,\\s]+)"""
+                """(?i)(?:^|[,;]\s*)""" + Regex.escape(cookieName) + """=([^;,\s]+)"""
             )
             pattern.find(source)?.groupValues?.getOrNull(1)
                 ?.takeIf { it.isNotBlank() }
