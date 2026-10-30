@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:1b9965cb044e2035fba1341a455ce8a8d633525b -->
+### FilmizleHell: add Playturka decoder diagnostics
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [1b9965c](https://github.com/Kayracs3/Kayra/commit/1b9965cb044e2035fba1341a455ce8a8d633525b)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:ebbb6a31162a8c68369bf528507672e87ebe8c17 -->
 ### FilmizleHell: bump plugin to version 13
 
