@@ -231,6 +231,66 @@ class DomainManagerTests(unittest.TestCase):
             self.assertEqual(fetch.call_count, 2)
             self.assertIn('mainUrl = "https://old.example"', kt.read_text(encoding="utf-8"))
 
+    def test_two_tls_hostname_mismatches_allow_verified_replacement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            provider, kt = test_provider(root)
+            entry = {
+                "identityProfile": {
+                    "tokens": ["dizi", "life", "diziler", "film", "filmler", "izleme", "platformu", "turkce"]
+                },
+                "candidateDomains": ["https://new.example"],
+            }
+            tls_error = {
+                "status": None, "finalUrl": "https://old.example/",
+                "contentType": "", "body": b"",
+                "error": "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'old.example' (ERR_CERT_COMMON_NAME_INVALID)",
+            }
+            candidate_body = (
+                '<html><head><title>Dizi.life - Diziler ve Filmler</title>'
+                '<meta property="og:site_name" content="Dizi.life">'
+                '<meta property="og:description" content="Dizi.life Türkçe dizi ve film izleme platformu">'
+                '</head><body><h1>Dizi.life — Türkçe dizi ve film izleme platformu</h1>'
+                + ('Dizi diziler film filmler izleme platformu Türkçe yeni bölüm ' * 30)
+                + '</body></html>'
+            ).encode("utf-8")
+            candidate = {
+                "status": 200, "finalUrl": "https://new.example/",
+                "contentType": "text/html", "body": candidate_body, "error": "",
+            }
+            with patch.object(dm, "fetch_page", side_effect=[tls_error, tls_error, candidate]) as fetch:
+                result = dm.inspect_provider(root, provider, entry, apply=True)
+            self.assertEqual(result["status"], "switched")
+            self.assertEqual(result["primaryFailureConfirmed"], "tls-hostname-mismatch")
+            self.assertEqual(fetch.call_count, 3)
+            self.assertIn('mainUrl = "https://new.example"', kt.read_text(encoding="utf-8"))
+
+    def test_single_tls_hostname_mismatch_is_not_enough(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            provider, kt = test_provider(root)
+            mismatch = {
+                "status": None, "finalUrl": "https://old.example/",
+                "contentType": "", "body": b"",
+                "error": "Hostname mismatch: certificate is not valid for old.example",
+            }
+            recovered = html_response()
+            with patch.object(dm, "fetch_page", side_effect=[mismatch, recovered]) as fetch, \
+                 patch.object(dm, "search_candidates") as search:
+                result = dm.inspect_provider(root, provider, {}, apply=True)
+            self.assertEqual(result["status"], "inconclusive")
+            self.assertEqual(fetch.call_count, 2)
+            search.assert_not_called()
+            self.assertIn('mainUrl = "https://old.example"', kt.read_text(encoding="utf-8"))
+
+    def test_generic_ssl_issuer_failure_does_not_trigger_switch(self):
+        error = {
+            "status": None, "finalUrl": "https://old.example/",
+            "contentType": "", "body": b"",
+            "error": "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate",
+        }
+        self.assertIsNone(dm.classify_primary_failure(error))
+
     def test_search_results_only_nominate_candidates_for_later_identity_check(self):
         provider = {"name": "Demo", "module": "Demo", "url": "https://old.example"}
         profile = {
