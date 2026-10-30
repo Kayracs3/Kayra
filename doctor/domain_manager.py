@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Safely discover and update changed provider domains for Kayra.
 
-Automatic switches are intentionally limited to candidates proven by an
-HTTP redirect, a canonical/og:url link from the old site, or an explicitly
-configured trusted candidate/discovery URL. A candidate must also match the
-provider's saved identity profile or explicit identity markers.
+A working 2xx/3xx domain is never replaced. Domain discovery starts only after
+two matching hard failures, including a verified TLS hostname/common-name
+mismatch. Generic SSL issuer/expiry errors, access challenges, 5xx responses
+and timeouts are not treated as proof that a domain changed.
+
+A replacement candidate must match the provider's saved identity profile or
+explicit identity markers before the provider source is modified.
 """
 from __future__ import annotations
 
