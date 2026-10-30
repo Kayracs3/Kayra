@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:4748a46fa9288194a8c9c856452bfe199cd86e9b -->
+### Validate Playturka audio sidecars before publishing master
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [4748a46](https://github.com/Kayracs3/Kayra/commit/4748a46fa9288194a8c9c856452bfe199cd86e9b)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:34acac4571275c0676d9527d3040c3deeac1b0a1 -->
 ### Bump FilmizleHell plugin to version 18
 
