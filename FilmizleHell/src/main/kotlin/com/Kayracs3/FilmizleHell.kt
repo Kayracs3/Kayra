@@ -1630,9 +1630,9 @@ class FilmizleHell : MainAPI() {
         val uri = runCatching { URI(raw) }.getOrNull()
         val parts = listOf(uri?.rawQuery.orEmpty(), uri?.rawFragment.orEmpty(), raw)
         for (part in parts) {
-            val normalized = part.removePrefix("#").replace('&', '&')
+            val normalized = part.removePrefix("#")
             val match = Regex(
-                """(?i)(?:^|[?&#])""" + Regex.escape(name) + """=([^&#"'\\s]+)"""
+                """(?i)(?:^|[?&#])""" + Regex.escape(name) + """=([^&#"'\s]+)"""
             ).find(normalized) ?: continue
             val value = match.groupValues.getOrNull(1).orEmpty()
             val decoded = runCatching { java.net.URLDecoder.decode(value, "UTF-8") }
@@ -1646,8 +1646,8 @@ class FilmizleHell : MainAPI() {
         playturkaParam(referer, "sk")?.let { return it }
         playturkaParam(html, "sk")?.let { return it }
         val patterns = listOf(
-            Regex("""(?i)["']?(?:site_key|siteKey|AM_SITE_KEY)["']?\\s*[:=]\\s*["']([^"'\\s]{4,300})["']"""),
-            Regex("""(?i)(?:[?&#])sk=([^&#"'\\s]{4,300})""")
+            Regex("""(?i)["']?(?:site_key|siteKey|AM_SITE_KEY)["']?\s*[:=]\s*["']([^"'\s]{4,300})["']"""),
+            Regex("""(?i)(?:[?&#])sk=([^&#"'\s]{4,300})""")
         )
         for (pattern in patterns) {
             pattern.find(html)?.groupValues?.getOrNull(1)?.let { raw ->
@@ -1660,7 +1660,7 @@ class FilmizleHell : MainAPI() {
     }
 
     private fun playturkaVisitorId(setCookie: String?): String? =
-        Regex("""(?i)(?:^|[,;]\\s*)am_visitor_id=([^;,\\s]+)""")
+        Regex("""(?i)(?:^|[,;]\s*)am_visitor_id=([^;,\s]+)""")
             .find(setCookie.orEmpty())?.groupValues?.getOrNull(1)
             ?.takeIf { it.isNotBlank() }
 
