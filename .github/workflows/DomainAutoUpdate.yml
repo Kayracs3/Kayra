@@ -89,7 +89,27 @@ jobs:
           fi
 
           git commit -m "Auto-update identity-verified provider domains"
-          git push origin HEAD:master
+
+          # Documentation/catalog workflows may update master at the same time.
+          # Rebase our domain registry/source changes onto the newest master and
+          # retry the push instead of losing learned profiles or switch records.
+          PUSHED=0
+          for attempt in 1 2 3; do
+            git fetch origin master
+            git rebase origin/master
+            if git push origin HEAD:master; then
+              PUSHED=1
+              break
+            fi
+            echo "Domain update push collision; retrying against latest master ($attempt/3)."
+            sleep 2
+          done
+
+          if [ "$PUSHED" -ne 1 ]; then
+            echo "::error::Domain update could not be pushed after three retries."
+            exit 1
+          fi
+
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
