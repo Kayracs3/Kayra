@@ -2084,7 +2084,7 @@ class FilmizleHell : MainAPI() {
                 it.isNotBlank() && !it.trim().startsWith("#")
             } ?: continue
             val url = fixUrl(uriLine.trim(), response.url) ?: continue
-            val bandwidth = Regex("""(?i)\\b(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\\d+)""")
+            val bandwidth = Regex("""(?i)\b(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\d+)""")
                 .find(info)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
             variants.add(bandwidth to url)
         }
