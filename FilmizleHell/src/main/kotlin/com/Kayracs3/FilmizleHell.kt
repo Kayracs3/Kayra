@@ -1,5 +1,6 @@
 package com.Kayracs3
 
+import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
@@ -1744,6 +1745,56 @@ class FilmizleHell : MainAPI() {
     }
 
     // Keep API diagnostics useful without leaking signed playback credentials.
+    /**
+     * Playturka's public player encrypts the /api/video-url JSON string by
+     * substituting Base64 characters (charMapping/reverseMapping in bundle.js).
+     * Reverse that exact mapping, restore Base64 padding, then parse the JSON.
+     */
+    private fun decodePlayturkaApiPayload(raw: String): JSONObject? {
+        val normalized = raw.trimStart('﻿').trim()
+        val encrypted = runCatching {
+            when (val value = org.json.JSONTokener(normalized).nextValue()) {
+                is String -> value
+                is JSONObject -> {
+                    listOf("data", "result", "payload").firstNotNullOfOrNull { key ->
+                        value.optString(key).takeIf { it.isNotBlank() && it != "null" }
+                    }
+                }
+                else -> null
+            }
+        }.getOrNull() ?: normalized.trim('"', '\'')
+
+        if (encrypted.isBlank() || encrypted.length > 512_000) return null
+
+        val decodedBase64 = buildString(encrypted.length + 4) {
+            for (character in encrypted) {
+                append(
+                    when (character) {
+                        in 'A'..'Z' -> ('Z' - (character - 'A'))
+                        in 'a'..'z' -> ('z' - (character - 'a'))
+                        in '0'..'9' -> ('0' + ((character - '0' - 5 + 10) % 10))
+                        '+' -> '-'
+                        '/' -> '_'
+                        '-' -> '+'
+                        '_' -> '/'
+                        else -> character
+                    }
+                )
+            }
+        }
+        if (decodedBase64.any { !(it in 'A'..'Z' || it in 'a'..'z' ||
+                    it in '0'..'9' || it == '+' || it == '/' || it == '=')
+            }) return null
+
+        val padded = decodedBase64 + "=".repeat((4 - decodedBase64.length % 4) % 4)
+        val jsonText = runCatching {
+            String(Base64.decode(padded, Base64.DEFAULT), Charsets.UTF_8)
+        }.getOrNull()?.trim().orEmpty()
+        if (jsonText.isBlank()) return null
+
+        return runCatching { JSONObject(jsonText) }.getOrNull()
+    }
+
     private fun safePlayturkaApiPreview(raw: String): String {
         var preview = decode(raw).take(420)
         preview = Regex("""(?i)https?://[^\s"'<>]+""").replace(preview) { match ->
@@ -1866,6 +1917,27 @@ class FilmizleHell : MainAPI() {
         extractPlayturkaMasterUrls(response.url, response.document, response.text)
             .map { it.second }
             .forEach(candidates::add)
+
+        // /api/video-url returns a JSON string containing Playturka's custom
+        // Base64 substitution payload. Decode it before searching for the signed
+        // master; the public player does the same before reading files.masterUrl.
+        val payload = decodePlayturkaApiPayload(response.text)
+        val files = payload?.optJSONObject("files")
+        val masterFields = listOf("masterUrl", "master_url", "master", "url")
+        masterFields.forEach { field ->
+            val rawMaster = files?.optString(field).orEmpty()
+                .ifBlank { payload?.optString(field).orEmpty() }
+            val absolute = fixUrl(rawMaster, response.url)
+            if (!absolute.isNullOrBlank()) candidates.add(absolute)
+        }
+        val payloadStatus = payload?.optString("status").orEmpty()
+        val payloadVideoId = payload?.optString("videoId").orEmpty()
+        Log.d(name, "Playturka API çözümleme: id=" + id +
+            ", decoded=" + (payload != null) +
+            ", status=" + payloadStatus.take(24) +
+            ", videoIdMatches=" + payloadVideoId.equals(id, true) +
+            ", fileKeys=" + (files?.keys()?.asSequence()?.toList()?.sorted()?.joinToString(",") ?: "none") +
+            ", masterCandidate=" + candidates.any { isSignedPlayturkaMaster(it, id) })
 
         val decoded = decode(response.text)
         Regex(
