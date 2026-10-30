@@ -53,7 +53,8 @@ These instructions record the maintainer's established preferences and lessons f
 - `DomainAutoUpdate.yml` runs on a schedule and can also be started manually. It learns site identity while configured domains are healthy.
 - **Never change a working provider domain.** Any valid HTTP 2xx/3xx response is treated as working, including a successful redirect to another hostname; keep the original configured `mainUrl`.
 - A domain is eligible for discovery only after the same hard failure is confirmed by two independent requests: HTTP 404/410, a parked-domain page, permanent DNS-not-found, or connection-refused.
-- HTTP 401/403/429/451, Cloudflare challenges, 5xx responses, TLS errors and timeouts are protected/transient states. Report them and keep the current domain; do not search for or apply an alternative.
+- HTTP 401/403/429/451, Cloudflare challenges, 5xx responses, generic TLS issuer/expiry errors and timeouts are protected/transient states. Report them and keep the current domain; do not search for or apply an alternative.
+- A TLS hostname/common-name mismatch (such as `ERR_CERT_COMMON_NAME_INVALID`) makes the current HTTPS hostname unusable. Treat it as a hard failure only after two independent confirmations, then require the replacement to pass identity verification.
 - Candidate discovery and identity verification run only after the current domain is confirmed dead. A candidate must pass identity verification before any source file is changed.
 - A confirmed switch updates only that provider's Kotlin host references, increments its plugin version, and dispatches the normal CloudStream compiler.
 
