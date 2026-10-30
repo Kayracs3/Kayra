@@ -2,6 +2,15 @@
 
 ## 2026-10-30
 
+<!-- kayra-commit:927a29b764c2290a10160bad156f935610e64efc -->
+### Prioritize signed Playturka master HLS with audio renditions
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [927a29b](https://github.com/Kayracs3/Kayra/commit/927a29b764c2290a10160bad156f935610e64efc)
+
+
+## 2026-10-30
+
 <!-- kayra-commit:6184cf6b1ae7e798df0be8813928b44737df6038 -->
 ### Keep Dizigecesi version at last confirmed poster fix
 
