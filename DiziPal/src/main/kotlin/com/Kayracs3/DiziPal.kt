@@ -931,8 +931,8 @@ class DiziPal : MainAPI() {
                         name = episode.name
                             ?.takeIf { it.isNotBlank() }
                             ?: ("Bölüm " + episodeNumber)
-                        season = seasonNumber
-                        episode = episodeNumber
+                        this.season = seasonNumber
+                        this.episode = episodeNumber
                         posterUrl = episode.posterUrl ?: poster
                     }
                 } else {
