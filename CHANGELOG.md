@@ -2,6 +2,31 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:b146f0e16163625379a299cd66449dae27b45663 -->
+### Canlı TV eklenti modülünü kaldır
+
+- Etkilenen alanlar: CanliTV
+- Commit: [b146f0e](https://github.com/Kayracs3/Kayra/commit/b146f0e16163625379a299cd66449dae27b45663)
+
+## 2026-11-01
+
+<!-- kayra-commit:c0e0c3e36f4e2343d7d56f2e0a1e8389f5f7109b -->
+### Canlı TV eklenti modülünü kaldır
+
+- Etkilenen alanlar: CanliTV
+- Commit: [c0e0c3e](https://github.com/Kayracs3/Kayra/commit/c0e0c3e36f4e2343d7d56f2e0a1e8389f5f7109b)
+
+## 2026-11-01
+
+<!-- kayra-commit:32a1e85fa06498ea99543c161930aa1ef67620c5 -->
+### Canlı TV eklenti modülünü kaldır
+
+- Etkilenen alanlar: CanliTV
+- Commit: [32a1e85](https://github.com/Kayracs3/Kayra/commit/32a1e85fa06498ea99543c161930aa1ef67620c5)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:94cd167e07f507dd6077b7e7c9a76e1c1826eed9 -->
 ### Canlı TV plugin kaydını mevcut sağlayıcı sınıfına bağla
 
