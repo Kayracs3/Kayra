@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:2006d57be8f638f61d55be61b73cd0736cda049e -->
+### DiziPalOrjinal katalog doğrulamalarını sağlamlaştır
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [2006d57](https://github.com/Kayracs3/Kayra/commit/2006d57be8f638f61d55be61b73cd0736cda049e)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:5a412d0b484f4cd0e1c2a75ff3fc41f8e8feda5d -->
 ### DiziPalOrjinal katalog eklentisini ekle
 
