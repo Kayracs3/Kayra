@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:e516d5fbc434e848b59aa64c3485b32d55825acb -->
+### Refactor CanliTV to use new M3U source
+
+- Etkilenen alanlar: CanliTV
+- Commit: [e516d5f](https://github.com/Kayracs3/Kayra/commit/e516d5fbc434e848b59aa64c3485b32d55825acb)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:ba32bbed4a97efdb67531f717f95845b179a3429 -->
 ### Canlı TV derleme hatalarını düzelt ve kaynakları TRT ile sınırla
 
