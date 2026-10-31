@@ -63,6 +63,26 @@
         "name": "AsyaWatch"
     },
     {
+        "iconUrl": "https://www.trt.com.tr/Content/Images/Channel/trt1.png",
+        "fileHash": "sha256-08435b7a101c0c5e28c6c6c410ad25151ec029e71f072987f061ad853651d377",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 10488,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 1,
+        "internalName": "CanliTV",
+        "description": "Resm\u00ee TRT canl\u0131 yay\u0131n kanallar\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/CanliTV.cs3",
+        "name": "CanliTV"
+    },
+    {
         "iconUrl": "https://raw.githubusercontent.com/Kayracs3/Kayra/master/CineStream/icon.png",
         "fileHash": "sha256-4a676af647a4cf6fec1e633f2f3825c55e0ba8f8e37af68f932d659e3ce21896",
         "apiVersion": 1,
