@@ -1,166 +1,142 @@
 package com.Kayracs3
 
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.*
+import java.util.Locale
 
 class CanliTV : MainAPI() {
-    override var mainUrl = "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
+    override var mainUrl = "https://github.com/Kayracs3/Kayra"
     override var name = "Canlı TV"
     override var lang = "tr"
     override val hasMainPage = true
-    override val hasDownloadSupport = false
     override val supportedTypes = setOf(TvType.Live)
-    override val vpnStatus = VPNStatus.None
 
-    private val m3uUrl = "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
+    /** Kanal listenizin (M3U) ham adresi. BURAYI KENDİ ADRESİNİZLE DEĞİŞTİRİN. */
+    private val playlistUrl = "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
 
-    private val categories = listOf(
-        "Tüm Kanallar" to "all",
-        "Spor" to "Spor",
-        "Sinema" to "Sinema",
-        "Dizi" to "Dizi",
-        "Haber" to "Haber",
-        "Belgesel" to "Belgesel",
-        "Çocuk" to "Çocuk",
-        "Müzik" to "Müzik",
-        "Diğer" to "Diğer"
-    )
-
-    data class Channel(
+    private data class Channel(
         val name: String,
         val url: String,
-        val logo: String?,
-        val category: String
+        val logo: String,
+        val group: String,
+        val category: String,
     )
 
-    private val extraChannels = listOf(
-        Channel(
-            name = "Bein TV Test",
-            url = "https://css.d6e3eae5e065d5.help//beintv/tracks-v1a1/mono.m3u8",
-            logo = null,
-            category = "Spor"
-        )
-    )
+    @Volatile
+    private var cache: List<Channel>? = null
 
-    private var cachedChannels: List<Channel>? = null
+    // ---------------------------------------------------------------- liste
 
-    private fun mapGroupToCategory(groupTitle: String): String {
-        val g = groupTitle.trim().lowercase()
+    private suspend fun channels(): List<Channel> {
+        cache?.let { if (it.isNotEmpty()) return it }
+        val text = runCatching { app.get(playlistUrl).text }.getOrNull() ?: ""
+        val list = parseM3u(text)
+        if (list.isNotEmpty()) cache = list
+        return list
+    }
+
+    private fun parseM3u(text: String): List<Channel> {
+        val out = mutableListOf<Channel>()
+        var name = ""
+        var logo = ""
+        var group = ""
+        for (raw in text.lineSequence()) {
+            val line = raw.trim()
+            when {
+                line.startsWith("#EXTINF", ignoreCase = true) -> {
+                    logo = attr(line, "tvg-logo")
+                    group = attr(line, "group-title")
+                    name = line.substringAfterLast(',', "").trim()
+                        .ifBlank { attr(line, "tvg-name") }
+                }
+                line.isNotEmpty() && !line.startsWith("#") -> {
+                    if (line.startsWith("http", ignoreCase = true) && name.isNotBlank()) {
+                        out.add(Channel(name, line, logo, group, mapGroupToCategory(group)))
+                    }
+                    name = ""; logo = ""; group = ""
+                }
+            }
+        }
+        return out
+    }
+
+    private fun attr(line: String, key: String): String =
+        Regex("$key=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+            .find(line)?.groupValues?.get(1)?.trim() ?: ""
+
+    private fun mapGroupToCategory(group: String): String {
+        val g = group.lowercase(Locale("tr"))
         return when {
-            g.contains("spor") || g.contains("sport") -> "Spor"
-            g.contains("sinema") || g.contains("film") || g.contains("movie") || g.contains("vizyon") -> "Sinema"
-            g.contains("dizi") || g.contains("series") || g.contains("7/24") -> "Dizi"
-            g.contains("haber") || g.contains("news") -> "Haber"
-            g.contains("belgesel") || g.contains("documentary") || g.contains("docu") -> "Belgesel"
-            g.contains("çocuk") || g.contains("cocuk") || g.contains("kids") || g.contains("cartoon") -> "Çocuk"
-            g.contains("müzik") || g.contains("muzik") || g.contains("music") -> "Müzik"
+            listOf("spor", "sport", "futbol", "maç").any { g.contains(it) } -> "Spor"
+            listOf("sinema", "film", "movie").any { g.contains(it) } -> "Sinema"
+            listOf("dizi", "series").any { g.contains(it) } -> "Dizi"
+            listOf("haber", "news").any { g.contains(it) } -> "Haber"
+            listOf("belgesel", "documentary").any { g.contains(it) } -> "Belgesel"
+            listOf("çocuk", "cocuk", "kids", "çizgi").any { g.contains(it) } -> "Çocuk"
+            listOf("müzik", "muzik", "music").any { g.contains(it) } -> "Müzik"
             else -> "Diğer"
         }
     }
 
+    // ------------------------------------------------------------ ana sayfa
+
+    private fun toResult(c: Channel): SearchResponse =
+        newLiveSearchResponse(c.name, c.url, TvType.Live) {
+            posterUrl = c.logo.takeIf { it.startsWith("http") }
+        }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
+        if (page > 1) return newHomePageResponse(emptyList(), false)
+        val all = channels()
+        if (all.isEmpty()) throw ErrorLoadingException("Kanal listesi yüklenemedi")
 
-        // HomePageList listesi oluşturuluyor
-        val homeLists = categories.map { (title, key) ->
-            val filtered = if (key == "all") channels else channels.filter { it.category == key }
-            HomePageList(
-                name = title,
-                list = filtered.map { ch ->
-                    newLiveSearchResponse(ch.name, ch.url, TvType.Live) {
-                        this.posterUrl = ch.logo
-                    }
-                }
-            )
+        val order = listOf("Spor", "Sinema", "Dizi", "Haber", "Belgesel", "Çocuk", "Müzik", "Diğer")
+        val grouped = all.groupBy { it.category }
+        val lists = order.mapNotNull { cat ->
+            grouped[cat]?.takeIf { it.isNotEmpty() }
+                ?.let { HomePageList(cat, it.map(::toResult), false) }
         }
-
-        // HomePageList listesi ile newHomePageResponse çağrılıyor
-        return newHomePageResponse(homeLists)
+        return newHomePageResponse(lists, false)
     }
 
-    private suspend fun fetchAllChannels(): List<Channel> {
-        val m3uChannels = fetchChannelsFromM3u()
-        val merged = mutableListOf<Channel>()
-        merged.addAll(extraChannels)
-        val existingUrls = extraChannels.map { it.url }.toMutableSet()
-        for (ch in m3uChannels) {
-            if (existingUrls.add(ch.url)) merged.add(ch)
-        }
-        return merged
-    }
-
-    private suspend fun fetchChannelsFromM3u(): List<Channel> {
-        val content = runCatching { app.get(m3uUrl).text }.getOrNull() ?: return emptyList()
-        val list = mutableListOf<Channel>()
-        var name: String? = null
-        var logo: String? = null
-        var category = "Diğer"
-
-        for (raw in content.lineSequence()) {
-            val line = raw.trim()
-            if (line.isEmpty()) continue
-
-            if (line.startsWith("#EXTINF", ignoreCase = true)) {
-                name = line.substringAfterLast(",", "").trim().ifEmpty { null }
-                logo = Regex("""tvg-logo="([^"]*)"""")
-                    .find(line)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
-                val rawGroup = Regex("""group-title="([^"]*)"""")
-                    .find(line)?.groupValues?.getOrNull(1) ?: ""
-                category = mapGroupToCategory(rawGroup)
-            } else if (!line.startsWith("#") && name != null) {
-                list.add(Channel(name!!, line, logo, category))
-                name = null
-                logo = null
-                category = "Diğer"
-            }
-        }
-        return list
-    }
+    // ---------------------------------------------------------------- arama
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
-        return channels
-            .filter { it.name.contains(query, ignoreCase = true) }
-            .map { ch ->
-                newLiveSearchResponse(ch.name, ch.url, TvType.Live) {
-                    this.posterUrl = ch.logo
-                }
-            }
+        val q = query.trim().lowercase(Locale("tr"))
+        if (q.isBlank()) return emptyList()
+        return channels()
+            .filter { it.name.lowercase(Locale("tr")).contains(q) }
+            .map(::toResult)
     }
+
+    // ----------------------------------------------------------------- load
 
     override suspend fun load(url: String): LoadResponse {
-        val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
-        val ch = channels.firstOrNull { it.url == url }
-
-        // LiveStreamLoadResponse doğrudan kullanılıyor
-        return LiveStreamLoadResponse(
-            name = ch?.name ?: "Canlı Yayın",
-            url = url,
-            apiName = this.name,
-            dataUrl = url,
-            posterUrl = ch?.logo,
+        val c = channels().firstOrNull { it.url == url }
+        return newLiveStreamLoadResponse(c?.name ?: name, url, url) {
+            posterUrl = c?.logo?.takeIf { it.startsWith("http") }
+            plot = c?.group?.ifBlank { null }
             type = TvType.Live
-        )
+        }
     }
+
+    // ------------------------------------------------------------ loadLinks
 
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
+        callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        callback.invoke(
+        val c = channels().firstOrNull { it.url == data }
+        callback(
             newExtractorLink(
-                source = this.name,
-                name = this.name,
-                url = data,
-                type = ExtractorLinkType.M3U8
+                name,
+                c?.name ?: name,
+                data,
+                ExtractorLinkType.M3U8,
             ) {
                 this.referer = ""
-                // Doğru kalite tanımı
                 this.quality = Qualities.P1080.value
             }
         )
