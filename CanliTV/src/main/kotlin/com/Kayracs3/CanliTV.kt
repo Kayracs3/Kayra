@@ -3,6 +3,7 @@ package com.Kayracs3
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 
 class CanliTV : MainAPI() {
@@ -37,10 +38,7 @@ class CanliTV : MainAPI() {
 
     /**
      * M3U listesine ek olarak her zaman gösterilecek manuel kanallar.
-     * Yeni kanal eklemek için buraya bir satır daha ekleyin.
-     *
-     * Alanlar: İsim, URL, Logo (null olabilir), Kategori
-     * Kategori, yukarıdaki `categories` listesindeki adlardan biri olmalı.
+     * Yeni kanal eklemek için aşağıdaki şablonu kopyalayın.
      */
     private val extraChannels = listOf(
         Channel(
@@ -49,11 +47,10 @@ class CanliTV : MainAPI() {
             logo = null,
             category = "Spor"
         ),
-        // 👇 Yeni kanal eklemek için örnek şablonu kopyalayın:
         // Channel(
         //     name = "Kanal Adı",
         //     url = "https://ornek.com/stream.m3u8",
-        //     logo = "https://ornek.com/logo.png",   // logo yoksa null yazın
+        //     logo = null,
         //     category = "Haber"
         // ),
     )
@@ -65,7 +62,7 @@ class CanliTV : MainAPI() {
         return when {
             g.contains("spor") || g.contains("sport") -> "Spor"
             g.contains("sinema") || g.contains("film") || g.contains("movie") || g.contains("vizyon") -> "Sinema"
-            g.contains("dizi") || g.contains("series") -> "Dizi"
+            g.contains("dizi") || g.contains("series") || g.contains("7/24") -> "Dizi"
             g.contains("haber") || g.contains("news") -> "Haber"
             g.contains("belgesel") || g.contains("documentary") || g.contains("docu") -> "Belgesel"
             g.contains("çocuk") || g.contains("cocuk") || g.contains("kids") || g.contains("cartoon") -> "Çocuk"
@@ -77,29 +74,26 @@ class CanliTV : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
 
-        val pages = categories.map { (title, key) ->
+        // Her kategori için HomePageList oluştur
+        val homeLists = categories.map { (title, key) ->
             val filtered = if (key == "all") channels else channels.filter { it.category == key }
-            newHomePageResponse(
-                title,
-                filtered.map { ch ->
+            HomePageList(
+                name = title,
+                list = filtered.map { ch ->
                     newLiveSearchResponse(ch.name, ch.url, TvType.Live) {
                         this.posterUrl = ch.logo
                     }
                 },
-                hasNext = false
+                showAll = false
             )
         }
-        return newHomePageResponse(pages, hasNext = false)
+
+        // HomePageList listesi ile doğru overload'u çağır
+        return newHomePageResponse(homeLists, hasNext = false)
     }
 
-    /**
-     * M3U kanallarını çeker ve manuel `extraChannels` ile birleştirir.
-     * Aynı URL'ye sahip kanallar tekrarlanmaz.
-     */
     private suspend fun fetchAllChannels(): List<Channel> {
         val m3uChannels = fetchChannelsFromM3u()
-        // Manuel kanalları en başa koy, sonra M3U kanallarını ekle.
-        // Aynı URL varsa M3U'daki kopyayı atla.
         val merged = mutableListOf<Channel>()
         merged.addAll(extraChannels)
         val existingUrls = extraChannels.map { it.url }.toMutableSet()
@@ -151,10 +145,11 @@ class CanliTV : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
         val ch = channels.firstOrNull { it.url == url }
-        return newLiveLoadResponse(
-            name = ch?.name ?: "Canlı Yayın",
+
+        // Canlı yayın için doğru yanıt türü: newLiveStreamLoadResponse
+        return newLiveStreamLoadResponse(
             url = url,
-            type = TvType.Live,
+            name = ch?.name ?: "Canlı Yayın",
             posterUrl = ch?.logo,
         )
     }
@@ -173,7 +168,9 @@ class CanliTV : MainAPI() {
                 type = ExtractorLinkType.M3U8
             ) {
                 this.referer = ""
-                this.quality = ExtractorLink.QUALITY.HD
+                // Geçersiz: ExtractorLink.QUALITY.HD
+                // Geçerli seçenekler: Qualities.UNKNOWN, Qualities.P1080, Qualities.P720, ...
+                this.quality = Qualities.UNKNOWN
             }
         )
         return true
