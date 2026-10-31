@@ -2,6 +2,23 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:8e8866637cff7d638a3629791d8d8c3887a09ff3 -->
+### DiziPalOrjinal oyuncu metaverisi API uyumunu düzelt
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [8e88666](https://github.com/Kayracs3/Kayra/commit/8e8866637cff7d638a3629791d8d8c3887a09ff3)
+
+## 2026-11-01
+
+<!-- kayra-commit:bd31ac6adf922b875bd96fdcf960c5754bd3b3c3 -->
+### DiziPal CloudStream API derleme uyumluluğunu düzelt
+
+- Etkilenen alanlar: DiziPal
+- Commit: [bd31ac6](https://github.com/Kayracs3/Kayra/commit/bd31ac6adf922b875bd96fdcf960c5754bd3b3c3)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:7e114f4d1ea56ee026bd789419c265e44389f474 -->
 ### DiziPalOrjinal filtre sayfalarını ekle
 
