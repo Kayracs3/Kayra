@@ -2,6 +2,31 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:d50f64decc25e7185312ccea95ada923fce7f9fa -->
+### Resmî TRT canlı yayın sağlayıcısını ekle
+
+- Etkilenen alanlar: CanliTV
+- Commit: [d50f64d](https://github.com/Kayracs3/Kayra/commit/d50f64decc25e7185312ccea95ada923fce7f9fa)
+
+## 2026-10-31
+
+<!-- kayra-commit:c24035435c427c18d20802caecbb75782920f987 -->
+### Canlı TV CloudStream kayıt sınıfını ekle
+
+- Etkilenen alanlar: CanliTV
+- Commit: [c240354](https://github.com/Kayracs3/Kayra/commit/c24035435c427c18d20802caecbb75782920f987)
+
+## 2026-10-31
+
+<!-- kayra-commit:0db41cfbcfd12af3f7aa456de3aab9b74859c45f -->
+### Canlı TV eklenti modülünü ekle
+
+- Etkilenen alanlar: CanliTV
+- Commit: [0db41cf](https://github.com/Kayracs3/Kayra/commit/0db41cfbcfd12af3f7aa456de3aab9b74859c45f)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:a9d24f6a88ed9f6e62189f631eb5aac7053e7485 -->
 ### Bump FilmizleHell plugin to v24
 
