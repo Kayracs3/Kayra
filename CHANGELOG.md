@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:d4f01eacf8b6216a39b5b38f602a966c160c5ea7 -->
+### Refactor CanliTV.kt by cleaning up comments
+
+- Etkilenen alanlar: CanliTV
+- Commit: [d4f01ea](https://github.com/Kayracs3/Kayra/commit/d4f01eacf8b6216a39b5b38f602a966c160c5ea7)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:94c60b140589e7ff4f84e98a8df67e819fac0965 -->
 ### Refactor CanliTV for better channel management
 
