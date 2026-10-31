@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:61038317bc7a21ee56f75b6664ab4ec4ae612211 -->
+### Refactor CanliTV to PuuBeles with new structure
+
+- Etkilenen alanlar: CanliTV
+- Commit: [6103831](https://github.com/Kayracs3/Kayra/commit/61038317bc7a21ee56f75b6664ab4ec4ae612211)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:afea2ed794ed414f9d0c35c12219e71e0e042b61 -->
 ### Canlı TV paket ve sınıf uyuşmazlığını düzelt
 
