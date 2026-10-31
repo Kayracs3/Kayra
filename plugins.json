@@ -64,10 +64,10 @@
     },
     {
         "iconUrl": "https://www.trt.com.tr/Content/Images/Channel/trt1.png",
-        "fileHash": "sha256-32d3e73d3eef8060b23e9db171a5d92b95a160d2aa8e7c25cf3a76dad2d4e749",
+        "fileHash": "sha256-426e60cf470ee1dd441c15c13f64740ce3abac71cf6cf7b1b35e4267d0991127",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 16244,
+        "fileSize": 16257,
         "status": 1,
         "language": "tr",
         "authors": [
