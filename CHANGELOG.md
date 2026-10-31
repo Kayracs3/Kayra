@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:826089f8f43255cc8ae94f7b4dc41389e51be6b7 -->
+### Update mainUrl to new DiziPal domain
+
+- Etkilenen alanlar: DiziPal
+- Commit: [826089f](https://github.com/Kayracs3/Kayra/commit/826089f8f43255cc8ae94f7b4dc41389e51be6b7)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:f2fbd8a7dff36c6e758b61a81e740feaec90308b -->
 ### Change package name from com.pars.puubeles to Kayracs3
 
