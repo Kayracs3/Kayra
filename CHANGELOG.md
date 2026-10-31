@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:ba32bbed4a97efdb67531f717f95845b179a3429 -->
+### Canlı TV derleme hatalarını düzelt ve kaynakları TRT ile sınırla
+
+- Etkilenen alanlar: CanliTV
+- Commit: [ba32bbe](https://github.com/Kayracs3/Kayra/commit/ba32bbed4a97efdb67531f717f95845b179a3429)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:eb419a1f0272b4a03e479c89f61fcf8a51b35a04 -->
 ### Refactor CanliTV class and update main URL
 
