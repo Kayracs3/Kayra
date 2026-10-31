@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:01919c818b6a637a405cba1cabce74b47ded8c9a -->
+### Update CanliTV.kt
+
+- Etkilenen alanlar: CanliTV
+- Commit: [01919c8](https://github.com/Kayracs3/Kayra/commit/01919c818b6a637a405cba1cabce74b47ded8c9a)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:595ee994d3f3759ae9126e786674def202bb2877 -->
 ### Refactor CanliTV to use dynamic channel fetching
 
