@@ -2,6 +2,23 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:082b160f6d162c38825b22d6bc499fc392af647c -->
+### Update playlist URL to new repository location
+
+- Etkilenen alanlar: CanliTV
+- Commit: [082b160](https://github.com/Kayracs3/Kayra/commit/082b160f6d162c38825b22d6bc499fc392af647c)
+
+## 2026-10-31
+
+<!-- kayra-commit:7a60aa43f97ed6841d8d86450669db92d8c52c5c -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [7a60aa4](https://github.com/Kayracs3/Kayra/commit/7a60aa43f97ed6841d8d86450669db92d8c52c5c)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:dde58911001fd4dec1e9a9f92fd94b8e48a3d369 -->
 ### Modify playlist URL and improve channel handling
 
