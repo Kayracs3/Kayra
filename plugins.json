@@ -253,11 +253,11 @@
         "name": "Dizilla"
     },
     {
-        "iconUrl": "https://dizipal1588.com/favicon.ico",
-        "fileHash": "sha256-f811bfa4aab3ecdef898d1b771b0cec326fdbdf72e7b812ba8437cfa5a26dc64",
+        "iconUrl": "https://dizipal1592.com/favicon.ico",
+        "fileHash": "sha256-37a57607a2aea771de24abf2d809e23b82d0cfb92d4025b27be96352061f9ccb",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 91743,
+        "fileSize": 91497,
         "status": 1,
         "language": "tr",
         "authors": [
