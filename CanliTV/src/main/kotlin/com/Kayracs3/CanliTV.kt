@@ -5,7 +5,6 @@ import com.lagradost.cloudstream3.utils.*
 import java.net.URI
 
 class CanliTV : MainAPI() {
-    // M3U listesinin kaynağını temsil eden nötr bir ana URL
     override var mainUrl = "https://github.com/sunarproje/support"
     override var name = "Canlı TV"
     override var lang = "tr"
@@ -22,14 +21,75 @@ class CanliTV : MainAPI() {
         val logo: String
     )
 
+    // -----------------------------------------------------------------
+    // 🎯 EKSTRA KANALLAR — Buraya istediğin kadar elle kanal ekleyebilirsin
+    // -----------------------------------------------------------------
+    private val extraChannels: List<Channel> = listOf(
+        Channel(
+            title = "beIN Sports 1",
+            category = "Spor",
+            stream = "https://css.d6e3eae5e065d5.help//beintv/tracks-v1a1/mono.m3u8",
+            logo = "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-1-tr.png"
+        ),
+        Channel(
+            title = "Tivibu Spor 1",
+            category = "Spor",
+            stream = "http://65.108.239.207/t1/index.m3u8",
+            logo = "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tivibu-spor-tr.png"
+        ),
+        Channel(
+            title = "Sinema HD",
+            category = "Sinema",
+            stream = "http://65.108.239.207/sinema/index.m3u8",
+            logo = "https://ui-avatars.com/api/?name=Sinema+HD&size=400&background=1e3a8a&color=ffffff&bold=true&length=2"
+        ),
+        Channel(
+            title = "BS Series 1",
+            category = "Dizi",
+            // SSL sorunu nedeniyle HTTP deniyoruz; olmazsa HTTPS'e geri dönebilirsin
+            stream = "http://65.108.239.207/bsseries1/index.m3u8",
+            logo = "https://ui-avatars.com/api/?name=BS+Series+1&size=400&background=1e3a8a&color=ffffff&bold=true&length=2"
+        ),
+        // ↓↓↓ Yeni kanal eklemek için aşağıdaki şablonu kopyala ↓↓↓
+        // Channel(
+        //     title = "Kanal Adı",
+        //     category = "Kategori",
+        //     stream = "https://ornek.com/kanal/index.m3u8",
+        //     logo = "https://ornek.com/logo.png"
+        // ),
+    )
+
+    // Ana sayfada gösterilecek kategoriler (extraChannels ve M3U'daki group-title ile eşleşir)
+    private val categories = listOf(
+        "Tüm Kanallar" to "all",
+        "Spor" to "Spor",
+        "Sinema" to "Sinema",
+        "Dizi" to "Dizi",
+        "Haber" to "Haber",
+        "Belgesel" to "Belgesel",
+        "Çocuk" to "Çocuk",
+        "Müzik" to "Müzik",
+        "Diğer" to "Diğer"
+    )
+
+    override val mainPage = mainPageOf(
+        *categories.map { (name, data) -> data to name }.toTypedArray()
+    )
+
     private var cachedChannels: List<Channel>? = null
 
     private suspend fun getChannels(): List<Channel> {
-        return cachedChannels ?: fetchChannels().also { cachedChannels = it }
+        return cachedChannels ?: loadAllChannels().also { cachedChannels = it }
     }
 
-    private suspend fun fetchChannels(): List<Channel> {
-        val content = app.get(m3uUrl).text
+    private suspend fun loadAllChannels(): List<Channel> {
+        val fromM3u = fetchChannelsFromM3u()
+        // Ekstra kanallar önce görünsün, ardından M3U'dan gelenler
+        return (extraChannels + fromM3u).distinctBy { it.stream }
+    }
+
+    private suspend fun fetchChannelsFromM3u(): List<Channel> {
+        val content = runCatching { app.get(m3uUrl).text }.getOrNull() ?: return emptyList()
         val lines = content.lines()
         val channels = mutableListOf<Channel>()
         var currentInfo: String? = null
@@ -49,21 +109,24 @@ class CanliTV : MainAPI() {
         return channels
     }
 
-    override val mainPage = mainPageOf(
-        "all" to "Tüm Kanallar"
-    )
-
     private fun Channel.toSearchResponse(): SearchResponse {
         return newLiveSearchResponse(title, stream, TvType.Live) {
             posterUrl = logo
         }
     }
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val channels = getChannels()
+    override suspend fun getMainPage(
+        page: Int,
+        request: MainPageRequest
+    ): HomePageResponse {
+        val allChannels = getChannels()
+        val items = when (request.data) {
+            "all" -> allChannels
+            else -> allChannels.filter { it.category.equals(request.data, ignoreCase = true) }
+        }
         return newHomePageResponse(
             request.name,
-            channels.map { it.toSearchResponse() },
+            items.map { it.toSearchResponse() },
             hasNext = false
         )
     }
@@ -111,8 +174,9 @@ class CanliTV : MainAPI() {
             ) {
                 referer = origin
                 headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Accept" to "*/*"
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept" to "*/*",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
                 )
                 quality = Qualities.Unknown.value
             }
