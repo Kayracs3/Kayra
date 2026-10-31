@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:afea2ed794ed414f9d0c35c12219e71e0e042b61 -->
+### Canlı TV paket ve sınıf uyuşmazlığını düzelt
+
+- Etkilenen alanlar: CanliTV
+- Commit: [afea2ed](https://github.com/Kayracs3/Kayra/commit/afea2ed794ed414f9d0c35c12219e71e0e042b61)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:826089f8f43255cc8ae94f7b4dc41389e51be6b7 -->
 ### Update mainUrl to new DiziPal domain
 
