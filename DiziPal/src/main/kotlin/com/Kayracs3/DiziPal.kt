@@ -882,25 +882,6 @@ class DiziPal : MainAPI() {
 
         val episodesByUrl = LinkedHashMap<String, Episode>()
 
-        fun rememberEpisode(episode: Episode) {
-            val key = canonicalContentPath(episode.data)
-            val previous = episodesByUrl[key]
-
-            val candidateIsBetter = previous == null ||
-                (previous.season == null && episode.season != null) ||
-                (previous.episode == null && episode.episode != null) ||
-                (previous.name.isNullOrBlank() && !episode.name.isNullOrBlank()) ||
-                (previous.posterUrl.isNullOrBlank() && !episode.posterUrl.isNullOrBlank())
-
-            if (candidateIsBetter) {
-                episodesByUrl[key] = episode
-            }
-        }
-
-        // Keep the detail page's results as a fallback in case one of the
-        // season pages is temporarily unavailable.
-        initialEpisodes.forEach(::rememberEpisode)
-
         var loadedSeasonPages = 0
         while (pendingSeasonUrls.isNotEmpty() && visitedSeasonUrls.size < 50) {
             val seasonUrl = pendingSeasonUrls.removeAt(0)
@@ -958,13 +939,21 @@ class DiziPal : MainAPI() {
                     episode
                 }
 
-                rememberEpisode(normalizedEpisode)
+                episodesByUrl[canonicalContentPath(normalizedEpisode.data)] = normalizedEpisode
             }
 
             loadedSeasonPages++
             // Some versions expose the full season selector only on the
             // season page. Add any newly discovered season URLs to the queue.
             collectSeasonUrls(seasonDocument, seasonBaseUrl)
+        }
+
+        // Sezon sayfası erişilemeyen durumlarda detay sayfasında bulunan kayıtları koru.
+        initialEpisodes.forEach { episode ->
+            val key = canonicalContentPath(episode.data)
+            if (!episodesByUrl.containsKey(key)) {
+                episodesByUrl[key] = episode
+            }
         }
 
         val result = episodesByUrl.values.sortedWith(
