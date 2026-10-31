@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:595ee994d3f3759ae9126e786674def202bb2877 -->
+### Refactor CanliTV to use dynamic channel fetching
+
+- Etkilenen alanlar: CanliTV
+- Commit: [595ee99](https://github.com/Kayracs3/Kayra/commit/595ee994d3f3759ae9126e786674def202bb2877)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:d50f64decc25e7185312ccea95ada923fce7f9fa -->
 ### Resmî TRT canlı yayın sağlayıcısını ekle
 
