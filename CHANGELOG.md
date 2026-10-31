@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:20f15077adc4ee892c0efbfd654dc62c31772afd -->
+### Refactor CanliTV to PuuBeles with new structure
+
+- Etkilenen alanlar: CanliTV
+- Commit: [20f1507](https://github.com/Kayracs3/Kayra/commit/20f15077adc4ee892c0efbfd654dc62c31772afd)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:082b160f6d162c38825b22d6bc499fc392af647c -->
 ### Update playlist URL to new repository location
 
