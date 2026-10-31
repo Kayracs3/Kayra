@@ -1,5 +1,7 @@
 package com.Kayracs3
 
+import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
+
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
