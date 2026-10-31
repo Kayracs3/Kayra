@@ -64,10 +64,10 @@
     },
     {
         "iconUrl": "https://www.trt.com.tr/Content/Images/Channel/trt1.png",
-        "fileHash": "sha256-426e60cf470ee1dd441c15c13f64740ce3abac71cf6cf7b1b35e4267d0991127",
+        "fileHash": "sha256-7726cb243e740cc1987dfeeecd3e967ac60dd7edbb23641e9d2e32e73e944bc8",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 16257,
+        "fileSize": 20454,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -274,10 +274,10 @@
     },
     {
         "iconUrl": "https://dizipal1588.com/favicon.ico",
-        "fileHash": "sha256-9f4e99184d7f9a470e8779ee16453c9883eaa74ee37f7a376ae4540524ab19be",
+        "fileHash": "sha256-f811bfa4aab3ecdef898d1b771b0cec326fdbdf72e7b812ba8437cfa5a26dc64",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 91744,
+        "fileSize": 91743,
         "status": 1,
         "language": "tr",
         "authors": [
