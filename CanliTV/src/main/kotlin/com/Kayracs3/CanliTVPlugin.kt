@@ -3,10 +3,11 @@ package com.Kayracs3
 import android.content.Context
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
+import Kayracs3.PuuBeles
 
 @CloudstreamPlugin
 class CanliTVPlugin : Plugin() {
     override fun load(context: Context) {
-        registerMainAPI(CanliTV())
+        registerMainAPI(PuuBeles())
     }
 }
