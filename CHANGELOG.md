@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:ce73b6c52c85061ec630247df4f2d14832cfd235 -->
+### Update DiziPal.kt
+
+- Etkilenen alanlar: DiziPal
+- Commit: [ce73b6c](https://github.com/Kayracs3/Kayra/commit/ce73b6c52c85061ec630247df4f2d14832cfd235)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:d1a822fee4a0f6881d73b369632da262cb520d82 -->
 ### DiziPal bölüm metaverisi derleme hatasını düzelt
 
