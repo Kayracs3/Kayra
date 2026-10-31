@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-01
+
+<!-- kayra-commit:dde58911001fd4dec1e9a9f92fd94b8e48a3d369 -->
+### Modify playlist URL and improve channel handling
+
+- Etkilenen alanlar: CanliTV
+- Commit: [dde5891](https://github.com/Kayracs3/Kayra/commit/dde58911001fd4dec1e9a9f92fd94b8e48a3d369)
+
+
 ## 2026-10-31
 
 <!-- kayra-commit:8b86ea06ed9b43714ab1b5c615b08d0d2ac05a57 -->
