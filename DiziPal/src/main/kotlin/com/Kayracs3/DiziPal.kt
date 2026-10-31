@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.utils.newSubtitleFile
+import com.lagradost.cloudstream3.newSubtitleFile
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 import javax.crypto.Cipher
@@ -46,11 +46,11 @@ class DiziPal : MainAPI() {
 
         val popular = document.select("div.movie-box, div.detail, article.item, .result-item, .ml-item")
             .mapNotNull { it.toSearchResult() }
-        if (popular.isNotEmpty()) home.add(newHomePageList("Popüler", popular))
+        if (popular.isNotEmpty()) home.add(HomePageList("Popüler", popular))
 
         val latest = document.select("div.last-episodes div.item, div.weekly div.item, .movies-list .ml-item, div.item")
             .mapNotNull { it.toSearchResult() }
-        if (latest.isNotEmpty()) home.add(newHomePageList("Son Eklenenler", latest))
+        if (latest.isNotEmpty()) home.add(HomePageList("Son Eklenenler", latest))
 
         return newHomePageResponse(home) // hasNext parametresi kaldırıldı (API uyumu için)
     }
@@ -310,7 +310,7 @@ class DiziPal : MainAPI() {
         }.getOrElse { runCatching { String(Base64.decode(clean, Base64.DEFAULT)) }.getOrDefault(clean) }
     }
 
-    private fun emitMediaLink(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun emitMediaLink(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
         val finalUrl = normalizeUrl(url, referer)
         if (!isMediaUrl(finalUrl)) return false
         val type = when {
@@ -338,7 +338,7 @@ class DiziPal : MainAPI() {
         "Accept" to "*/*"
     )
 
-    private fun extractSubtitles(text: String, baseUrl: String, subtitleCallback: (SubtitleFile) -> Unit): Boolean {
+    private suspend fun extractSubtitles(text: String, baseUrl: String, subtitleCallback: (SubtitleFile) -> Unit): Boolean {
         var any = false
         Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(text).forEach {
             val raw = it.groupValues[1].decodeEscapes()
