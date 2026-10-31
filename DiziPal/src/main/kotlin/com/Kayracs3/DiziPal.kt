@@ -45,16 +45,8 @@ class DiziPal : MainAPI() {
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Güncel Bölümler",
         "$mainUrl/yabanci-dizi-izle" to "Diziler",
-        "$mainUrl/hd-film-izle" to "Filmler",
-        "$mainUrl/kanal/exxen" to "Exxen",
-        "$mainUrl/kanal/disney" to "Disney+",
-        "$mainUrl/kanal/netflix" to "Netflix",
-        "$mainUrl/kanal/amazon" to "Amazon",
-        "$mainUrl/kanal/apple-tv" to "Apple TV+",
-        "$mainUrl/kanal/max" to "Max",
-        "$mainUrl/kanal/hulu" to "Hulu",
-        "$mainUrl/kanal/tod" to "TOD",
-        "$mainUrl/kanal/tabii" to "tabii",
+        "$mainUrl/film-izle" to "Filmler",
+        "$mainUrl/platform-bolumler" to "Platformlar",
     )
 
     override suspend fun getMainPage(
