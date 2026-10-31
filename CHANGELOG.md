@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:fe97cdeffaeeeb12b861a1f992d24a7231afff64 -->
+### Refactor DiziPal.kt for clarity and conciseness
+
+- Etkilenen alanlar: DiziPal
+- Commit: [fe97cde](https://github.com/Kayracs3/Kayra/commit/fe97cdeffaeeeb12b861a1f992d24a7231afff64)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:ce73b6c52c85061ec630247df4f2d14832cfd235 -->
 ### Update DiziPal.kt
 
