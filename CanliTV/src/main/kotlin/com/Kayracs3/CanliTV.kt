@@ -1,4 +1,4 @@
-package com.pars.puubeles
+package Kayracs3
 
 import android.content.Context
 import android.content.pm.PackageManager
