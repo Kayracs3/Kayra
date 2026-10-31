@@ -315,7 +315,7 @@ class DiziPal : MainAPI() {
             }
         }
 
-        val episodes = parseEpisodes(document, poster, documentBase(document, pageUrl))
+        val episodes = parseAllSeasonEpisodes(document, pageUrl, poster)
 
         return newTvSeriesLoadResponse(
             title,
@@ -814,6 +814,254 @@ class DiziPal : MainAPI() {
         }
     }
 
+    private suspend fun parseAllSeasonEpisodes(
+        document: Document,
+        seriesUrl: String,
+        poster: String?,
+    ): List<Episode> {
+        val baseUrl = documentBase(document, seriesUrl)
+        val initialEpisodes = parseEpisodes(document, poster, baseUrl)
+        val pendingSeasonUrls = ArrayList<String>()
+        val discoveredSeasonUrls = LinkedHashSet<String>()
+        val visitedSeasonUrls = HashSet<String>()
+
+        fun collectSeasonUrls(source: Document, sourceBase: String) {
+            seasonPageUrls(source, sourceBase).forEach { seasonUrl ->
+                if (discoveredSeasonUrls.add(seasonUrl)) {
+                    pendingSeasonUrls += seasonUrl
+                }
+            }
+        }
+
+        collectSeasonUrls(document, baseUrl)
+
+        val expectedSeasonCount = Regex(
+            """(?i)\b(\d{1,2})\s+sezon\b"""
+        ).find(document.text())
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+
+        // The series page may only expose the first episode. Its page contains
+        // the complete season navigation, so inspect it once to discover all
+        // season URLs before requesting the individual season listings.
+        if (pendingSeasonUrls.isEmpty() ||
+            (expectedSeasonCount != null && pendingSeasonUrls.size < expectedSeasonCount)
+        ) {
+            val firstEpisodeUrl = initialEpisodes.firstOrNull()?.data
+                ?: document.select("a[href]")
+                    .map { normalizeUrl(it.attr("href"), baseUrl) }
+                    .firstOrNull { isEpisodeUrl(it) }
+
+            if (!firstEpisodeUrl.isNullOrBlank()) {
+                val episodeResponse = runCatching {
+                    app.get(
+                        firstEpisodeUrl,
+                        headers = headers + ("Referer" to seriesUrl),
+                        referer = seriesUrl,
+                        timeout = 10000,
+                        allowRedirects = true,
+                    )
+                }.onFailure {
+                    Log.d(
+                        "DiziPal",
+                        "Sezon bağlantılarını bulmak için bölüm sayfası okunamadı: " +
+                            firstEpisodeUrl + "; " + it.message,
+                    )
+                }.getOrNull()
+
+                if (episodeResponse?.isSuccessful == true) {
+                    val episodeDocument = episodeResponse.document
+                    collectSeasonUrls(
+                        episodeDocument,
+                        documentBase(episodeDocument, firstEpisodeUrl),
+                    )
+                }
+            }
+        }
+
+        val episodesByUrl = LinkedHashMap<String, Episode>()
+
+        fun rememberEpisode(episode: Episode) {
+            val key = canonicalContentPath(episode.data)
+            val previous = episodesByUrl[key]
+
+            val candidateIsBetter = previous == null ||
+                (previous.season == null && episode.season != null) ||
+                (previous.episode == null && episode.episode != null) ||
+                (previous.name.isNullOrBlank() && !episode.name.isNullOrBlank()) ||
+                (previous.posterUrl.isNullOrBlank() && !episode.posterUrl.isNullOrBlank())
+
+            if (candidateIsBetter) {
+                episodesByUrl[key] = episode
+            }
+        }
+
+        // Keep the detail page's results as a fallback in case one of the
+        // season pages is temporarily unavailable.
+        initialEpisodes.forEach(::rememberEpisode)
+
+        var loadedSeasonPages = 0
+        while (pendingSeasonUrls.isNotEmpty() && visitedSeasonUrls.size < 50) {
+            val seasonUrl = pendingSeasonUrls.removeAt(0)
+            if (!visitedSeasonUrls.add(seasonUrl)) continue
+
+            val seasonResponse = runCatching {
+                app.get(
+                    seasonUrl,
+                    headers = headers + ("Referer" to seriesUrl),
+                    referer = seriesUrl,
+                    timeout = 10000,
+                    allowRedirects = true,
+                )
+            }.onFailure {
+                Log.d(
+                    "DiziPal",
+                    "Sezon sayfası okunamadı: " + seasonUrl + "; " + it.message,
+                )
+            }.getOrNull() ?: continue
+
+            if (!seasonResponse.isSuccessful) {
+                Log.d("DiziPal", "Sezon sayfası başarısız: " + seasonUrl)
+                continue
+            }
+
+            val seasonDocument = seasonResponse.document
+            val seasonBaseUrl = documentBase(seasonDocument, seasonUrl)
+            val seasonFallback = seasonNumberFromUrl(seasonUrl)
+            val seasonEpisodes = parseEpisodes(
+                seasonDocument,
+                poster,
+                seasonBaseUrl,
+            )
+
+            seasonEpisodes.forEachIndexed { index, episode ->
+                val seasonNumber = episode.season ?: seasonFallback
+                val episodeNumber = episode.episode
+                    ?: episodeNumberFrom(episode.name.orEmpty())
+                    ?: (index + 1)
+
+                val normalizedEpisode = if (
+                    episode.season != seasonNumber ||
+                    episode.episode != episodeNumber ||
+                    (episode.posterUrl.isNullOrBlank() && !poster.isNullOrBlank())
+                ) {
+                    newEpisode(episode.data) {
+                        name = episode.name
+                            ?.takeIf { it.isNotBlank() }
+                            ?: ("Bölüm " + episodeNumber)
+                        season = seasonNumber
+                        episode = episodeNumber
+                        posterUrl = episode.posterUrl ?: poster
+                    }
+                } else {
+                    episode
+                }
+
+                rememberEpisode(normalizedEpisode)
+            }
+
+            loadedSeasonPages++
+            // Some versions expose the full season selector only on the
+            // season page. Add any newly discovered season URLs to the queue.
+            collectSeasonUrls(seasonDocument, seasonBaseUrl)
+        }
+
+        val result = episodesByUrl.values.sortedWith(
+            compareBy<Episode> { it.season ?: Int.MAX_VALUE }
+                .thenBy { it.episode ?: Int.MAX_VALUE }
+        )
+
+        Log.d(
+            "DiziPal",
+            "Sezon taraması tamamlandı: " +
+                visitedSeasonUrls.size + " sezon adresi, " +
+                loadedSeasonPages + " sezon sayfası, " +
+                result.size + " benzersiz bölüm",
+        )
+
+        return result.ifEmpty { initialEpisodes }
+    }
+
+    private fun seasonPageUrls(
+        document: Document,
+        baseUrl: String,
+    ): List<String> {
+        val found = LinkedHashSet<String>()
+
+        fun add(rawUrl: String?) {
+            val url = normalizeUrl(rawUrl, baseUrl)
+                .substringBefore("#")
+                .trim()
+
+            if (url.isNotBlank() && isSeasonPageUrl(url)) {
+                found += url
+            }
+        }
+
+        document.select("a[href], [data-href], [data-url]").forEach { element ->
+            add(
+                element.attr("href")
+                    .ifBlank { element.attr("data-href") }
+                    .ifBlank { element.attr("data-url") }
+            )
+        }
+
+        val html = document.html().decodeEscapes()
+        val absoluteSeasonUrl = Regex(
+            """(?i)https?://[^"'<>\\s]+/sezon/[^"'<>\\s?#]+"""
+        )
+        absoluteSeasonUrl.findAll(html).forEach { match ->
+            add(match.value)
+        }
+
+        val relativeSeasonUrl = Regex(
+            """(?i)(?<![A-Za-z0-9])(/sezon/[^"'<>\\s?#]+)"""
+        )
+        relativeSeasonUrl.findAll(html).forEach { match ->
+            add(match.groupValues.getOrNull(1))
+        }
+
+        return found.toList()
+    }
+
+    private fun isSeasonPageUrl(url: String): Boolean {
+        return runCatching {
+            URI(url).path
+                ?.lowercase()
+                ?.startsWith("/sezon/") == true
+        }.getOrDefault(false)
+    }
+
+    private fun seasonNumberFromUrl(url: String): Int? {
+        val path = runCatching { URI(url).path.orEmpty() }.getOrDefault("")
+        return Regex("""(?i)/sezon-(\d{1,3})(?:-|/|$)""")
+            .find(path)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+            ?.takeIf { it in 1..100 }
+    }
+
+    private fun episodeNumberFrom(text: String): Int? {
+        val source = text
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val patterns = listOf(
+            Regex(
+                """(?i)\b(?:bölüm|bolum|episode|ep)\s*[#.:_-]*\s*(\d{1,3})\b"""
+            ),
+            Regex(
+                """(?i)^\s*(\d{1,3})[.)]\s*(?:bölüm|bolum|episode)\b"""
+            ),
+        )
+
+        return patterns.asSequence()
+            .mapNotNull { it.find(source)?.groupValues?.getOrNull(1)?.toIntOrNull() }
+            .firstOrNull { it in 1..999 }
+    }
+
     private fun parseEpisodes(
         document: Document,
         poster: String?,
@@ -918,7 +1166,6 @@ class DiziPal : MainAPI() {
             .sortedWith(
                 compareBy<Episode> { it.season ?: Int.MAX_VALUE }
                     .thenBy { it.episode ?: Int.MAX_VALUE }
-                    .thenBy { it.name.orEmpty() }
             )
 
         Log.d(
