@@ -43,10 +43,10 @@ class DiziPal : MainAPI() {
     private val episodePosterCache = LinkedHashMap<String, String>()
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Güncel Bölümler",
-        "$mainUrl/yabanci-dizi-izle" to "Diziler",
-        "$mainUrl/film-izle" to "Filmler",
-        "$mainUrl/platform-bolumler" to "Platformlar",
+        "$mainUrl//yabanci-dizi-izle?yil=2026-" to "Güncel Bölümler",
+        "$mainUrl/yabanci-dizi-izle?orderby=izlenme" to "En Çok İzlenenler",
+        "$mainUrl/imdb-top-100" to "İmdb Puanına Göre",
+        "$mainUrl/film-izle?page=1" to "Filmler",
     )
 
     override suspend fun getMainPage(
