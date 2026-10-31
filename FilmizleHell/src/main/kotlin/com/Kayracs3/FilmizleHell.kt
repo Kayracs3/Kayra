@@ -906,6 +906,15 @@ class FilmizleHell : MainAPI() {
             Regex("""\.(?:jpe?g|png|gif|webp|svg|ico|css|js|json|map|xml|txt|woff2?|ttf)(?:$|\?)""").containsMatchIn(url.lowercase(Locale.ROOT))
     }
 
+    private fun isAdOrPreviewUrl(url: String): Boolean {
+        val uri = runCatching { URI(url) }.getOrNull()
+        val pathAndQuery = (uri?.rawPath.orEmpty() + "?" + uri?.rawQuery.orEmpty())
+            .lowercase(Locale.ROOT)
+        return Regex(
+            """(?:^|[/_.?&=-])(ad|ads|advert|advertisement|preroll|pre-roll|preview|promo|trailer|teaser|sample)(?:$|[/_.?&=-])"""
+        ).containsMatchIn(pathAndQuery)
+    }
+
     private fun isRejectedPlayerCandidate(raw: String, fixed: String): Boolean {
         val original = decode(raw).trim().lowercase(Locale.ROOT)
         if (original.isBlank() || original.startsWith("javascript:") ||
@@ -2589,9 +2598,18 @@ class FilmizleHell : MainAPI() {
                         "Playturka oynatma HTTP başlıkları: accept=*/*, cacheBypass=true, cookiePresent=" +
                             playbackHeaders.containsKey("Cookie")
                     )
-                    publishDirect(playbackUrl, playerReferer, callback, playbackHeaders)
-                    found++
-                    break
+                    if (publishDirect(
+                            playbackUrl,
+                            playerReferer,
+                            callback,
+                            playbackHeaders,
+                            expectedRuntimeMinutes = expectedRuntimeMinutes,
+                            durationValidated = true
+                        )
+                    ) {
+                        found++
+                        break
+                    }
                 } else {
                     Log.d(name, "Playturka manifest doğrulanmadı: " + safeLogUrl(manifest) +
                         ", HTTP=" + response.code + ", type=" + contentType.take(80))
@@ -2669,13 +2687,33 @@ class FilmizleHell : MainAPI() {
         url: String,
         referer: String,
         callback: (ExtractorLink) -> Unit,
-        extraHeaders: Map<String, String> = emptyMap()
-    ) {
+        extraHeaders: Map<String, String> = emptyMap(),
+        expectedRuntimeMinutes: Int? = null,
+        durationValidated: Boolean = false
+    ): Boolean {
         val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
-        if (host.isBlank() || !isDirectMedia(url) || isRejectedPlayerCandidate(url, url) || isStaticAsset(url)) {
-            Log.d(name, "Geçersiz/fragman medya bağlantısı atlandı: " + safeLogUrl(url))
-            return
+        if (host.isBlank() || !isDirectMedia(url) || isRejectedPlayerCandidate(url, url) ||
+            isStaticAsset(url) || isAdOrPreviewUrl(url)
+        ) {
+            Log.d(name, "Geçersiz/reklam/fragman medya bağlantısı atlandı: " + safeLogUrl(url))
+            return false
         }
+
+        val isHls = pathOf(url).endsWith(".m3u8", true)
+        if (isHls && !durationValidated) {
+            val duration = validatePlayturkaMovieStreamDuration(
+                url, referer, "direct", expectedRuntimeMinutes
+            )
+            if (duration == null) {
+                Log.w(
+                    name,
+                    "Kısa/reklam veya süresi doğrulanamayan doğrudan HLS kaynağı atlandı: " +
+                        safeLogUrl(url)
+                )
+                return false
+            }
+        }
+
         val type = when {
             url.contains(".m3u8", true) -> ExtractorLinkType.M3U8
             url.contains(".mp4", true) || url.contains(".webm", true) -> ExtractorLinkType.VIDEO
@@ -2689,6 +2727,7 @@ class FilmizleHell : MainAPI() {
                 this.headers = requestHeaders + ("Referer" to referer) + extraHeaders
             }
         )
+        return true
     }
 
     private suspend fun publishSubtitles(
@@ -2832,8 +2871,15 @@ class FilmizleHell : MainAPI() {
             if (depth > 2 || !visited.add(candidate)) return
             Log.d(name, "resolve[$depth]: " + safeLogUrl(candidate))
             if (isDirectMedia(candidate)) {
-                publishDirect(candidate, referer, callback)
-                found = true
+                if (publishDirect(
+                        candidate,
+                        referer,
+                        callback,
+                        expectedRuntimeMinutes = expectedRuntimeMinutes
+                    )
+                ) {
+                    found = true
+                }
                 return
             }
 
@@ -2843,13 +2889,31 @@ class FilmizleHell : MainAPI() {
             // Playturka has a dedicated resolver below; probing generic extractors
             // first only adds requests and does not contribute a usable source.
             if (!candidateHost.equals("p.playturka.space", true)) {
+                val extractedLinks = ArrayList<ExtractorLink>()
                 runCatching {
                     loadExtractor(candidate, referer, emitSubtitle) {
-                        found = true
-                        callback(it)
+                        extractedLinks.add(it)
                     }
                 }.onFailure {
                     Log.d(name, "Extractor başarısız: " + safeLogUrl(candidate) + " (" + it.javaClass.simpleName + ")")
+                }
+
+                for (link in extractedLinks) {
+                    if (isAdOrPreviewUrl(link.url)) {
+                        Log.d(name, "Extractor reklam/fragman bağlantısı atlandı: " + safeLogUrl(link.url))
+                        continue
+                    }
+                    if (pathOf(link.url).endsWith(".m3u8", true) &&
+                        validatePlayturkaMovieStreamDuration(
+                            link.url, referer, "extractor", expectedRuntimeMinutes
+                        ) == null
+                    ) {
+                        Log.w(name, "Kısa/reklam veya süresi doğrulanamayan extractor HLS bağlantısı atlandı: " +
+                            safeLogUrl(link.url))
+                        continue
+                    }
+                    callback(link)
+                    found = true
                 }
             }
 
@@ -2883,15 +2947,15 @@ class FilmizleHell : MainAPI() {
                     playturkaResolved = true
                 }
             }
-            val (nextDirect, nextEmbeds) = collectPlayerCandidates(nested.document, nested.text, nested.url)
-            val (jsDirect, jsEmbeds) = if (playturkaResolved) {
-                Log.d(name, "Playturka kaynakları çözüldü: iç içe JS taraması atlandı")
-                emptySet<String>() to emptySet<String>()
-            } else {
-                collectExternalScriptCandidates(
-                    nested.document, nested.url, nested.url, visitedScripts, seenSubtitles, emitSubtitle
-                )
+            if (playturkaResolved) {
+                Log.d(name, "Playturka tam film akışı doğrulandı; aynı sayfadaki diğer reklam/alternatif kaynaklar atlandı")
+                return
             }
+
+            val (nextDirect, nextEmbeds) = collectPlayerCandidates(nested.document, nested.text, nested.url)
+            val (jsDirect, jsEmbeds) = collectExternalScriptCandidates(
+                nested.document, nested.url, nested.url, visitedScripts, seenSubtitles, emitSubtitle
+            )
             val nestedDirect = LinkedHashSet<String>().apply {
                 addAll(nextDirect)
                 addAll(jsDirect)
@@ -2902,14 +2966,24 @@ class FilmizleHell : MainAPI() {
             }
             Log.d(name, "nested candidates: direct=" + nestedDirect.size + ", embeds=" +
                 nestedEmbeds.size + ", page=" + safeLogUrl(nested.url))
-            nestedDirect.forEach { url ->
-                if (!visited.contains(url)) {
-                    publishDirect(url, nested.url, callback)
+            for (url in nestedDirect) {
+                if (visited.contains(url)) continue
+                if (publishDirect(
+                        url,
+                        nested.url,
+                        callback,
+                        expectedRuntimeMinutes = expectedRuntimeMinutes
+                    )
+                ) {
                     found = true
+                    break
                 }
             }
-            for (next in nestedEmbeds.take(12)) {
-                resolve(next, nested.url, depth + 1)
+            if (!found) {
+                for (next in nestedEmbeds.take(12)) {
+                    resolve(next, nested.url, depth + 1)
+                    if (found) break
+                }
             }
         }
 
@@ -2918,11 +2992,20 @@ class FilmizleHell : MainAPI() {
         val orderedCandidates = allCandidates.sortedBy { candidate ->
             val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
             val path = pathOf(candidate)
-            if (host.equals("p.playturka.space", true) &&
-                Regex("""(?i)^/videos/[A-Za-z0-9_-]{1,64}/master\.m3u8$""").matches(path)
-            ) 0 else 1
+            val playturkaId = Regex("""(?i)^/videos/([A-Za-z0-9_-]{1,64})/master\.m3u8$""")
+                .find(path)?.groupValues?.getOrNull(1)
+            when {
+                host.equals("p.playturka.space", true) &&
+                    playturkaId != null && isSignedPlayturkaMaster(candidate, playturkaId) -> 0
+                host.equals("p.playturka.space", true) -> 1
+                isDirectMedia(candidate) -> 2
+                else -> 3
+            }
         }
-        for (candidate in orderedCandidates.take(20)) resolve(candidate, page.url, 0)
+        for (candidate in orderedCandidates.take(20)) {
+            if (found) break
+            resolve(candidate, page.url, 0)
+        }
 
         // If the iframe was present but the normal Playturka path failed, retain
         // the generic JavaScript-source fallback rather than dropping alternatives.
@@ -2931,13 +3014,22 @@ class FilmizleHell : MainAPI() {
                 page.document, page.url, page.url, visitedScripts, seenSubtitles, emitSubtitle
             )
             for (url in fallbackDirect) {
-                if (isDirectMedia(url)) {
-                    publishDirect(url, page.url, callback)
+                if (isDirectMedia(url) && publishDirect(
+                        url,
+                        page.url,
+                        callback,
+                        expectedRuntimeMinutes = expectedRuntimeMinutes
+                    )
+                ) {
                     found = true
+                    break
                 }
             }
-            for (candidate in fallbackEmbeds.take(12)) {
-                resolve(candidate, page.url, 0)
+            if (!found) {
+                for (candidate in fallbackEmbeds.take(12)) {
+                    resolve(candidate, page.url, 0)
+                    if (found) break
+                }
             }
         }
 
