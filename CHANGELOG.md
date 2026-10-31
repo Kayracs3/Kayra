@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:7e114f4d1ea56ee026bd789419c265e44389f474 -->
+### DiziPalOrjinal filtre sayfalarını ekle
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [7e114f4](https://github.com/Kayracs3/Kayra/commit/7e114f4d1ea56ee026bd789419c265e44389f474)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:2006d57be8f638f61d55be61b73cd0736cda049e -->
 ### DiziPalOrjinal katalog doğrulamalarını sağlamlaştır
 
