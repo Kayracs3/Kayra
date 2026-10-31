@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:94c60b140589e7ff4f84e98a8df67e819fac0965 -->
+### Refactor CanliTV for better channel management
+
+- Etkilenen alanlar: CanliTV
+- Commit: [94c60b1](https://github.com/Kayracs3/Kayra/commit/94c60b140589e7ff4f84e98a8df67e819fac0965)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:e516d5fbc434e848b59aa64c3485b32d55825acb -->
 ### Refactor CanliTV to use new M3U source
 
