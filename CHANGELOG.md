@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:f2fbd8a7dff36c6e758b61a81e740feaec90308b -->
+### Change package name from com.pars.puubeles to Kayracs3
+
+- Etkilenen alanlar: CanliTV
+- Commit: [f2fbd8a](https://github.com/Kayracs3/Kayra/commit/f2fbd8a7dff36c6e758b61a81e740feaec90308b)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:20f15077adc4ee892c0efbfd654dc62c31772afd -->
 ### Refactor CanliTV to PuuBeles with new structure
 
