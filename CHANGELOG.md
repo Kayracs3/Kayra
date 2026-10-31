@@ -2,6 +2,15 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:eb419a1f0272b4a03e479c89f61fcf8a51b35a04 -->
+### Refactor CanliTV class and update main URL
+
+- Etkilenen alanlar: CanliTV
+- Commit: [eb419a1](https://github.com/Kayracs3/Kayra/commit/eb419a1f0272b4a03e479c89f61fcf8a51b35a04)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:01919c818b6a637a405cba1cabce74b47ded8c9a -->
 ### Update CanliTV.kt
 
