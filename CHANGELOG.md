@@ -2,6 +2,23 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:214462d72110963f6785aa7ea765868ab8658653 -->
+### DiziPal simge alan adını güncelle
+
+- Etkilenen alanlar: DiziPal
+- Commit: [214462d](https://github.com/Kayracs3/Kayra/commit/214462d72110963f6785aa7ea765868ab8658653)
+
+## 2026-11-01
+
+<!-- kayra-commit:e4f8aade08a256b063a16e1b40cc4dd53610f5c6 -->
+### DiziPal katalog sayfa yollarını güncelle
+
+- Etkilenen alanlar: DiziPal
+- Commit: [e4f8aad](https://github.com/Kayracs3/Kayra/commit/e4f8aade08a256b063a16e1b40cc4dd53610f5c6)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:b146f0e16163625379a299cd66449dae27b45663 -->
 ### Canlı TV eklenti modülünü kaldır
 
