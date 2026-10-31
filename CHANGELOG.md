@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:c50a0ba27ea33d30d19cb84e26ddc138a098d974 -->
+### DiziPal sezon sayfalarından tüm bölümleri listele
+
+- Etkilenen alanlar: DiziPal
+- Commit: [c50a0ba](https://github.com/Kayracs3/Kayra/commit/c50a0ba27ea33d30d19cb84e26ddc138a098d974)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:deb4133bb1ff3a82d5d8bb75219d01646348a316 -->
 ### Update mainPage URLs and categories in DiziPal
 
