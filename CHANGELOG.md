@@ -2,6 +2,23 @@
 
 ## 2026-10-31
 
+<!-- kayra-commit:a9d24f6a88ed9f6e62189f631eb5aac7053e7485 -->
+### Bump FilmizleHell plugin to v24
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [a9d24f6](https://github.com/Kayracs3/Kayra/commit/a9d24f6a88ed9f6e62189f631eb5aac7053e7485)
+
+## 2026-10-31
+
+<!-- kayra-commit:a06661103c87e1c3ebbbec444d736b26f138f104 -->
+### Reject short ad streams and prioritize verified FilmizleHell source
+
+- Etkilenen alanlar: FilmizleHell
+- Commit: [a066611](https://github.com/Kayracs3/Kayra/commit/a06661103c87e1c3ebbbec444d736b26f138f104)
+
+
+## 2026-10-31
+
 <!-- kayra-commit:1d3d3ccd0c1a06e68e4872786417729eb7e615ff -->
 ### Bump FilmizleHell plugin to v23
 
