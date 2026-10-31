@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:deb4133bb1ff3a82d5d8bb75219d01646348a316 -->
+### Update mainPage URLs and categories in DiziPal
+
+- Etkilenen alanlar: DiziPal
+- Commit: [deb4133](https://github.com/Kayracs3/Kayra/commit/deb4133bb1ff3a82d5d8bb75219d01646348a316)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:214462d72110963f6785aa7ea765868ab8658653 -->
 ### DiziPal simge alan adını güncelle
 
