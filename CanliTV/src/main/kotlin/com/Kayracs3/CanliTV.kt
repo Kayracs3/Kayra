@@ -1,162 +1,173 @@
 package com.Kayracs3
 
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.*
 
 class CanliTV : MainAPI() {
-    override var mainUrl = "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
+    override var mainUrl = "https://www.trt.net.tr"
     override var name = "Canlı TV"
     override var lang = "tr"
     override val hasMainPage = true
+    override val hasQuickSearch = true
     override val hasDownloadSupport = false
     override val supportedTypes = setOf(TvType.Live)
-    override val vpnStatus = VPNStatus.None
 
-    private val m3uUrl = "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
-
-    private val categories = listOf(
-        "Tüm Kanallar" to "all",
-        "Spor" to "Spor",
-        "Sinema" to "Sinema",
-        "Dizi" to "Dizi",
-        "Haber" to "Haber",
-        "Belgesel" to "Belgesel",
-        "Çocuk" to "Çocuk",
-        "Müzik" to "Müzik",
-        "Diğer" to "Diğer"
-    )
-
-    data class Channel(
+    private data class Channel(
         val name: String,
         val url: String,
-        val logo: String?,
-        val category: String
+        val category: String,
+        val logo: String? = null
     )
 
-    /**
-     * M3U listesine ek olarak her zaman gösterilecek manuel kanallar.
-     * Yeni kanal eklemek için buraya bir satır daha ekleyin.
-     *
-     * Alanlar: İsim, URL, Logo (null olabilir), Kategori
-     * Kategori, yukarıdaki `categories` listesindeki adlardan biri olmalı.
+    /*
+     * Yalnızca TRT'nin kendi yayın alan adlarında yayımlanan,
+     * resmî TRT canlı kanal akışları listelenir.
+     * Üçüncü taraf IPTV listeleri veya doğrulanmamış yayın adresleri kullanılmaz.
      */
-    private val extraChannels = listOf(
+    private val channels = listOf(
         Channel(
-            name = "Bein TV Test",
-            url = "https://css.d6e3eae5e065d5.help//beintv/tracks-v1a1/mono.m3u8",
-            logo = null,
-            category = "Spor"
+            "TRT 1",
+            "https://tv-trt1.medya.trt.com.tr/master_720.m3u8",
+            "Genel",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-1-tr.png"
         ),
-        // 👇 Yeni kanal eklemek için örnek şablonu kopyalayın:
-        // Channel(
-        //     name = "Kanal Adı",
-        //     url = "https://ornek.com/stream.m3u8",
-        //     logo = "https://ornek.com/logo.png",   // logo yoksa null yazın
-        //     category = "Haber"
-        // ),
+        Channel(
+            "TRT 2",
+            "https://tv-trt2.medya.trt.com.tr/master_720.m3u8",
+            "Kültür",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-2-tr.png"
+        ),
+        Channel(
+            "TRT 3",
+            "https://tv-trt3.live.trt.com.tr/master.m3u8",
+            "Spor",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-3-tr.png"
+        ),
+        Channel(
+            "TRT Haber",
+            "https://tv-trthaber.medya.trt.com.tr/master_720.m3u8",
+            "Haber",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-haber-tr.png"
+        ),
+        Channel(
+            "TRT Belgesel",
+            "https://tv-trtbelgesel.medya.trt.com.tr/master_720.m3u8",
+            "Belgesel",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-belgesel-tr.png"
+        ),
+        Channel(
+            "TRT Spor",
+            "https://tv-trtspor1.medya.trt.com.tr/master.m3u8",
+            "Spor",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-spor-tr.png"
+        ),
+        Channel(
+            "TRT Spor Yıldız",
+            "https://tv-trtspor2.medya.trt.com.tr/master.m3u8",
+            "Spor",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-spor-yildiz-tr.png"
+        ),
+        Channel(
+            "TRT Çocuk",
+            "https://tv-trtcocuk.live.trt.com.tr/master_720.m3u8",
+            "Çocuk",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-cocuk-tr.png"
+        ),
+        Channel(
+            "TRT Avaz",
+            "https://tv-trtavaz.medya.trt.com.tr/master.m3u8",
+            "Uluslararası",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-avaz-tr.png"
+        ),
+        Channel(
+            "TRT Türk",
+            "https://tv-trtturk.medya.trt.com.tr/master_720.m3u8",
+            "Uluslararası",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-turk-tr.png"
+        ),
+        Channel(
+            "TRT Kurdî",
+            "https://tv-trtkurdi.medya.trt.com.tr/master_720.m3u8",
+            "Uluslararası",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-kurdi-tr.png"
+        ),
+        Channel(
+            "TRT Arabi",
+            "https://tv-trtarabi.medya.trt.com.tr/master_720.m3u8",
+            "Uluslararası",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-arabi-tr.png"
+        ),
+        Channel(
+            "TRT World",
+            "https://tv-trtworld.medya.trt.com.tr/master_720.m3u8",
+            "Uluslararası",
+            "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-world-tr.png"
+        )
     )
 
-    private var cachedChannels: List<Channel>? = null
+    override val mainPage = mainPageOf(
+        "all" to "Tüm Kanallar",
+        "Genel" to "Genel",
+        "Haber" to "Haber",
+        "Spor" to "Spor",
+        "Belgesel" to "Belgesel",
+        "Kültür" to "Kültür",
+        "Çocuk" to "Çocuk",
+        "Uluslararası" to "Uluslararası"
+    )
 
-    private fun mapGroupToCategory(groupTitle: String): String {
-        val g = groupTitle.trim().lowercase()
-        return when {
-            g.contains("spor") || g.contains("sport") -> "Spor"
-            g.contains("sinema") || g.contains("film") || g.contains("movie") || g.contains("vizyon") -> "Sinema"
-            g.contains("dizi") || g.contains("series") -> "Dizi"
-            g.contains("haber") || g.contains("news") -> "Haber"
-            g.contains("belgesel") || g.contains("documentary") || g.contains("docu") -> "Belgesel"
-            g.contains("çocuk") || g.contains("cocuk") || g.contains("kids") || g.contains("cartoon") -> "Çocuk"
-            g.contains("müzik") || g.contains("muzik") || g.contains("music") -> "Müzik"
-            else -> "Diğer"
+    private fun Channel.toSearchResponse(): SearchResponse {
+        return newLiveSearchResponse(
+            name,
+            url,
+            TvType.Live
+        ) {
+            posterUrl = logo
         }
     }
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
-
-        val pages = categories.map { (title, key) ->
-            val filtered = if (key == "all") channels else channels.filter { it.category == key }
-            newHomePageResponse(
-                title,
-                filtered.map { ch ->
-                    newLiveSearchResponse(ch.name, ch.url, TvType.Live) {
-                        this.posterUrl = ch.logo
-                    }
-                },
-                hasNext = false
-            )
+    override suspend fun getMainPage(
+        page: Int,
+        request: MainPageRequest
+    ): HomePageResponse {
+        val selected = request.data
+        val filtered = if (selected == "all") {
+            channels
+        } else {
+            channels.filter { it.category == selected }
         }
-        return newHomePageResponse(pages, hasNext = false)
-    }
 
-    /**
-     * M3U kanallarını çeker ve manuel `extraChannels` ile birleştirir.
-     * Aynı URL'ye sahip kanallar tekrarlanmaz.
-     */
-    private suspend fun fetchAllChannels(): List<Channel> {
-        val m3uChannels = fetchChannelsFromM3u()
-        // Manuel kanalları en başa koy, sonra M3U kanallarını ekle.
-        // Aynı URL varsa M3U'daki kopyayı atla.
-        val merged = mutableListOf<Channel>()
-        merged.addAll(extraChannels)
-        val existingUrls = extraChannels.map { it.url }.toMutableSet()
-        for (ch in m3uChannels) {
-            if (existingUrls.add(ch.url)) merged.add(ch)
-        }
-        return merged
-    }
-
-    private suspend fun fetchChannelsFromM3u(): List<Channel> {
-        val content = runCatching { app.get(m3uUrl).text }.getOrNull() ?: return emptyList()
-        val list = mutableListOf<Channel>()
-        var name: String? = null
-        var logo: String? = null
-        var category = "Diğer"
-
-        for (raw in content.lineSequence()) {
-            val line = raw.trim()
-            if (line.isEmpty()) continue
-
-            if (line.startsWith("#EXTINF", ignoreCase = true)) {
-                name = line.substringAfterLast(",", "").trim().ifEmpty { null }
-                logo = Regex("""tvg-logo="([^"]*)"""")
-                    .find(line)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
-                val rawGroup = Regex("""group-title="([^"]*)"""")
-                    .find(line)?.groupValues?.getOrNull(1) ?: ""
-                category = mapGroupToCategory(rawGroup)
-            } else if (!line.startsWith("#") && name != null) {
-                list.add(Channel(name!!, line, logo, category))
-                name = null
-                logo = null
-                category = "Diğer"
-            }
-        }
-        return list
+        return newHomePageResponse(
+            request.name,
+            filtered.map { it.toSearchResponse() },
+            hasNext = false
+        )
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
+        val text = query.trim()
+        if (text.isEmpty()) return channels.map { it.toSearchResponse() }
+
         return channels
-            .filter { it.name.contains(query, ignoreCase = true) }
-            .map { ch ->
-                newLiveSearchResponse(ch.name, ch.url, TvType.Live) {
-                    this.posterUrl = ch.logo
-                }
+            .filter {
+                it.name.contains(text, ignoreCase = true) ||
+                    it.category.contains(text, ignoreCase = true)
             }
+            .map { it.toSearchResponse() }
     }
 
-    override suspend fun load(url: String): LoadResponse {
-        val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
-        val ch = channels.firstOrNull { it.url == url }
-        return newLiveLoadResponse(
-            name = ch?.name ?: "Canlı Yayın",
-            url = url,
-            type = TvType.Live,
-            posterUrl = ch?.logo,
-        )
+    override suspend fun load(url: String): LoadResponse? {
+        val channel = channels.firstOrNull { it.url == url } ?: return null
+
+        return newLiveStreamLoadResponse(
+            channel.name,
+            url,
+            url
+        ) {
+            posterUrl = channel.logo
+            plot = "TRT'nin resmî canlı yayını."
+            tags = listOf(channel.category)
+        }
     }
 
     override suspend fun loadLinks(
@@ -165,17 +176,36 @@ class CanliTV : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        callback.invoke(
+        val channel = channels.firstOrNull { it.url == data } ?: return false
+        val host = runCatching {
+            java.net.URI(channel.url).host.orEmpty().lowercase()
+        }.getOrDefault("")
+
+        // Yalnızca bu dosyada tanımlı TRT yayınlarının oynatılmasına izin ver.
+        if (!host.endsWith(".trt.com.tr") ||
+            !channel.url.endsWith(".m3u8", ignoreCase = true)
+        ) {
+            return false
+        }
+
+        callback(
             newExtractorLink(
-                source = this.name,
-                name = this.name,
-                url = data,
+                source = name,
+                name = channel.name,
+                url = channel.url,
                 type = ExtractorLinkType.M3U8
             ) {
-                this.referer = ""
-                this.quality = ExtractorLink.QUALITY.HD
+                referer = "https://www.trt.net.tr/"
+                headers = mapOf(
+                    "Referer" to "https://www.trt.net.tr/",
+                    "Origin" to "https://www.trt.net.tr",
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "*/*"
+                )
+                quality = Qualities.P720.value
             }
         )
+
         return true
     }
 }
