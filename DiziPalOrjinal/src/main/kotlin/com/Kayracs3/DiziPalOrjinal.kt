@@ -108,6 +108,7 @@ class DiziPalOrjinal : MainAPI() {
         val year = pageYear(document, title)
         val rating = pageRating(document)
         val genres = pageGenres(document)
+        if (isAdultContent(title + " " + genres.joinToString(" "))) return null
         val actors = pageActors(document, address)
 
         if (isMovie(address) ||
@@ -291,6 +292,7 @@ class DiziPalOrjinal : MainAPI() {
             val episodeName = cleanEpisodeName(rawName).ifBlank {
                 if (episodeNumber != null) "Bölüm " + episodeNumber else "Bölüm"
             }
+            if (isAdultContent(episodeName)) continue
 
             val episodePoster = imageFrom(link, baseUrl) ?: fallbackPoster
             val episode = newEpisode(url) {
@@ -332,7 +334,9 @@ class DiziPalOrjinal : MainAPI() {
         if (seasonEpisode != null) {
             val season = seasonEpisode.groupValues[1].toIntOrNull()
             val episode = seasonEpisode.groupValues[2].toIntOrNull()
-            if (season in 1..100 && episode in 1..999) return season!! to episode!!
+            if (season != null && episode != null &&
+                season in 1..100 && episode in 1..999
+            ) return season to episode
         }
 
         val sxe = Regex("""(?i)\bS(\d{1,2})\s*E(\d{1,3})\b""").find(text)
@@ -407,6 +411,7 @@ class DiziPalOrjinal : MainAPI() {
             ).firstOrNull { it.isNotBlank() }?.let(::cleanTitle) ?: continue
 
             if (title.length < 2 || isGenericTitle(title)) continue
+            if (isAdultContent(title + " " + card.text())) continue
 
             val key = canonical(url)
             val item = if (isMovie(url)) {
@@ -621,6 +626,16 @@ class DiziPalOrjinal : MainAPI() {
             "izle", "detaylar", "detay", "tumunu gor",
             "tum bolumleri", "fragman", "oynat", "dizipal", "ana sayfa",
         )
+    }
+
+    private fun isAdultContent(value: String): Boolean {
+        val terms = normalize(value).split(" ").toSet()
+        val blocked = setOf(
+            "porn", "porno", "hentai", "erotik", "erotic",
+            "xxx", "adult", "yetiskin", "seks", "sex",
+        )
+        return terms.any { it in blocked } ||
+            Regex("""(?i)18\s*\+|18\s*yaş|18\s*yas""").containsMatchIn(value)
     }
 
     private fun normalize(value: String): String {
