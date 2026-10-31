@@ -572,6 +572,23 @@
           "webdramaturkey"
         ]
       }
+    },
+    "CanliTV": {
+      "identityProfile": {
+        "title": "GitHub - Kayracs3/Kayra · GitHub",
+        "h1": "",
+        "siteName": "GitHub",
+        "description": "Contribute to Kayracs3/Kayra development by creating an account on GitHub.",
+        "tokens": [
+          "account",
+          "contribute",
+          "creating",
+          "development",
+          "github",
+          "kayra",
+          "kayracs3"
+        ]
+      }
     }
   }
 }
