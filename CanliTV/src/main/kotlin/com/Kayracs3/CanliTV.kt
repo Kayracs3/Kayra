@@ -12,7 +12,7 @@ class CanliTV : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
 
     /** Kanal listenizin (M3U) ham adresi. BURAYI KENDİ ADRESİNİZLE DEĞİŞTİRİN. */
-    private val playlistUrl = "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
+    private val playlistUrl = "https://raw.githubusercontent.com/KULLANICI/REPO/main/liste.m3u"
 
     private data class Channel(
         val name: String,
@@ -20,6 +20,20 @@ class CanliTV : MainAPI() {
         val logo: String,
         val group: String,
         val category: String,
+        val headers: Map<String, String> = emptyMap(),
+    )
+
+    /** Elle eklenen kanallar: Channel(ad, adres, logo, grup, kategori, headers) */
+    private val manualChannels = listOf<Channel>(
+        // Örnek:
+        // Channel(
+        //     name = "Bein TV Test",
+        //     url = "https://ornek.com/yayin/index.m3u8",
+        //     logo = "",
+        //     group = "Spor",
+        //     category = "Spor",
+        //     headers = mapOf("User-Agent" to "Mozilla/5.0", "Referer" to "https://ornek.com/"),
+        // ),
     )
 
     @Volatile
@@ -30,34 +44,66 @@ class CanliTV : MainAPI() {
     private suspend fun channels(): List<Channel> {
         cache?.let { if (it.isNotEmpty()) return it }
         val text = runCatching { app.get(playlistUrl).text }.getOrNull() ?: ""
-        val list = parseM3u(text)
+        val list = parseM3u(text) + manualChannels
         if (list.isNotEmpty()) cache = list
         return list
     }
 
+    /**
+     * #EXTINF / #EXTVLCOPT / "url|Header=Değer&Header2=Değer2" biçimlerini okur.
+     * Desteklenen header'lar: User-Agent, Referer, Origin.
+     */
     private fun parseM3u(text: String): List<Channel> {
         val out = mutableListOf<Channel>()
         var name = ""
         var logo = ""
-        var group = ""
+        var group = "Diğer"
+        var opts = LinkedHashMap<String, String>()
+
         for (raw in text.lineSequence()) {
             val line = raw.trim()
-            when {
-                line.startsWith("#EXTINF", ignoreCase = true) -> {
-                    logo = attr(line, "tvg-logo")
-                    group = attr(line, "group-title")
-                    name = line.substringAfterLast(',', "").trim()
-                        .ifBlank { attr(line, "tvg-name") }
+            if (line.isEmpty()) continue
+
+            if (line.startsWith("#EXTINF", ignoreCase = true)) {
+                logo = attr(line, "tvg-logo")
+                group = attr(line, "group-title").ifBlank { "Diğer" }
+                name = line.substringAfterLast(',', "").trim().ifBlank { attr(line, "tvg-name") }
+                opts = LinkedHashMap()
+                attr(line, "user-agent").ifBlank { null }?.let { opts["User-Agent"] = it }
+                attr(line, "http-referrer").ifBlank { null }?.let { opts["Referer"] = it }
+            } else if (line.startsWith("#EXTVLCOPT:", ignoreCase = true)) {
+                val kv = line.substringAfter(':')
+                val k = kv.substringBefore('=').trim().lowercase(Locale.ROOT)
+                val v = kv.substringAfter('=', "").trim()
+                when (k) {
+                    "http-user-agent" -> opts["User-Agent"] = v
+                    "http-referrer", "http-referer" -> opts["Referer"] = v
+                    "http-origin" -> opts["Origin"] = v
                 }
-                line.isNotEmpty() && !line.startsWith("#") -> {
-                    if (line.startsWith("http", ignoreCase = true) && name.isNotBlank()) {
-                        out.add(Channel(name, line, logo, group, mapGroupToCategory(group)))
+            } else if (!line.startsWith("#")) {
+                if (line.startsWith("http", ignoreCase = true) && name.isNotBlank()) {
+                    val url = line.substringBefore('|').trim()
+                    val hdr = LinkedHashMap(opts)
+                    if (line.contains('|')) {
+                        line.substringAfter('|').split('&').forEach { p ->
+                            val k = p.substringBefore('=').trim()
+                            val v = p.substringAfter('=', "").trim()
+                            if (k.isNotEmpty() && v.isNotEmpty()) hdr[normHeader(k)] = v
+                        }
                     }
-                    name = ""; logo = ""; group = ""
+                    out.add(Channel(name, url, logo, group.trim(), mapGroupToCategory(group), hdr))
+                    name = ""
                 }
             }
         }
         return out
+    }
+
+    private fun normHeader(k: String): String = when (k.lowercase(Locale.ROOT)) {
+        "user-agent", "useragent" -> "User-Agent"
+        "referer", "referrer" -> "Referer"
+        "origin" -> "Origin"
+        else -> k
     }
 
     private fun attr(line: String, key: String): String =
@@ -129,15 +175,25 @@ class CanliTV : MainAPI() {
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         val c = channels().firstOrNull { it.url == data }
+
+        // Referer ayrı alana, geri kalan header'lar (User-Agent, Origin...) headers'a gider
+        val ref = c?.headers?.entries
+            ?.firstOrNull { it.key.equals("Referer", ignoreCase = true) }?.value ?: ""
+        val hdr = c?.headers?.filterKeys { !it.equals("Referer", ignoreCase = true) } ?: emptyMap()
+
+        val isHls = data.contains(".m3u8", true) || data.contains(".m3u", true) ||
+            data.contains("/playlist", true)
+
         callback(
             newExtractorLink(
                 name,
                 c?.name ?: name,
                 data,
-                ExtractorLinkType.M3U8,
+                if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO,
             ) {
-                this.referer = ""
-                this.quality = Qualities.P1080.value
+                this.referer = ref
+                this.quality = Qualities.Unknown.value
+                this.headers = hdr
             }
         )
         return true
