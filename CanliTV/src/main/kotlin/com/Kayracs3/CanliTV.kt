@@ -12,7 +12,7 @@ class CanliTV : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
 
     /** Kanal listenizin (M3U) ham adresi. BURAYI KENDİ ADRESİNİZLE DEĞİŞTİRİN. */
-    private val playlistUrl = "https://raw.githubusercontent.com/KULLANICI/REPO/main/liste.m3u"
+    private val playlistUrl = "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
 
     private data class Channel(
         val name: String,
