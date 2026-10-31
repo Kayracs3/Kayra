@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:5a412d0b484f4cd0e1c2a75ff3fc41f8e8feda5d -->
+### DiziPalOrjinal katalog eklentisini ekle
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [5a412d0](https://github.com/Kayracs3/Kayra/commit/5a412d0b484f4cd0e1c2a75ff3fc41f8e8feda5d)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:fe97cdeffaeeeb12b861a1f992d24a7231afff64 -->
 ### Refactor DiziPal.kt for clarity and conciseness
 
