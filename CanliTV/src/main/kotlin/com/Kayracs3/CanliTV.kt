@@ -36,23 +36,13 @@ class CanliTV : MainAPI() {
         val category: String
     )
 
-    /**
-     * M3U listesine ek olarak her zaman gösterilecek manuel kanallar.
-     * Yeni kanal eklemek için aşağıdaki şablonu kopyalayın.
-     */
     private val extraChannels = listOf(
         Channel(
             name = "Bein TV Test",
             url = "https://css.d6e3eae5e065d5.help//beintv/tracks-v1a1/mono.m3u8",
             logo = null,
             category = "Spor"
-        ),
-        // Channel(
-        //     name = "Kanal Adı",
-        //     url = "https://ornek.com/stream.m3u8",
-        //     logo = null,
-        //     category = "Haber"
-        // ),
+        )
     )
 
     private var cachedChannels: List<Channel>? = null
@@ -74,7 +64,7 @@ class CanliTV : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
 
-        // Her kategori için HomePageList oluştur
+        // HomePageList listesi oluşturuluyor
         val homeLists = categories.map { (title, key) ->
             val filtered = if (key == "all") channels else channels.filter { it.category == key }
             HomePageList(
@@ -83,13 +73,12 @@ class CanliTV : MainAPI() {
                     newLiveSearchResponse(ch.name, ch.url, TvType.Live) {
                         this.posterUrl = ch.logo
                     }
-                },
-                showAll = false
+                }
             )
         }
 
-        // HomePageList listesi ile doğru overload'u çağır
-        return newHomePageResponse(homeLists, hasNext = false)
+        // HomePageList listesi ile newHomePageResponse çağrılıyor
+        return newHomePageResponse(homeLists)
     }
 
     private suspend fun fetchAllChannels(): List<Channel> {
@@ -146,11 +135,14 @@ class CanliTV : MainAPI() {
         val channels = cachedChannels ?: fetchAllChannels().also { cachedChannels = it }
         val ch = channels.firstOrNull { it.url == url }
 
-        // Canlı yayın için doğru yanıt türü: newLiveStreamLoadResponse
-        return newLiveStreamLoadResponse(
-            url = url,
+        // LiveStreamLoadResponse doğrudan kullanılıyor
+        return LiveStreamLoadResponse(
             name = ch?.name ?: "Canlı Yayın",
+            url = url,
+            apiName = this.name,
+            dataUrl = url,
             posterUrl = ch?.logo,
+            type = TvType.Live
         )
     }
 
@@ -168,9 +160,8 @@ class CanliTV : MainAPI() {
                 type = ExtractorLinkType.M3U8
             ) {
                 this.referer = ""
-                // Geçersiz: ExtractorLink.QUALITY.HD
-                // Geçerli seçenekler: Qualities.UNKNOWN, Qualities.P1080, Qualities.P720, ...
-                this.quality = Qualities.UNKNOWN
+                // Doğru kalite tanımı
+                this.quality = Qualities.P1080.value
             }
         )
         return true
