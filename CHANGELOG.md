@@ -2,6 +2,23 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:94cd167e07f507dd6077b7e7c9a76e1c1826eed9 -->
+### Canlı TV plugin kaydını mevcut sağlayıcı sınıfına bağla
+
+- Etkilenen alanlar: CanliTV
+- Commit: [94cd167](https://github.com/Kayracs3/Kayra/commit/94cd167e07f507dd6077b7e7c9a76e1c1826eed9)
+
+## 2026-11-01
+
+<!-- kayra-commit:2035bf8051415f0d06ebb128fa0e88811aa98ef1 -->
+### Canlı TV yayın kodunu istenen haliyle geri yükle
+
+- Etkilenen alanlar: CanliTV
+- Commit: [2035bf8](https://github.com/Kayracs3/Kayra/commit/2035bf8051415f0d06ebb128fa0e88811aa98ef1)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:61038317bc7a21ee56f75b6664ab4ec4ae612211 -->
 ### Refactor CanliTV to PuuBeles with new structure
 
