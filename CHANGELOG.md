@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:dbddbe12faa1597a259acb819414b86935e082a4 -->
+### Enhance subtitle extraction in loadLinks function
+
+- Etkilenen alanlar: DiziMom
+- Commit: [dbddbe1](https://github.com/Kayracs3/Kayra/commit/dbddbe12faa1597a259acb819414b86935e082a4)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:1212ccfc94e2e5e638fcbea5e10093be04c88891 -->
 ### Enhance link cleaning in emitLink function
 
