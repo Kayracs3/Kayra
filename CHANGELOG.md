@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:a85974b186ca285233b161ac76d5e3767f631d61 -->
+### Refactor subtitle extraction and parsing logic
+
+- Etkilenen alanlar: DiziMom
+- Commit: [a85974b](https://github.com/Kayracs3/Kayra/commit/a85974b186ca285233b161ac76d5e3767f631d61)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:816d2ae3e65d08822dec8641b24e718ac45c1657 -->
 ### Update version to 6 in build.gradle.kts
 
