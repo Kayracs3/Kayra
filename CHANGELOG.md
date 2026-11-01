@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:497338e558bc2beb0045af5d059fdbbbb68d3517 -->
+### Refactor loadLinks to filter valid media links
+
+- Etkilenen alanlar: DiziMom
+- Commit: [497338e](https://github.com/Kayracs3/Kayra/commit/497338e558bc2beb0045af5d059fdbbbb68d3517)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:0836fa76cb9148b78b34203be752680d4b9ee3bb -->
 ### Refactor loadLinks and emitLink functions
 
