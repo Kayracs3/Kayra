@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:15adc0e1220d4407764d87366bbe458bb2f7065d -->
+### Refactor subtitle extraction logic and comments
+
+- Etkilenen alanlar: DiziMom
+- Commit: [15adc0e](https://github.com/Kayracs3/Kayra/commit/15adc0e1220d4407764d87366bbe458bb2f7065d)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:533bb62f5ea27941d309241c0309c159bcbd598f -->
 ### Bump version from 1 to 2
 
