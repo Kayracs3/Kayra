@@ -631,6 +631,83 @@ class DiziPalOrjinal : MainAPI() {
         "${u.scheme}://${u.host}" + if (u.port != -1) ":${u.port}" else ""
     } catch (_: Exception) { null }
 
+    /**
+     * videoplays.cfd API'sini kullanarak video linkini çözer.
+     * 1. Video ID'sini alır (player.html?video=3776).
+     * 2. /api/videos/{id}/token endpoint'inden token alır.
+     * 3. Token ile master.m3u8 linkini oluşturur.
+     */
+    private suspend fun resolveVideoplaysCfd(iframeUrl: String, callback: (ExtractorLink) -> Unit): Boolean {
+        val videoId = Regex("""[?&]video=([^&\s"'<>]+)""").find(iframeUrl)?.groupValues?.getOrNull(1)
+        if (videoId.isNullOrBlank()) {
+            Log.e(name, "videoplays.cfd: video ID bulunamadı: $iframeUrl")
+            return false
+        }
+        val origin = originOf(iframeUrl) ?: "https://videoplays.cfd"
+        Log.d(name, "videoplays.cfd: videoId=$videoId, origin=$origin")
+
+        // 1) Token al
+        val tokenUrl = "$origin/api/videos/$videoId/token"
+        val tokenResp = runCatching {
+            app.get(
+                tokenUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to iframeUrl,
+                    "Origin" to origin,
+                    "Accept" to "application/json, text/plain, */*",
+                ),
+                referer = iframeUrl,
+                timeout = 15000,
+                allowRedirects = true,
+            )
+        }.getOrNull()
+
+        if (tokenResp == null || !tokenResp.isSuccessful) {
+            Log.e(name, "videoplays.cfd: token alınamadı (${tokenResp?.code}) - $tokenUrl")
+            return false
+        }
+
+        val tokenBody = tokenResp.text
+        Log.d(name, "videoplays.cfd: token yanıtı: ${tokenBody.take(400)}")
+
+        // Token'ı JSON'dan çıkar (token veya playlist_url alanı)
+        val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
+        val playlistUrlFromBody = Regex(""""playlist_url"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(tokenBody)?.groupValues?.getOrNull(1)
+
+        val finalUrl = if (!playlistUrlFromBody.isNullOrBlank()) {
+            // playlist_url doğrudan verilmiş
+            absolute(playlistUrlFromBody.replace("\\/", "/"), origin)
+        } else if (!token.isNullOrBlank()) {
+            // token ile master.m3u8 oluştur
+            "$origin/api/videos/$videoId/master.m3u8?token=" + URLEncoder.encode(token, "UTF-8")
+        } else {
+            Log.e(name, "videoplays.cfd: token veya playlist_url bulunamadı. Yanıt: ${tokenBody.take(200)}")
+            return false
+        }
+
+        Log.d(name, "videoplays.cfd: ★ m3u8 linki: $finalUrl")
+
+        callback.invoke(
+            newExtractorLink(
+                source = name,
+                name = name,
+                url = finalUrl,
+                type = ExtractorLinkType.M3U8,
+            ) {
+                this.referer = iframeUrl
+                this.quality = Qualities.P1080.value
+                this.headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to iframeUrl,
+                    "Origin" to origin,
+                    "Accept" to "*/*",
+                )
+            }
+        )
+        return true
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -673,6 +750,17 @@ class DiziPalOrjinal : MainAPI() {
         suspend fun scanPage(url: String, referer: String, depth: Int) {
             if (depth > 3 || !visited.add("page:$url")) return
             Log.d(name, "[$depth] Sayfa: $url")
+
+            // ★ videoplays.cfd ise özel API çözücüyü kullan
+            if (url.contains("videoplays.cfd", true) || url.contains("player.html?video=", true)) {
+                Log.d(name, "[$depth] videoplays.cfd tespit edildi, API ile çözülüyor...")
+                if (resolveVideoplaysCfd(url, callback)) {
+                    found = true
+                    return
+                }
+                // API başarısız olursa normal taramaya devam et
+                Log.w(name, "[$depth] API başarısız, normal tarama devam ediyor.")
+            }
 
             val resp = runCatching {
                 app.get(
@@ -721,87 +809,19 @@ class DiziPalOrjinal : MainAPI() {
                 }
             }
 
-            // 4) Base64 görünümlü string'leri dene
-            Regex("""["']([A-Za-z0-9+/]{40,}={0,2})["']""").findAll(text).forEach { m ->
-                val decoded = runCatching { String(Base64.decode(m.groupValues[1], Base64.DEFAULT)) }.getOrNull()
-                if (decoded != null && (decoded.contains(".m3u8") || decoded.contains(".mp4"))) {
-                    Log.d(name, "[$depth] base64 media: ${decoded.take(200)}")
-                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)""").findAll(decoded).forEach { emitMedia(it.value, url) }
-                }
-            }
-
-            // 5) Iframe'ler
+            // 4) Iframe'ler
             Regex("""<iframe[^>]+src\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
                 val ifUrl = absolute(m.groupValues[1], url)
                 if (ifUrl.isNotBlank()) scanPage(ifUrl, url, depth + 1)
             }
 
-            // 6) API endpoint'lerini dene (video ID varsa)
-            val videoId = Regex("""[?&]video=([^&\s"'<>]+)""").find(url)?.groupValues?.getOrNull(1)
-                ?: Regex("""[?&]id=([^&\s"'<>]+)""").find(url)?.groupValues?.getOrNull(1)
-            if (!videoId.isNullOrBlank() && depth <= 2) {
-                val origin = originOf(url)
-                if (origin != null) {
-                    val apiPaths = listOf(
-                        "/api/video/$videoId",
-                        "/api/getVideo?id=$videoId",
-                        "/api/source/$videoId",
-                        "/api/player/$videoId",
-                        "/api/get.php?id=$videoId",
-                        "/api/video.php?id=$videoId",
-                        "/player/api.php?id=$videoId",
-                        "/source.php?id=$videoId",
-                        "/getvideo.php?id=$videoId",
-                        "/api/v1/video/$videoId",
-                    )
-                    for (path in apiPaths) {
-                        val apiUrl = origin + path
-                        val apiResp = runCatching {
-                            app.get(
-                                apiUrl,
-                                headers = headers + mapOf(
-                                    "Referer" to url,
-                                    "X-Requested-With" to "XMLHttpRequest",
-                                    "User-Agent" to USER_AGENT,
-                                ),
-                                referer = url,
-                                timeout = 8000,
-                                allowRedirects = true,
-                            )
-                        }.getOrNull()
-                        if (apiResp != null && apiResp.isSuccessful) {
-                            val apiText = apiResp.text.replace("\\/", "/")
-                            if (apiText.contains("m3u8") || apiText.contains("mp4") || apiText.contains("file") || apiText.contains("source") || apiText.contains("url")) {
-                                Log.d(name, "[$depth] API OK: $apiUrl -> ${apiText.take(300)}")
-                                Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)""").findAll(apiText).forEach { emitMedia(it.value, apiUrl) }
-                                listOf(""""file"\s*:\s*"([^"]+)"""", """"url"\s*:\s*"([^"]+)"""", """"src"\s*:\s*"([^"]+)"""").forEach { p ->
-                                    Regex(p, RegexOption.IGNORE_CASE).findAll(apiText).forEach { emitMedia(it.groupValues[1], apiUrl) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 7) Altyazı
+            // 5) Altyazı
             Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
                 val subUrl = absolute(m.groupValues[1], url)
                 if (subUrl.isNotBlank() && (subUrl.contains(".vtt", true) || subUrl.contains(".srt", true))) {
                     runCatching { subtitleCallback.invoke(SubtitleFile(subUrl, "Türkçe")) }
                     Log.d(name, "[$depth] Altyazı: $subUrl")
                 }
-            }
-
-            // 8) Teşhis: derin seviyelerde script/var dök
-            if (depth >= 1 && !found) {
-                Log.d(name, "[$depth] === SCRIPT SNIPPET ===")
-                Regex("""<script[^>]*>([\s\S]{50,1200})</script>""", RegexOption.IGNORE_CASE).findAll(text).take(2).forEachIndexed { i, m ->
-                    Log.d(name, "[$depth] Script $i: ${m.groupValues[1].take(800)}")
-                }
-                Regex("""(?:var|let|const)\s+(\w+)\s*=\s*["']([^"']{40,300})["']""").findAll(text).take(5).forEach { m ->
-                    Log.d(name, "[$depth] Var ${m.groupValues[1]}: ${m.groupValues[2].take(200)}")
-                }
-                Log.d(name, "[$depth] === END SCRIPT ===")
             }
         }
 
