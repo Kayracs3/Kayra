@@ -634,30 +634,35 @@ class DiziPalOrjinal : MainAPI() {
     /**
      * videoplays.cfd API'sini kullanarak video linkini çözer.
      * 1. Video ID'sini alır (player.html?video=3776).
-     * 2. /api/videos/{id}/token endpoint'inden token alır.
-     * 3. Token ile master.m3u8 linkini oluşturur.
+     * 2. /api/videos/{id}/token?embed_referrer={outerReferer} endpoint'inden token alır.
+     * 3. playlist_url varsa onu, yoksa token ile master.m3u8 linkini oluşturur.
      */
-    private suspend fun resolveVideoplaysCfd(iframeUrl: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun resolveVideoplaysCfd(
+        iframeUrl: String,
+        outerReferer: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
         val videoId = Regex("""[?&]video=([^&\s"'<>]+)""").find(iframeUrl)?.groupValues?.getOrNull(1)
         if (videoId.isNullOrBlank()) {
             Log.e(name, "videoplays.cfd: video ID bulunamadı: $iframeUrl")
             return false
         }
         val origin = originOf(iframeUrl) ?: "https://videoplays.cfd"
-        Log.d(name, "videoplays.cfd: videoId=$videoId, origin=$origin")
+        Log.d(name, "videoplays.cfd: videoId=$videoId, origin=$origin, ref=$outerReferer")
 
-        // 1) Token al
-        val tokenUrl = "$origin/api/videos/$videoId/token"
+        // ★ embed_referrer parametresi ile token al
+        val tokenUrl = "$origin/api/videos/$videoId/token?embed_referrer=" +
+                URLEncoder.encode(outerReferer, "UTF-8")
         val tokenResp = runCatching {
             app.get(
                 tokenUrl,
                 headers = mapOf(
                     "User-Agent" to USER_AGENT,
-                    "Referer" to iframeUrl,
+                    "Referer" to outerReferer,
                     "Origin" to origin,
                     "Accept" to "application/json, text/plain, */*",
                 ),
-                referer = iframeUrl,
+                referer = outerReferer,
                 timeout = 15000,
                 allowRedirects = true,
             )
@@ -669,21 +674,25 @@ class DiziPalOrjinal : MainAPI() {
         }
 
         val tokenBody = tokenResp.text
-        Log.d(name, "videoplays.cfd: token yanıtı: ${tokenBody.take(400)}")
+        Log.d(name, "videoplays.cfd: token yanıtı: ${tokenBody.take(500)}")
 
-        // Token'ı JSON'dan çıkar (token veya playlist_url alanı)
+        // ★ playlist_url varsa doğrudan onu kullan
+        val playlistUrlFromBody = Regex(
+            """"playlist_url"\s*:\s*"([^"]+)"""",
+            RegexOption.IGNORE_CASE
+        ).find(tokenBody)?.groupValues?.getOrNull(1)
+
         val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
-        val playlistUrlFromBody = Regex(""""playlist_url"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(tokenBody)?.groupValues?.getOrNull(1)
 
-        val finalUrl = if (!playlistUrlFromBody.isNullOrBlank()) {
-            // playlist_url doğrudan verilmiş
-            absolute(playlistUrlFromBody.replace("\\/", "/"), origin)
-        } else if (!token.isNullOrBlank()) {
-            // token ile master.m3u8 oluştur
-            "$origin/api/videos/$videoId/master.m3u8?token=" + URLEncoder.encode(token, "UTF-8")
-        } else {
-            Log.e(name, "videoplays.cfd: token veya playlist_url bulunamadı. Yanıt: ${tokenBody.take(200)}")
-            return false
+        val finalUrl = when {
+            !playlistUrlFromBody.isNullOrBlank() ->
+                absolute(playlistUrlFromBody.replace("\\/", "/"), origin)
+            !token.isNullOrBlank() ->
+                "$origin/api/videos/$videoId/master.m3u8?token=" + URLEncoder.encode(token, "UTF-8")
+            else -> {
+                Log.e(name, "videoplays.cfd: token/playlist_url yok. Yanıt: ${tokenBody.take(200)}")
+                return false
+            }
         }
 
         Log.d(name, "videoplays.cfd: ★ m3u8 linki: $finalUrl")
@@ -754,11 +763,10 @@ class DiziPalOrjinal : MainAPI() {
             // ★ videoplays.cfd ise özel API çözücüyü kullan
             if (url.contains("videoplays.cfd", true) || url.contains("player.html?video=", true)) {
                 Log.d(name, "[$depth] videoplays.cfd tespit edildi, API ile çözülüyor...")
-                if (resolveVideoplaysCfd(url, callback)) {
+                if (resolveVideoplaysCfd(url, referer, callback)) {
                     found = true
                     return
                 }
-                // API başarısız olursa normal taramaya devam et
                 Log.w(name, "[$depth] API başarısız, normal tarama devam ediyor.")
             }
 
