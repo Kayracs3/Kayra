@@ -192,7 +192,7 @@ class DiziMom : MainAPI() {
         return episodes
     }
 
-    // ★★★ DÜZELTİLMİŞ loadLinks — sadece doğru stream.php linklerini kabul eder ★★★
+    // ★★★ CORE.JS MEKANİZMASINA GÖRE GÜNCELLENMİŞ loadLinks ★★★
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -205,24 +205,17 @@ class DiziMom : MainAPI() {
         Log.d(name, "loadLinks başladı: $sourceUrl")
         var found = false
 
-        suspend fun emitLink(link: String, referer: String) {
+        suspend fun emitLink(link: String, referer: String, label: String = "") {
             if (link.isBlank()) return
             val clean = link.replace("&amp;", "&").replace("\\/", "/")
-
-            // ★★★ FİLTRE: Sadece stream.php içeren veya doğrudan m3u8/mp4/mpd olan linkleri kabul et ★★★
             val isStreamPhp = clean.contains("/api/stream.php", ignoreCase = true)
             val isDirectMedia = clean.contains(".m3u8", true) || clean.contains(".mp4", true) || clean.contains(".mpd", true)
-            if (!isStreamPhp && !isDirectMedia) {
-                Log.d(name, "⏭️ Atlanan (medya değil): $clean")
-                return
-            }
-
+            if (!isStreamPhp && !isDirectMedia) return
             val type = when {
                 isStreamPhp || clean.contains(".m3u8", true) -> ExtractorLinkType.M3U8
                 clean.contains(".mpd", true) -> ExtractorLinkType.DASH
                 else -> ExtractorLinkType.VIDEO
             }
-
             callback.invoke(newExtractorLink(source = name, name = name, url = clean, type = type) {
                 this.referer = referer
                 this.quality = Qualities.P1080.value
@@ -233,65 +226,122 @@ class DiziMom : MainAPI() {
                 )
             })
             found = true
-            Log.d(name, "★ Link eklendi: $clean")
+            Log.d(name, "★ Link eklendi ($label): $clean")
         }
 
-        val document = getDocument(sourceUrl) ?: run {
-            Log.e(name, "Bölüm sayfası çekilemedi")
-            return false
+        fun extractFromHtml(html: String, referer: String, label: String) {
+            Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                .findAll(html).forEach { found@
+                    try { emitLinkSuspend(it.value, referer, label) } catch (_: Exception) {}
+                }
+            Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                .findAll(html).forEach {
+                    try { emitLinkSuspend(it.value, referer, label) } catch (_: Exception) {}
+                }
         }
 
+        // suspend uyumlu emitLink sarmalayıcı
+        suspend fun emitLinkSuspend(link: String, referer: String, label: String) {
+            emitLink(link, referer, label)
+        }
+
+        val document = getDocument(sourceUrl) ?: return false
         val html = document.html().replace("\\/", "/")
 
-        // 1) Doğrudan stream.php linki (en kesin)
+        // 1) Statik HTML'de stream.php veya doğrudan m3u8 (bazen olur)
         Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-            .findAll(html).forEach { emitLink(it.value, sourceUrl) }
+            .findAll(html).forEach { emitLink(it.value, sourceUrl, "statik") }
+        Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+            .findAll(html).forEach { emitLink(it.value, sourceUrl, "statik-media") }
 
-        // 2) iframe'ler
-        document.select("iframe[src], iframe[data-src]").forEach { iframe ->
-            val raw = iframe.attr("src").ifBlank { iframe.attr("data-src") }
-            val iframeUrl = absolute(raw, sourceUrl)
-            if (iframeUrl.isBlank()) return@forEach
-            if (iframeUrl.contains("/api/stream.php", ignoreCase = true)) {
-                emitLink(iframeUrl, sourceUrl)
+        // 2) data-pv slug'ını bul
+        if (!found) {
+            val pvSlug = document.selectFirst("[data-pv]")?.attr("data-pv")?.trim()
+            Log.d(name, "data-pv slug: $pvSlug")
+
+            // core.js src'sini bul (base URL türetmek için)
+            val coreJsRaw = document.select("script[src]").firstOrNull {
+                val src = it.attr("src")
+                src.contains("/e/c.js") || src.contains("/assets/js/core.js")
+            }?.attr("src")
+            Log.d(name, "core.js src: $coreJsRaw")
+
+            val base = when {
+                !coreJsRaw.isNullOrBlank() -> {
+                    val abs = absolute(coreJsRaw, sourceUrl)
+                    abs.replace(Regex("/(?:e/c|assets/js/core)\\.js.*$"), "")
+                }
+                else -> "https://play2.pilavyerplay.top"
             }
-            val iframeDoc = getDocument(iframeUrl) ?: return@forEach
-            val iframeHtml = iframeDoc.html().replace("\\/", "/")
-            Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                .findAll(iframeHtml).forEach { emitLink(it.value, iframeUrl) }
-        }
+            Log.d(name, "Player BASE: $base")
 
-        // 3) Script içerikleri (inline + harici)
-        for (script in document.select("script")) {
-            val content = script.data() + " " + script.html()
-            Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                .findAll(content).forEach { emitLink(it.value, sourceUrl) }
+            if (!pvSlug.isNullOrBlank()) {
+                // s.php URL'sini kur
+                val sPhpUrl = "$base/assets/js/s.php?s=" + URLEncoder.encode(pvSlug, "UTF-8")
+                Log.d(name, "s.php URL: $sPhpUrl")
 
-            val src = script.attr("src").trim()
-            if (src.isNotBlank()) {
-                val scriptUrl = absolute(src, sourceUrl)
-                val scriptResp = runCatching {
-                    app.get(scriptUrl, headers = headers + mapOf("Referer" to sourceUrl), referer = sourceUrl, timeout = 10000)
-                }.getOrNull()
-                if (scriptResp != null && scriptResp.isSuccessful) {
-                    val body = scriptResp.text.replace("\\/", "/")
+                val sPhpDoc = getDocument(sPhpUrl, sourceUrl)
+                if (sPhpDoc != null) {
+                    val sPhpHtml = sPhpDoc.html().replace("\\/", "/")
+                    Log.d(name, "s.php HTML uzunluğu: ${sPhpHtml.length}")
+                    Log.d(name, "s.php ilk 800 char: ${sPhpHtml.take(800)}")
+
+                    // s.php içinde stream.php veya m3u8 ara
                     Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                        .findAll(body).forEach { emitLink(it.value, scriptUrl) }
+                        .findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php") }
+                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                        .findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php-media") }
+
+                    // s.php içindeki iframe'ler
+                    sPhpDoc.select("iframe[src], iframe[data-src]").forEach { iframe ->
+                        val src = iframe.attr("src").ifBlank { iframe.attr("data-src") }
+                        if (src.isBlank()) return@forEach
+                        val innerUrl = absolute(src, sPhpUrl)
+                        if (innerUrl.contains("/api/stream.php", true)) {
+                            emitLink(innerUrl, sPhpUrl, "s.php-iframe")
+                        }
+                    }
+
+                    // s.php'de script varsa src'yi de çek
+                    if (!found) {
+                        sPhpDoc.select("script[src]").forEach { script ->
+                            val src = script.attr("src").trim()
+                            if (src.isBlank()) return@forEach
+                            val fullSrc = absolute(src, sPhpUrl)
+                            val scriptResp = runCatching {
+                                app.get(fullSrc, headers = headers + mapOf("Referer" to sPhpUrl), referer = sPhpUrl, timeout = 8000)
+                            }.getOrNull()
+                            if (scriptResp != null && scriptResp.isSuccessful) {
+                                val body = scriptResp.text.replace("\\/", "/")
+                                Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                                    .findAll(body).forEach { emitLink(it.value, fullSrc, "s.php-script") }
+                                Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                                    .findAll(body).forEach { emitLink(it.value, fullSrc, "s.php-script-media") }
+                            }
+                        }
+                    }
+                } else {
+                    Log.e(name, "s.php çekilemedi: $sPhpUrl")
                 }
             }
         }
 
-        // 4) data-player-shell
-        document.select("[data-player-shell]").forEach { el ->
-            val raw = el.attr("data-player-shell").replace("&quot;", "\"").replace("\\/", "/")
-            Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                .findAll(raw).forEach { emitLink(it.value, sourceUrl) }
-        }
-
-        // 5) Son çare: Sayfadaki tüm m3u8/mp4 içeren linkleri tara (stream.php dışında)
+        // 3) Son çare: sayfadaki tüm script'leri tara
         if (!found) {
-            Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                .findAll(html).forEach { emitLink(it.value, sourceUrl) }
+            for (script in document.select("script")) {
+                val src = script.attr("src").trim()
+                if (src.isNotBlank()) {
+                    val scriptUrl = absolute(src, sourceUrl)
+                    val scriptResp = runCatching {
+                        app.get(scriptUrl, headers = headers + mapOf("Referer" to sourceUrl), referer = sourceUrl, timeout = 8000)
+                    }.getOrNull()
+                    if (scriptResp != null && scriptResp.isSuccessful) {
+                        val body = scriptResp.text.replace("\\/", "/")
+                        Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                            .findAll(body).forEach { emitLink(it.value, scriptUrl, "harici-script") }
+                    }
+                }
+            }
         }
 
         if (!found) Log.e(name, "Hiçbir oynatma linki bulunamadı.")
