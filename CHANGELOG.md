@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:6243fe57fb46b94446fcee737ad8ee24e8688f7c -->
+### Refactor load function and improve link extraction
+
+- Etkilenen alanlar: DiziMom
+- Commit: [6243fe5](https://github.com/Kayracs3/Kayra/commit/6243fe57fb46b94446fcee737ad8ee24e8688f7c)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:b1a96d046a2b914615056a6c571f70037f2a2bf1 -->
 ### Update DiziMom.kt
 
