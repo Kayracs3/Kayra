@@ -254,10 +254,10 @@
     },
     {
         "iconUrl": "https://dizipal1592.com/favicon.ico",
-        "fileHash": "sha256-c6653e38a210bcb7bf708c033a05853fe19983d6042d82097210619764ffcdc9",
+        "fileHash": "sha256-8f963c8577d12eef660043e2cb1a767d8ceefae0fdcf67e3e088d72eaaf0e98b",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 98111,
+        "fileSize": 29916,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -272,6 +272,27 @@
         "description": "Dizipal dizi ve film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPal.cs3",
         "name": "DiziPal"
+    },
+    {
+        "iconUrl": "https://dizipalorjinal18.com/favicon.ico",
+        "fileHash": "sha256-5f8bc1c58d4ea4bac6a005a44a45ffe4572079c9e0a73dff7b2cdcb568c5ed38",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 29625,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "DiziPalOrjinal",
+        "description": "DiziPalOrjinal film ve dizi katalog sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziPalOrjinal.cs3",
+        "name": "DiziPalOrjinal"
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=dizipod.com&sz=%size%",
