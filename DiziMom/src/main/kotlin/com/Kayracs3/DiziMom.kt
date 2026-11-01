@@ -192,7 +192,7 @@ class DiziMom : MainAPI() {
         return episodes
     }
 
-    // ★★★ GÜNCELLENMİŞ loadLinks ★★★
+    // ★★★ DÜZELTİLMİŞ loadLinks — sadece doğru stream.php linklerini kabul eder ★★★
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -208,11 +208,21 @@ class DiziMom : MainAPI() {
         suspend fun emitLink(link: String, referer: String) {
             if (link.isBlank()) return
             val clean = link.replace("&amp;", "&").replace("\\/", "/")
+
+            // ★★★ FİLTRE: Sadece stream.php içeren veya doğrudan m3u8/mp4/mpd olan linkleri kabul et ★★★
+            val isStreamPhp = clean.contains("/api/stream.php", ignoreCase = true)
+            val isDirectMedia = clean.contains(".m3u8", true) || clean.contains(".mp4", true) || clean.contains(".mpd", true)
+            if (!isStreamPhp && !isDirectMedia) {
+                Log.d(name, "⏭️ Atlanan (medya değil): $clean")
+                return
+            }
+
             val type = when {
-                clean.contains(".m3u8", true) || clean.contains("stream.php", true) -> ExtractorLinkType.M3U8
+                isStreamPhp || clean.contains(".m3u8", true) -> ExtractorLinkType.M3U8
                 clean.contains(".mpd", true) -> ExtractorLinkType.DASH
                 else -> ExtractorLinkType.VIDEO
             }
+
             callback.invoke(newExtractorLink(source = name, name = name, url = clean, type = type) {
                 this.referer = referer
                 this.quality = Qualities.P1080.value
@@ -233,36 +243,28 @@ class DiziMom : MainAPI() {
 
         val html = document.html().replace("\\/", "/")
 
-        // 1) Doğrudan stream.php linki
+        // 1) Doğrudan stream.php linki (en kesin)
         Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
             .findAll(html).forEach { emitLink(it.value, sourceUrl) }
 
-        // 2) pilavyerplay / play2 host'u geçen linkler
-        Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-            .findAll(html).forEach { emitLink(it.value, sourceUrl) }
-
-        // 3) iframe'ler
+        // 2) iframe'ler
         document.select("iframe[src], iframe[data-src]").forEach { iframe ->
             val raw = iframe.attr("src").ifBlank { iframe.attr("data-src") }
             val iframeUrl = absolute(raw, sourceUrl)
             if (iframeUrl.isBlank()) return@forEach
-            if (iframeUrl.contains("stream.php") || iframeUrl.contains("pilavyerplay") || iframeUrl.contains("play2")) {
+            if (iframeUrl.contains("/api/stream.php", ignoreCase = true)) {
                 emitLink(iframeUrl, sourceUrl)
             }
             val iframeDoc = getDocument(iframeUrl) ?: return@forEach
             val iframeHtml = iframeDoc.html().replace("\\/", "/")
             Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                 .findAll(iframeHtml).forEach { emitLink(it.value, iframeUrl) }
-            Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                .findAll(iframeHtml).forEach { emitLink(it.value, iframeUrl) }
         }
 
-        // 4) Script içerikleri (inline + harici)
+        // 3) Script içerikleri (inline + harici)
         for (script in document.select("script")) {
             val content = script.data() + " " + script.html()
             Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                .findAll(content).forEach { emitLink(it.value, sourceUrl) }
-            Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                 .findAll(content).forEach { emitLink(it.value, sourceUrl) }
 
             val src = script.attr("src").trim()
@@ -275,19 +277,21 @@ class DiziMom : MainAPI() {
                     val body = scriptResp.text.replace("\\/", "/")
                     Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                         .findAll(body).forEach { emitLink(it.value, scriptUrl) }
-                    Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                        .findAll(body).forEach { emitLink(it.value, scriptUrl) }
                 }
             }
         }
 
-        // 5) data-player-shell
+        // 4) data-player-shell
         document.select("[data-player-shell]").forEach { el ->
             val raw = el.attr("data-player-shell").replace("&quot;", "\"").replace("\\/", "/")
             Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                 .findAll(raw).forEach { emitLink(it.value, sourceUrl) }
-            Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                .findAll(raw).forEach { emitLink(it.value, sourceUrl) }
+        }
+
+        // 5) Son çare: Sayfadaki tüm m3u8/mp4 içeren linkleri tara (stream.php dışında)
+        if (!found) {
+            Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                .findAll(html).forEach { emitLink(it.value, sourceUrl) }
         }
 
         if (!found) Log.e(name, "Hiçbir oynatma linki bulunamadı.")
