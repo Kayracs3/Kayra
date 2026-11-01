@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:adc93fab18a286745e2f439aa260da15834582f2 -->
+### Fix DiziMom loadLinks type import
+
+- Etkilenen alanlar: DiziMom
+- Commit: [adc93fa](https://github.com/Kayracs3/Kayra/commit/adc93fab18a286745e2f439aa260da15834582f2)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:71403905fb65f867a1473db59f987a3884b0dead -->
 ### Document DiziMom provider
 
