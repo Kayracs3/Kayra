@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:aa000fbdadd718f3cf27efcfc4abea7e7c6a0d84 -->
+### Refactor media URL handling and scanning logic
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [aa000fb](https://github.com/Kayracs3/Kayra/commit/aa000fbdadd718f3cf27efcfc4abea7e7c6a0d84)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:ab7229ad3fb00d3e0d5d077f19a9c5cebd8f0ee3 -->
 ### Clean up comments and enhance diagnostic logging
 
