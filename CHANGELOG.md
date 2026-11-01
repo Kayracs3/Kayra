@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:377fe12b5f3becf98abf37059007222438ce5ff5 -->
+### Refactor mainPage entries for clarity and consistency
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [377fe12](https://github.com/Kayracs3/Kayra/commit/377fe12b5f3becf98abf37059007222438ce5ff5)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:8e8866637cff7d638a3629791d8d8c3887a09ff3 -->
 ### DiziPalOrjinal oyuncu metaverisi API uyumunu düzelt
 
