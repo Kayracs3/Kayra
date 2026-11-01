@@ -1,5 +1,6 @@
 package com.Kayracs3
 
+import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.app
@@ -12,6 +13,9 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.net.URLEncoder
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 class DiziPalOrjinal : MainAPI() {
     override var mainUrl = "https://dizipalorjinal18.com"
@@ -25,6 +29,9 @@ class DiziPalOrjinal : MainAPI() {
 
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
+        // ★ YENİ: DiziPal script'inin AES anahtarları
+        private const val AES_KEY = "T8r9Wq3mZ1kL5vYb"
+        private const val AES_IV = "N2pR7sX4cV6bM1qF"
     }
 
     private val headers = mapOf(
@@ -594,6 +601,38 @@ class DiziPalOrjinal : MainAPI() {
         return runCatching { URI(absolute(url, mainUrl)).path.orEmpty() }.getOrDefault("")
     }
 
+    // ★ YENİ: Şifreli config çözme yardımcıları
+    private fun extractEncryptedConfig(text: String): String? {
+        val patterns = listOf(
+            Regex("""(?:const|let|var)\s+_?config\s*=\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE),
+            Regex("""(?:const|let|var)\s+_?enc\w*\s*=\s*['"]([^'"]{20,})['"]""", RegexOption.IGNORE_CASE),
+            Regex(""""config"\s*:\s*"([^"]{20,})"""", RegexOption.IGNORE_CASE),
+            Regex("""_config\s*=\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE),
+        )
+        for (p in patterns) {
+            val m = p.find(text) ?: continue
+            val value = m.groupValues[1]
+            if (value.startsWith("enc:") || value.length > 40) return value
+        }
+        return null
+    }
+
+    private fun decryptDizipalConfig(encrypted: String): String {
+        val clean = encrypted.removePrefix("enc:")
+        return runCatching {
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(AES_KEY.toByteArray(), "AES"), IvParameterSpec(AES_IV.toByteArray()))
+            String(cipher.doFinal(Base64.decode(clean, Base64.DEFAULT)))
+        }.getOrElse {
+            runCatching { String(Base64.decode(clean, Base64.DEFAULT)) }.getOrDefault("")
+        }
+    }
+
+    private fun originOf(url: String): String? = try {
+        val u = URI(url)
+        "${u.scheme}://${u.host}" + if (u.port != -1) ":${u.port}" else ""
+    } catch (_: Exception) { null }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -608,7 +647,7 @@ class DiziPalOrjinal : MainAPI() {
         // ★ DÜZELTME: emitMedia artık suspend
         suspend fun emitMedia(raw: String?, referer: String) {
             val media = raw?.trim() ?: return
-            val mediaUrl = absolute(media, referer)
+            val mediaUrl = absolute(media.replace("\\/", "/"), referer)
             if (mediaUrl.isBlank() || !mediaUrl.startsWith("http", true)) return
             if (!visited.add(mediaUrl)) return
             val lower = mediaUrl.lowercase()
@@ -628,6 +667,13 @@ class DiziPalOrjinal : MainAPI() {
                         )
                     }.getOrNull() ?: return
                     if (page.isSuccessful) {
+                        // ★ source2.php JSON yanıtı olabilir, JSON'daki "file" alanını da tara
+                        Regex(""""file"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(page.text).forEach {
+                            emitMedia(it.groupValues[1].replace("\\/", "/"), mediaUrl)
+                        }
+                        Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).findAll(page.text).forEach {
+                            emitMedia(it.value, mediaUrl)
+                        }
                         val doc = Document.createShell(referer)
                         doc.body().append(page.text)
                         doc.select("iframe[src], source[src], video[src]").forEach { el ->
@@ -735,7 +781,97 @@ class DiziPalOrjinal : MainAPI() {
             )
         }.getOrNull() ?: return false
         if (!page.isSuccessful) return false
+
+        // İlk olarak mevcut regex taraması
         scanMediaPage(page.text, sourceUrl)
+
+        // ★ YENİ: Şifreli config varsa çöz ve player URL'sini işle
+        val encrypted = extractEncryptedConfig(page.text.replace("\\/", "/"))
+        if (encrypted != null) {
+            Log.d(name, "Şifreli config bulundu: ${encrypted.take(80)}")
+            val player = decryptDizipalConfig(encrypted)
+            Log.d(name, "Çözülen player: ${player.take(200)}")
+            if (player.isNotBlank()) {
+                val playerWithScheme = when {
+                    player.startsWith("//") -> "https:$player"
+                    !player.startsWith("http") -> "https://$player"
+                    else -> player
+                }
+                val iframeUrl = absolute(playerWithScheme, sourceUrl)
+                Log.d(name, "Iframe URL: $iframeUrl")
+
+                val vParam = Regex("""[?&]v=([^&]+)""").find(iframeUrl)?.groupValues?.getOrNull(1)
+                Log.d(name, "v parametresi: $vParam")
+
+                val iframePage = runCatching {
+                    app.get(
+                        iframeUrl,
+                        headers = headers + mapOf("Referer" to sourceUrl, "User-Agent" to USER_AGENT),
+                        referer = sourceUrl,
+                        timeout = 15000,
+                        allowRedirects = true,
+                    )
+                }.getOrNull()
+
+                if (iframePage != null && iframePage.isSuccessful) {
+                    Log.d(name, "Iframe başarılı: ${iframePage.code}")
+                    val iframeHtml = iframePage.text.replace("\\/", "/")
+
+                    // Altyazılar
+                    Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(iframeHtml).forEach { m ->
+                        val subUrl = absolute(m.groupValues[1], iframeUrl)
+                        if (subUrl.isNotBlank()) runCatching {
+                            subtitleCallback.invoke(SubtitleFile(subUrl, "Türkçe"))
+                            Log.d(name, "Altyazı: $subUrl")
+                        }
+                    }
+
+                    // v parametresi ile source2.php
+                    if (!vParam.isNullOrBlank()) {
+                        val origin = originOf(iframeUrl) ?: iframeUrl
+                        val source2Url = origin.trimEnd('/') + "/source2.php?v=" + URLEncoder.encode(vParam, "UTF-8")
+                        Log.d(name, "Source2 URL: $source2Url")
+
+                        val s2 = runCatching {
+                            app.get(
+                                source2Url,
+                                headers = headers + mapOf(
+                                    "Referer" to iframeUrl,
+                                    "User-Agent" to USER_AGENT,
+                                    "X-Requested-With" to "XMLHttpRequest",
+                                    "Accept" to "application/json,text/plain,*/*",
+                                ),
+                                referer = iframeUrl,
+                                timeout = 15000,
+                                allowRedirects = true,
+                            )
+                        }.getOrNull()
+
+                        if (s2 != null && s2.isSuccessful) {
+                            Log.d(name, "Source2 yanıtı: ${s2.text.take(500)}")
+                            val s2Text = s2.text.replace("\\/", "/")
+                            Regex(""""file"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(s2Text).forEach {
+                                emitMedia(it.groupValues[1], iframeUrl)
+                            }
+                            Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).findAll(s2Text).forEach {
+                                emitMedia(it.value, iframeUrl)
+                            }
+                        } else {
+                            Log.e(name, "Source2 başarısız: ${s2?.code}")
+                        }
+                    }
+
+                    // Iframe HTML içinde doğrudan m3u8
+                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).findAll(iframeHtml).forEach {
+                        emitMedia(it.value, iframeUrl)
+                    }
+                } else {
+                    Log.e(name, "Iframe başarısız: ${iframePage?.code}")
+                }
+            }
+        }
+
+        if (!found) Log.e(name, "Hiçbir oynatma linki bulunamadı.")
         return found
     }
 }
