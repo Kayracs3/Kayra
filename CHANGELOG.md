@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:9dcf62a7da33daa6870818a01a3f68c714fa7c83 -->
+### Refactor subtitle extraction to use iframeUrl
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [9dcf62a](https://github.com/Kayracs3/Kayra/commit/9dcf62a7da33daa6870818a01a3f68c714fa7c83)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:18db495a3629f4a85eb3673452ecc8c37a9e8577 -->
 ### Refactor subtitle extraction for CDN compatibility
 
