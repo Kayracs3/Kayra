@@ -9,7 +9,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.utils.newSubtitleFile
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
@@ -389,7 +388,6 @@ class DiziPalOrjinal : MainAPI() {
         document.selectFirst("main p")?.text(),
     ).firstOrNull { !it.isNullOrBlank() }?.replace(Regex("""\s+"""), " ")?.trim()
 
-    // ★ YENİ: Yapım yılı — script.data() kullanır
     private fun pageYear(document: Document, title: String): Int? {
         for (script in document.select("script[type=application/ld+json]")) {
             val text = script.data()
@@ -428,7 +426,6 @@ class DiziPalOrjinal : MainAPI() {
         return y
     }
 
-    // ★ YENİ: IMDb puanı — script.data() kullanır
     private fun pageRating(document: Document): Double? {
         for (script in document.select("script[type=application/ld+json]")) {
             val text = script.data()
@@ -678,7 +675,8 @@ class DiziPalOrjinal : MainAPI() {
                 if (!hasCues) continue
 
                 val lang = label?.let { mapLang(it) } ?: "Türkçe"
-                subtitleCallback.invoke(newSubtitleFile(lang = lang, url = candidate))
+                // ★ DÜZELTME: newSubtitleFile yerine doğrudan SubtitleFile
+                subtitleCallback.invoke(SubtitleFile(url = candidate, lang = lang))
                 count++
                 return
             }
