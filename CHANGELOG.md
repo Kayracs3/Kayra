@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:15eb8d01e73eb470412371d21fa3c81b50bb661e -->
+### Fix missing URI import for DiziPalOrjinal Kotlin compilation
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [15eb8d0](https://github.com/Kayracs3/Kayra/commit/15eb8d01e73eb470412371d21fa3c81b50bb661e)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:5698ac0c8bda71c98c6868e76b07d5c32859af45 -->
 ### Add loadLinks function for media link extraction
 
