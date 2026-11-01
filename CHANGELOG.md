@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:03fb93f5e2c9c96ae652a8aede5e6fa6c34ceef9 -->
+### Update version to 5 in build.gradle.kts
+
+- Etkilenen alanlar: DiziMom
+- Commit: [03fb93f](https://github.com/Kayracs3/Kayra/commit/03fb93f5e2c9c96ae652a8aede5e6fa6c34ceef9)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:ffb0b5525d0f7e951249046e065f1bdc2794f100 -->
 ### Update print statement from 'Hello' to 'Goodbye'
 
