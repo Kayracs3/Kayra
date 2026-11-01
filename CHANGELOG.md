@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:67eaecb2da7cd1a6c0888c61c3023d711247edc4 -->
+### Implement video link resolution with videoplays.cfd API
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [67eaecb](https://github.com/Kayracs3/Kayra/commit/67eaecb2da7cd1a6c0888c61c3023d711247edc4)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:e8354822ed8159d432a9d4bdd2fc78f527ad1e49 -->
 ### Refactor scanPage function for better clarity
 
