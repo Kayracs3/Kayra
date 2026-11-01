@@ -39,7 +39,6 @@ class DiziMom : MainAPI() {
         "$mainUrl/filmler" to "Filmler",
     )
 
-    // ★★★ EKSİK OLAN METOT: Ana sayfa ★★★
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val address = if (page <= 1) request.data else request.data.trimEnd('/') + "?page=$page"
         val document = getDocument(address)
@@ -50,7 +49,6 @@ class DiziMom : MainAPI() {
         return newHomePageResponse(request.name, results, hasNext = next)
     }
 
-    // ★★★ API TABANLI ARAMA ★★★
     override suspend fun search(query: String): List<SearchResponse> {
         val value = query.trim()
         if (value.length < 2) return emptyList()
@@ -106,7 +104,7 @@ class DiziMom : MainAPI() {
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
-    // ★★★ DETAY SAYFASI ★★★
+    // ★★★ DÜZELTİLMİŞ load FONKSİYONU ★★★
     override suspend fun load(url: String): LoadResponse? {
         val document = getDocument(url) ?: return null
         val title = pageTitle(document, url) ?: return null
@@ -115,6 +113,7 @@ class DiziMom : MainAPI() {
         val year = pageYear(document, title)
         val genres = pageGenres(document)
 
+        // Film ise doğrudan film yanıtı döndür
         if (url.contains("/film/")) {
             return newMovieLoadResponse(title, url, TvType.Movie, url) {
                 posterUrl = poster
@@ -124,12 +123,29 @@ class DiziMom : MainAPI() {
             }
         }
 
-        // Dizi: bölüm listesi statik HTML'de yok, şimdilik tek bir "İzle" bölümü ekliyoruz.
-        // Gerçek sezon/bölüm listesi için site içi JS API'si incelenmeli.
-        val episodes = listOf(
-            newEpisode(url) { this.name = "İzle" }
-        )
+        // ★ Dizi: tüm sezonları bul ve her sezonun bölümlerini topla
+        val episodes = mutableListOf<Episode>()
+        val seasonLinks = document.select("a[href*='?sezon=']")
+        Log.d(name, "Bulunan sezon linki sayısı: ${seasonLinks.size}")
 
+        if (seasonLinks.isNotEmpty()) {
+            for (seasonLink in seasonLinks) {
+                val href = seasonLink.attr("href").trim()
+                if (href.isBlank()) continue
+                val seasonUrl = absolute(href, url)
+                val seasonNum = Regex("""sezon=(\d+)""").find(seasonUrl)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                Log.d(name, "Sezon URL: $seasonUrl, Sezon No: $seasonNum")
+                val seasonDoc = getDocument(seasonUrl) ?: continue
+                val seasonEpisodes = parseEpisodes(seasonDoc, seasonUrl, seasonNum ?: 1)
+                episodes.addAll(seasonEpisodes)
+            }
+        } else {
+            // Sezon linki yoksa, mevcut sayfadaki bölümleri al
+            val defaultEpisodes = parseEpisodes(document, url, 1)
+            episodes.addAll(defaultEpisodes)
+        }
+
+        Log.d(name, "Toplam bölüm sayısı: ${episodes.size}")
         return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
             posterUrl = poster
             this.plot = plot
@@ -138,7 +154,36 @@ class DiziMom : MainAPI() {
         }
     }
 
-    // ★★★ OYNATICI ★★★
+    // ★ YENİ: Bir sayfadaki bölüm linklerini ayrıştırır
+    private fun parseEpisodes(document: Document, baseUrl: String, defaultSeason: Int): List<Episode> {
+        val episodes = mutableListOf<Episode>()
+        val episodeLinks = document.select("a[href*='/sezon-'][href*='/bolum-']")
+        Log.d(name, "parseEpisodes: ${episodeLinks.size} bölüm linki bulundu (base: $baseUrl)")
+
+        for (link in episodeLinks) {
+            val href = link.attr("href").trim()
+            if (href.isBlank()) continue
+
+            val fullUrl = absolute(href, baseUrl)
+            val match = Regex("""/sezon-(\d+)/bolum-(\d+)""").find(fullUrl) ?: continue
+            val seasonNum = match.groupValues[1].toIntOrNull() ?: defaultSeason
+            val episodeNum = match.groupValues[2].toIntOrNull() ?: continue
+
+            // Bölüm adını al (paylaşılan HTML'deki <p class="...font-semibold..."> etiketi)
+            val episodeName = link.selectFirst("p.text-sm.font-semibold")?.text()?.trim()
+                ?: link.text().trim().ifBlank { "Bölüm $episodeNum" }
+
+            val episode = newEpisode(fullUrl) {
+                this.name = episodeName
+                this.season = seasonNum
+                this.episode = episodeNum
+            }
+            episodes.add(episode)
+        }
+        return episodes
+    }
+
+    // ★★★ OYNATICI (site JS tabanlı olduğu için hâlâ sınırlı) ★★★
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -151,7 +196,6 @@ class DiziMom : MainAPI() {
         val document = getDocument(sourceUrl) ?: return false
         var found = false
 
-        // 1) HTML içindeki doğrudan m3u8/mp4
         val html = document.html().replace("\\/", "/")
         Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .findAll(html).forEach { m ->
@@ -162,7 +206,6 @@ class DiziMom : MainAPI() {
                 found = true
             }
 
-        // 2) iframe'leri tara
         document.select("iframe[src]").forEach { iframe ->
             val iframeUrl = absolute(iframe.attr("src"), sourceUrl)
             if (iframeUrl.isNotBlank()) {
@@ -175,14 +218,6 @@ class DiziMom : MainAPI() {
                         })
                         found = true
                     }
-            }
-        }
-
-        // 3) player shell veri özniteliği (varsa)
-        document.select("[data-player-shell]").forEach { el ->
-            val playerData = el.attr("data-player-shell")
-            if (playerData.isNotBlank()) {
-                Log.d(name, "Player shell verisi: $playerData")
             }
         }
 
