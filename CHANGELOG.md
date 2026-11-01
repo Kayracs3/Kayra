@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:83a88fb1658b0cbdbb29d94e7b3f3947d4c35ecf -->
+### Refactor DiziMom class and update dependencies
+
+- Etkilenen alanlar: DiziMom
+- Commit: [83a88fb](https://github.com/Kayracs3/Kayra/commit/83a88fb1658b0cbdbb29d94e7b3f3947d4c35ecf)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:adc93fab18a286745e2f439aa260da15834582f2 -->
 ### Fix DiziMom loadLinks type import
 
