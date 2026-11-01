@@ -39,7 +39,18 @@ class DiziMom : MainAPI() {
         "$mainUrl/filmler" to "Filmler",
     )
 
-    // ★★★ API TABANLI ARAMA (doğrulandı) ★★★
+    // ★★★ EKSİK OLAN METOT: Ana sayfa ★★★
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val address = if (page <= 1) request.data else request.data.trimEnd('/') + "?page=$page"
+        val document = getDocument(address)
+            ?: return newHomePageResponse(request.name, emptyList(), hasNext = false)
+        val results = parseCatalog(document, address)
+        val next = page < 20 && results.isNotEmpty()
+        Log.d(name, "Katalog ${request.name}: ${results.size} kayıt")
+        return newHomePageResponse(request.name, results, hasNext = next)
+    }
+
+    // ★★★ API TABANLI ARAMA ★★★
     override suspend fun search(query: String): List<SearchResponse> {
         val value = query.trim()
         if (value.length < 2) return emptyList()
@@ -69,7 +80,6 @@ class DiziMom : MainAPI() {
         val json = runCatching { org.json.JSONObject(response.text) }.getOrNull() ?: return emptyList()
         val results = mutableListOf<SearchResponse>()
 
-        // Filmler
         json.optJSONArray("movies")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val item = arr.optJSONObject(i) ?: continue
@@ -80,7 +90,6 @@ class DiziMom : MainAPI() {
             }
         }
 
-        // Diziler
         json.optJSONArray("series")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val item = arr.optJSONObject(i) ?: continue
@@ -174,7 +183,6 @@ class DiziMom : MainAPI() {
             val playerData = el.attr("data-player-shell")
             if (playerData.isNotBlank()) {
                 Log.d(name, "Player shell verisi: $playerData")
-                // Burada playerData içindeki JSON'dan video linki çıkarılabilir.
             }
         }
 
@@ -193,6 +201,56 @@ class DiziMom : MainAPI() {
         }
     }
 
+    private fun parseCatalog(document: Document, baseUrl: String): List<SearchResponse> {
+        val found = LinkedHashMap<String, SearchResponse>()
+        for (link in document.select("a[href]")) {
+            val url = absolute(link.attr("href"), baseUrl).substringBefore("#")
+            if (url.isBlank()) continue
+            if (!url.contains("/film/") && !url.contains("/dizi/")) continue
+
+            val card = findCard(link)
+            val poster = imageFrom(link, baseUrl) ?: imageFrom(card, baseUrl)
+            val title = listOf(
+                link.attr("title"), link.attr("aria-label"),
+                link.selectFirst("h2,h3,h4,.title,.name")?.text().orEmpty(),
+                link.selectFirst("img")?.attr("alt").orEmpty(),
+                link.text(),
+                card.selectFirst("h2,h3,h4,.title,.name")?.text().orEmpty(),
+            ).firstOrNull { it.isNotBlank() }?.trim() ?: continue
+            if (title.length < 2) continue
+
+            val key = canonical(url)
+            val item = if (url.contains("/film/")) {
+                newMovieSearchResponse(title, url, TvType.Movie) { posterUrl = poster }
+            } else {
+                newTvSeriesSearchResponse(title, url, TvType.TvSeries) { posterUrl = poster }
+            }
+            found.putIfAbsent(key, item)
+        }
+        return found.values.toList()
+    }
+
+    private fun findCard(link: Element): Element {
+        var best = link
+        var current: Element? = link
+        repeat(3) {
+            val item = current ?: return@repeat
+            if (item.selectFirst("img") != null) best = item
+            val parent = item.parent() ?: return@repeat
+            if (parent.select("a[href]").size > 10) return@repeat
+            current = parent
+            best = parent
+        }
+        return best
+    }
+
+    private fun imageFrom(element: Element?, baseUrl: String): String? {
+        if (element == null) return null
+        val img = if (element.tagName().equals("img", true)) element else element.selectFirst("img") ?: return null
+        val src = img.attr("data-src").ifBlank { img.attr("data-lazy-src") }.ifBlank { img.attr("src") }
+        return if (src.isNotBlank()) absolute(src, baseUrl) else null
+    }
+
     private fun pageTitle(document: Document, url: String): String? {
         return document.selectFirst("h1")?.text()?.trim()
             ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
@@ -202,11 +260,13 @@ class DiziMom : MainAPI() {
 
     private fun pagePoster(document: Document, baseUrl: String): String? {
         return document.selectFirst("meta[property=og:image]")?.attr("content")?.let { absolute(it, baseUrl) }
+            ?: document.selectFirst(".poster img, .detail-poster img")?.let { imageFrom(it, baseUrl) }
     }
 
     private fun pagePlot(document: Document): String? {
         return document.selectFirst("meta[property=og:description]")?.attr("content")?.trim()
             ?: document.selectFirst("meta[name=description]")?.attr("content")?.trim()
+            ?: document.selectFirst(".description, .plot, .summary")?.text()?.trim()
     }
 
     private fun pageYear(document: Document, title: String): Int? {
@@ -219,8 +279,8 @@ class DiziMom : MainAPI() {
 
     private fun pageGenres(document: Document): List<String> {
         val list = mutableListOf<String>()
-        document.select("a[href*='/tur/']").forEach { list.add(it.text().trim()) }
-        return list.distinct().take(20)
+        document.select("a[href*='/tur/'], .genres a, .genre a").forEach { list.add(it.text().trim()) }
+        return list.filter { it.isNotBlank() }.distinct().take(20)
     }
 
     private fun absolute(raw: String, base: String): String {
@@ -230,6 +290,8 @@ class DiziMom : MainAPI() {
         if (value.startsWith("//")) return "https:$value"
         return runCatching { URI(base).resolve(value).toString() }.getOrElse { mainUrl.trimEnd('/') + "/" + value.removePrefix("/") }
     }
+
+    private fun canonical(url: String): String = absolute(url, mainUrl).substringBefore("#").substringBefore("?").trimEnd('/').lowercase()
 
     private fun pathOf(url: String): String = runCatching { URI(absolute(url, mainUrl)).path.orEmpty() }.getOrDefault("")
 }
