@@ -2,6 +2,23 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:816d2ae3e65d08822dec8641b24e718ac45c1657 -->
+### Update version to 6 in build.gradle.kts
+
+- Etkilenen alanlar: DiziMom
+- Commit: [816d2ae](https://github.com/Kayracs3/Kayra/commit/816d2ae3e65d08822dec8641b24e718ac45c1657)
+
+## 2026-11-01
+
+<!-- kayra-commit:9eecd15d565847aa37dfd7b4a1710467241a720a -->
+### Refactor search and subtitle fetching methods
+
+- Etkilenen alanlar: DiziMom
+- Commit: [9eecd15](https://github.com/Kayracs3/Kayra/commit/9eecd15d565847aa37dfd7b4a1710467241a720a)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:03fb93f5e2c9c96ae652a8aede5e6fa6c34ceef9 -->
 ### Update version to 5 in build.gradle.kts
 
