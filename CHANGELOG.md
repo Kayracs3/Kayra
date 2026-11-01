@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:b0890bd87dcb4861086292e6b979464651c86c23 -->
+### Restore full DiziPalOrjinal.kt and keep the required URI import fix
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [b0890bd](https://github.com/Kayracs3/Kayra/commit/b0890bd87dcb4861086292e6b979464651c86c23)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:15eb8d01e73eb470412371d21fa3c81b50bb661e -->
 ### Fix missing URI import for DiziPalOrjinal Kotlin compilation
 
