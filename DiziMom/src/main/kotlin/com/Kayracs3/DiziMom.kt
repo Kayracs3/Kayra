@@ -192,7 +192,7 @@ class DiziMom : MainAPI() {
         return episodes
     }
 
-    // ★★★ DÜZELTİLMİŞ loadLinks — emitLink artık suspend ★★★
+    // ★★★ GÜNCELLENMİŞ loadLinks ★★★
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -205,43 +205,65 @@ class DiziMom : MainAPI() {
         Log.d(name, "loadLinks başladı: $sourceUrl")
         var found = false
 
-        // ★★★ KRİTİK DÜZELTME: suspend fun emitLink ★★★
         suspend fun emitLink(link: String, referer: String) {
             if (link.isBlank()) return
+            val clean = link.replace("&amp;", "&").replace("\\/", "/")
             val type = when {
-                link.contains(".m3u8", true) -> ExtractorLinkType.M3U8
-                link.contains(".mpd", true) -> ExtractorLinkType.DASH
+                clean.contains(".m3u8", true) || clean.contains("stream.php", true) -> ExtractorLinkType.M3U8
+                clean.contains(".mpd", true) -> ExtractorLinkType.DASH
                 else -> ExtractorLinkType.VIDEO
             }
-            callback.invoke(newExtractorLink(source = name, name = name, url = link, type = type) {
+            callback.invoke(newExtractorLink(source = name, name = name, url = clean, type = type) {
                 this.referer = referer
                 this.quality = Qualities.P1080.value
+                this.headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to referer,
+                    "Origin" to "https://ddizimom.net",
+                )
             })
             found = true
-            Log.d(name, "★ Link eklendi: $link")
+            Log.d(name, "★ Link eklendi: $clean")
         }
 
         val document = getDocument(sourceUrl) ?: run {
-            Log.e(name, "Bölüm sayfası çekilemedi: $sourceUrl")
+            Log.e(name, "Bölüm sayfası çekilemedi")
             return false
         }
 
         val html = document.html().replace("\\/", "/")
-        Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+
+        // 1) Doğrudan stream.php linki
+        Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
             .findAll(html).forEach { emitLink(it.value, sourceUrl) }
 
-        for (script in document.select("script")) {
-            val inline = script.data()
-            if (inline.isNotBlank()) {
-                Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                    .findAll(inline).forEach { emitLink(it.value, sourceUrl) }
-                Regex("""["'](?:file|src|url|source|stream|playlist|manifest|hls)["']\s*[:=]\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                    .findAll(inline).forEach { m ->
-                        val candidate = m.groupValues[1]
-                        if (candidate.contains(".m3u8", true) || candidate.contains(".mp4", true) || candidate.contains(".mpd", true))
-                            emitLink(absolute(candidate, sourceUrl), sourceUrl)
-                    }
+        // 2) pilavyerplay / play2 host'u geçen linkler
+        Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+            .findAll(html).forEach { emitLink(it.value, sourceUrl) }
+
+        // 3) iframe'ler
+        document.select("iframe[src], iframe[data-src]").forEach { iframe ->
+            val raw = iframe.attr("src").ifBlank { iframe.attr("data-src") }
+            val iframeUrl = absolute(raw, sourceUrl)
+            if (iframeUrl.isBlank()) return@forEach
+            if (iframeUrl.contains("stream.php") || iframeUrl.contains("pilavyerplay") || iframeUrl.contains("play2")) {
+                emitLink(iframeUrl, sourceUrl)
             }
+            val iframeDoc = getDocument(iframeUrl) ?: return@forEach
+            val iframeHtml = iframeDoc.html().replace("\\/", "/")
+            Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                .findAll(iframeHtml).forEach { emitLink(it.value, iframeUrl) }
+            Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                .findAll(iframeHtml).forEach { emitLink(it.value, iframeUrl) }
+        }
+
+        // 4) Script içerikleri (inline + harici)
+        for (script in document.select("script")) {
+            val content = script.data() + " " + script.html()
+            Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                .findAll(content).forEach { emitLink(it.value, sourceUrl) }
+            Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                .findAll(content).forEach { emitLink(it.value, sourceUrl) }
 
             val src = script.attr("src").trim()
             if (src.isNotBlank()) {
@@ -250,58 +272,22 @@ class DiziMom : MainAPI() {
                     app.get(scriptUrl, headers = headers + mapOf("Referer" to sourceUrl), referer = sourceUrl, timeout = 10000)
                 }.getOrNull()
                 if (scriptResp != null && scriptResp.isSuccessful) {
-                    val scriptBody = scriptResp.text.replace("\\/", "/")
-                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                        .findAll(scriptBody).forEach { emitLink(it.value, scriptUrl) }
-                    Regex("""["'](?:file|src|url|source|stream|playlist|manifest|hls)["']\s*[:=]\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                        .findAll(scriptBody).forEach { m ->
-                            val candidate = m.groupValues[1]
-                            if (candidate.contains(".m3u8", true) || candidate.contains(".mp4", true) || candidate.contains(".mpd", true))
-                                emitLink(absolute(candidate, scriptUrl), scriptUrl)
-                        }
+                    val body = scriptResp.text.replace("\\/", "/")
+                    Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                        .findAll(body).forEach { emitLink(it.value, scriptUrl) }
+                    Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                        .findAll(body).forEach { emitLink(it.value, scriptUrl) }
                 }
             }
         }
 
-        document.select("iframe[src], iframe[data-src], video[src], video source[src], source[src], source[data-src]").forEach { el ->
-            val raw = el.attr("src").ifBlank { el.attr("data-src") }
-            if (raw.isBlank()) return@forEach
-            val full = absolute(raw, sourceUrl)
-            if (full.isBlank()) return@forEach
-            if (el.tagName().equals("iframe", true)) {
-                val iframeResp = runCatching {
-                    app.get(full, headers = headers + mapOf("Referer" to sourceUrl), referer = sourceUrl, timeout = 10000)
-                }.getOrNull()
-                if (iframeResp != null && iframeResp.isSuccessful) {
-                    val iframeBody = iframeResp.text.replace("\\/", "/")
-                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                        .findAll(iframeBody).forEach { emitLink(it.value, full) }
-                    Regex("""["'](?:file|src|url|source|stream|playlist|manifest|hls)["']\s*[:=]\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                        .findAll(iframeBody).forEach { m ->
-                            val candidate = m.groupValues[1]
-                            if (candidate.contains(".m3u8", true) || candidate.contains(".mp4", true) || candidate.contains(".mpd", true))
-                                emitLink(absolute(candidate, full), full)
-                        }
-                }
-            } else if (full.contains(".m3u8", true) || full.contains(".mp4", true) || full.contains(".mpd", true)) {
-                emitLink(full, sourceUrl)
-            }
-        }
-
+        // 5) data-player-shell
         document.select("[data-player-shell]").forEach { el ->
-            val raw = el.attr("data-player-shell")
-            if (raw.isNotBlank()) {
-                Log.d(name, "data-player-shell bulundu: ${raw.take(300)}")
-                val decoded = raw.replace("&quot;", "\"").replace("\\/", "/")
-                Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                    .findAll(decoded).forEach { emitLink(it.value, sourceUrl) }
-                Regex("""["'](?:file|src|url|source|stream|playlist|manifest|hls)["']\s*[:=]\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                    .findAll(decoded).forEach { m ->
-                        val candidate = m.groupValues[1]
-                        if (candidate.contains(".m3u8", true) || candidate.contains(".mp4", true) || candidate.contains(".mpd", true))
-                            emitLink(absolute(candidate, sourceUrl), sourceUrl)
-                    }
-            }
+            val raw = el.attr("data-player-shell").replace("&quot;", "\"").replace("\\/", "/")
+            Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                .findAll(raw).forEach { emitLink(it.value, sourceUrl) }
+            Regex("""https?://[^\s"'<>]*(?:pilavyerplay|play2)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                .findAll(raw).forEach { emitLink(it.value, sourceUrl) }
         }
 
         if (!found) Log.e(name, "Hiçbir oynatma linki bulunamadı.")
