@@ -192,7 +192,7 @@ class DiziMom : MainAPI() {
         return episodes
     }
 
-    // ★★★ DÜZELTİLMİŞ loadLinks ★★★
+    // ★★★ DÜZELTİLMİŞ loadLinks — emitLink artık suspend ★★★
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -205,7 +205,8 @@ class DiziMom : MainAPI() {
         Log.d(name, "loadLinks başladı: $sourceUrl")
         var found = false
 
-        fun emitLink(link: String, referer: String) {
+        // ★★★ KRİTİK DÜZELTME: suspend fun emitLink ★★★
+        suspend fun emitLink(link: String, referer: String) {
             if (link.isBlank()) return
             val type = when {
                 link.contains(".m3u8", true) -> ExtractorLinkType.M3U8
