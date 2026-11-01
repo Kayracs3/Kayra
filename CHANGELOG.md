@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:b9c448b5669921c7f7f8b1c7542e920eab60216f -->
+### Add new imports for extractor link utilities
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [b9c448b](https://github.com/Kayracs3/Kayra/commit/b9c448b5669921c7f7f8b1c7542e920eab60216f)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:8b2c12bd95aeea8a924396fb85f4a8bd65811c4b -->
 ### Fix DiziPal CloudStream API compatibility errors
 
