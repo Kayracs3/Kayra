@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:db6f0dfe8f440c3d973842082524a1147635bd14 -->
+### Refactor loadLinks and emitLink to be suspend functions
+
+- Etkilenen alanlar: DiziMom
+- Commit: [db6f0df](https://github.com/Kayracs3/Kayra/commit/db6f0dfe8f440c3d973842082524a1147635bd14)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:6243fe57fb46b94446fcee737ad8ee24e8688f7c -->
 ### Refactor load function and improve link extraction
 
