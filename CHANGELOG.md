@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:b1a96d046a2b914615056a6c571f70037f2a2bf1 -->
+### Update DiziMom.kt
+
+- Etkilenen alanlar: DiziMom
+- Commit: [b1a96d0](https://github.com/Kayracs3/Kayra/commit/b1a96d046a2b914615056a6c571f70037f2a2bf1)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:341ca4bd8ba1482cb67213512223ce0a73d00dfd -->
 ### Parse DiziMom metadata, season controls, episodes and cast HTML
 
