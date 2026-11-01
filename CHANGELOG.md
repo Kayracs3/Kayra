@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:54c9d91256e9cecf9b2371ab951d92d618df8877 -->
+### Update DiziPalOrjinal.kt
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [54c9d91](https://github.com/Kayracs3/Kayra/commit/54c9d91256e9cecf9b2371ab951d92d618df8877)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:3a9285a385ce3633133a5d7ca1dd94d9465026e0 -->
 ### Refactor pageYear and pageRating to use script.data()
 
