@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:7211ba711af3615f843bafaebe8fe206fa8152f1 -->
+### Refactor regex patterns and improve logging
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [7211ba7](https://github.com/Kayracs3/Kayra/commit/7211ba711af3615f843bafaebe8fe206fa8152f1)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:dd7a0664ac17e5366813283f0595fcb0a8ba5528 -->
 ### Refactor search and subtitle extraction methods
 
