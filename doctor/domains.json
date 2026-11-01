@@ -616,6 +616,26 @@
           "yabanc"
         ]
       }
+    },
+    "DiziMom": {
+      "identityProfile": {
+        "title": "DiziMom - Dizi izle - Yabancı Dizi izle",
+        "h1": "Yellow Mirror",
+        "siteName": "DiziMom",
+        "description": "Yabancı dizi izle, günlük güncel dizi izle, yerli dizi izle, 1080p yabancı dizi izle",
+        "tokens": [
+          "1080p",
+          "dizi",
+          "dizimom",
+          "guncel",
+          "gunluk",
+          "izle",
+          "mirror",
+          "yabanc",
+          "yellow",
+          "yerli"
+        ]
+      }
     }
   }
 }
