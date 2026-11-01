@@ -517,8 +517,9 @@ class DiziPalOrjinal : MainAPI() {
     }
 
     /**
-     * CDN yapısına göre altyazı arar.
-     * m3u8'deki audio_0/video_0 desenine uygun subtitle_0 yollarını dener.
+     * videoplays.cfd altyazılarını çözer.
+     * Altyazı dosyaları CDN'de .srt olarak duruyor ancak 403 dönüyordu;
+     * bu sürümde istekler finalUrl (m3u8) referer'ı ve CDN origin'i ile yapılıyor.
      */
     private suspend fun extractVideoplaysSubtitles(
         tokenBody: String,
@@ -532,6 +533,14 @@ class DiziPalOrjinal : MainAPI() {
         var count = 0
         Log.d(name, "videoplays.cfd: altyazı aramaya başlıyorum")
 
+        val cdnOrigin = originOf(finalUrl) ?: origin
+        val subHeaders = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Referer" to finalUrl,
+            "Origin" to cdnOrigin,
+            "Accept" to "text/plain, application/x-subrip, */*",
+        )
+
         suspend fun addSub(rawUrl: String?, label: String?, referer: String) {
             if (rawUrl.isNullOrBlank()) return
             val clean = rawUrl.replace("\\/", "/").trim()
@@ -539,7 +548,7 @@ class DiziPalOrjinal : MainAPI() {
             val fullUrl = absolute(clean, referer)
             if (fullUrl.isBlank() || !seen.add(fullUrl)) return
             val resp = runCatching {
-                app.get(fullUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer, "Accept" to "*/*"), referer = referer, timeout = 5000, allowRedirects = true)
+                app.get(fullUrl, headers = subHeaders, referer = finalUrl, timeout = 5000, allowRedirects = true)
             }.getOrNull()
             if (resp == null || !resp.isSuccessful) {
                 Log.d(name, "videoplays.cfd: altyazı erişilemedi: $fullUrl (${resp?.code})")
@@ -547,13 +556,11 @@ class DiziPalOrjinal : MainAPI() {
             }
             val body = resp.text
             if (body.isBlank() || body.length < 20) return
-            // m3u8 altyazı playlist ise içindeki .vtt'leri ayrıştır
             if (body.contains("#EXTM3U", true)) {
                 Log.d(name, "videoplays.cfd: altyazı m3u8 bulundu: $fullUrl")
                 Regex("""[^\r\n#]+\.(?:vtt|srt|webvtt)[^\r\n]*""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
                     addSub(m.value.trim(), label, fullUrl)
                 }
-                // Veya HLS segment listesi — segmentleri birleştirmek gerekir, atla
                 return
             }
             val valid = body.contains("WEBVTT", true) || body.contains("-->") ||
@@ -570,7 +577,6 @@ class DiziPalOrjinal : MainAPI() {
             }
         }
 
-        // 1) Token yanıtındaki JSON
         for (key in listOf("subtitles", "subs", "tracks", "captions", "subtitle_tracks", "text_tracks", "media", "playlist")) {
             val arrStart = Regex(""""$key"\s*:\s*\[""", RegexOption.IGNORE_CASE).find(tokenBody) ?: continue
             var i = arrStart.range.last + 1
@@ -594,9 +600,8 @@ class DiziPalOrjinal : MainAPI() {
             }
         }
 
-        // 2) m3u8 tam içerik
         val m3u8Resp = runCatching {
-            app.get(finalUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to iframeUrl, "Origin" to origin, "Accept" to "*/*"), referer = iframeUrl, timeout = 15000, allowRedirects = true)
+            app.get(finalUrl, headers = subHeaders, referer = finalUrl, timeout = 15000, allowRedirects = true)
         }.getOrNull()
         if (m3u8Resp != null && m3u8Resp.isSuccessful) {
             val m3u8Body = m3u8Resp.text
@@ -609,40 +614,33 @@ class DiziPalOrjinal : MainAPI() {
             }
         }
 
-        // ★★★ 3) CDN yapısına uygun subtitle_0, subtitle_1 yolları ★★★
         val m3u8Base = finalUrl.substringBefore("?").substringBeforeLast("/")
         if (m3u8Base.isNotBlank()) {
             val paths = mutableListOf<String>()
-            // audio_0, video_0 desenine uygun subtitle_0
             for (idx in 0..3) {
+                paths.add("$m3u8Base/subtitle_${idx}/stream.srt")
                 paths.add("$m3u8Base/subtitle_${idx}/stream.vtt")
                 paths.add("$m3u8Base/subtitle_${idx}/stream.m3u8")
-                paths.add("$m3u8Base/subtitle_${idx}/stream.srt")
+                paths.add("$m3u8Base/subtitle_${idx}/tr.srt")
                 paths.add("$m3u8Base/subtitle_${idx}/tr.vtt")
-                paths.add("$m3u8Base/subtitles_${idx}/stream.vtt")
-                paths.add("$m3u8Base/subtitles_${idx}/tr.vtt")
+                paths.add("$m3u8Base/subtitles_${idx}/stream.srt")
+                paths.add("$m3u8Base/subtitles_${idx}/tr.srt")
             }
-            // Diğer yaygın desenler
-            paths.add("$m3u8Base/subtitles/tr.vtt")
             paths.add("$m3u8Base/subtitles/tr.srt")
-            paths.add("$m3u8Base/subs/tr.vtt")
-            paths.add("$m3u8Base/tr.vtt")
+            paths.add("$m3u8Base/subtitles/tr.vtt")
+            paths.add("$m3u8Base/subs/tr.srt")
             paths.add("$m3u8Base/tr.srt")
+            paths.add("$m3u8Base/tr.vtt")
+            paths.add("$m3u8Base/sub.srt")
             paths.add("$m3u8Base/sub.vtt")
-            paths.add("$m3u8Base/sub.m3u8")
+            paths.add("$m3u8Base/turkish.srt")
             paths.add("$m3u8Base/turkish.vtt")
-            // İngilizce altyazılar
-            paths.add("$m3u8Base/subtitle_0/stream.eng.vtt")
-            paths.add("$m3u8Base/subtitle_0/stream.en.vtt")
-            paths.add("$m3u8Base/subtitle_0/eng.vtt")
-            paths.add("$m3u8Base/en.vtt")
 
             for (path in paths) {
-                addSub(path, if (path.contains("en", true)) "en" else "tr", iframeUrl)
+                addSub(path, if (path.contains("en", true)) "en" else "tr", finalUrl)
             }
         }
 
-        // 4) API endpoint'leri (auth gerekebilir, sessizce dene)
         for (endpoint in listOf(
             "/api/videos/$videoId/subtitles",
             "/api/videos/$videoId/tracks",
@@ -650,11 +648,11 @@ class DiziPalOrjinal : MainAPI() {
         )) {
             val url = origin + endpoint
             val resp = runCatching {
-                app.get(url, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to iframeUrl, "Origin" to origin, "Accept" to "application/json"), referer = iframeUrl, timeout = 3000, allowRedirects = true)
+                app.get(url, headers = subHeaders, referer = finalUrl, timeout = 3000, allowRedirects = true)
             }.getOrNull()
             if (resp != null && resp.isSuccessful && resp.text.length > 10) {
                 Log.d(name, "videoplays.cfd: $endpoint → ${resp.text.take(200)}")
-                Regex("""["'](?:url|file|src|uri)["']\s*:\s*["']([^"']+\.(?:vtt|srt))["']""", RegexOption.IGNORE_CASE).findAll(resp.text).forEach { m -> addSub(m.groupValues[1], null, iframeUrl) }
+                Regex("""["'](?:url|file|src|uri)["']\s*:\s*["']([^"']+\.(?:vtt|srt))["']""", RegexOption.IGNORE_CASE).findAll(resp.text).forEach { m -> addSub(m.groupValues[1], null, finalUrl) }
             }
         }
 
