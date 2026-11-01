@@ -1,4 +1,4 @@
-version = 2
+version = 3
 
 cloudstream {
     description = "DiziMom film, dizi ve anime katalog sağlayıcısı"
