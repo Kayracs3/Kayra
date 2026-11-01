@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:4e202a9e1d2eb70cb44233326b349bd2b564d0b5 -->
+### Refactor subtitle extraction and logging
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [4e202a9](https://github.com/Kayracs3/Kayra/commit/4e202a9e1d2eb70cb44233326b349bd2b564d0b5)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:ff3f74a031f3e391d7c618e8f4332563c1fa1f23 -->
 ### Update print statement from 'Hello' to 'Goodbye'
 
