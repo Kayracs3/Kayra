@@ -207,7 +207,14 @@ class DiziMom : MainAPI() {
 
         suspend fun emitLink(link: String, referer: String, label: String = "") {
             if (link.isBlank()) return
-            val clean = link.replace("&amp;", "&").replace("\\/", "/")
+            // ★ DÜZELTME: \u0026 gibi unicode escape'leri de çevir
+            val clean = link
+                .replace("&amp;", "&")
+                .replace("\\u0026", "&")
+                .replace("\\u003d", "=")
+                .replace("\\u003f", "?")
+                .replace("\\/", "/")
+                .replace("\\u002F", "/")
             val isStreamPhp = clean.contains("/api/stream.php", ignoreCase = true)
             val isDirectMedia = clean.contains(".m3u8", true) || clean.contains(".mp4", true) || clean.contains(".mpd", true)
             if (!isStreamPhp && !isDirectMedia) return
@@ -232,13 +239,11 @@ class DiziMom : MainAPI() {
         val document = getDocument(sourceUrl) ?: return false
         val html = document.html().replace("\\/", "/")
 
-        // 1) Statik HTML'de stream.php veya doğrudan m3u8 (bazen olur)
         Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
             .findAll(html).forEach { emitLink(it.value, sourceUrl, "statik") }
         Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .findAll(html).forEach { emitLink(it.value, sourceUrl, "statik-media") }
 
-        // 2) data-pv slug'ını bul
         if (!found) {
             val pvSlug = document.selectFirst("[data-pv]")?.attr("data-pv")?.trim()
             Log.d(name, "data-pv slug: $pvSlug")
@@ -266,7 +271,6 @@ class DiziMom : MainAPI() {
                 if (sPhpDoc != null) {
                     val sPhpHtml = sPhpDoc.html().replace("\\/", "/")
                     Log.d(name, "s.php HTML uzunluğu: ${sPhpHtml.length}")
-                    Log.d(name, "s.php ilk 800 char: ${sPhpHtml.take(800)}")
 
                     Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                         .findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php") }
@@ -294,8 +298,6 @@ class DiziMom : MainAPI() {
                                 val body = scriptResp.text.replace("\\/", "/")
                                 Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                                     .findAll(body).forEach { emitLink(it.value, fullSrc, "s.php-script") }
-                                Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                                    .findAll(body).forEach { emitLink(it.value, fullSrc, "s.php-script-media") }
                             }
                         }
                     }
@@ -305,7 +307,6 @@ class DiziMom : MainAPI() {
             }
         }
 
-        // 3) Son çare: sayfadaki tüm script'leri tara
         if (!found) {
             for (script in document.select("script")) {
                 val src = script.attr("src").trim()
