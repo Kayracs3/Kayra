@@ -2,6 +2,7 @@ package com.Kayracs3
 
 import android.util.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -112,6 +113,8 @@ class DiziMom : MainAPI() {
         val plot = pagePlot(document)
         val year = pageYear(document, title)
         val genres = pageGenres(document)
+        val rating = pageRating(document)
+        val actors = pageActors(document)
 
         // Film ise doğrudan film yanıtı döndür
         if (url.contains("/film/")) {
@@ -120,19 +123,21 @@ class DiziMom : MainAPI() {
                 this.plot = plot
                 this.year = year
                 this.tags = genres
+                rating?.let { score = Score.from10(it) }
+                if (actors.isNotEmpty()) addActors(actors)
             }
         }
 
-        // ★ Dizi: tüm sezonları bul ve her sezonun bölümlerini topla
+        // ★ Dizi: sezon seçicisi ve her sezonun bölüm kartlarını tara
         val episodes = mutableListOf<Episode>()
-        val seasonLinks = document.select("a[href*='?sezon=']")
+        val seasonLinks = document.select("div.flex.flex-wrap.gap-2 a[href*='?sezon=']")
         Log.d(name, "Bulunan sezon linki sayısı: ${seasonLinks.size}")
 
         if (seasonLinks.isNotEmpty()) {
             for (seasonLink in seasonLinks) {
                 val href = seasonLink.attr("href").trim()
                 if (href.isBlank()) continue
-                val seasonUrl = absolute(href, url)
+                val seasonUrl = absolute(href, url).substringBefore("#")
                 val seasonNum = Regex("""sezon=(\d+)""").find(seasonUrl)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 Log.d(name, "Sezon URL: $seasonUrl, Sezon No: $seasonNum")
                 val seasonDoc = getDocument(seasonUrl) ?: continue
@@ -151,13 +156,21 @@ class DiziMom : MainAPI() {
             this.plot = plot
             this.year = year
             this.tags = genres
+            rating?.let { score = Score.from10(it) }
+            if (actors.isNotEmpty()) addActors(actors)
         }
     }
 
     // ★ YENİ: Bir sayfadaki bölüm linklerini ayrıştırır
     private fun parseEpisodes(document: Document, baseUrl: String, defaultSeason: Int): List<Episode> {
         val episodes = mutableListOf<Episode>()
-        val episodeLinks = document.select("a[href*='/sezon-'][href*='/bolum-']")
+        val selectedEpisodeLinks =
+            document.select("div.grid.grid-cols-2.gap-4 a[href*='/sezon-'][href*='/bolum-']")
+        val episodeLinks = if (selectedEpisodeLinks.isNotEmpty()) {
+            selectedEpisodeLinks
+        } else {
+            document.select("a[href*='/sezon-'][href*='/bolum-']")
+        }
         Log.d(name, "parseEpisodes: ${episodeLinks.size} bölüm linki bulundu (base: $baseUrl)")
 
         for (link in episodeLinks) {
@@ -173,10 +186,12 @@ class DiziMom : MainAPI() {
             val episodeName = link.selectFirst("p.text-sm.font-semibold")?.text()?.trim()
                 ?: link.text().trim().ifBlank { "Bölüm $episodeNum" }
 
+            val episodePoster = imageFrom(link, baseUrl)
             val episode = newEpisode(fullUrl) {
                 this.name = episodeName
                 this.season = seasonNum
                 this.episode = episodeNum
+                this.posterUrl = episodePoster
             }
             episodes.add(episode)
         }
@@ -304,18 +319,64 @@ class DiziMom : MainAPI() {
             ?: document.selectFirst(".description, .plot, .summary")?.text()?.trim()
     }
 
+    private fun detailValue(document: Document, label: String): String? {
+        val row = document.select("dl.divide-y.text-sm > div").firstOrNull {
+            it.selectFirst("dt")?.text()?.trim()?.equals(label, ignoreCase = true) == true
+        } ?: return null
+        return row.selectFirst("dd")?.text()?.trim()?.takeIf { it.isNotBlank() }
+    }
+
     private fun pageYear(document: Document, title: String): Int? {
+        val value = detailValue(document, "Yapım Yılı")
+        Regex("""(19\d{2}|20\d{2})""").find(value.orEmpty())
+            ?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+
         for (script in document.select("script[type=application/ld+json]")) {
             val text = script.data()
-            Regex("\"datePublished\"\\s*:\\s*\"(\\d{4})").find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+            Regex("\"datePublished\"\\s*:\\s*\"(\\d{4})")
+                .find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
         }
         return Regex("\\((\\d{4})\\)").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
     }
 
+    private fun pageRating(document: Document): Double? {
+        val value = detailValue(document, "IMDB Puanı") ?: return null
+        val rating = Regex("""(?<!\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)""")
+            .find(value)?.value?.replace(',', '.')?.toDoubleOrNull()
+        return rating?.takeIf { it in 0.0..10.0 }
+    }
+
     private fun pageGenres(document: Document): List<String> {
+        val detailGenre = detailValue(document, "Tür")
+        if (!detailGenre.isNullOrBlank()) {
+            return detailGenre.split(',', '·')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .take(20)
+        }
+
         val list = mutableListOf<String>()
-        document.select("a[href*='/tur/'], .genres a, .genre a").forEach { list.add(it.text().trim()) }
+        document.select("a[href*='/tur/'], .genres a, .genre a").forEach {
+            list.add(it.text().trim())
+        }
         return list.filter { it.isNotBlank() }.distinct().take(20)
+    }
+
+    private fun pageActors(document: Document): List<String> {
+        val actors = LinkedHashSet<String>()
+        document.select("#cast-grid > a[href*='/oyuncu/'], #cast-grid a[href*='/oyuncu/']")
+            .forEach { card ->
+                val name = card.selectFirst("p[title]")?.attr("title")?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: card.selectFirst("p")?.text()?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                    ?: card.selectFirst("img[alt]")?.attr("alt")?.trim()
+                        ?.takeIf { it.isNotBlank() }
+
+                if (!name.isNullOrBlank()) actors.add(name)
+            }
+        return actors.take(50).toList()
     }
 
     private fun absolute(raw: String, base: String): String {
