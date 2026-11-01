@@ -2,6 +2,23 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:18146e85e94730222e674b62f11418ea18d7e328 -->
+### Refactor media loading and parsing logic
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [18146e8](https://github.com/Kayracs3/Kayra/commit/18146e85e94730222e674b62f11418ea18d7e328)
+
+## 2026-11-01
+
+<!-- kayra-commit:996dbddbbd9d2e133acf3d38b7df8e831331cb0f -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [996dbdd](https://github.com/Kayracs3/Kayra/commit/996dbddbbd9d2e133acf3d38b7df8e831331cb0f)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:4277d23a78ddea01c05eb35efc5564aa6907d0c4 -->
 ### Add ExtractorLink import to DiziPalOrjinal.kt
 
