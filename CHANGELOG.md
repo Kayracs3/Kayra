@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:bee2e9aa6c8e119c9c4ae43b496f97994bcae544 -->
+### Bump version from 3 to 4
+
+- Etkilenen alanlar: DiziMom
+- Commit: [bee2e9a](https://github.com/Kayracs3/Kayra/commit/bee2e9aa6c8e119c9c4ae43b496f97994bcae544)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:13139a9edc0c06c3b23353611c9f5f7f49ac523a -->
 ### Refactor subtitle extraction and add API support
 
