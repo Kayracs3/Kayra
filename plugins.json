@@ -254,10 +254,10 @@
     },
     {
         "iconUrl": "https://ddizimom.net/favicon.ico",
-        "fileHash": "sha256-a6cb984434b5bad4fe4918369b1919f90f24b5204aec2e0e9c27ae9621ffe6c7",
+        "fileHash": "sha256-a582508b72dc6cb7834f003419b1e578f3bec3ce1efb7f93d9547dbc99a40fc5",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 37644,
+        "fileSize": 39108,
         "status": 3,
         "language": "tr",
         "authors": [
@@ -268,7 +268,7 @@
             "TvSeries",
             "Anime"
         ],
-        "version": 2,
+        "version": 3,
         "internalName": "DiziMom",
         "description": "DiziMom film, dizi ve anime katalog sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziMom.cs3",
