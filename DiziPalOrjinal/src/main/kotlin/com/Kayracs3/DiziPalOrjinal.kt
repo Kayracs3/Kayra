@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.newSubtitleFile
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
@@ -74,19 +75,52 @@ class DiziPalOrjinal : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val value = query.trim()
         if (value.length < 2) return emptyList()
+
         val encoded = URLEncoder.encode(value, "UTF-8")
-        val addresses = listOf(
-            "$mainUrl/?s=$encoded", "$mainUrl/?q=$encoded",
-            "$mainUrl/arama?q=$encoded", "$mainUrl/ara?search=$encoded",
-        )
-        for (address in addresses) {
-            val document = getDocument(address) ?: continue
-            val results = parseCatalog(document, address)
-                .filter { it.name.contains(value, true) || normalize(it.name).contains(normalize(value)) }
-                .distinctBy { canonical(it.url) }
-            if (results.isNotEmpty()) return results
+        val apiUrl = "$mainUrl/api/v1/search?q=$encoded&per_page=20"
+
+        val response = runCatching {
+            app.get(
+                apiUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "application/json",
+                    "Referer" to "$mainUrl/",
+                ),
+                referer = "$mainUrl/",
+                timeout = 15000,
+                allowRedirects = true,
+            )
+        }.getOrNull()
+
+        if (response == null || !response.isSuccessful) {
+            Log.e(name, "Arama API başarısız: ${response?.code}")
+            return emptyList()
         }
-        return emptyList()
+
+        val json = runCatching { org.json.JSONObject(response.text) }.getOrNull() ?: return emptyList()
+        val data = json.optJSONArray("data") ?: return emptyList()
+        val results = mutableListOf<SearchResponse>()
+
+        for (i in 0 until data.length()) {
+            val item = data.optJSONObject(i) ?: continue
+            val title = item.optString("title").takeIf { it.isNotBlank() } ?: continue
+            val slug = item.optString("slug").takeIf { it.isNotBlank() } ?: continue
+            val poster = item.optString("poster_url").replace("\\/", "/").takeIf { it.isNotBlank() }
+            val type = item.optString("type", "series")
+
+            val url = if (type == "movie") "$mainUrl/filmler/$slug" else "$mainUrl/diziler/$slug"
+
+            val searchResponse = if (type == "movie") {
+                newMovieSearchResponse(title, url, TvType.Movie) { posterUrl = poster }
+            } else {
+                newTvSeriesSearchResponse(title, url, TvType.TvSeries) { posterUrl = poster }
+            }
+            results.add(searchResponse)
+        }
+
+        Log.d(name, "Arama API: '${value}' için ${results.size} sonuç")
+        return results
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
@@ -103,6 +137,7 @@ class DiziPalOrjinal : MainAPI() {
         val genres = pageGenres(document)
         if (isAdultContent(title + " " + genres.joinToString(" "))) return null
         val actors = pageActors(document, address)
+
         if (isMovie(address) || document.selectFirst("meta[property=og:type][content*=movie]") != null) {
             return newMovieLoadResponse(title, address, TvType.Movie, address) {
                 posterUrl = poster
@@ -115,7 +150,7 @@ class DiziPalOrjinal : MainAPI() {
             }
         }
         val episodes = parseAllSeasonEpisodes(document, address, poster)
-        Log.d(name, "Dizi detayı: " + title + ", oyuncu=" + actors.size + ", sezon=" + episodes.mapNotNull { it.season }.distinct().size + ", bölüm=" + episodes.size)
+        Log.d(name, "Dizi detayı: " + title + ", oyuncu=" + actors.size + ", sezon=" + episodes.mapNotNull { it.season }.distinct().size + ", bölüm=" + episodes.size + ", yıl=" + year + ", puan=" + rating)
         return newTvSeriesLoadResponse(title, address, TvType.TvSeries, episodes) {
             posterUrl = poster
             posterHeaders = headers
@@ -354,19 +389,94 @@ class DiziPalOrjinal : MainAPI() {
         document.selectFirst("main p")?.text(),
     ).firstOrNull { !it.isNullOrBlank() }?.replace(Regex("""\s+"""), " ")?.trim()
 
+    // ★★★ YENİ: Yapım yılı — JSON-LD → meta → görünür etiket → başlık ★★★
     private fun pageYear(document: Document, title: String): Int? {
-        val text = title + " " + document.selectFirst("main")?.text().orEmpty() + " " + document.selectFirst("meta[name=description]")?.attr("content").orEmpty()
-        return Regex("""(?<!\d)(19|20)\d{2}(?!\d)""").find(text)?.value?.toIntOrNull()
+        // 1) JSON-LD datePublished
+        for (script in document.select("script[type=application/ld+json]")) {
+            val text = script.data()
+            if (text.isBlank()) continue
+            val m = Regex(""""datePublished"\s*:\s*"(\d{4})""", RegexOption.IGNORE_CASE).find(text)
+            if (m != null) {
+                val y = m.groupValues[1].toIntOrNull()
+                if (y != null && y in 1900..2100) {
+                    Log.d(name, "Yıl (JSON-LD): $y")
+                    return y
+                }
+            }
+        }
+        // 2) Meta etiketleri
+        for (key in listOf("og:release_date", "release_date", "og:year", "year", "date")) {
+            val content = document.selectFirst("meta[property=$key], meta[name=$key]")?.attr("content")
+            if (content.isNullOrBlank()) continue
+            val y = Regex("""(19|20)\d{2}""").find(content)?.value?.toIntOrNull()
+            if (y != null) {
+                Log.d(name, "Yıl (meta): $y")
+                return y
+            }
+        }
+        // 3) Görünür "Yapım Yılı: 2024" / "Yıl: 2024"
+        for (el in document.select("span, div, p, li, strong, b")) {
+            val t = el.text().replace(Regex("""\s+"""), " ").trim()
+            if (t.length > 80) continue
+            if (!Regex("""(?i)(yapım\s*yılı|yapim\s*yili|çıkış\s*yılı|cikis\s*yili|yıl|year)""").containsMatchIn(t)) continue
+            val y = Regex("""(19|20)\d{2}""").find(t)?.value?.toIntOrNull()
+            if (y != null) {
+                Log.d(name, "Yıl (etiket): $y")
+                return y
+            }
+        }
+        // 4) Başlıktan "(2024)" veya "2024"
+        val y = Regex("""\((\d{4})\)""").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?: Regex("""\b(19|20)\d{2}\b""").find(title)?.value?.toIntOrNull()
+        if (y != null) Log.d(name, "Yıl (başlık): $y")
+        return y
     }
 
+    // ★★★ YENİ: IMDb puanı — JSON-LD → meta → itemprop → görünür etiket ★★★
     private fun pageRating(document: Document): Double? {
-        val value = listOf(
-            document.selectFirst("meta[property=og:rating]")?.attr("content"),
-            document.selectFirst("meta[name=rating]")?.attr("content"),
-            document.selectFirst("[itemprop=ratingValue]")?.text(),
-            document.selectFirst(".rating, .score, .imdb")?.text(),
-        ).firstOrNull { !it.isNullOrBlank() } ?: return null
-        return Regex("""\d+(?:[.,]\d+)?""").find(value)?.value?.replace(",", ".")?.toDoubleOrNull()
+        // 1) JSON-LD aggregateRating.ratingValue
+        for (script in document.select("script[type=application/ld+json]")) {
+            val text = script.data()
+            if (text.isBlank()) continue
+            val m = Regex(""""ratingValue"\s*:\s*"?(\d+(?:[.,]\d+)?)"?""", RegexOption.IGNORE_CASE).find(text)
+            if (m != null) {
+                val r = m.groupValues[1].replace(",", ".").toDoubleOrNull()
+                if (r != null && r in 0.0..10.0) {
+                    Log.d(name, "Puan (JSON-LD): $r")
+                    return r
+                }
+            }
+        }
+        // 2) Meta etiketleri
+        for (key in listOf("og:rating", "rating", "imdb:rating", "twitter:data1")) {
+            val content = document.selectFirst("meta[property=$key], meta[name=$key]")?.attr("content")
+            if (content.isNullOrBlank()) continue
+            val r = Regex("""\d+(?:[.,]\d+)?""").find(content)?.value?.replace(",", ".")?.toDoubleOrNull()
+            if (r != null && r in 0.0..10.0) {
+                Log.d(name, "Puan (meta): $r")
+                return r
+            }
+        }
+        // 3) itemprop=ratingValue
+        document.selectFirst("[itemprop=ratingValue]")?.text()?.let { text ->
+            val r = Regex("""\d+(?:[.,]\d+)?""").find(text)?.value?.replace(",", ".")?.toDoubleOrNull()
+            if (r != null && r in 0.0..10.0) {
+                Log.d(name, "Puan (itemprop): $r")
+                return r
+            }
+        }
+        // 4) Görünür "IMDb: 8.7" / "8.7/10"
+        for (el in document.select("span, div, p, strong, b, li")) {
+            val t = el.text().replace(Regex("""\s+"""), " ").trim()
+            if (t.length > 60) continue
+            if (!Regex("""(?i)imdb|puan|rating""").containsMatchIn(t) && !Regex("""\d([.,]\d+)?\s*/\s*10""").containsMatchIn(t)) continue
+            val r = Regex("""\d+(?:[.,]\d+)?""").find(t)?.value?.replace(",", ".")?.toDoubleOrNull()
+            if (r != null && r in 0.0..10.0) {
+                Log.d(name, "Puan (etiket): $r")
+                return r
+            }
+        }
+        return null
     }
 
     private fun pageGenres(document: Document): List<String> {
@@ -516,11 +626,6 @@ class DiziPalOrjinal : MainAPI() {
         }
     }
 
-    /**
-     * videoplays.cfd altyazılarını çözer.
-     * ÖNEMLİ: SubtitleFile sınıfı (lang, url) sırasını bekler.
-     * Bu yüzden newSubtitleFile(lang = ..., url = ...) ile çağırıyoruz.
-     */
     private suspend fun extractVideoplaysSubtitles(
         tokenBody: String,
         finalUrl: String,
@@ -535,7 +640,6 @@ class DiziPalOrjinal : MainAPI() {
         val storageBaseUrl = Regex(""""storage_base_url"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE)
             .find(tokenBody)?.groupValues?.getOrNull(1)?.trimEnd('/') ?: ""
         val videoToken = Regex("""[?&]token=([^&]+)""").find(finalUrl)?.groupValues?.getOrNull(1)
-        Log.d(name, "videoplays.cfd: storageBase=$storageBaseUrl, videoToken=${videoToken?.take(30)}...")
 
         val subHeaders = mapOf(
             "User-Agent" to USER_AGENT,
@@ -573,9 +677,9 @@ class DiziPalOrjinal : MainAPI() {
                 if (!resp.isSuccessful) { Log.d(name, "videoplays.cfd: HTTP ${resp.code}"); continue }
 
                 val body = resp.text
-                Log.d(name, "videoplays.cfd: içerik boyut=${body.length}, ilk 200='${body.take(200).replace("\n", "\\n")}'")
+                Log.d(name, "videoplays.cfd: içerik boyut=${body.length}")
 
-                if (body.isBlank() || body.length < 10) { Log.d(name, "videoplays.cfd: boş/kısa içerik"); continue }
+                if (body.isBlank() || body.length < 10) { continue }
 
                 if (body.contains("#EXTM3U", true)) {
                     Regex("""[^\r\n#]+\.(?:vtt|srt|webvtt)[^\r\n]*""", RegexOption.IGNORE_CASE)
@@ -584,13 +688,9 @@ class DiziPalOrjinal : MainAPI() {
                 }
 
                 val hasCues = body.contains("-->") || body.contains("Dialogue:", true)
-                if (!hasCues) {
-                    Log.d(name, "videoplays.cfd: ✗ boş altyazı (cue yok) → $candidate")
-                    continue
-                }
+                if (!hasCues) { Log.d(name, "videoplays.cfd: ✗ boş altyazı"); continue }
 
                 val lang = label?.let { mapLang(it) } ?: "Türkçe"
-                // ★★★ KRİTİK DÜZELTME: newSubtitleFile(lang=..., url=...) ★★★
                 subtitleCallback.invoke(newSubtitleFile(lang = lang, url = candidate))
                 Log.d(name, "videoplays.cfd: ★ Altyazı eklendi: $candidate ($lang, ${body.length} char)")
                 count++
@@ -598,7 +698,6 @@ class DiziPalOrjinal : MainAPI() {
             }
         }
 
-        // 1) API'den altyazı listesi
         val apiUrl = "$origin/api/videos/$videoId"
         val apiResp = runCatching {
             app.get(
@@ -614,7 +713,6 @@ class DiziPalOrjinal : MainAPI() {
         }.getOrNull()
         if (apiResp != null && apiResp.isSuccessful) {
             val apiBody = apiResp.text
-            Log.d(name, "videoplays.cfd: video API yanıtı (${apiBody.length} char): ${apiBody.take(2000)}")
             val subtitlesArray = Regex(""""subtitles"\s*:\s*\[(.*?)]""", RegexOption.DOT_MATCHES_ALL)
                 .find(apiBody)?.groupValues?.getOrNull(1)
             if (!subtitlesArray.isNullOrBlank()) {
@@ -629,11 +727,8 @@ class DiziPalOrjinal : MainAPI() {
                     addSub(subUrl, label)
                 }
             }
-        } else {
-            Log.e(name, "videoplays.cfd: video API başarısız (${apiResp?.code})")
         }
 
-        // 2) Token yanıtındaki olası altyazılar (yedek)
         for (key in listOf("subtitles", "subs", "tracks", "captions")) {
             val arrStart = Regex(""""$key"\s*:\s*\[""", RegexOption.IGNORE_CASE).find(tokenBody) ?: continue
             var i = arrStart.range.last + 1
@@ -668,7 +763,6 @@ class DiziPalOrjinal : MainAPI() {
             return false
         }
         val origin = originOf(iframeUrl) ?: "https://videoplays.cfd"
-        Log.d(name, "videoplays.cfd: videoId=$videoId, origin=$origin, ref=$outerReferer")
 
         val tokenUrl = "$origin/api/videos/$videoId/token?embed_referrer=" + URLEncoder.encode(outerReferer, "UTF-8")
         val tokenResp = runCatching {
@@ -681,7 +775,6 @@ class DiziPalOrjinal : MainAPI() {
         }
 
         val tokenBody = tokenResp.text
-        Log.d(name, "videoplays.cfd: token yanıtı: ${tokenBody.take(2000)}")
 
         val playlistUrlFromBody = Regex(""""playlist_url"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(tokenBody)?.groupValues?.getOrNull(1)
         val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
@@ -689,10 +782,7 @@ class DiziPalOrjinal : MainAPI() {
         val finalUrl = when {
             !playlistUrlFromBody.isNullOrBlank() -> absolute(playlistUrlFromBody.replace("\\/", "/"), origin)
             !token.isNullOrBlank() -> "$origin/api/videos/$videoId/master.m3u8?token=" + URLEncoder.encode(token, "UTF-8")
-            else -> {
-                Log.e(name, "videoplays.cfd: token/playlist_url yok")
-                return false
-            }
+            else -> return false
         }
 
         Log.d(name, "videoplays.cfd: ★ m3u8 linki: $finalUrl")
@@ -743,14 +833,11 @@ class DiziPalOrjinal : MainAPI() {
                 this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer, "Accept" to "*/*")
             })
             found = true
-            Log.d(name, "★ Video link bulundu: $mediaUrl")
         }
 
         suspend fun scanPage(url: String, referer: String, depth: Int) {
             if (depth > 3 || !visited.add("page:$url")) return
-            Log.d(name, "[$depth] Sayfa: $url")
             if (url.contains("videoplays.cfd", true) || url.contains("player.html?video=", true)) {
-                Log.d(name, "[$depth] videoplays.cfd tespit edildi")
                 if (resolveVideoplaysCfd(url, referer, subtitleCallback, callback)) { found = true; return }
             }
             val resp = runCatching {
@@ -767,16 +854,9 @@ class DiziPalOrjinal : MainAPI() {
                 val ifUrl = absolute(m.groupValues[1], url)
                 if (ifUrl.isNotBlank()) scanPage(ifUrl, url, depth + 1)
             }
-            Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
-                val subUrl = absolute(m.groupValues[1], url)
-                if (subUrl.isNotBlank() && (subUrl.contains(".vtt", true) || subUrl.contains(".srt", true))) {
-                    runCatching { subtitleCallback.invoke(newSubtitleFile(lang = "Türkçe", url = subUrl)) }
-                }
-            }
         }
 
         scanPage(sourceUrl, "$mainUrl/", 0)
-        if (!found) Log.e(name, "Hiçbir oynatma linki bulunamadı.")
         return found
     }
 }
