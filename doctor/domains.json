@@ -589,6 +589,33 @@
           "kayracs3"
         ]
       }
+    },
+    "DiziPalOrjinal": {
+      "identityProfile": {
+        "title": "Dizipal - Yabancı Dizi İzle | Film İzle",
+        "h1": "Dizipal - Yabancı Dizi ve Film İzle",
+        "siteName": "Dizipal - Yabancı Dizi İzle | Film İzle",
+        "description": "Dizipal üzerinden en popüler yabancı dizi ve filmleri 1080p izle. Kesintisiz eğlencenin tadını çıkarmak için aradığın tüm içerikler dizipal'de!",
+        "tokens": [
+          "1080p",
+          "arad",
+          "dizi",
+          "dizipal",
+          "eglencenin",
+          "film",
+          "filmleri",
+          "icerikler",
+          "icin",
+          "izle",
+          "karmak",
+          "kesintisiz",
+          "populer",
+          "tad",
+          "tum",
+          "uzerinden",
+          "yabanc"
+        ]
+      }
     }
   }
 }
