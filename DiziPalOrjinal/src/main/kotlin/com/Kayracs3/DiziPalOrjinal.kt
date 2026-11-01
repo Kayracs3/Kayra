@@ -670,10 +670,9 @@ class DiziPalOrjinal : MainAPI() {
             Log.d(name, "★ Video link bulundu: $mediaUrl")
         }
 
-        // ★ YENİ: Sayfayı özyinelemeli tara, iframe'leri regex ile bul
         suspend fun scanPage(url: String, referer: String, depth: Int) {
             if (depth > 3 || !visited.add("page:$url")) return
-            Log.d(name, "[$depth] Sayfa çekiliyor: $url")
+            Log.d(name, "[$depth] Sayfa: $url")
 
             val resp = runCatching {
                 app.get(
@@ -684,36 +683,107 @@ class DiziPalOrjinal : MainAPI() {
                     allowRedirects = true,
                 )
             }.getOrNull()
-
-            if (resp == null) {
-                Log.e(name, "[$depth] Bağlantı hatası: $url")
-                return
-            }
-            if (!resp.isSuccessful) {
-                Log.e(name, "[$depth] HTTP ${resp.code}: $url")
-                return
-            }
+            if (resp == null) { Log.e(name, "[$depth] Bağlantı hatası"); return }
+            if (!resp.isSuccessful) { Log.e(name, "[$depth] HTTP ${resp.code}"); return }
 
             val text = resp.text.replace("\\/", "/").replace("\\\"", "\"")
-            Log.d(name, "[$depth] HTML uzunluğu: ${text.length}")
+            Log.d(name, "[$depth] HTML: ${text.length}")
 
-            // m3u8/mp4 doğrudan
+            // 1) Doğrudan medya URL'leri
             Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd|m3u|webm)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
                 .findAll(text).forEach { emitMedia(it.value, url) }
 
-            // JSON içi file/url/src
+            // 2) Genişletilmiş JSON/değişken desenleri
             listOf(
-                Regex(""""file"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE),
-                Regex(""""url"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE),
-                Regex(""""src"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE),
-                Regex(""""source"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE),
-                Regex("""file\s*[:=]\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE),
-                Regex("""source\s*[:=]\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE),
+                """"file"\s*:\s*"([^"]+)"""",
+                """"url"\s*:\s*"([^"]+)"""",
+                """"src"\s*:\s*"([^"]+)"""",
+                """"source"\s*:\s*"([^"]+)"""",
+                """"stream"\s*:\s*"([^"]+)"""",
+                """"playlist"\s*:\s*"([^"]+)"""",
+                """"manifest"\s*:\s*"([^"]+)"""",
+                """"hls"\s*:\s*"([^"]+)"""",
+                """"m3u8"\s*:\s*"([^"]+)"""",
+                """"video_url"\s*:\s*"([^"]+)"""",
+                """"videoUrl"\s*:\s*"([^"]+)"""",
+                """"link"\s*:\s*"([^"]+)"""",
+                """(?:file|source|video_url|videoUrl|hls|stream)\s*[:=]\s*['"]([^'"]+)['"]""",
             ).forEach { p ->
-                p.findAll(text).forEach { emitMedia(it.groupValues[1], url) }
+                Regex(p, RegexOption.IGNORE_CASE).findAll(text).forEach { emitMedia(it.groupValues[1], url) }
             }
 
-            // Altyazılar
+            // 3) atob('base64') çöz
+            Regex("""atob\s*\(\s*["']([^"']+)["']\s*\)""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
+                val decoded = runCatching { String(Base64.decode(m.groupValues[1], Base64.DEFAULT)) }.getOrNull()
+                if (decoded != null) {
+                    Log.d(name, "[$depth] atob: ${decoded.take(200)}")
+                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)""").findAll(decoded).forEach { emitMedia(it.value, url) }
+                }
+            }
+
+            // 4) Base64 görünümlü string'leri dene
+            Regex("""["']([A-Za-z0-9+/]{40,}={0,2})["']""").findAll(text).forEach { m ->
+                val decoded = runCatching { String(Base64.decode(m.groupValues[1], Base64.DEFAULT)) }.getOrNull()
+                if (decoded != null && (decoded.contains(".m3u8") || decoded.contains(".mp4"))) {
+                    Log.d(name, "[$depth] base64 media: ${decoded.take(200)}")
+                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)""").findAll(decoded).forEach { emitMedia(it.value, url) }
+                }
+            }
+
+            // 5) Iframe'ler
+            Regex("""<iframe[^>]+src\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
+                val ifUrl = absolute(m.groupValues[1], url)
+                if (ifUrl.isNotBlank()) scanPage(ifUrl, url, depth + 1)
+            }
+
+            // 6) API endpoint'lerini dene (video ID varsa)
+            val videoId = Regex("""[?&]video=([^&\s"'<>]+)""").find(url)?.groupValues?.getOrNull(1)
+                ?: Regex("""[?&]id=([^&\s"'<>]+)""").find(url)?.groupValues?.getOrNull(1)
+            if (!videoId.isNullOrBlank() && depth <= 2) {
+                val origin = originOf(url)
+                if (origin != null) {
+                    val apiPaths = listOf(
+                        "/api/video/$videoId",
+                        "/api/getVideo?id=$videoId",
+                        "/api/source/$videoId",
+                        "/api/player/$videoId",
+                        "/api/get.php?id=$videoId",
+                        "/api/video.php?id=$videoId",
+                        "/player/api.php?id=$videoId",
+                        "/source.php?id=$videoId",
+                        "/getvideo.php?id=$videoId",
+                        "/api/v1/video/$videoId",
+                    )
+                    for (path in apiPaths) {
+                        val apiUrl = origin + path
+                        val apiResp = runCatching {
+                            app.get(
+                                apiUrl,
+                                headers = headers + mapOf(
+                                    "Referer" to url,
+                                    "X-Requested-With" to "XMLHttpRequest",
+                                    "User-Agent" to USER_AGENT,
+                                ),
+                                referer = url,
+                                timeout = 8000,
+                                allowRedirects = true,
+                            )
+                        }.getOrNull()
+                        if (apiResp != null && apiResp.isSuccessful) {
+                            val apiText = apiResp.text.replace("\\/", "/")
+                            if (apiText.contains("m3u8") || apiText.contains("mp4") || apiText.contains("file") || apiText.contains("source") || apiText.contains("url")) {
+                                Log.d(name, "[$depth] API OK: $apiUrl -> ${apiText.take(300)}")
+                                Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)""").findAll(apiText).forEach { emitMedia(it.value, apiUrl) }
+                                listOf(""""file"\s*:\s*"([^"]+)"""", """"url"\s*:\s*"([^"]+)"""", """"src"\s*:\s*"([^"]+)"""").forEach { p ->
+                                    Regex(p, RegexOption.IGNORE_CASE).findAll(apiText).forEach { emitMedia(it.groupValues[1], apiUrl) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 7) Altyazı
             Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
                 val subUrl = absolute(m.groupValues[1], url)
                 if (subUrl.isNotBlank() && (subUrl.contains(".vtt", true) || subUrl.contains(".srt", true))) {
@@ -722,15 +792,16 @@ class DiziPalOrjinal : MainAPI() {
                 }
             }
 
-            // ★ Iframe'leri regex ile bul (jsoup yerine — daha güvenilir)
-            val iframeRegex = Regex("""<iframe[^>]+src\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-            val iframes = iframeRegex.findAll(text).map { it.groupValues[1] }.toList()
-            Log.d(name, "[$depth] Iframe sayısı: ${iframes.size}")
-            for (rawIframe in iframes) {
-                val iframeUrl = absolute(rawIframe, url)
-                if (iframeUrl.isBlank()) continue
-                Log.d(name, "[$depth] → iframe: $iframeUrl")
-                scanPage(iframeUrl, url, depth + 1)
+            // 8) Teşhis: derin seviyelerde script/var dök
+            if (depth >= 1 && !found) {
+                Log.d(name, "[$depth] === SCRIPT SNIPPET ===")
+                Regex("""<script[^>]*>([\s\S]{50,1200})</script>""", RegexOption.IGNORE_CASE).findAll(text).take(2).forEachIndexed { i, m ->
+                    Log.d(name, "[$depth] Script $i: ${m.groupValues[1].take(800)}")
+                }
+                Regex("""(?:var|let|const)\s+(\w+)\s*=\s*["']([^"']{40,300})["']""").findAll(text).take(5).forEach { m ->
+                    Log.d(name, "[$depth] Var ${m.groupValues[1]}: ${m.groupValues[2].take(200)}")
+                }
+                Log.d(name, "[$depth] === END SCRIPT ===")
             }
         }
 
