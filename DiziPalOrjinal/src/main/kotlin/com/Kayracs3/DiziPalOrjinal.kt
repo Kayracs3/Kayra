@@ -519,7 +519,8 @@ class DiziPalOrjinal : MainAPI() {
     /**
      * videoplays.cfd altyazılarını çözer.
      * Önce /api/videos/{id} endpoint'inden altyazı listesini alır,
-     * ardından yedek olarak diğer yöntemleri dener.
+     * her URL için token ekli/tokensiz varyantları dener,
+     * gerçek cue içermeyen (sadece header) dosyaları reddeder.
      */
     private suspend fun extractVideoplaysSubtitles(
         tokenBody: String,
@@ -529,77 +530,116 @@ class DiziPalOrjinal : MainAPI() {
         videoId: String,
         subtitleCallback: (SubtitleFile) -> Unit,
     ) {
-        val seen = mutableSetOf<String>()
         var count = 0
-        Log.d(name, "videoplays.cfd: altyazı aramaya başlıyorum")
+        Log.d(name, "videoplays.cfd: altyazı aramaya başlıyorum (videoId=$videoId)")
 
-        val cdnOrigin = originOf(finalUrl) ?: origin
+        val storageBaseUrl = Regex(""""storage_base_url"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE)
+            .find(tokenBody)?.groupValues?.getOrNull(1)?.trimEnd('/') ?: ""
+        val videoToken = Regex("""[?&]token=([^&]+)""").find(finalUrl)?.groupValues?.getOrNull(1)
+        Log.d(name, "videoplays.cfd: storageBase=$storageBaseUrl, videoToken=${videoToken?.take(30)}...")
+
         val subHeaders = mapOf(
             "User-Agent" to USER_AGENT,
             "Referer" to iframeUrl,
             "Origin" to origin,
-            "Accept" to "text/plain, application/x-subrip, */*",
+            "Accept" to "text/vtt, application/x-subrip, text/plain, */*",
+            "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
         )
 
         suspend fun addSub(rawUrl: String?, label: String?) {
             if (rawUrl.isNullOrBlank()) return
             val clean = rawUrl.replace("\\/", "/").trim()
             if (clean.isBlank() || clean.startsWith("data:")) return
-            val fullUrl = absolute(clean, iframeUrl)
-            if (fullUrl.isBlank() || !seen.add(fullUrl)) return
-            val resp = runCatching {
-                app.get(fullUrl, headers = subHeaders, referer = iframeUrl, timeout = 5000, allowRedirects = true)
-            }.getOrNull()
-            if (resp == null || !resp.isSuccessful) {
-                Log.d(name, "videoplays.cfd: altyazı erişilemedi: $fullUrl (${resp?.code})")
-                return
+
+            // URL'yi çözümle
+            val baseResolved = when {
+                clean.startsWith("http://", true) || clean.startsWith("https://", true) -> clean
+                clean.startsWith("/") && storageBaseUrl.isNotBlank() -> "$storageBaseUrl$clean"
+                storageBaseUrl.isNotBlank() -> "$storageBaseUrl/$clean"
+                else -> absolute(clean, iframeUrl)
             }
-            val body = resp.text
-            if (body.isBlank() || body.length < 20) return
-            if (body.contains("#EXTM3U", true)) {
-                Log.d(name, "videoplays.cfd: altyazı m3u8 bulundu: $fullUrl")
-                Regex("""[^\r\n#]+\.(?:vtt|srt|webvtt)[^\r\n]*""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
-                    addSub(m.value.trim(), label)
+
+            // Aday URL'ler
+            val candidates = mutableListOf(baseResolved)
+            if (!videoToken.isNullOrBlank() && !baseResolved.contains("token=", true)) {
+                val sep = if (baseResolved.contains("?")) "&" else "?"
+                candidates.add("$baseResolved${sep}token=" + URLEncoder.encode(videoToken, "UTF-8"))
+            }
+
+            for (candidate in candidates) {
+                Log.d(name, "videoplays.cfd: altyazı denemesi → $candidate")
+                val resp = runCatching {
+                    app.get(candidate, headers = subHeaders, referer = iframeUrl, timeout = 10000, allowRedirects = true)
+                }.getOrNull()
+
+                if (resp == null) { Log.d(name, "videoplays.cfd: bağlantı hatası"); continue }
+                if (!resp.isSuccessful) { Log.d(name, "videoplays.cfd: HTTP ${resp.code}"); continue }
+
+                val body = resp.text
+                Log.d(name, "videoplays.cfd: içerik boyut=${body.length}, ilk 300='${body.take(300).replace("\n", "\\n")}'")
+
+                if (body.isBlank() || body.length < 10) { Log.d(name, "videoplays.cfd: boş/kısa içerik"); continue }
+
+                // Alt m3u8
+                if (body.contains("#EXTM3U", true)) {
+                    Log.d(name, "videoplays.cfd: altyazı m3u8 tespit edildi")
+                    Regex("""[^\r\n#]+\.(?:vtt|srt|webvtt)[^\r\n]*""", RegexOption.IGNORE_CASE)
+                        .findAll(body).forEach { m -> addSub(absolute(m.value.trim(), candidate), label) }
+                    return
                 }
-                return
-            }
-            val valid = body.contains("WEBVTT", true) || body.contains("-->") ||
-                    body.contains("[Script Info]", true) || body.contains("Dialogue:", true)
-            if (!valid) {
-                Log.d(name, "videoplays.cfd: geçersiz format: $fullUrl → ${body.take(80)}")
-                return
-            }
-            val lang = label?.let { mapLang(it) } ?: "Türkçe"
-            runCatching {
-                subtitleCallback.invoke(SubtitleFile(fullUrl, lang))
-                Log.d(name, "videoplays.cfd: ★ Altyazı eklendi: $fullUrl ($lang)")
+
+                // KATI doğrulama: gerçek cue şart
+                val hasCues = body.contains("-->") || body.contains("Dialogue:", true)
+                if (!hasCues) {
+                    Log.d(name, "videoplays.cfd: ✗ boş altyazı (cue yok) → $candidate")
+                    continue
+                }
+
+                val lang = label?.let { mapLang(it) } ?: "Türkçe"
+                subtitleCallback.invoke(SubtitleFile(candidate, lang))
+                Log.d(name, "videoplays.cfd: ★ Altyazı eklendi: $candidate ($lang, ${body.length} char)")
                 count++
+                return // başarılı, diğer adayları denemeye gerek yok
             }
         }
 
-        // ★ 1) API'den altyazı listesini al
+        // 1) API'den altyazı listesi
         val apiUrl = "$origin/api/videos/$videoId"
         val apiResp = runCatching {
-            app.get(apiUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to iframeUrl, "Origin" to origin, "Accept" to "application/json"), referer = iframeUrl, timeout = 10000, allowRedirects = true)
+            app.get(
+                apiUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to iframeUrl,
+                    "Origin" to origin,
+                    "Accept" to "application/json, text/plain, */*",
+                ),
+                referer = iframeUrl, timeout = 10000, allowRedirects = true,
+            )
         }.getOrNull()
         if (apiResp != null && apiResp.isSuccessful) {
             val apiBody = apiResp.text
-            Log.d(name, "videoplays.cfd: video API yanıtı: ${apiBody.take(1000)}")
-            val subtitlesArray = Regex(""""subtitles"\s*:\s*\[(.*?)]""", RegexOption.DOT_MATCHES_ALL).find(apiBody)?.groupValues?.getOrNull(1)
+            Log.d(name, "videoplays.cfd: video API yanıtı (${apiBody.length} char): ${apiBody.take(2000)}")
+            val subtitlesArray = Regex(""""subtitles"\s*:\s*\[(.*?)]""", RegexOption.DOT_MATCHES_ALL)
+                .find(apiBody)?.groupValues?.getOrNull(1)
             if (!subtitlesArray.isNullOrBlank()) {
                 Regex("""\{[^{}]*\}""").findAll(subtitlesArray).forEach { objMatch ->
                     val obj = objMatch.value
                     val subUrl = Regex(""""url"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    val lang = Regex(""""lang"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    addSub(subUrl, lang)
+                        ?: Regex(""""file"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
+                        ?: Regex(""""src"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
+                    val label = Regex(""""lang"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
+                        ?: Regex(""""language"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
+                        ?: Regex(""""label"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
+                    addSub(subUrl, label)
                 }
             }
         } else {
-            Log.e(name, "videoplays.cfd: video API başarısız: ${apiResp?.code}")
+            Log.e(name, "videoplays.cfd: video API başarısız (${apiResp?.code})")
         }
 
-        // 2) Token yanıtındaki JSON (yedek)
-        for (key in listOf("subtitles", "subs", "tracks", "captions", "subtitle_tracks", "text_tracks", "media", "playlist")) {
+        // 2) Token yanıtındaki olası altyazılar (yedek)
+        for (key in listOf("subtitles", "subs", "tracks", "captions")) {
             val arrStart = Regex(""""$key"\s*:\s*\[""", RegexOption.IGNORE_CASE).find(tokenBody) ?: continue
             var i = arrStart.range.last + 1
             var depth = 1
@@ -612,28 +652,9 @@ class DiziPalOrjinal : MainAPI() {
             Regex("""\{[^{}]*\}""").findAll(arrBody).forEach { objMatch ->
                 val obj = objMatch.value
                 val subUrl = Regex(""""url"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    ?: Regex(""""file"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    ?: Regex(""""src"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    ?: Regex(""""uri"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                val label = Regex(""""label"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    ?: Regex(""""name"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    ?: Regex(""""language"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
+                val label = Regex(""""lang"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
+                    ?: Regex(""""label"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
                 addSub(subUrl, label)
-            }
-        }
-
-        // 3) m3u8 içindeki HLS altyazıları (yedek)
-        val m3u8Resp = runCatching {
-            app.get(finalUrl, headers = subHeaders, referer = finalUrl, timeout = 15000, allowRedirects = true)
-        }.getOrNull()
-        if (m3u8Resp != null && m3u8Resp.isSuccessful) {
-            val m3u8Body = m3u8Resp.text
-            Log.d(name, "videoplays.cfd: m3u8: ${m3u8Body.take(2000)}")
-            Regex("""#EXT-X-MEDIA:[^\r\n]*TYPE=SUBTITLES[^\r\n]*""", RegexOption.IGNORE_CASE).findAll(m3u8Body).forEach { m ->
-                val line = m.value
-                val uri = Regex("""URI="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
-                val label = Regex("""NAME="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
-                addSub(uri, label)
             }
         }
 
