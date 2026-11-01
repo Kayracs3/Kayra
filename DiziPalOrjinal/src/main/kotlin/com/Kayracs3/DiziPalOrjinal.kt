@@ -29,7 +29,6 @@ class DiziPalOrjinal : MainAPI() {
 
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
-        // ★ YENİ: DiziPal script'inin AES anahtarları
         private const val AES_KEY = "T8r9Wq3mZ1kL5vYb"
         private const val AES_IV = "N2pR7sX4cV6bM1qF"
     }
@@ -601,7 +600,6 @@ class DiziPalOrjinal : MainAPI() {
         return runCatching { URI(absolute(url, mainUrl)).path.orEmpty() }.getOrDefault("")
     }
 
-    // ★ YENİ: Şifreli config çözme yardımcıları
     private fun extractEncryptedConfig(text: String): String? {
         val patterns = listOf(
             Regex("""(?:const|let|var)\s+_?config\s*=\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE),
@@ -644,7 +642,6 @@ class DiziPalOrjinal : MainAPI() {
         val visited = mutableSetOf<String>()
         var found = false
 
-        // ★ DÜZELTME: emitMedia artık suspend
         suspend fun emitMedia(raw: String?, referer: String) {
             val media = raw?.trim() ?: return
             val mediaUrl = absolute(media.replace("\\/", "/"), referer)
@@ -667,7 +664,6 @@ class DiziPalOrjinal : MainAPI() {
                         )
                     }.getOrNull() ?: return
                     if (page.isSuccessful) {
-                        // ★ source2.php JSON yanıtı olabilir, JSON'daki "file" alanını da tara
                         Regex(""""file"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(page.text).forEach {
                             emitMedia(it.groupValues[1].replace("\\/", "/"), mediaUrl)
                         }
@@ -715,7 +711,6 @@ class DiziPalOrjinal : MainAPI() {
             Log.d(name, "Video link bulundu: $mediaUrl")
         }
 
-        // ★ DÜZELTME: scanMediaPage artık suspend
         suspend fun scanMediaPage(html: String, referer: String) {
             val doc = Document.createShell(referer)
             doc.body().append(html)
@@ -782,10 +777,36 @@ class DiziPalOrjinal : MainAPI() {
         }.getOrNull() ?: return false
         if (!page.isSuccessful) return false
 
-        // İlk olarak mevcut regex taraması
+        // ★★★ TEŞHİS LOGLARI ★★★
+        val html = page.text
+        Log.d(name, "=== TEŞHİS ===")
+        Log.d(name, "HTML uzunluğu: ${html.length}")
+        Log.d(name, "_config var mı: ${html.contains("_config")}")
+        Log.d(name, "enc: var mı: ${html.contains("enc:")}")
+        Log.d(name, "iframe var mı: ${html.contains("iframe")}")
+        Log.d(name, ".m3u8 var mı: ${html.contains(".m3u8")}")
+        Log.d(name, "player var mı: ${html.contains("player")}")
+        Log.d(name, "source2 var mı: ${html.contains("source2")}")
+        Log.d(name, "video var mı: ${html.contains("video")}")
+        Regex("""<iframe[^>]+src=["']([^"']+)["']""").find(html)?.let {
+            Log.d(name, "İlk iframe src: ${it.groupValues[1].take(300)}")
+        }
+        Regex("""https?://[^\s"'<>\\]+\.m3u8[^\s"'<>\\]*""").find(html)?.let {
+            Log.d(name, "İlk m3u8: ${it.value.take(300)}")
+        }
+        val scriptMatch = Regex("""<script[^>]*>([\s\S]{100,2000}?(?:player|video|source|file)[\s\S]{0,500}?)</script>""", RegexOption.IGNORE_CASE).find(html)
+        if (scriptMatch != null) {
+            Log.d(name, "Script snippet: ${scriptMatch.groupValues[1].take(800)}")
+        } else {
+            Regex("""<script[^>]*>([\s\S]{200,})</script>""", RegexOption.IGNORE_CASE).find(html)?.let {
+                Log.d(name, "İlk büyük script: ${it.groupValues[1].take(500)}")
+            }
+        }
+        Log.d(name, "=== TEŞHİS SONU ===")
+        // ★★★ TEŞHİS LOGLARI SONU ★★★
+
         scanMediaPage(page.text, sourceUrl)
 
-        // ★ YENİ: Şifreli config varsa çöz ve player URL'sini işle
         val encrypted = extractEncryptedConfig(page.text.replace("\\/", "/"))
         if (encrypted != null) {
             Log.d(name, "Şifreli config bulundu: ${encrypted.take(80)}")
@@ -799,10 +820,8 @@ class DiziPalOrjinal : MainAPI() {
                 }
                 val iframeUrl = absolute(playerWithScheme, sourceUrl)
                 Log.d(name, "Iframe URL: $iframeUrl")
-
                 val vParam = Regex("""[?&]v=([^&]+)""").find(iframeUrl)?.groupValues?.getOrNull(1)
                 Log.d(name, "v parametresi: $vParam")
-
                 val iframePage = runCatching {
                     app.get(
                         iframeUrl,
@@ -812,12 +831,9 @@ class DiziPalOrjinal : MainAPI() {
                         allowRedirects = true,
                     )
                 }.getOrNull()
-
                 if (iframePage != null && iframePage.isSuccessful) {
                     Log.d(name, "Iframe başarılı: ${iframePage.code}")
                     val iframeHtml = iframePage.text.replace("\\/", "/")
-
-                    // Altyazılar
                     Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(iframeHtml).forEach { m ->
                         val subUrl = absolute(m.groupValues[1], iframeUrl)
                         if (subUrl.isNotBlank()) runCatching {
@@ -825,13 +841,10 @@ class DiziPalOrjinal : MainAPI() {
                             Log.d(name, "Altyazı: $subUrl")
                         }
                     }
-
-                    // v parametresi ile source2.php
                     if (!vParam.isNullOrBlank()) {
                         val origin = originOf(iframeUrl) ?: iframeUrl
                         val source2Url = origin.trimEnd('/') + "/source2.php?v=" + URLEncoder.encode(vParam, "UTF-8")
                         Log.d(name, "Source2 URL: $source2Url")
-
                         val s2 = runCatching {
                             app.get(
                                 source2Url,
@@ -846,7 +859,6 @@ class DiziPalOrjinal : MainAPI() {
                                 allowRedirects = true,
                             )
                         }.getOrNull()
-
                         if (s2 != null && s2.isSuccessful) {
                             Log.d(name, "Source2 yanıtı: ${s2.text.take(500)}")
                             val s2Text = s2.text.replace("\\/", "/")
@@ -860,8 +872,6 @@ class DiziPalOrjinal : MainAPI() {
                             Log.e(name, "Source2 başarısız: ${s2?.code}")
                         }
                     }
-
-                    // Iframe HTML içinde doğrudan m3u8
                     Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).findAll(iframeHtml).forEach {
                         emitMedia(it.value, iframeUrl)
                     }
