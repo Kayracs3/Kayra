@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:5698ac0c8bda71c98c6868e76b07d5c32859af45 -->
+### Add loadLinks function for media link extraction
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [5698ac0](https://github.com/Kayracs3/Kayra/commit/5698ac0c8bda71c98c6868e76b07d5c32859af45)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:b9c448b5669921c7f7f8b1c7542e920eab60216f -->
 ### Add new imports for extractor link utilities
 
