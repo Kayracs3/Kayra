@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:e8354822ed8159d432a9d4bdd2fc78f527ad1e49 -->
+### Refactor scanPage function for better clarity
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [e835482](https://github.com/Kayracs3/Kayra/commit/e8354822ed8159d432a9d4bdd2fc78f527ad1e49)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:aa000fbdadd718f3cf27efcfc4abea7e7c6a0d84 -->
 ### Refactor media URL handling and scanning logic
 
