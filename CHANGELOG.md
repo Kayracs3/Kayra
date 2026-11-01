@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:d1b595068efa45698c551ec7307e5c1766950718 -->
+### Add subtitle extraction for videoplays.cfd API
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [d1b5950](https://github.com/Kayracs3/Kayra/commit/d1b595068efa45698c551ec7307e5c1766950718)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:5aaccbed22798854fcb75f3de6a982573842846b -->
 ### Refactor resolveVideoplaysCfd to use outerReferer
 
