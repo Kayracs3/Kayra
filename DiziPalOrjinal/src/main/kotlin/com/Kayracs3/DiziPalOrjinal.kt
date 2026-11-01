@@ -61,10 +61,7 @@ class DiziPalOrjinal : MainAPI() {
         "$mainUrl/tur/romantik" to "Romantik",
     )
 
-    override suspend fun getMainPage(
-        page: Int,
-        request: MainPageRequest,
-    ): HomePageResponse {
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val address = pageUrl(request.data, page)
         val document = getDocument(address)
             ?: return newHomePageResponse(request.name, emptyList(), hasNext = false)
@@ -79,10 +76,8 @@ class DiziPalOrjinal : MainAPI() {
         if (value.length < 2) return emptyList()
         val encoded = URLEncoder.encode(value, "UTF-8")
         val addresses = listOf(
-            "$mainUrl/?s=$encoded",
-            "$mainUrl/?q=$encoded",
-            "$mainUrl/arama?q=$encoded",
-            "$mainUrl/ara?search=$encoded",
+            "$mainUrl/?s=$encoded", "$mainUrl/?q=$encoded",
+            "$mainUrl/arama?q=$encoded", "$mainUrl/ara?search=$encoded",
         )
         for (address in addresses) {
             val document = getDocument(address) ?: continue
@@ -120,10 +115,7 @@ class DiziPalOrjinal : MainAPI() {
             }
         }
         val episodes = parseAllSeasonEpisodes(document, address, poster)
-        Log.d(
-            name,
-            "Dizi detayı: " + title + ", oyuncu=" + actors.size + ", sezon=" + episodes.mapNotNull { it.season }.distinct().size + ", bölüm=" + episodes.size,
-        )
+        Log.d(name, "Dizi detayı: " + title + ", oyuncu=" + actors.size + ", sezon=" + episodes.mapNotNull { it.season }.distinct().size + ", bölüm=" + episodes.size)
         return newTvSeriesLoadResponse(title, address, TvType.TvSeries, episodes) {
             posterUrl = poster
             posterHeaders = headers
@@ -135,14 +127,9 @@ class DiziPalOrjinal : MainAPI() {
         }
     }
 
-    private suspend fun parseAllSeasonEpisodes(
-        detail: Document,
-        seriesUrl: String,
-        fallbackPoster: String?,
-    ): List<Episode> {
+    private suspend fun parseAllSeasonEpisodes(detail: Document, seriesUrl: String, fallbackPoster: String?): List<Episode> {
         val byUrl = LinkedHashMap<String, Episode>()
-        parseEpisodeLinks(detail, seriesUrl, fallbackPoster, null)
-            .forEach { byUrl[canonical(it.data)] = it }
+        parseEpisodeLinks(detail, seriesUrl, fallbackPoster, null).forEach { byUrl[canonical(it.data)] = it }
         val seasons = parseSeasonLinks(detail, seriesUrl)
         var loaded = 0
         for ((index, season) in seasons.withIndex()) {
@@ -150,14 +137,13 @@ class DiziPalOrjinal : MainAPI() {
             val seasonUrl = season.first
             val seasonNumber = season.second ?: index + 1
             val seasonDocument = getDocument(seasonUrl, seriesUrl) ?: continue
-            parseEpisodeLinks(seasonDocument, seasonUrl, fallbackPoster, seasonNumber)
-                .forEach { episode ->
-                    val key = canonical(episode.data)
-                    val old = byUrl[key]
-                    if (old == null || (old.season == null && episode.season != null) || (old.episode == null && episode.episode != null) || (old.posterUrl.isNullOrBlank() && !episode.posterUrl.isNullOrBlank())) {
-                        byUrl[key] = episode
-                    }
+            parseEpisodeLinks(seasonDocument, seasonUrl, fallbackPoster, seasonNumber).forEach { episode ->
+                val key = canonical(episode.data)
+                val old = byUrl[key]
+                if (old == null || (old.season == null && episode.season != null) || (old.episode == null && episode.episode != null) || (old.posterUrl.isNullOrBlank() && !episode.posterUrl.isNullOrBlank())) {
+                    byUrl[key] = episode
                 }
+            }
             loaded++
         }
         val result = byUrl.values.sortedWith(
@@ -165,17 +151,11 @@ class DiziPalOrjinal : MainAPI() {
                 .thenBy { it.episode ?: Int.MAX_VALUE }
                 .thenBy { it.name.orEmpty() },
         )
-        Log.d(
-            name,
-            "Sezon taraması: bulunan=" + seasons.size + ", okunan=" + loaded + ", bölüm=" + result.size,
-        )
+        Log.d(name, "Sezon taraması: bulunan=" + seasons.size + ", okunan=" + loaded + ", bölüm=" + result.size)
         return result
     }
 
-    private fun parseSeasonLinks(
-        document: Document,
-        baseUrl: String,
-    ): List<Pair<String, Int?>> {
+    private fun parseSeasonLinks(document: Document, baseUrl: String): List<Pair<String, Int?>> {
         val found = LinkedHashMap<String, Int?>()
         for (link in document.select("a[href]")) {
             val href = link.attr("href").trim()
@@ -191,24 +171,15 @@ class DiziPalOrjinal : MainAPI() {
         return found.map { it.key to it.value }
     }
 
-    private fun parseEpisodeLinks(
-        document: Document,
-        baseUrl: String,
-        fallbackPoster: String?,
-        defaultSeason: Int?,
-    ): List<Episode> {
+    private fun parseEpisodeLinks(document: Document, baseUrl: String, fallbackPoster: String?, defaultSeason: Int?): List<Episode> {
         val found = LinkedHashMap<String, Episode>()
         for (link in document.select("a[href]")) {
             val href = link.attr("href").trim()
             if (href.isBlank() || href.startsWith("#")) continue
             val url = absolute(href, baseUrl).substringBefore("#")
             if (!url.startsWith(mainUrl, true)) continue
-            val label = listOf(
-                link.text(),
-                link.attr("title"),
-                link.attr("aria-label"),
-                link.selectFirst("img")?.attr("alt").orEmpty(),
-            ).filter { it.isNotBlank() }.joinToString(" ")
+            val label = listOf(link.text(), link.attr("title"), link.attr("aria-label"), link.selectFirst("img")?.attr("alt").orEmpty())
+                .filter { it.isNotBlank() }.joinToString(" ")
             val context = episodeContext(link)
             val numbers = readEpisodeNumbers(label) ?: readEpisodeNumbers(context) ?: readEpisodeNumbers(url)
             val path = pathOf(url).lowercase()
@@ -218,12 +189,8 @@ class DiziPalOrjinal : MainAPI() {
             if (canonical(url) == canonical(baseUrl)) continue
             val season = numbers?.first ?: defaultSeason
             val episodeNumber = numbers?.second ?: readEpisodeNumber(label + " " + context + " " + url)
-            val rawName = listOf(
-                link.attr("title"),
-                link.attr("aria-label"),
-                link.text(),
-                link.selectFirst("img")?.attr("alt").orEmpty(),
-            ).firstOrNull { it.isNotBlank() } ?: pathOf(url).substringAfterLast("/")
+            val rawName = listOf(link.attr("title"), link.attr("aria-label"), link.text(), link.selectFirst("img")?.attr("alt").orEmpty())
+                .firstOrNull { it.isNotBlank() } ?: pathOf(url).substringAfterLast("/")
             val episodeName = cleanEpisodeName(rawName).ifBlank { if (episodeNumber != null) "Bölüm " + episodeNumber else "Bölüm" }
             if (isAdultContent(episodeName)) continue
             val episodePoster = imageFrom(link, baseUrl) ?: fallbackPoster
@@ -243,9 +210,7 @@ class DiziPalOrjinal : MainAPI() {
         repeat(5) {
             val item = current ?: return ""
             val text = item.text().replace(Regex("""\s+"""), " ").trim()
-            if (text.contains("Bölüm", true) || text.contains("Episode", true)) {
-                return text.take(350)
-            }
+            if (text.contains("Bölüm", true) || text.contains("Episode", true)) return text.take(350)
             current = item.parent()
         }
         return link.parent()?.text()?.take(350).orEmpty()
@@ -255,21 +220,21 @@ class DiziPalOrjinal : MainAPI() {
         val text = value.replace("_", " ").replace("-", " ").replace(Regex("""\s+"""), " ")
         val seasonEpisode = Regex("""(?i)\b(\d{1,2})\s*\.?\s*(?:sezon|season)\s*(\d{1,3})\s*\.?\s*(?:bölüm|bolum|episode)\b""").find(text)
         if (seasonEpisode != null) {
-            val season = seasonEpisode.groupValues[1].toIntOrNull()
-            val episode = seasonEpisode.groupValues[2].toIntOrNull()
-            if (season != null && episode != null && season in 1..100 && episode in 1..999) return season to episode
+            val s = seasonEpisode.groupValues[1].toIntOrNull()
+            val e = seasonEpisode.groupValues[2].toIntOrNull()
+            if (s != null && e != null && s in 1..100 && e in 1..999) return s to e
         }
         val sxe = Regex("""(?i)\bS(\d{1,2})\s*E(\d{1,3})\b""").find(text)
         if (sxe != null) {
-            val season = sxe.groupValues[1].toIntOrNull()
-            val episode = sxe.groupValues[2].toIntOrNull()
-            if (season != null && episode != null) return season to episode
+            val s = sxe.groupValues[1].toIntOrNull()
+            val e = sxe.groupValues[2].toIntOrNull()
+            if (s != null && e != null) return s to e
         }
         val x = Regex("""\b(\d{1,2})\s*x\s*(\d{1,3})\b""", RegexOption.IGNORE_CASE).find(text)
         if (x != null) {
-            val season = x.groupValues[1].toIntOrNull()
-            val episode = x.groupValues[2].toIntOrNull()
-            if (season != null && episode != null) return season to episode
+            val s = x.groupValues[1].toIntOrNull()
+            val e = x.groupValues[2].toIntOrNull()
+            if (s != null && e != null) return s to e
         }
         return null
     }
@@ -280,9 +245,7 @@ class DiziPalOrjinal : MainAPI() {
             Regex("""(?i)\bS\d{1,2}\s*E(\d{1,3})\b"""),
             Regex("""(?i)\b\d{1,2}\s*x\s*(\d{1,3})\b"""),
         )
-        return patterns.asSequence()
-            .mapNotNull { it.find(value)?.groupValues?.lastOrNull()?.toIntOrNull() }
-            .firstOrNull { it in 1..999 }
+        return patterns.asSequence().mapNotNull { it.find(value)?.groupValues?.lastOrNull()?.toIntOrNull() }.firstOrNull { it in 1..999 }
     }
 
     private fun seasonNumber(value: String): Int? {
@@ -290,24 +253,17 @@ class DiziPalOrjinal : MainAPI() {
             Regex("""(?i)\b(\d{1,2})\s*\.?\s*(?:sezon|season)\b"""),
             Regex("""(?i)/(?:season|sezon)[-_]?(\d{1,2})(?:/|$)"""),
         )
-        return patterns.asSequence()
-            .mapNotNull { it.find(value)?.groupValues?.getOrNull(1)?.toIntOrNull() }
-            .firstOrNull { it in 1..100 }
+        return patterns.asSequence().mapNotNull { it.find(value)?.groupValues?.getOrNull(1)?.toIntOrNull() }.firstOrNull { it in 1..100 }
     }
 
-    private fun cleanEpisodeName(value: String): String {
-        return value
-            .replace(Regex("""(?i)^\s*\d+\s*\.?\s*sezon\s*\d+\s*\.?\s*bölüm\s*"""), "")
-            .replace(Regex("""(?i)^\s*S\d{1,2}\s*E\d{1,3}\s*[-:–—]*\s*"""), "")
-            .replace(Regex("""(?i)\s+(?:dublaj|altyazılı|altyazili|türkçe dublaj|türkçe altyazılı).*$"""), "")
-            .replace(Regex("""\s+"""), " ")
-            .trim(' ', '-', '–', '—', ':', '|')
-    }
+    private fun cleanEpisodeName(value: String): String = value
+        .replace(Regex("""(?i)^\s*\d+\s*\.?\s*sezon\s*\d+\s*\.?\s*bölüm\s*"""), "")
+        .replace(Regex("""(?i)^\s*S\d{1,2}\s*E\d{1,3}\s*[-:–—]*\s*"""), "")
+        .replace(Regex("""(?i)\s+(?:dublaj|altyazılı|altyazili|türkçe dublaj|türkçe altyazılı).*$"""), "")
+        .replace(Regex("""\s+"""), " ")
+        .trim(' ', '-', '–', '—', ':', '|')
 
-    private fun parseCatalog(
-        document: Document,
-        baseUrl: String,
-    ): List<SearchResponse> {
+    private fun parseCatalog(document: Document, baseUrl: String): List<SearchResponse> {
         val found = LinkedHashMap<String, SearchResponse>()
         for (link in document.select("a[href]")) {
             val url = absolute(link.attr("href"), baseUrl).substringBefore("#")
@@ -315,8 +271,7 @@ class DiziPalOrjinal : MainAPI() {
             val card = findCard(link)
             val poster = imageFrom(link, baseUrl) ?: imageFrom(card, baseUrl)
             val title = listOf(
-                link.attr("title"),
-                link.attr("aria-label"),
+                link.attr("title"), link.attr("aria-label"),
                 link.selectFirst("h2,h3,h4,.title,.name")?.text().orEmpty(),
                 link.selectFirst("img")?.attr("alt").orEmpty(),
                 link.text(),
@@ -356,39 +311,20 @@ class DiziPalOrjinal : MainAPI() {
             document.selectFirst(".poster img, .detail-poster img, .film-poster img, .series-poster img")?.let(::imageAttribute),
             document.selectFirst("main img, article img")?.let(::imageAttribute),
         )
-        return images.asSequence()
-            .filterNotNull()
-            .map { absolute(it, baseUrl) }
-            .firstOrNull { isImageUrl(it) }
+        return images.asSequence().filterNotNull().map { absolute(it, baseUrl) }.firstOrNull { isImageUrl(it) }
     }
 
     private fun imageFrom(element: Element?, baseUrl: String): String? {
         if (element == null) return null
-        val image = if (element.tagName().equals("img", true)) {
-            element
-        } else {
-            element.selectFirst("img")
-        } ?: return null
+        val image = if (element.tagName().equals("img", true)) element else element.selectFirst("img") ?: return null
         return absolute(imageAttribute(image), baseUrl).takeIf { isImageUrl(it) }
     }
 
     private fun imageAttribute(image: Element): String {
-        for (attribute in listOf(
-            "data-src",
-            "data-lazy-src",
-            "data-original",
-            "data-image",
-            "data-lazy",
-            "src",
-            "srcset",
-        )) {
+        for (attribute in listOf("data-src", "data-lazy-src", "data-original", "data-image", "data-lazy", "src", "srcset")) {
             val value = image.attr(attribute).trim()
             if (value.isBlank() || value.startsWith("data:", true)) continue
-            return if (attribute == "srcset") {
-                value.substringBefore(",").trim().substringBefore(" ")
-            } else {
-                value
-            }
+            return if (attribute == "srcset") value.substringBefore(",").trim().substringBefore(" ") else value
         }
         return ""
     }
@@ -409,18 +345,14 @@ class DiziPalOrjinal : MainAPI() {
         return cleanTitle(value).takeIf { it.isNotBlank() }
     }
 
-    private fun pagePlot(document: Document): String? {
-        return listOf(
-            document.selectFirst("meta[property=og:description]")?.attr("content"),
-            document.selectFirst("meta[name=description]")?.attr("content"),
-            document.selectFirst(".description")?.text(),
-            document.selectFirst(".plot")?.text(),
-            document.selectFirst(".summary")?.text(),
-            document.selectFirst("main p")?.text(),
-        ).firstOrNull { !it.isNullOrBlank() }
-            ?.replace(Regex("""\s+"""), " ")
-            ?.trim()
-    }
+    private fun pagePlot(document: Document): String? = listOf(
+        document.selectFirst("meta[property=og:description]")?.attr("content"),
+        document.selectFirst("meta[name=description]")?.attr("content"),
+        document.selectFirst(".description")?.text(),
+        document.selectFirst(".plot")?.text(),
+        document.selectFirst(".summary")?.text(),
+        document.selectFirst("main p")?.text(),
+    ).firstOrNull { !it.isNullOrBlank() }?.replace(Regex("""\s+"""), " ")?.trim()
 
     private fun pageYear(document: Document, title: String): Int? {
         val text = title + " " + document.selectFirst("main")?.text().orEmpty() + " " + document.selectFirst("meta[name=description]")?.attr("content").orEmpty()
@@ -439,11 +371,10 @@ class DiziPalOrjinal : MainAPI() {
 
     private fun pageGenres(document: Document): List<String> {
         val result = LinkedHashSet<String>()
-        document.select("a[href*='/tur/'], .genres a, .genre a, [itemprop=genre]")
-            .forEach { element ->
-                val genre = cleanTitle(element.text())
-                if (genre.isNotBlank() && genre.length < 40) result += genre
-            }
+        document.select("a[href*='/tur/'], .genres a, .genre a, [itemprop=genre]").forEach { element ->
+            val genre = cleanTitle(element.text())
+            if (genre.isNotBlank() && genre.length < 40) result += genre
+        }
         return result.take(20)
     }
 
@@ -457,16 +388,9 @@ class DiziPalOrjinal : MainAPI() {
             repeat(5) {
                 val current = section ?: return@repeat
                 current.select("a[href], .actor, .cast-item, .person").forEach { item ->
-                    val actorName = cleanTitle(
-                        item.text().ifBlank {
-                            item.attr("title").ifBlank { item.selectFirst("img")?.attr("alt").orEmpty() }
-                        },
-                    )
+                    val actorName = cleanTitle(item.text().ifBlank { item.attr("title").ifBlank { item.selectFirst("img")?.attr("alt").orEmpty() } })
                     if (actorName.isBlank() || actorName.length > 70) return@forEach
-                    result.putIfAbsent(
-                        normalize(actorName),
-                        Actor(actorName, imageFrom(item, baseUrl)),
-                    )
+                    result.putIfAbsent(normalize(actorName), Actor(actorName, imageFrom(item, baseUrl)))
                 }
                 if (result.size >= 40) return@repeat
                 section = current.parent()
@@ -475,60 +399,37 @@ class DiziPalOrjinal : MainAPI() {
         if (result.isEmpty()) {
             document.select("a[href*='/oyuncu/'], a[href*='/actor/']").forEach { item ->
                 val actorName = cleanTitle(item.text().ifBlank { item.attr("title") })
-                if (actorName.isNotBlank() && actorName.length <= 70) {
-                    result.putIfAbsent(
-                        normalize(actorName),
-                        Actor(actorName, imageFrom(item, baseUrl)),
-                    )
-                }
+                if (actorName.isNotBlank() && actorName.length <= 70) result.putIfAbsent(normalize(actorName), Actor(actorName, imageFrom(item, baseUrl)))
             }
         }
         return result.values.take(40)
     }
 
-    private fun cleanTitle(value: String): String {
-        return value
-            .replace(Regex("""\s+"""), " ")
-            .replace(
-                Regex("""(?i)\s*[|–-]\s*(?:dizipal|yabancı dizi izle|film izle).*$"""),
-                "",
-            )
-            .trim()
-    }
+    private fun cleanTitle(value: String): String = value
+        .replace(Regex("""\s+"""), " ")
+        .replace(Regex("""(?i)\s*[|–-]\s*(?:dizipal|yabancı dizi izle|film izle).*$"""), "")
+        .trim()
 
-    private fun isGenericTitle(value: String): Boolean {
-        return normalize(value) in setOf(
-            "izle", "detaylar", "detay", "tumunu gor", "tum bolumleri", "fragman", "oynat", "dizipal", "ana sayfa",
-        )
-    }
+    private fun isGenericTitle(value: String): Boolean = normalize(value) in setOf(
+        "izle", "detaylar", "detay", "tumunu gor", "tum bolumleri", "fragman", "oynat", "dizipal", "ana sayfa",
+    )
 
     private fun isAdultContent(value: String): Boolean {
         val terms = normalize(value).split(" ").toSet()
-        val blocked = setOf(
-            "porn", "porno", "hentai", "erotik", "erotic", "xxx", "adult", "yetiskin", "seks", "sex",
-        )
+        val blocked = setOf("porn", "porno", "hentai", "erotik", "erotic", "xxx", "adult", "yetiskin", "seks", "sex")
         return terms.any { it in blocked } || Regex("""(?i)18\s*\+|18\s*yaş|18\s*yas""").containsMatchIn(value)
     }
 
-    private fun normalize(value: String): String {
-        return value.lowercase()
-            .replace('ı', 'i')
-            .replace('ş', 's')
-            .replace('ğ', 'g')
-            .replace('ü', 'u')
-            .replace('ö', 'o')
-            .replace('ç', 'c')
-            .replace(Regex("""\p{M}+"""), "")
-            .replace(Regex("""[^a-z0-9]+"""), " ")
-            .trim()
-            .replace(Regex("""\s+"""), " ")
-    }
+    private fun normalize(value: String): String = value.lowercase()
+        .replace('ı', 'i').replace('ş', 's').replace('ğ', 'g')
+        .replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')
+        .replace(Regex("""\p{M}+"""), "")
+        .replace(Regex("""[^a-z0-9]+"""), " ")
+        .trim().replace(Regex("""\s+"""), " ")
 
     private fun isDetailUrl(url: String): Boolean {
         val parts = pathOf(url).trimEnd('/').lowercase().split("/").filter { it.isNotBlank() }
-        return parts.size >= 2 && parts.first() in setOf(
-            "diziler", "filmler", "dizi", "film", "movies", "series",
-        )
+        return parts.size >= 2 && parts.first() in setOf("diziler", "filmler", "dizi", "film", "movies", "series")
     }
 
     private fun isMovie(url: String): Boolean {
@@ -538,35 +439,20 @@ class DiziPalOrjinal : MainAPI() {
 
     private fun hasNextPage(document: Document, page: Int): Boolean {
         if (page >= 30) return false
-        val hasNext = document.select(
-            "a[rel=next], .pagination a.next, a[aria-label*=Sonraki i], a:contains(Sonraki)",
-        ).any { it.attr("href").isNotBlank() }
+        val hasNext = document.select("a[rel=next], .pagination a.next, a[aria-label*=Sonraki i], a:contains(Sonraki)")
+            .any { it.attr("href").isNotBlank() }
         if (hasNext) return true
-        return document.select(".pagination a, nav[aria-label*=pagination i] a")
-            .any { it.text().trim() == (page + 1).toString() }
+        return document.select(".pagination a, nav[aria-label*=pagination i] a").any { it.text().trim() == (page + 1).toString() }
     }
 
     private fun pageUrl(base: String, page: Int): String {
         if (page <= 1) return base
-        return if (base.contains("?")) {
-            base + "&page=" + page
-        } else {
-            base.trimEnd('/') + "?page=" + page
-        }
+        return if (base.contains("?")) base + "&page=" + page else base.trimEnd('/') + "?page=" + page
     }
 
-    private suspend fun getDocument(
-        url: String,
-        referer: String = "$mainUrl/",
-    ): Document? {
+    private suspend fun getDocument(url: String, referer: String = "$mainUrl/"): Document? {
         return try {
-            val response = app.get(
-                url,
-                headers = headers + ("Referer" to referer),
-                referer = referer,
-                timeout = 15000,
-                allowRedirects = true,
-            )
+            val response = app.get(url, headers = headers + ("Referer" to referer), referer = referer, timeout = 15000, allowRedirects = true)
             if (response.isSuccessful) response.document else null
         } catch (e: Exception) {
             Log.d(name, "Sayfa isteği başarısız: " + url + "; " + e.message)
@@ -575,30 +461,16 @@ class DiziPalOrjinal : MainAPI() {
     }
 
     private fun absolute(raw: String, base: String): String {
-        val value = raw.trim()
-            .replace("&amp;", "&")
-            .replace("\\/", "/")
-            .trim('"', '\'')
+        val value = raw.trim().replace("&amp;", "&").replace("\\/", "/").trim('"', '\'')
         if (value.isBlank()) return ""
-        if (value.startsWith("http://", true) || value.startsWith("https://", true)) {
-            return value
-        }
+        if (value.startsWith("http://", true) || value.startsWith("https://", true)) return value
         if (value.startsWith("//")) return "https:" + value
-        return runCatching { URI(base).resolve(value).toString() }
-            .getOrElse { mainUrl.trimEnd('/') + "/" + value.removePrefix("/") }
+        return runCatching { URI(base).resolve(value).toString() }.getOrElse { mainUrl.trimEnd('/') + "/" + value.removePrefix("/") }
     }
 
-    private fun canonical(url: String): String {
-        return absolute(url, mainUrl)
-            .substringBefore("#")
-            .substringBefore("?")
-            .trimEnd('/')
-            .lowercase()
-    }
+    private fun canonical(url: String): String = absolute(url, mainUrl).substringBefore("#").substringBefore("?").trimEnd('/').lowercase()
 
-    private fun pathOf(url: String): String {
-        return runCatching { URI(absolute(url, mainUrl)).path.orEmpty() }.getOrDefault("")
-    }
+    private fun pathOf(url: String): String = runCatching { URI(absolute(url, mainUrl)).path.orEmpty() }.getOrDefault("")
 
     private fun extractEncryptedConfig(text: String): String? {
         val patterns = listOf(
@@ -621,9 +493,7 @@ class DiziPalOrjinal : MainAPI() {
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(AES_KEY.toByteArray(), "AES"), IvParameterSpec(AES_IV.toByteArray()))
             String(cipher.doFinal(Base64.decode(clean, Base64.DEFAULT)))
-        }.getOrElse {
-            runCatching { String(Base64.decode(clean, Base64.DEFAULT)) }.getOrDefault("")
-        }
+        }.getOrElse { runCatching { String(Base64.decode(clean, Base64.DEFAULT)) }.getOrDefault("") }
     }
 
     private fun originOf(url: String): String? = try {
@@ -642,13 +512,11 @@ class DiziPalOrjinal : MainAPI() {
             "it" -> "Italiano"
             "ru" -> "Русский"
             "ar" -> "العربية"
-            "pt" -> "Português"
-            "pl" -> "Polski"
             else -> code
         }
     }
 
-    // ★ YENİ: videoplays.cfd token yanıtından / m3u8'den altyazı çıkar
+    // ★★★ ALTYAZI ÇIKARMA — Çok katmanlı, doğrulamalı ★★★
     private suspend fun extractVideoplaysSubtitles(
         tokenBody: String,
         finalUrl: String,
@@ -659,15 +527,38 @@ class DiziPalOrjinal : MainAPI() {
     ) {
         val seen = mutableSetOf<String>()
         var count = 0
+        Log.d(name, "videoplays.cfd: altyazı aramaya başlıyorum (videoId=$videoId, finalUrl=$finalUrl)")
 
-        fun addSub(rawUrl: String?, label: String?) {
+        // Doğrulamalı altyazı ekleme
+        suspend fun addSub(rawUrl: String?, label: String?, referer: String) {
             if (rawUrl.isNullOrBlank()) return
             val clean = rawUrl.replace("\\/", "/").trim()
             if (clean.isBlank() || clean.startsWith("data:")) return
-            // m3u8 (video) değilse ekle
-            if (clean.contains(".m3u8", true) && !clean.contains("sub", true)) return
-            val fullUrl = absolute(clean, finalUrl)
+            val fullUrl = absolute(clean, referer)
             if (fullUrl.isBlank() || !seen.add(fullUrl)) return
+            // GET ile doğrula
+            val resp = runCatching {
+                app.get(
+                    fullUrl,
+                    headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer, "Accept" to "*/*"),
+                    referer = referer, timeout = 5000, allowRedirects = true,
+                )
+            }.getOrNull()
+            if (resp == null || !resp.isSuccessful) {
+                Log.d(name, "videoplays.cfd: altyazı URL erişilemedi: $fullUrl (${resp?.code})")
+                return
+            }
+            val body = resp.text
+            if (body.isBlank() || body.length < 20) {
+                Log.d(name, "videoplays.cfd: altyazı içeriği boş/kısa: $fullUrl")
+                return
+            }
+            val valid = body.contains("WEBVTT", true) || body.contains("-->") ||
+                    body.contains("[Script Info]", true) || body.contains("Dialogue:", true)
+            if (!valid) {
+                Log.d(name, "videoplays.cfd: geçersiz altyazı formatı: $fullUrl → ${body.take(80)}")
+                return
+            }
             val lang = label?.let { mapLang(it) } ?: "Türkçe"
             runCatching {
                 subtitleCallback.invoke(SubtitleFile(fullUrl, lang))
@@ -676,22 +567,17 @@ class DiziPalOrjinal : MainAPI() {
             }
         }
 
-        // 1) Token yanıtında "subtitles" / "subs" / "tracks" / "captions" dizileri
-        val arrayKeys = listOf("subtitles", "subs", "tracks", "captions", "subtitle_tracks", "text_tracks", "media")
-        for (key in arrayKeys) {
+        // 1) Token yanıtındaki tüm JSON alanları
+        for (key in listOf("subtitles", "subs", "tracks", "captions", "subtitle_tracks", "text_tracks", "media", "playlist")) {
             val arrStart = Regex(""""$key"\s*:\s*\[""", RegexOption.IGNORE_CASE).find(tokenBody) ?: continue
-            val start = arrStart.range.last + 1
+            var i = arrStart.range.last + 1
             var depth = 1
-            var i = start
             while (i < tokenBody.length && depth > 0) {
-                when (tokenBody[i]) {
-                    '[' -> depth++
-                    ']' -> depth--
-                }
+                when (tokenBody[i]) { '[' -> depth++; ']' -> depth-- }
                 i++
             }
             if (depth != 0) continue
-            val arrBody = tokenBody.substring(start, i - 1)
+            val arrBody = tokenBody.substring(arrStart.range.last + 1, i - 1)
             Regex("""\{[^{}]*\}""").findAll(arrBody).forEach { objMatch ->
                 val obj = objMatch.value
                 val subUrl = Regex(""""url"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
@@ -701,13 +587,12 @@ class DiziPalOrjinal : MainAPI() {
                 val label = Regex(""""label"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
                     ?: Regex(""""name"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
                     ?: Regex(""""language"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    ?: Regex(""""lang"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                addSub(subUrl, label)
+                addSub(subUrl, label, iframeUrl)
             }
         }
 
-        // 2) Token yanıtında basit string desenleri
-        listOf(
+        // 2) Token yanıtındaki string alanlar
+        for (pattern in listOf(
             """"subtitle"\s*:\s*"([^"]+)"""",
             """"subtitles"\s*:\s*"([^"]+)"""",
             """"vtt"\s*:\s*"([^"]+)"""",
@@ -715,76 +600,94 @@ class DiziPalOrjinal : MainAPI() {
             """"subtitle_url"\s*:\s*"([^"]+)"""",
             """"caption_url"\s*:\s*"([^"]+)"""",
             """"webvtt"\s*:\s*"([^"]+)"""",
-        ).forEach { pattern ->
-            Regex(pattern, RegexOption.IGNORE_CASE).findAll(tokenBody).forEach { m ->
-                addSub(m.groupValues[1], null)
-            }
+        )) {
+            Regex(pattern, RegexOption.IGNORE_CASE).findAll(tokenBody).forEach { m -> addSub(m.groupValues[1], null, iframeUrl) }
         }
 
-        // 3) master.m3u8 içindeki #EXT-X-MEDIA TYPE=SUBTITLES
+        // 3) m3u8 tam içerik — HLS altyazıları
         val m3u8Resp = runCatching {
             app.get(
                 finalUrl,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to iframeUrl,
-                    "Origin" to origin,
-                    "Accept" to "*/*",
-                ),
-                referer = iframeUrl,
-                timeout = 15000,
-                allowRedirects = true,
+                headers = mapOf("User-Agent" to USER_AGENT, "Referer" to iframeUrl, "Origin" to origin, "Accept" to "*/*"),
+                referer = iframeUrl, timeout = 15000, allowRedirects = true,
             )
         }.getOrNull()
         if (m3u8Resp != null && m3u8Resp.isSuccessful) {
             val m3u8Body = m3u8Resp.text
-            Log.d(name, "videoplays.cfd: m3u8 içerik (${m3u8Body.length}): ${m3u8Body.take(1500)}")
-            Regex("""#EXT-X-MEDIA:[^\r\n]*TYPE=SUBTITLES[^\r\n]*""", RegexOption.IGNORE_CASE)
-                .findAll(m3u8Body).forEach { m ->
-                    val line = m.value
-                    val uri = Regex("""URI="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
-                    val label = Regex("""NAME="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
-                        ?: Regex("""LANGUAGE="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
-                    addSub(uri, label)
-                }
-            // m3u8 içinde doğrudan .vtt/.srt referansı (nadiren)
-            Regex("""[^\r\n#]+\.(?:vtt|srt)(?:\?[^\r\n]*)?""", RegexOption.IGNORE_CASE)
-                .findAll(m3u8Body).forEach { m -> addSub(m.value.trim(), null) }
+            Log.d(name, "videoplays.cfd: m3u8 (${m3u8Body.length} char): ${m3u8Body.take(2000)}")
+            // HLS EXT-X-MEDIA TYPE=SUBTITLES
+            Regex("""#EXT-X-MEDIA:[^\r\n]*TYPE=SUBTITLES[^\r\n]*""", RegexOption.IGNORE_CASE).findAll(m3u8Body).forEach { m ->
+                val line = m.value
+                val uri = Regex("""URI="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+                val label = Regex("""NAME="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+                    ?: Regex("""LANGUAGE="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+                addSub(uri, label, finalUrl)
+            }
+            // Doğrudan .vtt/.srt referansları
+            Regex("""[^\r\n#]+\.(?:vtt|srt)(?:\?[^\r\n]*)?""", RegexOption.IGNORE_CASE).findAll(m3u8Body).forEach { m -> addSub(m.value.trim(), null, finalUrl) }
         }
 
-        // 4) Yaygın altyazı API endpoint'leri
+        // 4) player.html'de altyazı arama
+        val playerHtml = runCatching {
+            app.get(iframeUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to iframeUrl, "Accept" to "text/html,*/*"), referer = iframeUrl, timeout = 10000, allowRedirects = true)
+        }.getOrNull()
+        if (playerHtml != null && playerHtml.isSuccessful) {
+            val html = playerHtml.text.replace("\\/", "/")
+            Log.d(name, "videoplays.cfd: player.html (${html.length} char)")
+            // String literal içindeki .vtt/.srt
+            Regex("""["']([^"']+\.(?:vtt|srt))["']""", RegexOption.IGNORE_CASE).findAll(html).forEach { m -> addSub(m.groupValues[1], "tr", iframeUrl) }
+            // subtitle config
+            Regex("""subtitles?\s*[:=]\s*(\[[^\]]+\])""", RegexOption.IGNORE_CASE).findAll(html).forEach { m ->
+                Log.d(name, "videoplays.cfd: HTML subtitle config: ${m.groupValues[1].take(300)}")
+            }
+        }
+
+        // 5) CDN üzerinde tahmini altyazı yolları
+        val m3u8Origin = originOf(finalUrl)
+        val m3u8Base = finalUrl.substringBefore("?").substringBeforeLast("/")
+        if (m3u8Origin != null && m3u8Base.isNotBlank()) {
+            val paths = listOf(
+                "$m3u8Base/tr.vtt", "$m3u8Base/tr.srt",
+                "$m3u8Base/turkish.vtt", "$m3u8Base/sub_tr.vtt",
+                "$m3u8Base/subtitles_tr.vtt", "$m3u8Base/subtitles/tr.vtt",
+                "$m3u8Base/subs/tr.vtt", "$m3u8Base/subtitles.vtt",
+                "$m3u8Base/sub.vtt", "$m3u8Base/captions.vtt",
+                "$m3u8Base/en.vtt", "$m3u8Base/eng.vtt", "$m3u8Base/sub_en.vtt",
+                "$m3u8Origin/subtitles/$videoId/tr.vtt",
+                "$m3u8Origin/subtitles/$videoId/en.vtt",
+                "$m3u8Origin/subs/$videoId/tr.vtt",
+                "$m3u8Origin/subs/$videoId/en.vtt",
+                "$m3u8Origin/$videoId/tr.vtt", "$m3u8Origin/$videoId/en.vtt",
+                "$origin/subtitles/$videoId/tr.vtt",
+                "$origin/subtitles/$videoId/en.vtt",
+                "$origin/subs/$videoId/tr.vtt",
+            )
+            for (path in paths) {
+                addSub(path, if (path.contains("tr")) "tr" else "en", iframeUrl)
+            }
+        }
+
+        // 6) API endpoint denemeleri
         for (endpoint in listOf(
-            "/api/videos/$videoId/subtitles",
-            "/api/videos/$videoId/tracks",
-            "/api/videos/$videoId/subs",
-            "/api/videos/$videoId/text_tracks",
+            "/api/videos/$videoId/subtitles", "/api/videos/$videoId/tracks",
+            "/api/videos/$videoId/subs", "/api/videos/$videoId/subtitle",
+            "/api/video/$videoId/subtitles", "/api/getSubs?id=$videoId",
+            "/api/subtitles/$videoId", "/api/$videoId/subtitles",
+            "/api/videos/$videoId/captions", "/api/videos/$videoId/text_tracks",
         )) {
             val url = origin + endpoint
             val resp = runCatching {
-                app.get(
-                    url,
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to iframeUrl,
-                        "Origin" to origin,
-                        "Accept" to "application/json",
-                    ),
-                    referer = iframeUrl,
-                    timeout = 5000,
-                    allowRedirects = true,
-                )
+                app.get(url, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to iframeUrl, "Origin" to origin, "Accept" to "application/json"), referer = iframeUrl, timeout = 4000, allowRedirects = true)
             }.getOrNull()
             if (resp != null && resp.isSuccessful && resp.text.length > 10) {
                 Log.d(name, "videoplays.cfd: $endpoint → ${resp.text.take(300)}")
-                Regex("""["'](?:url|file|src|uri)["']\s*:\s*["']([^"']+\.(?:vtt|srt))["']""", RegexOption.IGNORE_CASE)
-                    .findAll(resp.text).forEach { m -> addSub(m.groupValues[1], null) }
+                Regex("""["'](?:url|file|src|uri)["']\s*:\s*["']([^"']+\.(?:vtt|srt))["']""", RegexOption.IGNORE_CASE).findAll(resp.text).forEach { m -> addSub(m.groupValues[1], null, iframeUrl) }
             }
         }
 
         Log.d(name, "videoplays.cfd: toplam $count altyazı eklendi")
     }
 
-    // ★ videoplays.cfd çözücü (altyazı desteği eklendi)
     private suspend fun resolveVideoplaysCfd(
         iframeUrl: String,
         outerReferer: String,
@@ -799,21 +702,9 @@ class DiziPalOrjinal : MainAPI() {
         val origin = originOf(iframeUrl) ?: "https://videoplays.cfd"
         Log.d(name, "videoplays.cfd: videoId=$videoId, origin=$origin, ref=$outerReferer")
 
-        val tokenUrl = "$origin/api/videos/$videoId/token?embed_referrer=" +
-                URLEncoder.encode(outerReferer, "UTF-8")
+        val tokenUrl = "$origin/api/videos/$videoId/token?embed_referrer=" + URLEncoder.encode(outerReferer, "UTF-8")
         val tokenResp = runCatching {
-            app.get(
-                tokenUrl,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to outerReferer,
-                    "Origin" to origin,
-                    "Accept" to "application/json, text/plain, */*",
-                ),
-                referer = outerReferer,
-                timeout = 15000,
-                allowRedirects = true,
-            )
+            app.get(tokenUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to outerReferer, "Origin" to origin, "Accept" to "application/json, text/plain, */*"), referer = outerReferer, timeout = 15000, allowRedirects = true)
         }.getOrNull()
 
         if (tokenResp == null || !tokenResp.isSuccessful) {
@@ -822,21 +713,14 @@ class DiziPalOrjinal : MainAPI() {
         }
 
         val tokenBody = tokenResp.text
-        // ★ Tam yanıtı logla (2000 karaktere kadar)
         Log.d(name, "videoplays.cfd: token yanıtı (${tokenBody.length} char): ${tokenBody.take(2000)}")
 
-        val playlistUrlFromBody = Regex(
-            """"playlist_url"\s*:\s*"([^"]+)"""",
-            RegexOption.IGNORE_CASE
-        ).find(tokenBody)?.groupValues?.getOrNull(1)
-
+        val playlistUrlFromBody = Regex(""""playlist_url"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(tokenBody)?.groupValues?.getOrNull(1)
         val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
 
         val finalUrl = when {
-            !playlistUrlFromBody.isNullOrBlank() ->
-                absolute(playlistUrlFromBody.replace("\\/", "/"), origin)
-            !token.isNullOrBlank() ->
-                "$origin/api/videos/$videoId/master.m3u8?token=" + URLEncoder.encode(token, "UTF-8")
+            !playlistUrlFromBody.isNullOrBlank() -> absolute(playlistUrlFromBody.replace("\\/", "/"), origin)
+            !token.isNullOrBlank() -> "$origin/api/videos/$videoId/master.m3u8?token=" + URLEncoder.encode(token, "UTF-8")
             else -> {
                 Log.e(name, "videoplays.cfd: token/playlist_url yok. Yanıt: ${tokenBody.take(200)}")
                 return false
@@ -845,23 +729,11 @@ class DiziPalOrjinal : MainAPI() {
 
         Log.d(name, "videoplays.cfd: ★ m3u8 linki: $finalUrl")
 
-        callback.invoke(
-            newExtractorLink(
-                source = name,
-                name = name,
-                url = finalUrl,
-                type = ExtractorLinkType.M3U8,
-            ) {
-                this.referer = iframeUrl
-                this.quality = Qualities.P1080.value
-                this.headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to iframeUrl,
-                    "Origin" to origin,
-                    "Accept" to "*/*",
-                )
-            }
-        )
+        callback.invoke(newExtractorLink(source = name, name = name, url = finalUrl, type = ExtractorLinkType.M3U8) {
+            this.referer = iframeUrl
+            this.quality = Qualities.P1080.value
+            this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to iframeUrl, "Origin" to origin, "Accept" to "*/*")
+        })
 
         // ★ Altyazıları çıkarmayı dene
         extractVideoplaysSubtitles(tokenBody, finalUrl, iframeUrl, origin, videoId, subtitleCallback)
@@ -886,8 +758,7 @@ class DiziPalOrjinal : MainAPI() {
             if (mediaUrl.isBlank() || !mediaUrl.startsWith("http", true)) return
             if (!visited.add(mediaUrl)) return
             val lower = mediaUrl.lowercase()
-            val isPlayable = lower.contains(".m3u8") || lower.contains(".mpd") || lower.contains(".mp4") || lower.contains(".m3u") || lower.contains(".webm")
-            if (!isPlayable) return
+            if (!(lower.contains(".m3u8") || lower.contains(".mpd") || lower.contains(".mp4") || lower.contains(".m3u") || lower.contains(".webm"))) return
             val linkType = when {
                 lower.contains(".m3u8") || lower.contains(".m3u") -> ExtractorLinkType.M3U8
                 lower.contains(".mpd") -> ExtractorLinkType.DASH
@@ -911,69 +782,38 @@ class DiziPalOrjinal : MainAPI() {
         suspend fun scanPage(url: String, referer: String, depth: Int) {
             if (depth > 3 || !visited.add("page:$url")) return
             Log.d(name, "[$depth] Sayfa: $url")
-
             if (url.contains("videoplays.cfd", true) || url.contains("player.html?video=", true)) {
-                Log.d(name, "[$depth] videoplays.cfd tespit edildi, API ile çözülüyor...")
-                if (resolveVideoplaysCfd(url, referer, subtitleCallback, callback)) {
-                    found = true
-                    return
-                }
-                Log.w(name, "[$depth] API başarısız, normal tarama devam ediyor.")
+                Log.d(name, "[$depth] videoplays.cfd tespit edildi")
+                if (resolveVideoplaysCfd(url, referer, subtitleCallback, callback)) { found = true; return }
+                Log.w(name, "[$depth] API başarısız, normal taramaya devam.")
             }
-
             val resp = runCatching {
-                app.get(
-                    url,
-                    headers = headers + mapOf("Referer" to referer, "User-Agent" to USER_AGENT),
-                    referer = referer,
-                    timeout = 15000,
-                    allowRedirects = true,
-                )
+                app.get(url, headers = headers + mapOf("Referer" to referer, "User-Agent" to USER_AGENT), referer = referer, timeout = 15000, allowRedirects = true)
             }.getOrNull()
             if (resp == null) { Log.e(name, "[$depth] Bağlantı hatası"); return }
             if (!resp.isSuccessful) { Log.e(name, "[$depth] HTTP ${resp.code}"); return }
-
             val text = resp.text.replace("\\/", "/").replace("\\\"", "\"")
             Log.d(name, "[$depth] HTML: ${text.length}")
-
-            Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd|m3u|webm)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                .findAll(text).forEach { emitMedia(it.value, url) }
-
+            Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd|m3u|webm)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).findAll(text).forEach { emitMedia(it.value, url) }
             listOf(
-                """"file"\s*:\s*"([^"]+)"""",
-                """"url"\s*:\s*"([^"]+)"""",
-                """"src"\s*:\s*"([^"]+)"""",
-                """"source"\s*:\s*"([^"]+)"""",
-                """"stream"\s*:\s*"([^"]+)"""",
-                """"playlist"\s*:\s*"([^"]+)"""",
-                """"manifest"\s*:\s*"([^"]+)"""",
-                """"hls"\s*:\s*"([^"]+)"""",
-                """"m3u8"\s*:\s*"([^"]+)"""",
-                """"video_url"\s*:\s*"([^"]+)"""",
-                """"videoUrl"\s*:\s*"([^"]+)"""",
-                """"link"\s*:\s*"([^"]+)"""",
+                """"file"\s*:\s*"([^"]+)"""", """"url"\s*:\s*"([^"]+)"""", """"src"\s*:\s*"([^"]+)"""",
+                """"source"\s*:\s*"([^"]+)"""", """"stream"\s*:\s*"([^"]+)"""", """"playlist"\s*:\s*"([^"]+)"""",
+                """"manifest"\s*:\s*"([^"]+)"""", """"hls"\s*:\s*"([^"]+)"""", """"m3u8"\s*:\s*"([^"]+)"""",
+                """"video_url"\s*:\s*"([^"]+)"""", """"videoUrl"\s*:\s*"([^"]+)"""", """"link"\s*:\s*"([^"]+)"""",
                 """(?:file|source|video_url|videoUrl|hls|stream)\s*[:=]\s*['"]([^'"]+)['"]""",
-            ).forEach { p ->
-                Regex(p, RegexOption.IGNORE_CASE).findAll(text).forEach { emitMedia(it.groupValues[1], url) }
-            }
-
+            ).forEach { p -> Regex(p, RegexOption.IGNORE_CASE).findAll(text).forEach { emitMedia(it.groupValues[1], url) } }
             Regex("""atob\s*\(\s*["']([^"']+)["']\s*\)""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
                 val decoded = runCatching { String(Base64.decode(m.groupValues[1], Base64.DEFAULT)) }.getOrNull()
-                if (decoded != null) {
-                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)""").findAll(decoded).forEach { emitMedia(it.value, url) }
-                }
+                if (decoded != null) Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)""").findAll(decoded).forEach { emitMedia(it.value, url) }
             }
-
             Regex("""<iframe[^>]+src\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
                 val ifUrl = absolute(m.groupValues[1], url)
                 if (ifUrl.isNotBlank()) scanPage(ifUrl, url, depth + 1)
             }
-
             Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
                 val subUrl = absolute(m.groupValues[1], url)
                 if (subUrl.isNotBlank() && (subUrl.contains(".vtt", true) || subUrl.contains(".srt", true))) {
                     runCatching { subtitleCallback.invoke(SubtitleFile(subUrl, "Türkçe")) }
-                    Log.d(name, "[$depth] Altyazı: $subUrl")
                 }
             }
         }
