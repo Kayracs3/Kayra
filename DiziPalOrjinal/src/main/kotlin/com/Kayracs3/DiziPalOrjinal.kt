@@ -389,9 +389,10 @@ class DiziPalOrjinal : MainAPI() {
         document.selectFirst("main p")?.text(),
     ).firstOrNull { !it.isNullOrBlank() }?.replace(Regex("""\s+"""), " ")?.trim()
 
+    // ★ YENİ: Yapım yılı — script.data() kullanır
     private fun pageYear(document: Document, title: String): Int? {
         for (script in document.select("script[type=application/ld+json]")) {
-            val text = script.html()
+            val text = script.data()
             if (text.isBlank()) continue
             val m = Regex("\"datePublished\"\\s*:\\s*\"(\\d{4})", RegexOption.IGNORE_CASE).find(text)
             if (m != null) {
@@ -427,9 +428,10 @@ class DiziPalOrjinal : MainAPI() {
         return y
     }
 
+    // ★ YENİ: IMDb puanı — script.data() kullanır
     private fun pageRating(document: Document): Double? {
         for (script in document.select("script[type=application/ld+json]")) {
-            val text = script.html()
+            val text = script.data()
             if (text.isBlank()) continue
             val m = Regex("\"ratingValue\"\\s*:\\s*\"?(\\d+(?:[.,]\\d+)?)\"?", RegexOption.IGNORE_CASE).find(text)
             if (m != null) {
