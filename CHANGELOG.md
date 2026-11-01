@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:5aaccbed22798854fcb75f3de6a982573842846b -->
+### Refactor resolveVideoplaysCfd to use outerReferer
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [5aaccbe](https://github.com/Kayracs3/Kayra/commit/5aaccbed22798854fcb75f3de6a982573842846b)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:67eaecb2da7cd1a6c0888c61c3023d711247edc4 -->
 ### Implement video link resolution with videoplays.cfd API
 
