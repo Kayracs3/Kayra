@@ -46,36 +46,18 @@ class DiziMom : MainAPI() {
             ?: return newHomePageResponse(request.name, emptyList(), hasNext = false)
         val results = parseCatalog(document, address)
         val next = page < 20 && results.isNotEmpty()
-        Log.d(name, "Katalog ${request.name}: ${results.size} kayıt")
         return newHomePageResponse(request.name, results, hasNext = next)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val value = query.trim()
         if (value.length < 2) return emptyList()
-
         val encoded = URLEncoder.encode(value, "UTF-8")
         val apiUrl = "$mainUrl/ara/oneri?q=$encoded"
-
         val response = runCatching {
-            app.get(
-                apiUrl,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Accept" to "application/json",
-                    "Referer" to "$mainUrl/",
-                ),
-                referer = "$mainUrl/",
-                timeout = 15000,
-                allowRedirects = true,
-            )
-        }.getOrNull()
-
-        if (response == null || !response.isSuccessful) {
-            Log.e(name, "Arama API başarısız: ${response?.code}")
-            return emptyList()
-        }
-
+            app.get(apiUrl, headers = mapOf("User-Agent" to USER_AGENT, "Accept" to "application/json", "Referer" to "$mainUrl/"), referer = "$mainUrl/", timeout = 15000, allowRedirects = true)
+        }.getOrNull() ?: return emptyList()
+        if (!response.isSuccessful) return emptyList()
         val json = runCatching { org.json.JSONObject(response.text) }.getOrNull() ?: return emptyList()
         val results = mutableListOf<SearchResponse>()
 
@@ -88,7 +70,6 @@ class DiziMom : MainAPI() {
                 results.add(newMovieSearchResponse(title, url, TvType.Movie) { posterUrl = poster })
             }
         }
-
         json.optJSONArray("series")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val item = arr.optJSONObject(i) ?: continue
@@ -98,8 +79,6 @@ class DiziMom : MainAPI() {
                 results.add(newTvSeriesSearchResponse(title, url, TvType.TvSeries) { posterUrl = poster })
             }
         }
-
-        Log.d(name, "Arama API: '${value}' için ${results.size} sonuç")
         return results
     }
 
@@ -128,25 +107,19 @@ class DiziMom : MainAPI() {
 
         val episodes = mutableListOf<Episode>()
         val seasonLinks = document.select("div.flex.flex-wrap.gap-2 a[href*='?sezon=']")
-        Log.d(name, "Bulunan sezon linki sayısı: ${seasonLinks.size}")
-
         if (seasonLinks.isNotEmpty()) {
             for (seasonLink in seasonLinks) {
                 val href = seasonLink.attr("href").trim()
                 if (href.isBlank()) continue
                 val seasonUrl = absolute(href, url).substringBefore("#")
                 val seasonNum = Regex("""sezon=(\d+)""").find(seasonUrl)?.groupValues?.getOrNull(1)?.toIntOrNull()
-                Log.d(name, "Sezon URL: $seasonUrl, Sezon No: $seasonNum")
                 val seasonDoc = getDocument(seasonUrl) ?: continue
-                val seasonEpisodes = parseEpisodes(seasonDoc, seasonUrl, seasonNum ?: 1)
-                episodes.addAll(seasonEpisodes)
+                episodes.addAll(parseEpisodes(seasonDoc, seasonUrl, seasonNum ?: 1))
             }
         } else {
-            val defaultEpisodes = parseEpisodes(document, url, 1)
-            episodes.addAll(defaultEpisodes)
+            episodes.addAll(parseEpisodes(document, url, 1))
         }
 
-        Log.d(name, "Toplam bölüm sayısı: ${episodes.size}")
         return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
             posterUrl = poster
             this.plot = plot
@@ -159,35 +132,26 @@ class DiziMom : MainAPI() {
 
     private fun parseEpisodes(document: Document, baseUrl: String, defaultSeason: Int): List<Episode> {
         val episodes = mutableListOf<Episode>()
-        val selectedEpisodeLinks =
-            document.select("div.grid.grid-cols-2.gap-4 a[href*='/sezon-'][href*='/bolum-']")
-        val episodeLinks = if (selectedEpisodeLinks.isNotEmpty()) {
-            selectedEpisodeLinks
-        } else {
-            document.select("a[href*='/sezon-'][href*='/bolum-']")
-        }
-        Log.d(name, "parseEpisodes: ${episodeLinks.size} bölüm linki bulundu (base: $baseUrl)")
+        val selectedEpisodeLinks = document.select("div.grid.grid-cols-2.gap-4 a[href*='/sezon-'][href*='/bolum-']")
+        val episodeLinks = if (selectedEpisodeLinks.isNotEmpty()) selectedEpisodeLinks
+        else document.select("a[href*='/sezon-'][href*='/bolum-']")
 
         for (link in episodeLinks) {
             val href = link.attr("href").trim()
             if (href.isBlank()) continue
-
             val fullUrl = absolute(href, baseUrl)
             val match = Regex("""/sezon-(\d+)/bolum-(\d+)""").find(fullUrl) ?: continue
             val seasonNum = match.groupValues[1].toIntOrNull() ?: defaultSeason
             val episodeNum = match.groupValues[2].toIntOrNull() ?: continue
-
             val episodeName = link.selectFirst("p.text-sm.font-semibold")?.text()?.trim()
                 ?: link.text().trim().ifBlank { "Bölüm $episodeNum" }
-
             val episodePoster = imageFrom(link, baseUrl)
-            val episode = newEpisode(fullUrl) {
+            episodes.add(newEpisode(fullUrl) {
                 this.name = episodeName
                 this.season = seasonNum
                 this.episode = episodeNum
                 this.posterUrl = episodePoster
-            }
-            episodes.add(episode)
+            })
         }
         return episodes
     }
@@ -200,7 +164,6 @@ class DiziMom : MainAPI() {
     ): Boolean {
         val sourceUrl = absolute(data, mainUrl)
         if (sourceUrl.isBlank()) return false
-
         Log.d(name, "loadLinks başladı: $sourceUrl")
         var found = false
         val addedSubs = mutableSetOf<String>()
@@ -208,187 +171,101 @@ class DiziMom : MainAPI() {
         suspend fun emitLink(link: String, referer: String, label: String = "") {
             if (link.isBlank()) return
             val clean = link
-                .replace("&amp;", "&")
-                .replace("\\u0026", "&")
-                .replace("\\u003d", "=")
-                .replace("\\u003f", "?")
-                .replace("\\/", "/")
-                .replace("\\u002F", "/")
-            val isStreamPhp = clean.contains("/api/stream.php", ignoreCase = true)
+                .replace("&amp;", "&").replace("\\u0026", "&")
+                .replace("\\u003d", "=").replace("\\u003f", "?")
+                .replace("\\/", "/").replace("\\u002F", "/")
+            val isStreamPhp = clean.contains("/api/stream.php", true)
             val isDirectMedia = clean.contains(".m3u8", true) || clean.contains(".mp4", true) || clean.contains(".mpd", true)
             if (!isStreamPhp && !isDirectMedia) return
-            val type = when {
-                isStreamPhp || clean.contains(".m3u8", true) -> ExtractorLinkType.M3U8
-                clean.contains(".mpd", true) -> ExtractorLinkType.DASH
-                else -> ExtractorLinkType.VIDEO
-            }
+            val type = if (isStreamPhp || clean.contains(".m3u8", true)) ExtractorLinkType.M3U8
+                       else if (clean.contains(".mpd", true)) ExtractorLinkType.DASH
+                       else ExtractorLinkType.VIDEO
             callback.invoke(newExtractorLink(source = name, name = name, url = clean, type = type) {
                 this.referer = referer
                 this.quality = Qualities.P1080.value
-                this.headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to referer,
-                    "Origin" to "https://ddizimom.net",
-                )
+                this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer, "Origin" to "https://ddizimom.net")
             })
             found = true
             Log.d(name, "★ Link eklendi ($label): $clean")
-
-            if (isStreamPhp && clean !in addedSubs) {
-                addedSubs.add(clean)
-                fetchSubtitlesFromStream(clean, referer, subtitleCallback)
+            if (isStreamPhp) {
+                fetchSubtitlesFromStream(clean, referer, sourceUrl, subtitleCallback, addedSubs)
             }
         }
 
         val document = getDocument(sourceUrl) ?: return false
         val html = document.html().replace("\\/", "/")
-
-        Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-            .findAll(html).forEach { emitLink(it.value, sourceUrl, "statik") }
-        Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-            .findAll(html).forEach { emitLink(it.value, sourceUrl, "statik-media") }
+        Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE).findAll(html).forEach { emitLink(it.value, sourceUrl, "statik") }
+        Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).findAll(html).forEach { emitLink(it.value, sourceUrl, "statik-media") }
 
         if (!found) {
             val pvSlug = document.selectFirst("[data-pv]")?.attr("data-pv")?.trim()
-            Log.d(name, "data-pv slug: $pvSlug")
-
             val coreJsRaw = document.select("script[src]").firstOrNull {
-                val src = it.attr("src")
-                src.contains("/e/c.js") || src.contains("/assets/js/core.js")
+                val src = it.attr("src"); src.contains("/e/c.js") || src.contains("/assets/js/core.js")
             }?.attr("src")
-            Log.d(name, "core.js src: $coreJsRaw")
-
             val base = when {
-                !coreJsRaw.isNullOrBlank() -> {
-                    val abs = absolute(coreJsRaw, sourceUrl)
-                    abs.replace(Regex("/(?:e/c|assets/js/core)\\.js.*$"), "")
-                }
-                else -> "https://play2.pilavyerplay.top"
+                !coreJsRaw.isNullOrBlank() -> absolute(coreJsRaw, sourceUrl).replace(Regex("/(?:e/c|assets/js/core)\\.js.*$"), "")
+                else -> "https://pilavyerplay.top"
             }
-            Log.d(name, "Player BASE: $base")
-
             if (!pvSlug.isNullOrBlank()) {
                 val sPhpUrl = "$base/assets/js/s.php?s=" + URLEncoder.encode(pvSlug, "UTF-8")
-                Log.d(name, "s.php URL: $sPhpUrl")
-
                 val sPhpDoc = getDocument(sPhpUrl, sourceUrl)
                 if (sPhpDoc != null) {
                     val sPhpHtml = sPhpDoc.html().replace("\\/", "/")
-                    Log.d(name, "s.php HTML uzunluğu: ${sPhpHtml.length}")
-
-                    Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                        .findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php") }
-                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                        .findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php-media") }
-
+                    Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE).findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php") }
+                    Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php-media") }
                     sPhpDoc.select("iframe[src], iframe[data-src]").forEach { iframe ->
                         val src = iframe.attr("src").ifBlank { iframe.attr("data-src") }
                         if (src.isBlank()) return@forEach
                         val innerUrl = absolute(src, sPhpUrl)
-                        if (innerUrl.contains("/api/stream.php", true)) {
-                            emitLink(innerUrl, sPhpUrl, "s.php-iframe")
-                        }
+                        if (innerUrl.contains("/api/stream.php", true)) emitLink(innerUrl, sPhpUrl, "s.php-iframe")
                     }
-
-                    // ★ Altyazı çıkarma: hem HTML hem sub.php API
-                    extractSubtitlesFromHtml(sPhpHtml, sPhpUrl, subtitleCallback, addedSubs)
-
-                    if (!found) {
-                        sPhpDoc.select("script[src]").forEach { script ->
-                            val src = script.attr("src").trim()
-                            if (src.isBlank()) return@forEach
-                            val fullSrc = absolute(src, sPhpUrl)
-                            val scriptResp = runCatching {
-                                app.get(fullSrc, headers = headers + mapOf("Referer" to sPhpUrl), referer = sPhpUrl, timeout = 8000)
-                            }.getOrNull()
-                            if (scriptResp != null && scriptResp.isSuccessful) {
-                                val body = scriptResp.text.replace("\\/", "/")
-                                Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                                    .findAll(body).forEach { emitLink(it.value, fullSrc, "s.php-script") }
-                                extractSubtitlesFromHtml(body, fullSrc, subtitleCallback, addedSubs)
-                            }
-                        }
-                    }
-                } else {
-                    Log.e(name, "s.php çekilemedi: $sPhpUrl")
+                    extractSubtitlesFromHtml(sPhpHtml, sPhpUrl, sourceUrl, subtitleCallback, addedSubs)
                 }
             }
         }
-
-        if (!found) {
-            for (script in document.select("script")) {
-                val src = script.attr("src").trim()
-                if (src.isNotBlank()) {
-                    val scriptUrl = absolute(src, sourceUrl)
-                    val scriptResp = runCatching {
-                        app.get(scriptUrl, headers = headers + mapOf("Referer" to sourceUrl), referer = sourceUrl, timeout = 8000)
-                    }.getOrNull()
-                    if (scriptResp != null && scriptResp.isSuccessful) {
-                        val body = scriptResp.text.replace("\\/", "/")
-                        Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                            .findAll(body).forEach { emitLink(it.value, scriptUrl, "harici-script") }
-                    }
-                }
-            }
-        }
-
-        if (!found) Log.e(name, "Hiçbir oynatma linki bulunamadı.")
         return found
     }
 
     private suspend fun fetchSubtitlesFromStream(
         streamUrl: String,
         referer: String,
+        pageUrl: String,
         subtitleCallback: (SubtitleFile) -> Unit,
+        addedSubs: MutableSet<String>,
     ) {
-        Log.d(name, "fetchSubtitlesFromStream: $streamUrl")
         val resp = runCatching {
             app.get(streamUrl, headers = headers + mapOf("Referer" to referer), referer = referer, timeout = 10000)
-        }.getOrNull()
-        if (resp == null || !resp.isSuccessful) return
+        }.getOrNull() ?: return
+        if (!resp.isSuccessful) return
 
         val m3u8 = resp.text.replace("\\/", "/")
-        Log.d(name, "stream.php m3u8 uzunluğu: ${m3u8.length}")
-
-        Regex("""#EXT-X-MEDIA:[^\r\n]*TYPE=SUBTITLES[^\r\n]*""", RegexOption.IGNORE_CASE)
-            .findAll(m3u8).forEach { match ->
-                val line = match.value
-                val uri = Regex("""URI="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
-                val label = Regex("""NAME="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
-                    ?: Regex("""LANGUAGE="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
-                if (!uri.isNullOrBlank()) {
-                    val fullSubUrl = absolute(uri, streamUrl)
-                    val lang = label?.let { mapLang(it) } ?: "Türkçe"
+        Regex("""#EXT-X-MEDIA:[^\r\n]*TYPE=SUBTITLES[^\r\n]*""", RegexOption.IGNORE_CASE).findAll(m3u8).forEach { match ->
+            val line = match.value
+            val uri = Regex("""URI="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+            val label = Regex("""NAME="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+                ?: Regex("""LANGUAGE="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+            if (!uri.isNullOrBlank()) {
+                val fullSubUrl = absolute(uri, streamUrl)
+                if (addedSubs.add(fullSubUrl)) {
                     runCatching {
-                        subtitleCallback.invoke(SubtitleFile(url = fullSubUrl, lang = lang))
-                        Log.d(name, "★ Altyazı eklendi (HLS): $fullSubUrl ($lang)")
+                        subtitleCallback.invoke(SubtitleFile(url = fullSubUrl, lang = label?.let { mapLang(it) } ?: "Türkçe"))
+                        Log.d(name, "★ Altyazı eklendi (HLS): $fullSubUrl")
                     }
                 }
             }
-
-        Regex("""[^\r\n#]+\.(?:vtt|srt|webvtt)[^\r\n]*""", RegexOption.IGNORE_CASE)
-            .findAll(m3u8).forEach { match ->
-                val subPath = match.value.trim()
-                if (subPath.isBlank()) return@forEach
-                val fullSubUrl = absolute(subPath, streamUrl)
-                runCatching {
-                    subtitleCallback.invoke(SubtitleFile(url = fullSubUrl, lang = "Türkçe"))
-                    Log.d(name, "★ Altyazı eklendi (m3u8 içi): $fullSubUrl")
-                }
-            }
+        }
     }
 
-    // ★★★ suspend yapıldı; sub.php / token.php API'lerini de çağırır ★★★
+    // ★★★ HTML + API keşfi. sub.php URL'lerini token'la birlikte dener. ★★★
     private suspend fun extractSubtitlesFromHtml(
         html: String,
         baseUrl: String,
+        pageUrl: String,
         subtitleCallback: (SubtitleFile) -> Unit,
         addedSubs: MutableSet<String>,
     ) {
         val decoded = html.replace("\\/", "/").replace("\\\"", "\"").replace("&quot;", "\"").replace("&amp;", "&")
         Log.d(name, "extractSubtitlesFromHtml: HTML uzunluğu ${decoded.length}, base: $baseUrl")
-
-        var count = 0
 
         fun tryAdd(rawUrl: String, label: String?) {
             if (rawUrl.isBlank()) return
@@ -396,200 +273,183 @@ class DiziMom : MainAPI() {
             if (!clean.contains(".vtt", true) && !clean.contains(".srt", true)) return
             val full = absolute(clean, baseUrl)
             if (full.isBlank() || !addedSubs.add(full)) return
-            val lang = label?.let { mapLang(it) } ?: "Türkçe"
             runCatching {
-                subtitleCallback.invoke(SubtitleFile(url = full, lang = lang))
-                Log.d(name, "★ Altyazı eklendi (HTML): $full ($lang)")
-                count++
+                subtitleCallback.invoke(SubtitleFile(url = full, lang = label?.let { mapLang(it) } ?: "Türkçe"))
+                Log.d(name, "★ Altyazı eklendi (HTML .vtt): $full")
             }
         }
 
-        // 1) <track> etiketleri
+        // <track>
         Regex("""<track[^>]+>""", RegexOption.IGNORE_CASE).findAll(decoded).forEach { m ->
-            val line = m.value
-            val src = Regex("""src=["']([^"']+)["']""").find(line)?.groupValues?.getOrNull(1) ?: return@forEach
-            val lang = Regex("""srclang=["']([^"']+)["']""").find(line)?.groupValues?.getOrNull(1)
-                ?: Regex("""label=["']([^"']+)["']""").find(line)?.groupValues?.getOrNull(1)
+            val src = Regex("""src=["']([^"']+)["']""").find(m.value)?.groupValues?.getOrNull(1) ?: return@forEach
+            val lang = Regex("""srclang=["']([^"']+)["']""").find(m.value)?.groupValues?.getOrNull(1)
+                ?: Regex("""label=["']([^"']+)["']""").find(m.value)?.groupValues?.getOrNull(1)
             tryAdd(src, lang)
         }
+        // .vtt/.srt URL'leri
+        Regex("""["'`]([^"'`\s<>]+\.(?:vtt|srt)(?:\?[^"'`\s<>]*)?)["'`]""", RegexOption.IGNORE_CASE).findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
 
-        // 2) Herhangi bir .vtt/.srt string
-        Regex("""["'`]([^"'`\s<>]+\.(?:vtt|srt)(?:\?[^"'`\s<>]*)?)["'`]""", RegexOption.IGNORE_CASE)
-            .findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
-
-        // 3) JSON/JS config anahtarları
-        val patterns = listOf(
-            """"subtitle"\s*:\s*"([^"]+)"""",
-            """"subtitles"\s*:\s*"([^"]+)"""",
-            """"sub"\s*:\s*"([^"]+)"""",
-            """"subs"\s*:\s*"([^"]+)"""",
-            """"vtt"\s*:\s*"([^"]+)"""",
-            """"srt"\s*:\s*"([^"]+)"""",
-            """"subtitle_url"\s*:\s*"([^"]+)"""",
-            """"subtitleUrl"\s*:\s*"([^"]+)"""",
-            """"caption_url"\s*:\s*"([^"]+)"""",
-            """"track_url"\s*:\s*"([^"]+)"""",
-            """subtitleUrl\s*[:=]\s*["']([^"']+)["']""",
-            """subtitle_url\s*[:=]\s*["']([^"']+)["']""",
-            """subUrl\s*[:=]\s*["']([^"']+)["']""",
-            """sub_url\s*[:=]\s*["']([^"']+)["']""",
-            """captionUrl\s*[:=]\s*["']([^"']+)["']""",
-            """trackUrl\s*[:=]\s*["']([^"']+)["']""",
-        )
-        for (p in patterns) {
-            Regex(p, RegexOption.IGNORE_CASE).findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
-        }
-
-        // 4) data-* öznitelikleri
-        Regex("""data-(?:subtitle|sub|track|caption|vtt|srt|subtitles)[a-z_-]*=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-            .findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
-
-        // 5) hls.js subtitleTracks objesi
-        Regex(
-            """subtitleTracks?\s*[:=]\s*\[([^\]]+)]""",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-        ).findAll(decoded).forEach { m ->
-            Regex("""["']([^"']+\.(?:vtt|srt)[^"']*)["']""").findAll(m.groupValues[1]).forEach { s ->
-                tryAdd(s.groupValues[1], null)
-            }
-        }
-
-        // 6) "sub" içeren URL'ler
-        Regex("""["'](https?://[^"']*?(?:sub|altyaz|caption|track)[^"']*?\.(?:vtt|srt)[^"']*)["']""", RegexOption.IGNORE_CASE)
-            .findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
-
-        // ★★★ 7) sub.php / subtitle.php / token.php API endpoint'lerini bul ve çağır ★★★
-        val apiRegexes = listOf(
-            Regex("""https?://[^\s"'`<>\\]+/api/(?:sub|subtitle|altyaz|caption|track)\.php[^\s"'`<>\\]*""", RegexOption.IGNORE_CASE),
-            Regex("""["'](/api/(?:sub|subtitle|altyaz|caption|track)\.php[^"']*)["']""", RegexOption.IGNORE_CASE),
-        )
+        // ★★★ sub.php API adayları — token ve farklı parametrelerle dene ★★★
         val apiUrls = mutableSetOf<String>()
-        for (rx in apiRegexes) {
-            rx.findAll(decoded).forEach { m ->
-                val u = if (m.groupValues.size > 1 && m.groupValues[1].isNotBlank()) m.groupValues[1] else m.value
-                val clean = u.trim().replace("\\/", "/").replace("&amp;", "&")
-                if (clean.isNotBlank()) apiUrls.add(absolute(clean, baseUrl))
-            }
+        Regex("""https?://[^\s"'`<>\\]+/api/(?:sub|subtitle|altyaz|caption|track)\.php[^\s"'`<>\\]*""", RegexOption.IGNORE_CASE).findAll(decoded).forEach {
+            apiUrls.add(it.value.replace("\\/", "/").replace("&amp;", "&"))
         }
-        Log.d(name, "Altyazı API adayları: $apiUrls")
+        Regex("""["'](/api/(?:sub|subtitle|altyaz|caption|track)\.php[^"']*)["']""", RegexOption.IGNORE_CASE).findAll(decoded).forEach {
+            apiUrls.add(absolute(it.groupValues[1].replace("\\/", "/"), baseUrl))
+        }
+
+        // Stream URL'sindeki token'ı bul (sub.php için gerekli olabilir)
+        val streamTokenRegex = Regex("""stream\.php\?[^"'\s]*?token=([^"'&\s]+)""")
+        val streamToken = streamTokenRegex.find(decoded)?.groupValues?.getOrNull(1)
+
+        Log.d(name, "Altyazı API adayları: $apiUrls, streamToken=${streamToken?.take(30)}...")
 
         for (apiUrl in apiUrls) {
             if (!addedSubs.add("api:$apiUrl")) continue
-            tryFetchSubtitleApi(apiUrl, baseUrl, subtitleCallback, addedSubs)
+            tryFetchSubtitleApi(apiUrl, baseUrl, pageUrl, streamToken, subtitleCallback, addedSubs)
         }
-
-        Log.d(name, "extractSubtitlesFromHtml: toplam $count altyazı eklendi (HTML)")
     }
 
-    // ★★★ YENİ: sub.php benzeri API'leri çağır ve yanıtı ayrıştır ★★★
+    // ★★★ sub.php için token'lı + token'sız + XHR başlıklı + token.php fallback ★★★
     private suspend fun tryFetchSubtitleApi(
         apiUrl: String,
         referer: String,
+        pageUrl: String,
+        streamToken: String?,
         subtitleCallback: (SubtitleFile) -> Unit,
         addedSubs: MutableSet<String>,
     ) {
         Log.d(name, "tryFetchSubtitleApi: $apiUrl")
-        val resp = runCatching {
-            app.get(
-                apiUrl,
-                headers = headers + mapOf(
-                    "Referer" to referer,
-                    "Accept" to "application/json, text/plain, text/vtt, */*",
-                ),
-                referer = referer,
-                timeout = 10000,
-                allowRedirects = true,
-            )
-        }.getOrNull()
+        val vParam = Regex("""[?&]v=([^&]+)""").find(apiUrl)?.groupValues?.getOrNull(1)
+        val baseOrigin = runCatching { URI(apiUrl).let { "${it.scheme}://${it.host}" } }.getOrNull() ?: ""
 
-        if (resp == null) { Log.d(name, "sub.php bağlantı hatası"); return }
-        if (!resp.isSuccessful) { Log.d(name, "sub.php HTTP ${resp.code}"); return }
+        val attempts = mutableListOf<String>()
 
-        val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
-        Log.d(name, "sub.php yanıtı (${body.length} char): ${body.take(1500)}")
+        // 1) olduğu gibi
+        attempts.add(apiUrl)
 
-        // A) Doğrudan VTT/SRT içeriği geldiyse
-        if (body.contains("WEBVTT", true) || body.contains("-->") || body.contains("[Script Info]", true)) {
-            if (addedSubs.add(apiUrl)) {
-                runCatching {
-                    subtitleCallback.invoke(SubtitleFile(url = apiUrl, lang = "Türkçe"))
-                    Log.d(name, "★ Altyazı eklendi (sub.php doğrudan): $apiUrl")
-                }
-            }
-            return
+        // 2) stream token'ı ile
+        if (!streamToken.isNullOrBlank() && !apiUrl.contains("token=", true)) {
+            attempts.add("$apiUrl&token=" + URLEncoder.encode(streamToken, "UTF-8"))
         }
 
-        // B) JSON yanıt
-        val json = runCatching { org.json.JSONObject(body) }.getOrNull()
-        if (json != null) {
-            var jsonFound = false
-            for (key in listOf("subs", "subtitles", "tracks", "data", "items", "result")) {
-                val arr = json.optJSONArray(key)
-                if (arr != null) {
-                    for (i in 0 until arr.length()) {
-                        val item = arr.optJSONObject(i) ?: continue
-                        val url = item.optString("url").ifBlank { item.optString("file") }.ifBlank { item.optString("src") }.ifBlank { item.optString("link") }
-                        val lang = item.optString("lang").ifBlank { item.optString("language") }.ifBlank { item.optString("label") }.ifBlank { item.optString("name") }
-                        if (url.isNotBlank()) {
-                            val full = absolute(url, apiUrl)
-                            if (addedSubs.add(full)) {
-                                val langStr = lang.ifBlank { "Türkçe" }
-                                runCatching {
-                                    subtitleCallback.invoke(SubtitleFile(url = full, lang = mapLang(langStr)))
-                                    Log.d(name, "★ Altyazı eklendi (sub.php JSON array): $full ($langStr)")
-                                    jsonFound = true
+        // 3) token.php'den yeni token al
+        if (!vParam.isNullOrBlank() && baseOrigin.isNotBlank()) {
+            val tokenUrl = "$baseOrigin/api/token.php?v=" + URLEncoder.encode(vParam, "UTF-8")
+            Log.d(name, "token.php deneniyor: $tokenUrl")
+            val tokenResp = runCatching {
+                app.get(tokenUrl, headers = headers + mapOf("Referer" to referer, "X-Requested-With" to "XMLHttpRequest", "Accept" to "application/json, text/plain, */*"), referer = referer, timeout = 8000)
+            }.getOrNull()
+            if (tokenResp != null && tokenResp.isSuccessful) {
+                val tokenBody = tokenResp.text
+                Log.d(name, "token.php yanıtı: ${tokenBody.take(400)}")
+                val newToken = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
+                    ?: Regex("""["']([A-Za-z0-9_\-\.]{40,})["']""").find(tokenBody)?.groupValues?.getOrNull(1)
+                    ?: tokenBody.trim().takeIf { it.length in 40..2000 && !it.startsWith("<") && !it.contains(" ") }
+                if (!newToken.isNullOrBlank()) {
+                    attempts.add("$apiUrl&token=" + URLEncoder.encode(newToken, "UTF-8"))
+                }
+            } else {
+                Log.d(name, "token.php başarısız: ${tokenResp?.code}")
+            }
+        }
+
+        // 4) XHR başlığı ile
+        attempts.add("xhr:$apiUrl")
+
+        for (attemptRaw in attempts.distinct()) {
+            val attempt = attemptRaw.removePrefix("xhr:")
+            val isXhr = attemptRaw.startsWith("xhr:")
+
+            val reqHeaders = headers + mapOf(
+                "Referer" to referer,
+                "Accept" to "application/json, text/plain, text/vtt, */*",
+            ) + (if (isXhr) mapOf("X-Requested-With" to "XMLHttpRequest") else emptyMap())
+
+            Log.d(name, "sub.php denemesi (${if (isXhr) "XHR" else "normal"}): $attempt")
+            val resp = runCatching {
+                app.get(attempt, headers = reqHeaders, referer = referer, timeout = 10000, allowRedirects = true)
+            }.getOrNull()
+
+            if (resp == null) { Log.d(name, "sub.php bağlantı hatası"); continue }
+            if (!resp.isSuccessful) { Log.d(name, "sub.php HTTP ${resp.code}"); continue }
+
+            val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
+            Log.d(name, "sub.php yanıtı (${body.length} char): ${body.take(1500)}")
+
+            // A) Doğrudan VTT içeriği
+            if (body.contains("WEBVTT", true) || body.contains("-->") || body.contains("[Script Info]", true)) {
+                if (addedSubs.add(attempt)) {
+                    runCatching {
+                        subtitleCallback.invoke(SubtitleFile(url = attempt, lang = "Türkçe"))
+                        Log.d(name, "★ Altyazı eklendi (sub.php doğrudan): $attempt")
+                    }
+                }
+                return
+            }
+
+            // B) JSON yanıtı
+            val json = runCatching { org.json.JSONObject(body) }.getOrNull()
+            if (json != null) {
+                var jsonFound = false
+                for (key in listOf("subs", "subtitles", "tracks", "data", "items", "result", "list")) {
+                    val arr = json.optJSONArray(key)
+                    if (arr != null) {
+                        for (i in 0 until arr.length()) {
+                            val item = arr.optJSONObject(i) ?: continue
+                            val url = item.optString("url").ifBlank { item.optString("file") }
+                                .ifBlank { item.optString("src") }.ifBlank { item.optString("link") }.ifBlank { item.optString("vtt") }
+                            val lang = item.optString("lang").ifBlank { item.optString("language") }
+                                .ifBlank { item.optString("label") }.ifBlank { item.optString("name") }
+                            if (url.isNotBlank()) {
+                                val full = absolute(url, attempt)
+                                if (addedSubs.add(full)) {
+                                    val langStr = lang.ifBlank { "Türkçe" }
+                                    runCatching {
+                                        subtitleCallback.invoke(SubtitleFile(url = full, lang = mapLang(langStr)))
+                                        Log.d(name, "★ Altyazı eklendi (sub.php JSON): $full ($langStr)")
+                                        jsonFound = true
+                                    }
                                 }
                             }
                         }
                     }
+                    val valStr = json.optString(key)
+                    if (valStr.startsWith("http", true) && (valStr.contains(".vtt", true) || valStr.contains(".srt", true))) {
+                        val full = absolute(valStr, attempt)
+                        if (addedSubs.add(full)) {
+                            runCatching {
+                                subtitleCallback.invoke(SubtitleFile(url = full, lang = "Türkçe"))
+                                Log.d(name, "★ Altyazı eklendi (sub.php JSON str): $full")
+                                jsonFound = true
+                            }
+                        }
+                    }
                 }
-                // Bazen value direkt string URL olabilir
-                val valStr = json.optString(key)
-                if (valStr.startsWith("http", true) && (valStr.contains(".vtt", true) || valStr.contains(".srt", true))) {
-                    val full = absolute(valStr, apiUrl)
+                Regex("""["']([^"']+\.(?:vtt|srt)[^"']*)["']""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
+                    val full = absolute(m.groupValues[1].replace("\\/", "/"), attempt)
                     if (addedSubs.add(full)) {
                         runCatching {
                             subtitleCallback.invoke(SubtitleFile(url = full, lang = "Türkçe"))
-                            Log.d(name, "★ Altyazı eklendi (sub.php JSON string): $full")
+                            Log.d(name, "★ Altyazı eklendi (sub.php JSON regex): $full")
                             jsonFound = true
                         }
                     }
                 }
+                if (jsonFound) return
             }
-            // JSON içinde herhangi bir .vtt/.srt string
-            Regex("""["']([^"']+\.(?:vtt|srt)[^"']*)["']""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
-                val u = m.groupValues[1].replace("\\/", "/")
-                val full = absolute(u, apiUrl)
+
+            // C) VTT/SRT URL'leri metin içinde
+            Regex("""["']?([^"'\s<>]+\.(?:vtt|srt)(?:\?[^"'\s<>]*)?)["']?""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
+                val u = m.groupValues[1].trim()
+                if (u.isBlank()) return@forEach
+                val full = absolute(u, attempt)
                 if (addedSubs.add(full)) {
                     runCatching {
                         subtitleCallback.invoke(SubtitleFile(url = full, lang = "Türkçe"))
-                        Log.d(name, "★ Altyazı eklendi (sub.php JSON regex): $full")
-                        jsonFound = true
+                        Log.d(name, "★ Altyazı eklendi (sub.php text): $full")
                     }
                 }
-            }
-            if (jsonFound) return
-        }
-
-        // C) HTML veya düz metin yanıtındaki .vtt/.srt URL'leri
-        Regex("""["']?([^"'\s<>]+\.(?:vtt|srt)(?:\?[^"'\s<>]*)?)["']?""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
-            val u = m.groupValues[1].trim()
-            if (u.isBlank()) return@forEach
-            val full = absolute(u, apiUrl)
-            if (addedSubs.add(full)) {
-                runCatching {
-                    subtitleCallback.invoke(SubtitleFile(url = full, lang = "Türkçe"))
-                    Log.d(name, "★ Altyazı eklendi (sub.php text): $full")
-                }
-            }
-        }
-
-        // D) İçinde başka sub.php / token.php varsa bir seviye daha dene (recursive)
-        Regex("""https?://[^\s"'`<>\\]+/api/(?:sub|token)\.php[^\s"'`<>\\]*""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
-            val nested = m.value.replace("\\/", "/").replace("&amp;", "&")
-            if (nested != apiUrl && addedSubs.add("api:$nested")) {
-                Log.d(name, "  → iç sub.php bulundu: $nested")
-                tryFetchSubtitleApi(nested, apiUrl, subtitleCallback, addedSubs)
             }
         }
     }
@@ -597,26 +457,17 @@ class DiziMom : MainAPI() {
     private fun mapLang(code: String): String {
         val c = code.lowercase().take(2)
         return when (c) {
-            "tr" -> "Türkçe"
-            "en" -> "English"
-            "de" -> "Deutsch"
-            "fr" -> "Français"
-            "es" -> "Español"
-            "it" -> "Italiano"
-            "ru" -> "Русский"
-            "ar" -> "العربية"
-            else -> code
+            "tr" -> "Türkçe"; "en" -> "English"; "de" -> "Deutsch"
+            "fr" -> "Français"; "es" -> "Español"; "it" -> "Italiano"
+            "ru" -> "Русский"; "ar" -> "العربية"; else -> code
         }
     }
 
     private suspend fun getDocument(url: String, referer: String = "$mainUrl/"): Document? {
         return try {
-            val response = app.get(url, headers = headers + ("Referer" to referer), referer = referer, timeout = 15000, allowRedirects = true)
-            if (response.isSuccessful) response.document else null
-        } catch (e: Exception) {
-            Log.e(name, "Sayfa hatası: $url; ${e.message}")
-            null
-        }
+            val r = app.get(url, headers = headers + ("Referer" to referer), referer = referer, timeout = 15000, allowRedirects = true)
+            if (r.isSuccessful) r.document else null
+        } catch (e: Exception) { Log.e(name, "Sayfa hatası: $url; ${e.message}"); null }
     }
 
     private fun parseCatalog(document: Document, baseUrl: String): List<SearchResponse> {
@@ -625,39 +476,30 @@ class DiziMom : MainAPI() {
             val url = absolute(link.attr("href"), baseUrl).substringBefore("#")
             if (url.isBlank()) continue
             if (!url.contains("/film/") && !url.contains("/dizi/")) continue
-
             val card = findCard(link)
             val poster = imageFrom(link, baseUrl) ?: imageFrom(card, baseUrl)
-            val title = listOf(
-                link.attr("title"), link.attr("aria-label"),
+            val title = listOf(link.attr("title"), link.attr("aria-label"),
                 link.selectFirst("h2,h3,h4,.title,.name")?.text().orEmpty(),
-                link.selectFirst("img")?.attr("alt").orEmpty(),
-                link.text(),
-                card.selectFirst("h2,h3,h4,.title,.name")?.text().orEmpty(),
-            ).firstOrNull { it.isNotBlank() }?.trim() ?: continue
+                link.selectFirst("img")?.attr("alt").orEmpty(), link.text(),
+                card.selectFirst("h2,h3,h4,.title,.name")?.text().orEmpty())
+                .firstOrNull { it.isNotBlank() }?.trim() ?: continue
             if (title.length < 2) continue
-
             val key = canonical(url)
-            val item = if (url.contains("/film/")) {
-                newMovieSearchResponse(title, url, TvType.Movie) { posterUrl = poster }
-            } else {
-                newTvSeriesSearchResponse(title, url, TvType.TvSeries) { posterUrl = poster }
-            }
+            val item = if (url.contains("/film/")) newMovieSearchResponse(title, url, TvType.Movie) { posterUrl = poster }
+                       else newTvSeriesSearchResponse(title, url, TvType.TvSeries) { posterUrl = poster }
             found.putIfAbsent(key, item)
         }
         return found.values.toList()
     }
 
     private fun findCard(link: Element): Element {
-        var best = link
-        var current: Element? = link
+        var best = link; var current: Element? = link
         repeat(3) {
             val item = current ?: return@repeat
             if (item.selectFirst("img") != null) best = item
             val parent = item.parent() ?: return@repeat
             if (parent.select("a[href]").size > 10) return@repeat
-            current = parent
-            best = parent
+            current = parent; best = parent
         }
         return best
     }
@@ -669,23 +511,20 @@ class DiziMom : MainAPI() {
         return if (src.isNotBlank()) absolute(src, baseUrl) else null
     }
 
-    private fun pageTitle(document: Document, url: String): String? {
-        return document.selectFirst("h1")?.text()?.trim()
+    private fun pageTitle(document: Document, url: String): String? =
+        document.selectFirst("h1")?.text()?.trim()
             ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
             ?: document.title().takeIf { it.isNotBlank() }
             ?: pathOf(url).substringAfterLast("/")
-    }
 
-    private fun pagePoster(document: Document, baseUrl: String): String? {
-        return document.selectFirst("meta[property=og:image]")?.attr("content")?.let { absolute(it, baseUrl) }
+    private fun pagePoster(document: Document, baseUrl: String): String? =
+        document.selectFirst("meta[property=og:image]")?.attr("content")?.let { absolute(it, baseUrl) }
             ?: document.selectFirst(".poster img, .detail-poster img")?.let { imageFrom(it, baseUrl) }
-    }
 
-    private fun pagePlot(document: Document): String? {
-        return document.selectFirst("meta[property=og:description]")?.attr("content")?.trim()
+    private fun pagePlot(document: Document): String? =
+        document.selectFirst("meta[property=og:description]")?.attr("content")?.trim()
             ?: document.selectFirst("meta[name=description]")?.attr("content")?.trim()
             ?: document.selectFirst(".description, .plot, .summary")?.text()?.trim()
-    }
 
     private fun detailValue(document: Document, label: String): String? {
         val row = document.select("dl.divide-y.text-sm > div").firstOrNull {
@@ -695,55 +534,33 @@ class DiziMom : MainAPI() {
     }
 
     private fun pageYear(document: Document, title: String): Int? {
-        val value = detailValue(document, "Yapım Yılı")
-        Regex("""(19\d{2}|20\d{2})""").find(value.orEmpty())
-            ?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
-
+        detailValue(document, "Yapım Yılı")?.let { Regex("""(19\d{2}|20\d{2})""").find(it)?.value?.toIntOrNull() }?.let { return it }
         for (script in document.select("script[type=application/ld+json]")) {
-            val text = script.data()
-            Regex("\"datePublished\"\\s*:\\s*\"(\\d{4})")
-                .find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+            Regex("\"datePublished\"\\s*:\\s*\"(\\d{4})").find(script.data())
+                ?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
         }
         return Regex("\\((\\d{4})\\)").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
     }
 
     private fun pageRating(document: Document): Double? {
-        val value = detailValue(document, "IMDB Puanı") ?: return null
-        val rating = Regex("""(?<!\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)""")
-            .find(value)?.value?.replace(',', '.')?.toDoubleOrNull()
+        detailValue(document, "IMDB Puanı") ?: return null
+        val rating = Regex("""(?<!\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)""").find(detailValue(document, "IMDB Puanı") ?: "")?.value?.replace(',', '.')?.toDoubleOrNull()
         return rating?.takeIf { it in 0.0..10.0 }
     }
 
     private fun pageGenres(document: Document): List<String> {
-        val detailGenre = detailValue(document, "Tür")
-        if (!detailGenre.isNullOrBlank()) {
-            return detailGenre.split(',', '·')
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .distinct()
-                .take(20)
-        }
-
-        val list = mutableListOf<String>()
-        document.select("a[href*='/tur/'], .genres a, .genre a").forEach {
-            list.add(it.text().trim())
-        }
-        return list.filter { it.isNotBlank() }.distinct().take(20)
+        detailValue(document, "Tür")?.let { return it.split(',', '·').map { g -> g.trim() }.filter { it.isNotBlank() }.distinct().take(20) }
+        return document.select("a[href*='/tur/']").map { it.text().trim() }.filter { it.isNotBlank() }.distinct().take(20)
     }
 
     private fun pageActors(document: Document): List<String> {
         val actors = LinkedHashSet<String>()
-        document.select("#cast-grid > a[href*='/oyuncu/'], #cast-grid a[href*='/oyuncu/']")
-            .forEach { card ->
-                val name = card.selectFirst("p[title]")?.attr("title")?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: card.selectFirst("p")?.text()?.trim()
-                        ?.takeIf { it.isNotBlank() }
-                    ?: card.selectFirst("img[alt]")?.attr("alt")?.trim()
-                        ?.takeIf { it.isNotBlank() }
-
-                if (!name.isNullOrBlank()) actors.add(name)
-            }
+        document.select("#cast-grid a[href*='/oyuncu/']").forEach { card ->
+            val name = card.selectFirst("p[title]")?.attr("title")?.trim()
+                ?: card.selectFirst("p")?.text()?.trim()
+                ?: card.selectFirst("img[alt]")?.attr("alt")?.trim()
+            if (!name.isNullOrBlank()) actors.add(name)
+        }
         return actors.take(50).toList()
     }
 
