@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:18db495a3629f4a85eb3673452ecc8c37a9e8577 -->
+### Refactor subtitle extraction for CDN compatibility
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [18db495](https://github.com/Kayracs3/Kayra/commit/18db495a3629f4a85eb3673452ecc8c37a9e8577)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:4e202a9e1d2eb70cb44233326b349bd2b564d0b5 -->
 ### Refactor subtitle extraction and logging
 
