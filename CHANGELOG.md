@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:7008f45237d7799b6555a9c7a2f942e06f1cb823 -->
+### Refactor subtitle extraction to use newSubtitleFile
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [7008f45](https://github.com/Kayracs3/Kayra/commit/7008f45237d7799b6555a9c7a2f942e06f1cb823)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:7a439fc62b86c3544e5de7149358ab437b050d15 -->
 ### Enhance subtitle extraction and logging
 
