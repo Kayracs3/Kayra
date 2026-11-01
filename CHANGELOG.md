@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:0836fa76cb9148b78b34203be752680d4b9ee3bb -->
+### Refactor loadLinks and emitLink functions
+
+- Etkilenen alanlar: DiziMom
+- Commit: [0836fa7](https://github.com/Kayracs3/Kayra/commit/0836fa76cb9148b78b34203be752680d4b9ee3bb)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:db6f0dfe8f440c3d973842082524a1147635bd14 -->
 ### Refactor loadLinks and emitLink to be suspend functions
 
