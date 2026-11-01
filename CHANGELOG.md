@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:dd7a0664ac17e5366813283f0595fcb0a8ba5528 -->
+### Refactor search and subtitle extraction methods
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [dd7a066](https://github.com/Kayracs3/Kayra/commit/dd7a0664ac17e5366813283f0595fcb0a8ba5528)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:7008f45237d7799b6555a9c7a2f942e06f1cb823 -->
 ### Refactor subtitle extraction to use newSubtitleFile
 
