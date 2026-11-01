@@ -253,6 +253,28 @@
         "name": "Dizilla"
     },
     {
+        "iconUrl": "https://ddizimom.net/favicon.ico",
+        "fileHash": "sha256-4d4cebef923a06cdc0f418cc17bcfa6b55b575864fc8894ce79879025f92b89e",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 33538,
+        "status": 3,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime"
+        ],
+        "version": 1,
+        "internalName": "DiziMom",
+        "description": "DiziMom film, dizi ve anime katalog sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziMom.cs3",
+        "name": "DiziMom"
+    },
+    {
         "iconUrl": "https://dizipal1592.com/favicon.ico",
         "fileHash": "sha256-71938a1c9099ca9668b7ac500866bacc3a978c2fcdf869cc6f2692701ad0427e",
         "apiVersion": 1,
