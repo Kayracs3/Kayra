@@ -2,6 +2,23 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:8b2c12bd95aeea8a924396fb85f4a8bd65811c4b -->
+### Fix DiziPal CloudStream API compatibility errors
+
+- Etkilenen alanlar: DiziPal
+- Commit: [8b2c12b](https://github.com/Kayracs3/Kayra/commit/8b2c12bd95aeea8a924396fb85f4a8bd65811c4b)
+
+## 2026-11-01
+
+<!-- kayra-commit:cb9f4b5c16b0606446102d070b698a3823ff0b1b -->
+### Keep DiziPalOrjinal catalog-only and remove unresolved player helpers
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [cb9f4b5](https://github.com/Kayracs3/Kayra/commit/cb9f4b5c16b0606446102d070b698a3823ff0b1b)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:b139497c6fca3287c4195575d7cfcf13ca8db76a -->
 ### Update DiziPalOrjinal.kt
 
