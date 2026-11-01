@@ -2,6 +2,47 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:71403905fb65f867a1473db59f987a3884b0dead -->
+### Document DiziMom provider
+
+- Etkilenen alanlar: DiziMom
+- Commit: [7140390](https://github.com/Kayracs3/Kayra/commit/71403905fb65f867a1473db59f987a3884b0dead)
+
+## 2026-11-01
+
+<!-- kayra-commit:6d9ec818744e5240f9e10993b706adf8ef26d90c -->
+### Add DiziMom catalogue provider
+
+- Etkilenen alanlar: DiziMom
+- Commit: [6d9ec81](https://github.com/Kayracs3/Kayra/commit/6d9ec818744e5240f9e10993b706adf8ef26d90c)
+
+## 2026-11-01
+
+<!-- kayra-commit:a9814d658782a8bb3b4308fd940e9eea452654ec -->
+### Register DiziMom provider
+
+- Etkilenen alanlar: DiziMom
+- Commit: [a9814d6](https://github.com/Kayracs3/Kayra/commit/a9814d658782a8bb3b4308fd940e9eea452654ec)
+
+## 2026-11-01
+
+<!-- kayra-commit:a0502e11ad2d424222597bffceda2d8c07ae3fee -->
+### Add DiziMom manifest
+
+- Etkilenen alanlar: DiziMom
+- Commit: [a0502e1](https://github.com/Kayracs3/Kayra/commit/a0502e11ad2d424222597bffceda2d8c07ae3fee)
+
+## 2026-11-01
+
+<!-- kayra-commit:1343cd31a8162ca94b5577c7efc31213054ddf26 -->
+### Add DiziMom CloudStream module
+
+- Etkilenen alanlar: DiziMom
+- Commit: [1343cd3](https://github.com/Kayracs3/Kayra/commit/1343cd31a8162ca94b5577c7efc31213054ddf26)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:54c9d91256e9cecf9b2371ab951d92d618df8877 -->
 ### Update DiziPalOrjinal.kt
 
