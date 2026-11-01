@@ -192,7 +192,6 @@ class DiziMom : MainAPI() {
         return episodes
     }
 
-    // ★★★ ALTYAZI ÇIKARMA EKLENMİŞ loadLinks ★★★
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -291,7 +290,6 @@ class DiziMom : MainAPI() {
                         }
                     }
 
-                    // ★ s.php içinden altyazıları çıkar (her zaman çalışır)
                     extractSubtitlesFromHtml(sPhpHtml, sPhpUrl, subtitleCallback, addedSubs)
 
                     if (!found) {
@@ -306,7 +304,6 @@ class DiziMom : MainAPI() {
                                 val body = scriptResp.text.replace("\\/", "/")
                                 Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                                     .findAll(body).forEach { emitLink(it.value, fullSrc, "s.php-script") }
-                                // Script içindeki altyazıları da tara
                                 extractSubtitlesFromHtml(body, fullSrc, subtitleCallback, addedSubs)
                             }
                         }
@@ -338,7 +335,6 @@ class DiziMom : MainAPI() {
         return found
     }
 
-    // ★★★ GELİŞMİŞ: stream.php m3u8 yanıtından HLS altyazılarını çıkar ★★★
     private suspend fun fetchSubtitlesFromStream(
         streamUrl: String,
         referer: String,
@@ -357,7 +353,6 @@ class DiziMom : MainAPI() {
         Log.d(name, "stream.php m3u8 uzunluğu: ${m3u8.length}")
         Log.d(name, "stream.php m3u8 ilk 800 char: ${m3u8.take(800)}")
 
-        // HLS EXT-X-MEDIA TYPE=SUBTITLES
         Regex("""#EXT-X-MEDIA:[^\r\n]*TYPE=SUBTITLES[^\r\n]*""", RegexOption.IGNORE_CASE)
             .findAll(m3u8).forEach { match ->
                 val line = match.value
@@ -374,7 +369,6 @@ class DiziMom : MainAPI() {
                 }
             }
 
-        // m3u8 içinde doğrudan .vtt/.srt referansı
         Regex("""[^\r\n#]+\.(?:vtt|srt|webvtt)[^\r\n]*""", RegexOption.IGNORE_CASE)
             .findAll(m3u8).forEach { match ->
                 val subPath = match.value.trim()
@@ -387,7 +381,7 @@ class DiziMom : MainAPI() {
             }
     }
 
-    // ★★★ GELİŞMİŞ: HTML'den altyazı çıkarma (agresif + debug) ★★★
+    // ★★★ DÜZELTİLMİŞ: RegexOption | yerine setOf kullanılıyor ★★★
     private fun extractSubtitlesFromHtml(
         html: String,
         baseUrl: String,
@@ -422,12 +416,12 @@ class DiziMom : MainAPI() {
             tryAdd(src, lang)
         }
 
-        // 2) Herhangi bir .vtt/.srt string (JS'de, JSON'da, data-*'ta)
+        // 2) Herhangi bir .vtt/.srt string
         Regex("""["'`]([^"'`\s<>]+\.(?:vtt|srt)(?:\?[^"'`\s<>]*)?)["'`]""", RegexOption.IGNORE_CASE)
             .findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
 
         // 3) JSON/JS config anahtarları
-        for (pattern in listOf(
+        val patterns = listOf(
             """"subtitle"\s*:\s*"([^"]+)"""",
             """"subtitles"\s*:\s*"([^"]+)"""",
             """"sub"\s*:\s*"([^"]+)"""",
@@ -444,29 +438,31 @@ class DiziMom : MainAPI() {
             """sub_url\s*[:=]\s*["']([^"']+)["']""",
             """captionUrl\s*[:=]\s*["']([^"']+)["']""",
             """trackUrl\s*[:=]\s*["']([^"']+)["']""",
-        )) {
-            Regex(pattern, RegexOption.IGNORE_CASE).findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
+        )
+        for (p in patterns) {
+            Regex(p, RegexOption.IGNORE_CASE).findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
         }
 
         // 4) data-* öznitelikleri
         Regex("""data-(?:subtitle|sub|track|caption|vtt|srt|subtitles)[a-z_-]*=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
             .findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
 
-        // 5) hls.js subtitleTracks objesi
-        Regex("""subtitleTracks?\s*[:=]\s*\[([^\]]+)]""", RegexOption.IGNORE_CASE | RegexOption.DOT_MATCHES_ALL)
-            .findAll(decoded).forEach { m ->
-                Regex("""["']([^"']+\.(?:vtt|srt)[^"']*)["']""").findAll(m.groupValues[1]).forEach { s ->
-                    tryAdd(s.groupValues[1], null)
-                }
+        // 5) hls.js subtitleTracks objesi — setOf ile (Enum'da | operatörü geçersiz)
+        Regex(
+            """subtitleTracks?\s*[:=]\s*\[([^\]]+)]""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        ).findAll(decoded).forEach { m ->
+            Regex("""["']([^"']+\.(?:vtt|srt)[^"']*)["']""").findAll(m.groupValues[1]).forEach { s ->
+                tryAdd(s.groupValues[1], null)
             }
+        }
 
-        // 6) Herhangi bir URL'de "sub" geçen ve .vtt/.srt ile biten
+        // 6) "sub" içeren URL'ler
         Regex("""["'](https?://[^"']*?(?:sub|altyaz|caption|track)[^"']*?\.(?:vtt|srt)[^"']*)["']""", RegexOption.IGNORE_CASE)
             .findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
 
         Log.d(name, "extractSubtitlesFromHtml: toplam $count altyazı eklendi")
 
-        // Hiç bulunamazsa debug için tüm URL'leri logla
         if (count == 0) {
             Log.d(name, "=== HTML'de altyazı bulunamadı. Tüm URL'ler dökülüyor ===")
             Regex("""(?:https?:)?//[^\s"'`<>\\]+""", RegexOption.IGNORE_CASE)
