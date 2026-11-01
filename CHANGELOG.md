@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:533bb62f5ea27941d309241c0309c159bcbd598f -->
+### Bump version from 1 to 2
+
+- Etkilenen alanlar: DiziMom
+- Commit: [533bb62](https://github.com/Kayracs3/Kayra/commit/533bb62f5ea27941d309241c0309c159bcbd598f)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:dbddbe12faa1597a259acb819414b86935e082a4 -->
 ### Enhance subtitle extraction in loadLinks function
 
