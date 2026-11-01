@@ -389,13 +389,11 @@ class DiziPalOrjinal : MainAPI() {
         document.selectFirst("main p")?.text(),
     ).firstOrNull { !it.isNullOrBlank() }?.replace(Regex("""\s+"""), " ")?.trim()
 
-    // ★★★ YENİ: Yapım yılı — JSON-LD → meta → görünür etiket → başlık ★★★
     private fun pageYear(document: Document, title: String): Int? {
-        // 1) JSON-LD datePublished
         for (script in document.select("script[type=application/ld+json]")) {
-            val text = script.data()
+            val text = script.html()
             if (text.isBlank()) continue
-            val m = Regex(""""datePublished"\s*:\s*"(\d{4})""", RegexOption.IGNORE_CASE).find(text)
+            val m = Regex("\"datePublished\"\\s*:\\s*\"(\\d{4})", RegexOption.IGNORE_CASE).find(text)
             if (m != null) {
                 val y = m.groupValues[1].toIntOrNull()
                 if (y != null && y in 1900..2100) {
@@ -404,41 +402,36 @@ class DiziPalOrjinal : MainAPI() {
                 }
             }
         }
-        // 2) Meta etiketleri
         for (key in listOf("og:release_date", "release_date", "og:year", "year", "date")) {
             val content = document.selectFirst("meta[property=$key], meta[name=$key]")?.attr("content")
             if (content.isNullOrBlank()) continue
-            val y = Regex("""(19|20)\d{2}""").find(content)?.value?.toIntOrNull()
+            val y = Regex("(19|20)\\d{2}").find(content)?.value?.toIntOrNull()
             if (y != null) {
                 Log.d(name, "Yıl (meta): $y")
                 return y
             }
         }
-        // 3) Görünür "Yapım Yılı: 2024" / "Yıl: 2024"
         for (el in document.select("span, div, p, li, strong, b")) {
-            val t = el.text().replace(Regex("""\s+"""), " ").trim()
+            val t = el.text().replace(Regex("\\s+"), " ").trim()
             if (t.length > 80) continue
-            if (!Regex("""(?i)(yapım\s*yılı|yapim\s*yili|çıkış\s*yılı|cikis\s*yili|yıl|year)""").containsMatchIn(t)) continue
-            val y = Regex("""(19|20)\d{2}""").find(t)?.value?.toIntOrNull()
+            if (!Regex("(?i)(yapım\\s*yılı|yapim\\s*yili|çıkış\\s*yılı|cikis\\s*yili|yıl|year)").containsMatchIn(t)) continue
+            val y = Regex("(19|20)\\d{2}").find(t)?.value?.toIntOrNull()
             if (y != null) {
                 Log.d(name, "Yıl (etiket): $y")
                 return y
             }
         }
-        // 4) Başlıktan "(2024)" veya "2024"
-        val y = Regex("""\((\d{4})\)""").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
-            ?: Regex("""\b(19|20)\d{2}\b""").find(title)?.value?.toIntOrNull()
+        val y = Regex("\\((\\d{4})\\)").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?: Regex("\\b(19|20)\\d{2}\\b").find(title)?.value?.toIntOrNull()
         if (y != null) Log.d(name, "Yıl (başlık): $y")
         return y
     }
 
-    // ★★★ YENİ: IMDb puanı — JSON-LD → meta → itemprop → görünür etiket ★★★
     private fun pageRating(document: Document): Double? {
-        // 1) JSON-LD aggregateRating.ratingValue
         for (script in document.select("script[type=application/ld+json]")) {
-            val text = script.data()
+            val text = script.html()
             if (text.isBlank()) continue
-            val m = Regex(""""ratingValue"\s*:\s*"?(\d+(?:[.,]\d+)?)"?""", RegexOption.IGNORE_CASE).find(text)
+            val m = Regex("\"ratingValue\"\\s*:\\s*\"?(\\d+(?:[.,]\\d+)?)\"?", RegexOption.IGNORE_CASE).find(text)
             if (m != null) {
                 val r = m.groupValues[1].replace(",", ".").toDoubleOrNull()
                 if (r != null && r in 0.0..10.0) {
@@ -447,30 +440,27 @@ class DiziPalOrjinal : MainAPI() {
                 }
             }
         }
-        // 2) Meta etiketleri
         for (key in listOf("og:rating", "rating", "imdb:rating", "twitter:data1")) {
             val content = document.selectFirst("meta[property=$key], meta[name=$key]")?.attr("content")
             if (content.isNullOrBlank()) continue
-            val r = Regex("""\d+(?:[.,]\d+)?""").find(content)?.value?.replace(",", ".")?.toDoubleOrNull()
+            val r = Regex("\\d+(?:[.,]\\d+)?").find(content)?.value?.replace(",", ".")?.toDoubleOrNull()
             if (r != null && r in 0.0..10.0) {
                 Log.d(name, "Puan (meta): $r")
                 return r
             }
         }
-        // 3) itemprop=ratingValue
         document.selectFirst("[itemprop=ratingValue]")?.text()?.let { text ->
-            val r = Regex("""\d+(?:[.,]\d+)?""").find(text)?.value?.replace(",", ".")?.toDoubleOrNull()
+            val r = Regex("\\d+(?:[.,]\\d+)?").find(text)?.value?.replace(",", ".")?.toDoubleOrNull()
             if (r != null && r in 0.0..10.0) {
                 Log.d(name, "Puan (itemprop): $r")
                 return r
             }
         }
-        // 4) Görünür "IMDb: 8.7" / "8.7/10"
         for (el in document.select("span, div, p, strong, b, li")) {
-            val t = el.text().replace(Regex("""\s+"""), " ").trim()
+            val t = el.text().replace(Regex("\\s+"), " ").trim()
             if (t.length > 60) continue
-            if (!Regex("""(?i)imdb|puan|rating""").containsMatchIn(t) && !Regex("""\d([.,]\d+)?\s*/\s*10""").containsMatchIn(t)) continue
-            val r = Regex("""\d+(?:[.,]\d+)?""").find(t)?.value?.replace(",", ".")?.toDoubleOrNull()
+            if (!Regex("(?i)imdb|puan|rating").containsMatchIn(t) && !Regex("\\d([.,]\\d+)?\\s*/\\s*10").containsMatchIn(t)) continue
+            val r = Regex("\\d+(?:[.,]\\d+)?").find(t)?.value?.replace(",", ".")?.toDoubleOrNull()
             if (r != null && r in 0.0..10.0) {
                 Log.d(name, "Puan (etiket): $r")
                 return r
@@ -635,7 +625,6 @@ class DiziPalOrjinal : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
     ) {
         var count = 0
-        Log.d(name, "videoplays.cfd: altyazı aramaya başlıyorum (videoId=$videoId)")
 
         val storageBaseUrl = Regex(""""storage_base_url"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE)
             .find(tokenBody)?.groupValues?.getOrNull(1)?.trimEnd('/') ?: ""
@@ -668,18 +657,14 @@ class DiziPalOrjinal : MainAPI() {
             }
 
             for (candidate in candidates) {
-                Log.d(name, "videoplays.cfd: altyazı denemesi → $candidate")
                 val resp = runCatching {
                     app.get(candidate, headers = subHeaders, referer = iframeUrl, timeout = 10000, allowRedirects = true)
                 }.getOrNull()
 
-                if (resp == null) { Log.d(name, "videoplays.cfd: bağlantı hatası"); continue }
-                if (!resp.isSuccessful) { Log.d(name, "videoplays.cfd: HTTP ${resp.code}"); continue }
+                if (resp == null || !resp.isSuccessful) continue
 
                 val body = resp.text
-                Log.d(name, "videoplays.cfd: içerik boyut=${body.length}")
-
-                if (body.isBlank() || body.length < 10) { continue }
+                if (body.isBlank() || body.length < 10) continue
 
                 if (body.contains("#EXTM3U", true)) {
                     Regex("""[^\r\n#]+\.(?:vtt|srt|webvtt)[^\r\n]*""", RegexOption.IGNORE_CASE)
@@ -688,11 +673,10 @@ class DiziPalOrjinal : MainAPI() {
                 }
 
                 val hasCues = body.contains("-->") || body.contains("Dialogue:", true)
-                if (!hasCues) { Log.d(name, "videoplays.cfd: ✗ boş altyazı"); continue }
+                if (!hasCues) continue
 
                 val lang = label?.let { mapLang(it) } ?: "Türkçe"
                 subtitleCallback.invoke(newSubtitleFile(lang = lang, url = candidate))
-                Log.d(name, "videoplays.cfd: ★ Altyazı eklendi: $candidate ($lang, ${body.length} char)")
                 count++
                 return
             }
@@ -728,27 +712,6 @@ class DiziPalOrjinal : MainAPI() {
                 }
             }
         }
-
-        for (key in listOf("subtitles", "subs", "tracks", "captions")) {
-            val arrStart = Regex(""""$key"\s*:\s*\[""", RegexOption.IGNORE_CASE).find(tokenBody) ?: continue
-            var i = arrStart.range.last + 1
-            var depth = 1
-            while (i < tokenBody.length && depth > 0) {
-                when (tokenBody[i]) { '[' -> depth++; ']' -> depth-- }
-                i++
-            }
-            if (depth != 0) continue
-            val arrBody = tokenBody.substring(arrStart.range.last + 1, i - 1)
-            Regex("""\{[^{}]*\}""").findAll(arrBody).forEach { objMatch ->
-                val obj = objMatch.value
-                val subUrl = Regex(""""url"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                val label = Regex(""""lang"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                    ?: Regex(""""label"\s*:\s*"([^"]+)"""").find(obj)?.groupValues?.getOrNull(1)
-                addSub(subUrl, label)
-            }
-        }
-
-        Log.d(name, "videoplays.cfd: toplam $count altyazı eklendi")
     }
 
     private suspend fun resolveVideoplaysCfd(
@@ -758,10 +721,7 @@ class DiziPalOrjinal : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val videoId = Regex("""[?&]video=([^&\s"'<>]+)""").find(iframeUrl)?.groupValues?.getOrNull(1)
-        if (videoId.isNullOrBlank()) {
-            Log.e(name, "videoplays.cfd: video ID bulunamadı: $iframeUrl")
-            return false
-        }
+        if (videoId.isNullOrBlank()) return false
         val origin = originOf(iframeUrl) ?: "https://videoplays.cfd"
 
         val tokenUrl = "$origin/api/videos/$videoId/token?embed_referrer=" + URLEncoder.encode(outerReferer, "UTF-8")
@@ -769,10 +729,7 @@ class DiziPalOrjinal : MainAPI() {
             app.get(tokenUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to outerReferer, "Origin" to origin, "Accept" to "application/json, text/plain, */*"), referer = outerReferer, timeout = 15000, allowRedirects = true)
         }.getOrNull()
 
-        if (tokenResp == null || !tokenResp.isSuccessful) {
-            Log.e(name, "videoplays.cfd: token alınamadı (${tokenResp?.code}) - $tokenUrl")
-            return false
-        }
+        if (tokenResp == null || !tokenResp.isSuccessful) return false
 
         val tokenBody = tokenResp.text
 
@@ -784,8 +741,6 @@ class DiziPalOrjinal : MainAPI() {
             !token.isNullOrBlank() -> "$origin/api/videos/$videoId/master.m3u8?token=" + URLEncoder.encode(token, "UTF-8")
             else -> return false
         }
-
-        Log.d(name, "videoplays.cfd: ★ m3u8 linki: $finalUrl")
 
         callback.invoke(newExtractorLink(source = name, name = name, url = finalUrl, type = ExtractorLinkType.M3U8) {
             this.referer = iframeUrl
