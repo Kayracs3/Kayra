@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:3a9285a385ce3633133a5d7ca1dd94d9465026e0 -->
+### Refactor pageYear and pageRating to use script.data()
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [3a9285a](https://github.com/Kayracs3/Kayra/commit/3a9285a385ce3633133a5d7ca1dd94d9465026e0)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:7211ba711af3615f843bafaebe8fe206fa8152f1 -->
 ### Refactor regex patterns and improve logging
 
