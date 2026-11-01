@@ -518,9 +518,8 @@ class DiziPalOrjinal : MainAPI() {
 
     /**
      * videoplays.cfd altyazılarını çözer.
-     * Önce /api/videos/{id} endpoint'inden altyazı listesini alır,
-     * her URL için token ekli/tokensiz varyantları dener,
-     * gerçek cue içermeyen (sadece header) dosyaları reddeder.
+     * ÖNEMLİ: SubtitleFile sınıfı (lang, url) sırasını bekler.
+     * Bu yüzden newSubtitleFile(lang = ..., url = ...) ile çağırıyoruz.
      */
     private suspend fun extractVideoplaysSubtitles(
         tokenBody: String,
@@ -551,7 +550,6 @@ class DiziPalOrjinal : MainAPI() {
             val clean = rawUrl.replace("\\/", "/").trim()
             if (clean.isBlank() || clean.startsWith("data:")) return
 
-            // URL'yi çözümle
             val baseResolved = when {
                 clean.startsWith("http://", true) || clean.startsWith("https://", true) -> clean
                 clean.startsWith("/") && storageBaseUrl.isNotBlank() -> "$storageBaseUrl$clean"
@@ -559,7 +557,6 @@ class DiziPalOrjinal : MainAPI() {
                 else -> absolute(clean, iframeUrl)
             }
 
-            // Aday URL'ler
             val candidates = mutableListOf(baseResolved)
             if (!videoToken.isNullOrBlank() && !baseResolved.contains("token=", true)) {
                 val sep = if (baseResolved.contains("?")) "&" else "?"
@@ -576,19 +573,16 @@ class DiziPalOrjinal : MainAPI() {
                 if (!resp.isSuccessful) { Log.d(name, "videoplays.cfd: HTTP ${resp.code}"); continue }
 
                 val body = resp.text
-                Log.d(name, "videoplays.cfd: içerik boyut=${body.length}, ilk 300='${body.take(300).replace("\n", "\\n")}'")
+                Log.d(name, "videoplays.cfd: içerik boyut=${body.length}, ilk 200='${body.take(200).replace("\n", "\\n")}'")
 
                 if (body.isBlank() || body.length < 10) { Log.d(name, "videoplays.cfd: boş/kısa içerik"); continue }
 
-                // Alt m3u8
                 if (body.contains("#EXTM3U", true)) {
-                    Log.d(name, "videoplays.cfd: altyazı m3u8 tespit edildi")
                     Regex("""[^\r\n#]+\.(?:vtt|srt|webvtt)[^\r\n]*""", RegexOption.IGNORE_CASE)
                         .findAll(body).forEach { m -> addSub(absolute(m.value.trim(), candidate), label) }
                     return
                 }
 
-                // KATI doğrulama: gerçek cue şart
                 val hasCues = body.contains("-->") || body.contains("Dialogue:", true)
                 if (!hasCues) {
                     Log.d(name, "videoplays.cfd: ✗ boş altyazı (cue yok) → $candidate")
@@ -596,10 +590,11 @@ class DiziPalOrjinal : MainAPI() {
                 }
 
                 val lang = label?.let { mapLang(it) } ?: "Türkçe"
-                subtitleCallback.invoke(SubtitleFile(candidate, lang))
+                // ★★★ KRİTİK DÜZELTME: newSubtitleFile(lang=..., url=...) ★★★
+                subtitleCallback.invoke(newSubtitleFile(lang = lang, url = candidate))
                 Log.d(name, "videoplays.cfd: ★ Altyazı eklendi: $candidate ($lang, ${body.length} char)")
                 count++
-                return // başarılı, diğer adayları denemeye gerek yok
+                return
             }
         }
 
@@ -771,6 +766,12 @@ class DiziPalOrjinal : MainAPI() {
             Regex("""<iframe[^>]+src\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
                 val ifUrl = absolute(m.groupValues[1], url)
                 if (ifUrl.isNotBlank()) scanPage(ifUrl, url, depth + 1)
+            }
+            Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(text).forEach { m ->
+                val subUrl = absolute(m.groupValues[1], url)
+                if (subUrl.isNotBlank() && (subUrl.contains(".vtt", true) || subUrl.contains(".srt", true))) {
+                    runCatching { subtitleCallback.invoke(newSubtitleFile(lang = "Türkçe", url = subUrl)) }
+                }
             }
         }
 
