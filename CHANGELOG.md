@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:1212ccfc94e2e5e638fcbea5e10093be04c88891 -->
+### Enhance link cleaning in emitLink function
+
+- Etkilenen alanlar: DiziMom
+- Commit: [1212ccf](https://github.com/Kayracs3/Kayra/commit/1212ccfc94e2e5e638fcbea5e10093be04c88891)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:60d7bd67684e90aae5950534b045aa3f43d7d1ea -->
 ### Remove unused HTML extraction functions
 
