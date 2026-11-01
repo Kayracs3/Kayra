@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:25dc6b03a3a7acb0b793485e0b3ae3394073a906 -->
+### Implement main page retrieval and parsing logic
+
+- Etkilenen alanlar: DiziMom
+- Commit: [25dc6b0](https://github.com/Kayracs3/Kayra/commit/25dc6b03a3a7acb0b793485e0b3ae3394073a906)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:83a88fb1658b0cbdbb29d94e7b3f3947d4c35ecf -->
 ### Refactor DiziMom class and update dependencies
 
