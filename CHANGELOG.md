@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:341ca4bd8ba1482cb67213512223ce0a73d00dfd -->
+### Parse DiziMom metadata, season controls, episodes and cast HTML
+
+- Etkilenen alanlar: DiziMom
+- Commit: [341ca4b](https://github.com/Kayracs3/Kayra/commit/341ca4bd8ba1482cb67213512223ce0a73d00dfd)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:abb1bd02b3da97ac32ad192e9b03ef950ebf0bb7 -->
 ### Enhance load function to support multiple seasons
 
