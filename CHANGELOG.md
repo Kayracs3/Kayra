@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:4277d23a78ddea01c05eb35efc5564aa6907d0c4 -->
+### Add ExtractorLink import to DiziPalOrjinal.kt
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [4277d23](https://github.com/Kayracs3/Kayra/commit/4277d23a78ddea01c05eb35efc5564aa6907d0c4)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:b0890bd87dcb4861086292e6b979464651c86c23 -->
 ### Restore full DiziPalOrjinal.kt and keep the required URI import fix
 
