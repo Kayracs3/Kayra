@@ -725,4 +725,198 @@ class DiziPalOrjinal : MainAPI() {
         return runCatching { URI(absolute(url, mainUrl)).path.orEmpty() }
             .getOrDefault("")
     }
+    override suspend fun loadLinks(
+    data: String,
+    isCasting: Boolean,
+    subtitleCallback: (SubtitleFile) -> Unit,
+    callback: (ExtractorLink) -> Unit,
+): Boolean {
+    val sourceUrl = absolute(data, mainUrl)
+    if (sourceUrl.isBlank()) return false
+
+    val visited = mutableSetOf<String>()
+    var found = false
+
+    fun emitMedia(raw: String?, referer: String) {
+        val media = raw?.trim() ?: return
+        val mediaUrl = absolute(media, referer)
+        if (mediaUrl.isBlank() || !mediaUrl.startsWith("http", true)) return
+        if (!visited.add(mediaUrl)) return
+
+        val lower = mediaUrl.lowercase()
+
+        val isPlayable = lower.contains(".m3u8") ||
+            lower.contains(".mpd") ||
+            lower.contains(".mp4") ||
+            lower.contains(".m3u") ||
+            lower.contains(".webm")
+
+        if (!isPlayable) {
+            if (lower.contains("source2.php") ||
+                lower.contains("/embed") ||
+                lower.contains("/player") ||
+                lower.contains("/watch") ||
+                lower.contains("/video")
+            ) {
+                val page = runCatching {
+                    app.get(
+                        mediaUrl,
+                        headers = headers + mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to referer,
+                        ),
+                        referer = referer,
+                        timeout = 15000,
+                        allowRedirects = true,
+                    )
+                }.getOrNull() ?: return
+
+                if (page.isSuccessful) {
+                    val doc = Document.createShell(referer)
+                    doc.body().append(page.text)
+                    doc.select("iframe[src], source[src], video[src]").forEach { el ->
+                        val src = absolute(el.attr("src"), mediaUrl)
+                        if (src.isNotBlank()) emitMedia(src, mediaUrl)
+                    }
+                }
+            }
+            return
+        }
+
+        val linkType = when {
+            lower.contains(".m3u8") || lower.contains(".m3u") -> ExtractorLinkType.M3U8
+            lower.contains(".mpd") -> ExtractorLinkType.DASH
+            else -> ExtractorLinkType.VIDEO
+        }
+
+        callback.invoke(
+            newExtractorLink(
+                source = name,
+                name = name,
+                url = mediaUrl,
+                type = linkType,
+            ) {
+                this.referer = referer
+                this.quality = when {
+                    lower.contains("2160") -> Qualities.P2160.value
+                    lower.contains("1080") -> Qualities.P1080.value
+                    lower.contains("720") -> Qualities.P720.value
+                    lower.contains("480") -> Qualities.P480.value
+                    else -> Qualities.Unknown.value
+                }
+                this.headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to referer,
+                    "Accept" to "*/*",
+                )
+            }
+        )
+
+        found = true
+        Log.d(name, "Video link bulundu: $mediaUrl")
+    }
+
+    fun scanMediaPage(html: String, referer: String) {
+        val doc = Document.createShell(referer)
+        doc.body().append(html)
+
+        val patterns = listOf(
+            Regex("""https?:\/\/[^\s"'<>]+(?:\.m3u8|\.mpd|\.mp4|\.m3u|\.webm)(?:\?[^\s"'<>]*)?""", RegexOption.IGNORE_CASE),
+            Regex("""["'](?:file|src|url)["']\s*:\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE),
+            Regex("""(?:src|source|file)\s*[:=]\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE),
+            Regex("""(?:src|source|file)\s*[:=]\s*([^,\s"'<>]+)""", RegexOption.IGNORE_CASE),
+            Regex("""https?:\/\/[^\s"'<>]+\/source2\.php\?[^\s"'<>]+""", RegexOption.IGNORE_CASE),
+        )
+
+        patterns.forEach { pattern ->
+            pattern.findAll(html).forEach { m ->
+                val value = if (m.groupValues.size > 1) {
+                    m.groupValues[1]
+                } else {
+                    m.value
+                }
+                val normalized = value
+                    .replace("\\/", "/")
+                    .replace("\\\"", "\"")
+                    .trim()
+                emitMedia(normalized, referer)
+            }
+        }
+
+        doc.select("iframe[src]").forEach { iframe ->
+            val iframeUrl = absolute(iframe.attr("src"), referer)
+            if (iframeUrl.isBlank() || iframeUrl in visited) return@forEach
+
+            val iframePage = runCatching {
+                app.get(
+                    iframeUrl,
+                    headers = headers + mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Referer" to referer,
+                    ),
+                    referer = referer,
+                    timeout = 15000,
+                    allowRedirects = true,
+                )
+            }.getOrNull() ?: return@forEach
+
+            if (iframePage.isSuccessful) {
+                scanMediaPage(iframePage.text, iframeUrl)
+            }
+        }
+
+        doc.select("track[src], source[src], video[src]").forEach { el ->
+            val src = absolute(el.attr("src"), referer)
+            if (src.contains(".vtt", true)) {
+                subtitleCallback.invoke(SubtitleFile(src, "Türkçe"))
+            }
+        }
+    }
+
+    val page = runCatching {
+        app.get(
+            sourceUrl,
+            headers = headers + mapOf(
+                "User-Agent" to USER_AGENT,
+                "Referer" to "$mainUrl/",
+            ),
+            referer = "$mainUrl/",
+            timeout = 15000,
+            allowRedirects = true,
+        )
+    }.getOrNull() ?: return false
+
+    if (!page.isSuccessful) return false
+
+    scanMediaPage(page.text, sourceUrl)
+
+    if (!found) {
+        val document = page.document
+        document.select("iframe[src]").forEach { iframe ->
+            val iframeUrl = absolute(iframe.attr("src"), sourceUrl)
+            if (iframeUrl.isBlank()) return@forEach
+
+            val iframePage = runCatching {
+                app.get(
+                    iframeUrl,
+                    headers = headers + mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Referer" to sourceUrl,
+                    ),
+                    referer = sourceUrl,
+                    timeout = 15000,
+                    allowRedirects = true,
+                )
+            }.getOrNull() ?: return@forEach
+
+            if (iframePage.isSuccessful) {
+                scanMediaPage(iframePage.text, iframeUrl)
+            }
+        }
+    }
+
+    return found
+}
 }
