@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:60d7bd67684e90aae5950534b045aa3f43d7d1ea -->
+### Remove unused HTML extraction functions
+
+- Etkilenen alanlar: DiziMom
+- Commit: [60d7bd6](https://github.com/Kayracs3/Kayra/commit/60d7bd67684e90aae5950534b045aa3f43d7d1ea)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:70dc7381882c0278ee5d21faa990800af0caff12 -->
 ### Refactor loadLinks method and link extraction logic
 
