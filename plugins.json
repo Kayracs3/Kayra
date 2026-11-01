@@ -254,10 +254,10 @@
     },
     {
         "iconUrl": "https://ddizimom.net/favicon.ico",
-        "fileHash": "sha256-c58e2242e525891b88fca41f54ee211faa74edd5e98d261394c5e16ea61299d6",
+        "fileHash": "sha256-32d3d27e7caa02425f838fb1d711ef91d0f2f36138ef670be32a56ca341347e1",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 24826,
+        "fileSize": 33460,
         "status": 3,
         "language": "tr",
         "authors": [
