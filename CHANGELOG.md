@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:abb1bd02b3da97ac32ad192e9b03ef950ebf0bb7 -->
+### Enhance load function to support multiple seasons
+
+- Etkilenen alanlar: DiziMom
+- Commit: [abb1bd0](https://github.com/Kayracs3/Kayra/commit/abb1bd02b3da97ac32ad192e9b03ef950ebf0bb7)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:25dc6b03a3a7acb0b793485e0b3ae3394073a906 -->
 ### Implement main page retrieval and parsing logic
 
