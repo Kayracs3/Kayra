@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:ab7229ad3fb00d3e0d5d077f19a9c5cebd8f0ee3 -->
+### Clean up comments and enhance diagnostic logging
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [ab7229a](https://github.com/Kayracs3/Kayra/commit/ab7229ad3fb00d3e0d5d077f19a9c5cebd8f0ee3)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:b656dd14d722f7cba321af6cf0f6ecb4330eb192 -->
 ### Implement AES decryption for encrypted config
 
