@@ -2,6 +2,15 @@
 
 ## 2026-11-01
 
+<!-- kayra-commit:7a439fc62b86c3544e5de7149358ab437b050d15 -->
+### Enhance subtitle extraction and logging
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [7a439fc](https://github.com/Kayracs3/Kayra/commit/7a439fc62b86c3544e5de7149358ab437b050d15)
+
+
+## 2026-11-01
+
 <!-- kayra-commit:9dcf62a7da33daa6870818a01a3f68c714fa7c83 -->
 ### Refactor subtitle extraction to use iframeUrl
 
