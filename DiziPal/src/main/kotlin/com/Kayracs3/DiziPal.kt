@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.newSubtitleFile
+import com.lagradost.cloudstream3.utils.newSubtitleFile
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 import javax.crypto.Cipher
@@ -26,7 +26,7 @@ class DiziPal : MainAPI() {
 
     companion object {
         private const val USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
         private const val BROWSER_UA =
             "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
         private const val AES_KEY = "T8r9Wq3mZ1kL5vYb"
@@ -46,13 +46,13 @@ class DiziPal : MainAPI() {
 
         val popular = document.select("div.movie-box, div.detail, article.item, .result-item, .ml-item")
             .mapNotNull { it.toSearchResult() }
-        if (popular.isNotEmpty()) home.add(HomePageList("Popüler", popular))
+        if (popular.isNotEmpty()) home.add(newHomePageList("Popüler", popular))
 
         val latest = document.select("div.last-episodes div.item, div.weekly div.item, .movies-list .ml-item, div.item")
             .mapNotNull { it.toSearchResult() }
-        if (latest.isNotEmpty()) home.add(HomePageList("Son Eklenenler", latest))
+        if (latest.isNotEmpty()) home.add(newHomePageList("Son Eklenenler", latest))
 
-        return newHomePageResponse(home) // hasNext parametresi kaldırıldı (API uyumu için)
+        return newHomePageResponse(home)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
@@ -85,7 +85,6 @@ class DiziPal : MainAPI() {
         val year = Regex("""\((\d{4})\)""").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
         val episodes = mutableListOf<Episode>()
-
         val seasons = document.select("div.seasons a, .seasons-list a, ul.seasons a")
         if (seasons.isNotEmpty()) {
             seasons.forEach { seasonEl ->
@@ -123,7 +122,7 @@ class DiziPal : MainAPI() {
         }
     }
 
-    // ================= OYNATICI =================
+    // ================= OYNATICI (KRİTİK DÜZELTME) =================
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -148,26 +147,35 @@ class DiziPal : MainAPI() {
 
         var found = false
 
+        // 1) Kaynak sayfada doğrudan m3u8
         for (media in findMediaUrls(raw)) {
             if (emitMediaLink(media, sourceUrl, callback)) found = true
         }
 
+        // 2) Şifreli config -> player URL
         val encrypted = extractEncryptedConfig(raw)
         if (encrypted != null) {
             val player = decryptDizipalConfig(encrypted)
             if (player.isNotBlank()) {
                 Log.d("DiziPal", "Player URL: " + player.take(200))
+
                 val playerWithScheme = when {
                     player.startsWith("//") -> "https:$player"
                     !player.startsWith("http") -> "https://$player"
                     else -> player
                 }
                 val iframeUrl = normalizeUrl(playerWithScheme, sourceUrl)
+                Log.d("DiziPal", "Iframe URL: $iframeUrl")
+
+                // ★★★ KRİTİK: İframe URL'sindeki ?v= parametresini çıkar ★★★
+                // Örnek: https://four.dplayer82.site/iframe.php?v=0ec9a3... -> "0ec9a3..."
+                val vParam = Regex("""[?&]v=([^&]+)""").find(iframeUrl)?.groupValues?.getOrNull(1)
+                Log.d("DiziPal", "v param: $vParam")
 
                 val iframeHeaders = headers + mapOf(
                     "User-Agent" to BROWSER_UA,
                     "Referer" to sourceUrl,
-                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
                     "Sec-Fetch-Dest" to "iframe",
                     "Sec-Fetch-Mode" to "navigate",
@@ -179,59 +187,105 @@ class DiziPal : MainAPI() {
                 }.getOrNull()
 
                 if (iframeResponse != null && iframeResponse.isSuccessful) {
-                    val iframeDoc = iframeResponse.document
-                    val iframeHtml = buildString {
-                        append(iframeResponse.text); append("\n"); append(iframeDoc.html())
-                        iframeDoc.select("script, noscript, template").forEach {
-                            append("\n"); append(it.data()); append("\n"); append(it.html())
-                        }
-                    }.decodeEscapes()
+                    Log.d("DiziPal", "Iframe başarılı: ${iframeResponse.code}")
+                    val iframeHtml = iframeResponse.text.decodeEscapes()
 
+                    // Altyazılar
                     if (extractSubtitles(iframeHtml, iframeUrl, subtitleCallback)) found = true
 
-                    val playlistId = Regex("""window\.openPlayer\s*\(\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE)
-                        .find(iframeHtml)?.groupValues?.getOrNull(1)
-
-                    if (!playlistId.isNullOrBlank()) {
+                    // ★★★ ASIL ÇÖZÜM: v param ile doğrudan source2.php çağır ★★★
+                    if (!vParam.isNullOrBlank()) {
                         val origin = originOf(iframeUrl) ?: iframeUrl
-                        val source2Url = origin.trimEnd('/') + "/source2.php?v=" + URLEncoder.encode(playlistId, "UTF-8")
+                        val source2Url = origin.trimEnd('/') + "/source2.php?v=" + URLEncoder.encode(vParam, "UTF-8")
+                        Log.d("DiziPal", "Source2 URL (v param): $source2Url")
+
                         val source2Response = runCatching {
-                            app.get(source2Url, headers = iframeHeaders + mapOf("Accept" to "application/json,text/plain,*/*"),
-                                referer = iframeUrl, timeout = 15000, allowRedirects = true)
+                            app.get(
+                                source2Url,
+                                headers = iframeHeaders + mapOf(
+                                    "Accept" to "application/json,text/plain,*/*",
+                                    "X-Requested-With" to "XMLHttpRequest",
+                                ),
+                                referer = iframeUrl,
+                                timeout = 15000,
+                                allowRedirects = true,
+                            )
                         }.getOrNull()
 
                         if (source2Response != null && source2Response.isSuccessful) {
                             val source2Text = source2Response.text.decodeEscapes()
+                            Log.d("DiziPal", "Source2 yanıtı: ${source2Text.take(500)}")
+
+                            // m3u8 / mp4
                             for (media in extractFileUrls(source2Text)) {
                                 if (emitMediaLink(media, iframeUrl, callback)) found = true
                             }
+                            // Altyazı
                             if (extractSubtitles(source2Text, iframeUrl, subtitleCallback)) found = true
+                        } else {
+                            Log.e("DiziPal", "Source2 başarısız: ${source2Response?.code}")
                         }
                     }
 
+                    // Alternatif: window.openPlayer (eski desen) - v param yoksa veya farklıysa
+                    val playlistId = Regex("""window\.openPlayer\s*\(\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE)
+                        .find(iframeHtml)?.groupValues?.getOrNull(1)
+                    if (!playlistId.isNullOrBlank() && playlistId != vParam) {
+                        val origin = originOf(iframeUrl) ?: iframeUrl
+                        val s2Url = origin.trimEnd('/') + "/source2.php?v=" + URLEncoder.encode(playlistId, "UTF-8")
+                        Log.d("DiziPal", "Source2 URL (openPlayer): $s2Url")
+                        val s2 = runCatching {
+                            app.get(s2Url, headers = iframeHeaders, referer = iframeUrl, timeout = 15000, allowRedirects = true)
+                        }.getOrNull()
+                        if (s2 != null && s2.isSuccessful) {
+                            for (media in extractFileUrls(s2.text.decodeEscapes())) {
+                                if (emitMediaLink(media, iframeUrl, callback)) found = true
+                            }
+                        }
+                    }
+
+                    // İframe HTML'inde doğrudan m3u8
                     for (media in findMediaUrls(iframeHtml)) {
                         if (emitMediaLink(media, iframeUrl, callback)) found = true
                     }
 
-                    iframeDoc.select("video[src], video source[src], source[src], video[data-src], source[data-src]").forEach { element ->
-                        val media = element.attr("src").ifBlank { element.attr("data-src") }
-                        if (media.isNotBlank()) {
-                            val finalUrl = normalizeUrl(media, iframeUrl)
-                            if (isMediaUrl(finalUrl) && emitMediaLink(finalUrl, iframeUrl, callback)) found = true
+                    // JSON'daki "file":"...", "url":"...", "src":"..." desenleri
+                    val patterns = listOf(
+                        Regex(""""file"\s*:\s*"([^"]+)""""),
+                        Regex(""""url"\s*:\s*"([^"]+)""""),
+                        Regex(""""source"\s*:\s*"([^"]+)""""),
+                        Regex(""""src"\s*:\s*"([^"]+)""""),
+                        Regex("""file\s*:\s*['"]([^'"]+)['"]"""),
+                        Regex("""url\s*:\s*['"]([^'"]+)['"]"""),
+                    )
+                    for (p in patterns) {
+                        p.findAll(iframeHtml).forEach { m ->
+                            val candidate = m.groupValues[1].decodeEscapes()
+                            if (candidate.contains(".m3u8") || candidate.contains(".mp4")) {
+                                if (emitMediaLink(candidate, iframeUrl, callback)) found = true
+                            }
                         }
                     }
+                } else {
+                    Log.e("DiziPal", "Iframe başarısız: ${iframeResponse?.code}")
                 }
+            } else {
+                Log.e("DiziPal", "Şifre çözme başarısız, player URL boş.")
             }
+        } else {
+            Log.e("DiziPal", "Şifreli config bulunamadı.")
         }
 
-        document.select("iframe[src], iframe[data-src], video[src], video source[src], source[src], [data-video-url], [data-stream]").forEach { element ->
-            val rawUrl = element.attr("src").ifBlank { element.attr("data-src") }
-                .ifBlank { element.attr("data-video-url") }.ifBlank { element.attr("data-stream") }
+        // 3) Kaynak sayfada iframe/video etiketleri
+        document.select("iframe[src], iframe[data-src], video[src], video source[src], source[src], [data-video-url], [data-stream]").forEach { el ->
+            val rawUrl = el.attr("src").ifBlank { el.attr("data-src") }
+                .ifBlank { el.attr("data-video-url") }.ifBlank { el.attr("data-stream") }
             if (rawUrl.isBlank()) return@forEach
             val target = normalizeUrl(rawUrl, sourceUrl)
             if (isMediaUrl(target) && emitMediaLink(target, sourceUrl, callback)) found = true
         }
 
+        // 4) Track tag'leri
         document.select("track[src], track[data-src]").forEach { track ->
             val rawUrl = track.attr("src").ifBlank { track.attr("data-src") }
             if (rawUrl.isBlank()) return@forEach
@@ -239,10 +293,11 @@ class DiziPal : MainAPI() {
                 subtitleCallback(newSubtitleFile(
                     lang = track.attr("label").ifBlank { "Türkçe" },
                     url = normalizeUrl(rawUrl, sourceUrl)
-                )) // headers kaldırıldı (API uyumu için)
+                ))
             }
         }
 
+        if (!found) Log.e("DiziPal", "Hiçbir oynatma linki bulunamadı.")
         return found
     }
 
@@ -251,7 +306,8 @@ class DiziPal : MainAPI() {
         if (url.isBlank()) return ""
         if (url.startsWith("http://") || url.startsWith("https://")) return url
         if (url.startsWith("//")) return "https:$url"
-        return try { java.net.URI(base).resolve(url).toString() } catch (_: Exception) { base.trimEnd('/') + "/" + url.trimStart('/') }
+        return try { java.net.URI(base).resolve(url).toString() }
+        catch (_: Exception) { base.trimEnd('/') + "/" + url.trimStart('/') }
     }
 
     private fun String.decodeEscapes(): String = this
@@ -310,7 +366,7 @@ class DiziPal : MainAPI() {
         }.getOrElse { runCatching { String(Base64.decode(clean, Base64.DEFAULT)) }.getOrDefault(clean) }
     }
 
-    private suspend fun emitMediaLink(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private fun emitMediaLink(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
         val finalUrl = normalizeUrl(url, referer)
         if (!isMediaUrl(finalUrl)) return false
         val type = when {
@@ -326,8 +382,9 @@ class DiziPal : MainAPI() {
         ) {
             this.referer = referer
             this.headers = mediaHeaders(referer)
-            this.quality = Qualities.P1080.value // API uyumlu kalite değeri
+            this.quality = Qualities.P1080.value
         })
+        Log.d("DiziPal", "Link eklendi: $finalUrl")
         return true
     }
 
@@ -338,7 +395,7 @@ class DiziPal : MainAPI() {
         "Accept" to "*/*"
     )
 
-    private suspend fun extractSubtitles(text: String, baseUrl: String, subtitleCallback: (SubtitleFile) -> Unit): Boolean {
+    private fun extractSubtitles(text: String, baseUrl: String, subtitleCallback: (SubtitleFile) -> Unit): Boolean {
         var any = false
         Regex(""""subtitle"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).findAll(text).forEach {
             val raw = it.groupValues[1].decodeEscapes()
