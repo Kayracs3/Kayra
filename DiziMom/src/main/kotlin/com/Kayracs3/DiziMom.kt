@@ -275,6 +275,143 @@ class DiziMom : MainAPI() {
         }
     }
 
+    // ★★★ YENİ: __PLAYER__ config'inden altyazıları çıkar ★★★
+    private suspend fun parsePlayerConfig(
+        html: String,
+        baseUrl: String,
+        videoToken: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        addedSubs: MutableSet<String>,
+    ) {
+        val decoded = html.replace("\\/", "/").replace("\\\"", "\"")
+
+        val configPatterns = listOf(
+            Regex("""window\.__PLAYER__\s*=\s*(\{[\s\S]*?\})\s*;"""),
+            Regex("""__PLAYER__\s*=\s*(\{[\s\S]*?\})\s*[,;]"""),
+            Regex("""var\s+__PLAYER__\s*=\s*(\{[\s\S]*?\})\s*[,;]"""),
+        )
+
+        var configJson: String? = null
+        for (p in configPatterns) {
+            val m = p.find(decoded)
+            if (m != null) {
+                configJson = m.groupValues[1]
+                break
+            }
+        }
+
+        if (configJson.isNullOrBlank()) {
+            Log.d(name, "parsePlayerConfig: __PLAYER__ bulunamadı")
+            return
+        }
+
+        Log.d(name, "parsePlayerConfig: __PLAYER__ bulundu (${configJson.length} char): ${configJson.take(800)}")
+
+        val json = runCatching { org.json.JSONObject(configJson) }.getOrNull() ?: return
+
+        val streamUrl = json.optString("stream").replace("\\/", "/")
+        val vParam = Regex("""[?&]v=([^&]+)""").find(streamUrl)?.groupValues?.getOrNull(1)
+        val streamTokenFromConfig = Regex("""[?&]token=([^&]+)""").find(streamUrl)?.groupValues?.getOrNull(1)
+        val effectiveToken = streamTokenFromConfig ?: videoToken
+
+        Log.d(name, "parsePlayerConfig: v=$vParam, token=${effectiveToken?.take(30)}...")
+
+        val subsArr = json.optJSONArray("subs") ?: run {
+            Log.d(name, "parsePlayerConfig: subs dizisi yok")
+            return
+        }
+
+        Log.d(name, "parsePlayerConfig: ${subsArr.length()} altyazı bulundu")
+
+        for (i in 0 until subsArr.length()) {
+            val sub = subsArr.optJSONObject(i) ?: continue
+            val sid = sub.optString("sid")
+            val label = sub.optString("label").ifBlank { "Altyazı ${i + 1}" }
+            val lang = sub.optString("lang").ifBlank { "tr" }
+            var src = sub.optString("src").replace("\\/", "/")
+
+            Log.d(name, "  sub[$i]: sid=$sid, label=$label, lang=$lang, src=${src.take(300)}")
+
+            if (src.isBlank()) continue
+
+            val fullUrl = absolute(src, baseUrl)
+
+            if (!addedSubs.add(fullUrl)) continue
+
+            val resp = runCatching {
+                app.get(
+                    fullUrl,
+                    headers = headers + mapOf(
+                        "Referer" to baseUrl,
+                        "Origin" to "https://pilavyerplay.top",
+                        "Accept" to "text/vtt, application/x-subrip, text/plain, */*",
+                    ),
+                    referer = baseUrl,
+                    timeout = 10000,
+                )
+            }.getOrNull()
+
+            if (resp == null) {
+                Log.d(name, "  sub[$i] bağlantı hatası")
+                continue
+            }
+            if (!resp.isSuccessful) {
+                Log.d(name, "  sub[$i] HTTP ${resp.code}")
+
+                if (resp.code == 400) {
+                    val retryUrls = mutableListOf<String>()
+                    if (!fullUrl.contains("sid=", true) && sid.isNotBlank()) {
+                        retryUrls.add("$fullUrl${if (fullUrl.contains("?")) "&" else "?"}sid=$sid")
+                    }
+                    if (!fullUrl.contains("v=", true) && !vParam.isNullOrBlank()) {
+                        retryUrls.add("$fullUrl${if (fullUrl.contains("?")) "&" else "?"}v=" + URLEncoder.encode(vParam, "UTF-8"))
+                    }
+                    if (!fullUrl.contains("token=", true) && !effectiveToken.isNullOrBlank()) {
+                        retryUrls.add("$fullUrl${if (fullUrl.contains("?")) "&" else "?"}token=" + URLEncoder.encode(effectiveToken, "UTF-8"))
+                    }
+                    if (sid.isNotBlank() && !vParam.isNullOrBlank() && !effectiveToken.isNullOrBlank()) {
+                        retryUrls.add("$fullUrl${if (fullUrl.contains("?")) "&" else "?"}sid=$sid&v=" + URLEncoder.encode(vParam, "UTF-8") + "&token=" + URLEncoder.encode(effectiveToken, "UTF-8"))
+                    }
+
+                    for (retryUrl in retryUrls) {
+                        Log.d(name, "  sub[$i] retry: $retryUrl")
+                        val retryResp = runCatching {
+                            app.get(retryUrl, headers = headers + mapOf("Referer" to baseUrl, "Origin" to "https://pilavyerplay.top"), referer = baseUrl, timeout = 10000)
+                        }.getOrNull()
+                        if (retryResp != null && retryResp.isSuccessful) {
+                            val body = retryResp.text
+                            if (body.contains("WEBVTT", true) || body.contains("-->")) {
+                                if (addedSubs.add(retryUrl)) {
+                                    subtitleCallback.invoke(SubtitleFile(url = retryUrl, lang = mapLang(lang)))
+                                    Log.d(name, "★ Altyazı eklendi (config retry): $retryUrl ($label)")
+                                }
+                                break
+                            }
+                        }
+                    }
+                }
+                continue
+            }
+
+            val body = resp.text
+            Log.d(name, "  sub[$i] yanıt (${body.length} char): ${body.take(200)}")
+
+            if (body.contains("WEBVTT", true) || body.contains("-->")) {
+                subtitleCallback.invoke(SubtitleFile(url = fullUrl, lang = mapLang(lang)))
+                Log.d(name, "★ Altyazı eklendi (config): $fullUrl ($label)")
+            } else {
+                Regex("""["']([^"']+\.(?:vtt|srt)[^"']*)["']""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
+                    val nestedUrl = absolute(m.groupValues[1].replace("\\/", "/"), fullUrl)
+                    if (addedSubs.add(nestedUrl)) {
+                        subtitleCallback.invoke(SubtitleFile(url = nestedUrl, lang = mapLang(lang)))
+                        Log.d(name, "★ Altyazı eklendi (config nested): $nestedUrl ($label)")
+                    }
+                }
+            }
+        }
+    }
+
+    // ★★★ GÜNCELLENMİŞ: önce __PLAYER__ config, sonra HTML fallback ★★★
     private suspend fun extractSubtitlesFromHtml(
         html: String,
         baseUrl: String,
@@ -285,6 +422,13 @@ class DiziMom : MainAPI() {
         val decoded = html.replace("\\/", "/").replace("\\\"", "\"").replace("&quot;", "\"").replace("&amp;", "&")
         Log.d(name, "extractSubtitlesFromHtml: HTML uzunluğu ${decoded.length}, base: $baseUrl")
 
+        val streamTokenRegex = Regex("""stream\.php\?[^"'\s]*?token=([^"'&\s]+)""")
+        val streamToken = streamTokenRegex.find(decoded)?.groupValues?.getOrNull(1)
+
+        // ★ ÖNCE: __PLAYER__ config'inden altyazıları çıkar
+        parsePlayerConfig(decoded, baseUrl, streamToken, subtitleCallback, addedSubs)
+
+        // Yedek: HTML'deki .vtt/.srt URL'leri
         fun tryAdd(rawUrl: String, label: String?) {
             if (rawUrl.isBlank()) return
             val clean = rawUrl.trim().replace("\\/", "/")
@@ -297,156 +441,14 @@ class DiziMom : MainAPI() {
             }
         }
 
-        // <track>
         Regex("""<track[^>]+>""", RegexOption.IGNORE_CASE).findAll(decoded).forEach { m ->
             val src = Regex("""src=["']([^"']+)["']""").find(m.value)?.groupValues?.getOrNull(1) ?: return@forEach
             val lang = Regex("""srclang=["']([^"']+)["']""").find(m.value)?.groupValues?.getOrNull(1)
                 ?: Regex("""label=["']([^"']+)["']""").find(m.value)?.groupValues?.getOrNull(1)
             tryAdd(src, lang)
         }
-        // .vtt/.srt URL'leri
+
         Regex("""["'`]([^"'`\s<>]+\.(?:vtt|srt)(?:\?[^"'`\s<>]*)?)["'`]""", RegexOption.IGNORE_CASE).findAll(decoded).forEach { m -> tryAdd(m.groupValues[1], null) }
-
-        // sub.php API adayları
-        val apiUrls = mutableSetOf<String>()
-        Regex("""https?://[^\s"'`<>\\]+/api/(?:sub|subtitle|altyaz|caption|track)\.php[^\s"'`<>\\]*""", RegexOption.IGNORE_CASE).findAll(decoded).forEach {
-            apiUrls.add(it.value.replace("\\/", "/").replace("&amp;", "&"))
-        }
-        Regex("""["'](/api/(?:sub|subtitle|altyaz|caption|track)\.php[^"']*)["']""", RegexOption.IGNORE_CASE).findAll(decoded).forEach {
-            apiUrls.add(absolute(it.groupValues[1].replace("\\/", "/"), baseUrl))
-        }
-
-        val streamTokenRegex = Regex("""stream\.php\?[^"'\s]*?token=([^"'&\s]+)""")
-        val streamToken = streamTokenRegex.find(decoded)?.groupValues?.getOrNull(1)
-
-        Log.d(name, "Altyazı API adayları: $apiUrls, streamToken=${streamToken?.take(30)}...")
-
-        for (apiUrl in apiUrls) {
-            if (!addedSubs.add("api:$apiUrl")) continue
-            tryFetchSubtitleApi(apiUrl, baseUrl, pageUrl, streamToken, subtitleCallback, addedSubs)
-        }
-    }
-
-    // ★★★ GÜNCELLENMİŞ: Çoklu token/parametre/referer denemeleri ★★★
-    private suspend fun tryFetchSubtitleApi(
-        apiUrl: String,
-        referer: String,
-        pageUrl: String,
-        streamToken: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        addedSubs: MutableSet<String>,
-    ) {
-        Log.d(name, "tryFetchSubtitleApi: $apiUrl")
-        val vParam = Regex("""[?&]v=([^&]+)""").find(apiUrl)?.groupValues?.getOrNull(1)
-        val baseOrigin = runCatching { URI(apiUrl).let { "${it.scheme}://${it.host}" } }.getOrNull() ?: ""
-
-        // Denenecek token listesi
-        val tokensToTry = mutableListOf<String>()
-        if (!streamToken.isNullOrBlank()) tokensToTry.add(streamToken)
-
-        // token.php'den yeni token al
-        if (!vParam.isNullOrBlank() && baseOrigin.isNotBlank()) {
-            val tokenUrl = "$baseOrigin/api/token.php?v=" + URLEncoder.encode(vParam, "UTF-8")
-            Log.d(name, "token.php deneniyor: $tokenUrl")
-            val tokenResp = runCatching {
-                app.get(tokenUrl, headers = headers + mapOf("Referer" to "$baseOrigin/", "X-Requested-With" to "XMLHttpRequest", "Accept" to "application/json, text/plain, */*"), referer = "$baseOrigin/", timeout = 8000)
-            }.getOrNull()
-            if (tokenResp != null && tokenResp.isSuccessful) {
-                val tokenBody = tokenResp.text
-                Log.d(name, "token.php yanıtı: ${tokenBody.take(400)}")
-                val newToken = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
-                    ?: Regex("""["']([A-Za-z0-9_\-\.]{40,})["']""").find(tokenBody)?.groupValues?.getOrNull(1)
-                if (!newToken.isNullOrBlank()) tokensToTry.add(newToken)
-            } else {
-                Log.d(name, "token.php başarısız: ${tokenResp?.code}")
-            }
-        }
-
-        val paramNames = listOf("token", "t", "sig", "auth")
-        val referers = listOf("$baseOrigin/", pageUrl)
-
-        for (paramName in paramNames) {
-            for (token in tokensToTry.distinct()) {
-                for (ref in referers) {
-                    var testUrl = apiUrl
-                    if (!testUrl.contains("$paramName=", true)) {
-                        val sep = if (testUrl.contains("?")) "&" else "?"
-                        testUrl = "$testUrl${sep}${paramName}=" + URLEncoder.encode(token, "UTF-8")
-                    }
-
-                    val reqHeaders = headers + mapOf(
-                        "Referer" to ref,
-                        "Origin" to baseOrigin,
-                        "Accept" to "application/json, text/plain, text/vtt, */*",
-                    )
-
-                    Log.d(name, "sub.php denemesi (param=$paramName, ref=$ref): $testUrl")
-                    val resp = runCatching {
-                        app.get(testUrl, headers = reqHeaders, referer = ref, timeout = 10000, allowRedirects = true)
-                    }.getOrNull()
-
-                    if (resp == null) { Log.d(name, "sub.php bağlantı hatası"); continue }
-                    if (!resp.isSuccessful) { Log.d(name, "sub.php HTTP ${resp.code}"); continue }
-
-                    val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
-                    Log.d(name, "sub.php yanıtı (${body.length} char): ${body.take(1500)}")
-
-                    // A) VTT içeriği
-                    if (body.contains("WEBVTT", true) || body.contains("-->") || body.contains("[Script Info]", true)) {
-                        if (addedSubs.add(testUrl)) {
-                            runCatching {
-                                subtitleCallback.invoke(SubtitleFile(url = testUrl, lang = "Türkçe"))
-                                Log.d(name, "★ Altyazı eklendi (sub.php doğrudan): $testUrl")
-                            }
-                        }
-                        return
-                    }
-
-                    // B) JSON yanıtı
-                    val json = runCatching { org.json.JSONObject(body) }.getOrNull()
-                    if (json != null) {
-                        var jsonFound = false
-                        for (key in listOf("subs", "subtitles", "tracks", "data", "items", "result", "list")) {
-                            val arr = json.optJSONArray(key)
-                            if (arr != null) {
-                                for (i in 0 until arr.length()) {
-                                    val item = arr.optJSONObject(i) ?: continue
-                                    val url = item.optString("url").ifBlank { item.optString("file") }
-                                        .ifBlank { item.optString("src") }.ifBlank { item.optString("link") }.ifBlank { item.optString("vtt") }
-                                    val lang = item.optString("lang").ifBlank { item.optString("language") }
-                                        .ifBlank { item.optString("label") }.ifBlank { item.optString("name") }
-                                    if (url.isNotBlank()) {
-                                        val full = absolute(url, testUrl)
-                                        if (addedSubs.add(full)) {
-                                            val langStr = lang.ifBlank { "Türkçe" }
-                                            runCatching {
-                                                subtitleCallback.invoke(SubtitleFile(url = full, lang = mapLang(langStr)))
-                                                Log.d(name, "★ Altyazı eklendi (sub.php JSON): $full ($langStr)")
-                                                jsonFound = true
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (jsonFound) return
-                    }
-
-                    // C) VTT/SRT URL'leri metin içinde
-                    Regex("""["']?([^"'\s<>]+\.(?:vtt|srt)(?:\?[^"'\s<>]*)?)["']?""", RegexOption.IGNORE_CASE).findAll(body).forEach { m ->
-                        val u = m.groupValues[1].trim()
-                        if (u.isBlank()) return@forEach
-                        val full = absolute(u, testUrl)
-                        if (addedSubs.add(full)) {
-                            runCatching {
-                                subtitleCallback.invoke(SubtitleFile(url = full, lang = "Türkçe"))
-                                Log.d(name, "★ Altyazı eklendi (sub.php text): $full")
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
     private fun mapLang(code: String): String {
