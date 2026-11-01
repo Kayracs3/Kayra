@@ -229,22 +229,6 @@ class DiziMom : MainAPI() {
             Log.d(name, "★ Link eklendi ($label): $clean")
         }
 
-        fun extractFromHtml(html: String, referer: String, label: String) {
-            Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-                .findAll(html).forEach { found@
-                    try { emitLinkSuspend(it.value, referer, label) } catch (_: Exception) {}
-                }
-            Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                .findAll(html).forEach {
-                    try { emitLinkSuspend(it.value, referer, label) } catch (_: Exception) {}
-                }
-        }
-
-        // suspend uyumlu emitLink sarmalayıcı
-        suspend fun emitLinkSuspend(link: String, referer: String, label: String) {
-            emitLink(link, referer, label)
-        }
-
         val document = getDocument(sourceUrl) ?: return false
         val html = document.html().replace("\\/", "/")
 
@@ -259,7 +243,6 @@ class DiziMom : MainAPI() {
             val pvSlug = document.selectFirst("[data-pv]")?.attr("data-pv")?.trim()
             Log.d(name, "data-pv slug: $pvSlug")
 
-            // core.js src'sini bul (base URL türetmek için)
             val coreJsRaw = document.select("script[src]").firstOrNull {
                 val src = it.attr("src")
                 src.contains("/e/c.js") || src.contains("/assets/js/core.js")
@@ -276,7 +259,6 @@ class DiziMom : MainAPI() {
             Log.d(name, "Player BASE: $base")
 
             if (!pvSlug.isNullOrBlank()) {
-                // s.php URL'sini kur
                 val sPhpUrl = "$base/assets/js/s.php?s=" + URLEncoder.encode(pvSlug, "UTF-8")
                 Log.d(name, "s.php URL: $sPhpUrl")
 
@@ -286,13 +268,11 @@ class DiziMom : MainAPI() {
                     Log.d(name, "s.php HTML uzunluğu: ${sPhpHtml.length}")
                     Log.d(name, "s.php ilk 800 char: ${sPhpHtml.take(800)}")
 
-                    // s.php içinde stream.php veya m3u8 ara
                     Regex("""https?://[^\s"'<>]+/api/stream\.php[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                         .findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php") }
                     Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4|mpd)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
                         .findAll(sPhpHtml).forEach { emitLink(it.value, sPhpUrl, "s.php-media") }
 
-                    // s.php içindeki iframe'ler
                     sPhpDoc.select("iframe[src], iframe[data-src]").forEach { iframe ->
                         val src = iframe.attr("src").ifBlank { iframe.attr("data-src") }
                         if (src.isBlank()) return@forEach
@@ -302,7 +282,6 @@ class DiziMom : MainAPI() {
                         }
                     }
 
-                    // s.php'de script varsa src'yi de çek
                     if (!found) {
                         sPhpDoc.select("script[src]").forEach { script ->
                             val src = script.attr("src").trim()
