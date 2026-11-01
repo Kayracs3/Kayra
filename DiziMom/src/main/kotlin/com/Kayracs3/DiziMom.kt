@@ -35,8 +35,8 @@ class DiziMom : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Ana Sayfa",
-        "$mainUrl/diziler" to "Diziler",
+        "$mainUrl/filmler?sirala=yeni" to "Yeni Eklenen Filmler",
+        "$mainUrl/diziler?sirala=yeni" to "Yeni Eklenen Diziler",
         "$mainUrl/filmler" to "Filmler",
     )
 
