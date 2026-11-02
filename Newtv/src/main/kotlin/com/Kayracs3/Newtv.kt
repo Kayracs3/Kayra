@@ -228,7 +228,7 @@ class NewTV : MainAPI() {
         return false
     }
 
-    private fun tryDirectOrToken(html: String, referer: String, channelId: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun tryDirectOrToken(html: String, referer: String, channelId: String, callback: (ExtractorLink) -> Unit): Boolean {
         Regex("""https?://[^\s"'<>\\]+?/index\.m3u8\?[^\s"'<>\\]*t=[^\s"'<>\\&]+[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(html)?.value?.let { m3u8 -> emitLink(m3u8, referer, callback); return true }
         Regex("""https?://[^\s"'<>\\]+?/index\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
@@ -236,7 +236,7 @@ class NewTV : MainAPI() {
         return false
     }
 
-    private fun emitLink(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun emitLink(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         // ★ Origin başlığı artık embed.st (iframe'in gerçek origin'i)
         callback.invoke(newExtractorLink(source = name, name = name, url = url, type = ExtractorLinkType.M3U8) {
             this.referer = referer
