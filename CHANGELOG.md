@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:dd045fd189ab57474614f57de3a82e9227cd55e8 -->
+### Refactor StreamPlayer API extraction and error handling
+
+- Etkilenen alanlar: Newtv
+- Commit: [dd045fd](https://github.com/Kayracs3/Kayra/commit/dd045fd189ab57474614f57de3a82e9227cd55e8)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:b3d67f464098fd3bea697a486a99f51bcc55b092 -->
 ### Update version from 8 to 9 in build.gradle.kts
 
