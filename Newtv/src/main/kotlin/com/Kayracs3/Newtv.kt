@@ -33,9 +33,7 @@ class BeyazElma : MainAPI() {
         "Referer" to "$mainUrl/",
     )
 
-    override val mainPage = mainPageOf(
-        apiChannels to "Tüm Kanallar",
-    )
+    override val mainPage = mainPageOf(apiChannels to "Tüm Kanallar")
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         return newHomePageResponse(request.name, fetchChannels(), hasNext = false)
@@ -101,15 +99,12 @@ class BeyazElma : MainAPI() {
         Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(html)?.value?.let { m3u8 -> emitLink(m3u8, channelPageUrl, callback); return true }
 
-        // 2) Embed URL'sini bul (artık mutlak URL)
+        // 2) Embed URL
         val embedUrl = findEmbedUrl(html)
-        if (embedUrl.isNullOrBlank()) {
-            Log.e(name, "Embed URL bulunamadı")
-            return false
-        }
+        if (embedUrl.isNullOrBlank()) { Log.e(name, "Embed URL bulunamadı"); return false }
         Log.d(name, "Embed URL: $embedUrl")
 
-        // 3) Embed sayfasını çek
+        // 3) Embed sayfası
         val embedResp = runCatching {
             app.get(
                 embedUrl,
@@ -131,20 +126,16 @@ class BeyazElma : MainAPI() {
         Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(embedHtml)?.value?.let { m3u8 -> emitLink(m3u8, embedUrl, callback); return true }
 
-        // 5) JWPlayer setup config
+        // 5) JWPlayer setup / config
         if (processJwPlayer(embedHtml, embedUrl, callback)) return true
 
-        // 6) __NEXT_DATA__ içinde JWPlayer
-        val nextData = Regex("""<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)</script>""", RegexOption.IGNORE_CASE)
-            .find(embedHtml)?.groupValues?.getOrNull(1)
-        if (!nextData.isNullOrBlank() && processJwPlayer(nextData, embedUrl, callback)) return true
-
-        // 7) JSON alanları
+        // 6) JSON alanları
         for (p in listOf(
             """"file"\s*:\s*"([^"]+)"""",
             """"source"\s*:\s*"([^"]+)"""",
             """"stream"\s*:\s*"([^"]+)"""",
             """"hls"\s*:\s*"([^"]+)"""",
+            """"playlist"\s*:\s*"([^"]+)"""",
         )) {
             Regex(p, RegexOption.IGNORE_CASE).find(embedHtml)?.groupValues?.getOrNull(1)?.let { u ->
                 if (u.contains(".m3u8", true) || u.startsWith("http")) {
@@ -153,7 +144,7 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 8) Nested iframe
+        // 7) iframe / video / source
         Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
             .find(embedHtml)?.groupValues?.getOrNull(1)?.let { nested ->
                 val nestedUrl = absolute(nested, embedUrl)
@@ -169,50 +160,93 @@ class BeyazElma : MainAPI() {
                 }
             }
 
-        // 9) Son çare: URL dökümü
+        Regex("""(?:video|source)[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(embedHtml)?.groupValues?.getOrNull(1)?.let { src ->
+                if (src.contains(".m3u8", true) || src.contains(".mp4", true)) {
+                    emitLink(absolute(src, embedUrl), embedUrl, callback); return true
+                }
+            }
+
+        // 8) ★ YENİ: Embed HTML'deki tüm script src'lerini indir ve tara
+        val scriptUrls = mutableSetOf<String>()
+        Regex("""<script[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(embedHtml).forEach { m ->
+            val src = m.groupValues[1].replace("\\/", "/").trim()
+            if (src.isNotBlank() && !src.startsWith("data:")) {
+                scriptUrls.add(absolute(src, embedUrl))
+            }
+        }
+        Log.d(name, "Embed içindeki ${scriptUrls.size} script taranacak")
+        for (scriptUrl in scriptUrls) {
+            // Harici kütüphaneleri atla (unpkg, jsdelivr, cloudflare, google)
+            val host = runCatching { URI(scriptUrl).host.orEmpty() }.getOrDefault("")
+            if (host.contains("unpkg.com") || host.contains("jsdelivr.net") ||
+                host.contains("cloudflareinsights.com") || host.contains("google")) {
+                Log.d(name, "Script atlandı (harici): $scriptUrl")
+                continue
+            }
+            Log.d(name, "Script çekiliyor: $scriptUrl")
+            val scriptResp = runCatching {
+                app.get(scriptUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to embedUrl), referer = embedUrl)
+            }.getOrNull() ?: continue
+            if (!scriptResp.isSuccessful) { Log.d(name, "Script HTTP ${scriptResp.code}: $scriptUrl"); continue }
+            val js = scriptResp.text.replace("\\/", "/").replace("\\\"", "\"")
+
+            // Script içinde doğrudan m3u8
+            Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                .find(js)?.value?.let { m3u8 -> emitLink(m3u8, scriptUrl, callback); return true }
+
+            // Script içinde JWPlayer setup
+            if (processJwPlayer(js, scriptUrl, callback)) return true
+
+            // Script içinde file/source
+            for (p in listOf(
+                """"file"\s*:\s*"([^"]+)"""",
+                """"source"\s*:\s*"([^"]+)"""",
+                """"stream"\s*:\s*"([^"]+)"""",
+                """"hls"\s*:\s*"([^"]+)"""",
+            )) {
+                Regex(p, RegexOption.IGNORE_CASE).find(js)?.groupValues?.getOrNull(1)?.let { u ->
+                    if (u.contains(".m3u8", true) || u.startsWith("http")) {
+                        emitLink(u, scriptUrl, callback); return true
+                    }
+                }
+            }
+        }
+
+        // 9) Son çare: embed HTML'deki tüm URL'leri logla
         Log.e(name, "Yayın linki bulunamadı. Embed HTML URL'leri:")
         Regex("""(?:https?:)?//[^\s"'<>\\]+""", RegexOption.IGNORE_CASE)
             .findAll(embedHtml)
             .map { it.value }
             .filter { it.length in 10..500 }
             .distinct()
-            .take(80)
+            .take(100)
             .forEach { Log.d(name, "EMBED URL: $it") }
+
+        // Script URL'lerini de logla
+        Log.d(name, "=== Embed script URL'leri ===")
+        scriptUrls.forEach { Log.d(name, "SCRIPT: $it") }
 
         return false
     }
 
-    /**
-     * Embed URL'sini bulur. Her zaman mainUrl'e göre çözer (kanal sayfasına göre değil)
-     * ve sondaki ters slash / kaçış karakterlerini temizler.
-     */
     private fun findEmbedUrl(html: String): String? {
-        // Ters slash temizleyici
         fun clean(url: String): String = url.trim().trimEnd('\\', '"', '\'', '/', ' ')
 
-        // 1) /api/embed?u=...  (relatif, mainUrl'e göre)
         Regex("""["'](/api/embed\?[^"'\\]+)["'\\]?""").find(html)?.groupValues?.getOrNull(1)?.let {
             return "$mainUrl${clean(it)}"
         }
-
-        // 2) https://beyazelma78.com/api/embed?u=...  (mutlak)
         Regex("""["'](https?://[^"'\\]*?/api/embed\?[^"'\\]+)["'\\]?""").find(html)?.groupValues?.getOrNull(1)?.let {
             return clean(it)
         }
-
-        // 3) /kanal/{slug}/api/embed?u=...  (yanlış formda gelirse düzelt)
         Regex("""["'](/kanal/[^"'\\]+/api/embed\?[^"'\\]+)["'\\]?""").find(html)?.groupValues?.getOrNull(1)?.let {
-            val path = clean(it)
-            val fixed = path.replace(Regex("""^/kanal/[^/]+"""), "")
+            val fixed = clean(it).replace(Regex("""^/kanal/[^/]+"""), "")
             return "$mainUrl$fixed"
         }
-
-        // 4) Doğrudan iframe
         Regex("""<iframe[^>]+src=["']([^"'\\]+)["']""", RegexOption.IGNORE_CASE)
             .find(html)?.groupValues?.getOrNull(1)?.let {
             return absolute(clean(it), mainUrl)
         }
-
         return null
     }
 
@@ -236,14 +270,12 @@ class BeyazElma : MainAPI() {
         referer: String,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        // 1) Doğrudan file
         Regex(""""file"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)?.let { fileUrl ->
             if (fileUrl.contains(".m3u8", true) || fileUrl.contains(".mp4", true)) {
                 emitLink(fileUrl, referer, callback); return true
             }
         }
 
-        // 2) sources[].file
         Regex(""""sources"\s*:\s*\[([\s\S]*?)]""").find(config)?.groupValues?.getOrNull(1)?.let { sourcesBlock ->
             Regex(""""file"\s*:\s*"([^"]+)"""").find(sourcesBlock)?.groupValues?.getOrNull(1)?.let { src ->
                 if (src.contains(".m3u8", true) || src.contains(".mp4", true)) {
@@ -252,7 +284,6 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 3) playlist URL'si
         Regex(""""playlist"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)?.let { playlistUrl ->
             Log.d(name, "JWPlayer playlist URL: $playlistUrl")
             val resolved = absolute(playlistUrl, referer)
@@ -270,7 +301,6 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 4) mediaid
         val mediaid = Regex(""""mediaid"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
             ?: Regex(""""mediaId"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
 
@@ -293,7 +323,6 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 5) key + pid
         val key = Regex(""""key"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
         val pid = Regex(""""pid"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
 
