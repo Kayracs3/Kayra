@@ -606,10 +606,10 @@
     },
     {
         "iconUrl": "https://tv.newtane.com/favicon.ico",
-        "fileHash": "sha256-cc2d53c6667335273c8b0bdd25629aac153c301af4020dd3d00cc0de38f7b654",
+        "fileHash": "sha256-45063db166b9dcc5a9fade3486393ff6e805c6a264597678df23cdfe7318d6eb",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 12813,
+        "fileSize": 17055,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -618,7 +618,7 @@
         "tvTypes": [
             "Live"
         ],
-        "version": 2,
+        "version": 3,
         "internalName": "Newtv",
         "description": "NewLive canl\u0131 TV sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Newtv.cs3",
