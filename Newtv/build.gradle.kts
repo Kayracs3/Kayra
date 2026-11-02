@@ -1,10 +1,10 @@
-version = 1
+version = 2
 
 cloudstream {
-    description = "NewTV otomatik sağlayıcısı"
+    description = "NewLive canlı TV sağlayıcısı"
     authors = listOf("Kayracs3")
     status = 1
-    tvTypes = listOf("Movie", "TvSeries")
+    tvTypes = listOf("Live")
     language = "tr"
     iconUrl = "https://tv.newtane.com/favicon.ico"
 }
