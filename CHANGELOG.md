@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:daec5981d64373640c72d4628a869ec2276db46c -->
+### Increment version from 4 to 5
+
+- Etkilenen alanlar: Newtv
+- Commit: [daec598](https://github.com/Kayracs3/Kayra/commit/daec5981d64373640c72d4628a869ec2276db46c)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:560300f4476bdd5be302b87fff86e94a413570c0 -->
 ### Update Newtv.kt
 
