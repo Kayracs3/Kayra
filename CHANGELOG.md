@@ -2,6 +2,15 @@
 
 ## 2026-11-02
 
+<!-- kayra-commit:f8571b1081f0e58ccf8e01e325a51e41dd27c9fe -->
+### Fix NewTV suspend extractor link compilation
+
+- Etkilenen alanlar: Newtv
+- Commit: [f8571b1](https://github.com/Kayracs3/Kayra/commit/f8571b1081f0e58ccf8e01e325a51e41dd27c9fe)
+
+
+## 2026-11-02
+
 <!-- kayra-commit:bdff6c2f25f4b01ba139c816c063b14099a5f687 -->
 ### Add new base URLs for embedding and edge services
 
