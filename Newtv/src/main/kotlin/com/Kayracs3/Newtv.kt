@@ -204,7 +204,7 @@ class NewTV : MainAPI() {
         return false
     }
 
-    private fun emitLink(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun emitLink(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
         callback.invoke(newExtractorLink(source = name, name = name, url = url, type = ExtractorLinkType.M3U8) {
             this.referer = referer
             this.quality = Qualities.Unknown.value
