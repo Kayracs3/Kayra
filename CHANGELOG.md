@@ -2,6 +2,23 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:304378011cc64e406dd9fa8efa56556998fb4314 -->
+### Update version from 6 to 7
+
+- Etkilenen alanlar: Newtv
+- Commit: [3043780](https://github.com/Kayracs3/Kayra/commit/304378011cc64e406dd9fa8efa56556998fb4314)
+
+## 2026-11-03
+
+<!-- kayra-commit:002f5bde6a5be4dd045aaf488186ff82389e3868 -->
+### Refactor embed handling and improve logging
+
+- Etkilenen alanlar: Newtv
+- Commit: [002f5bd](https://github.com/Kayracs3/Kayra/commit/002f5bde6a5be4dd045aaf488186ff82389e3868)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:8290cdb3ed08f390b2d8e642cc152ecf55afc944 -->
 ### Update version from 5 to 6 in build.gradle.kts
 
