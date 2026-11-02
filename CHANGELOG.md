@@ -2,6 +2,15 @@
 
 ## 2026-11-02
 
+<!-- kayra-commit:50cb0e58889d5f91eb2b5572b5c69712bd6f9a24 -->
+### Refactor token handling and logging in Newtv.kt
+
+- Etkilenen alanlar: Newtv
+- Commit: [50cb0e5](https://github.com/Kayracs3/Kayra/commit/50cb0e58889d5f91eb2b5572b5c69712bd6f9a24)
+
+
+## 2026-11-02
+
 <!-- kayra-commit:f8571b1081f0e58ccf8e01e325a51e41dd27c9fe -->
 ### Fix NewTV suspend extractor link compilation
 
