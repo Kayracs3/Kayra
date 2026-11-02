@@ -2,6 +2,15 @@
 
 ## 2026-11-02
 
+<!-- kayra-commit:0b9adc469aacc413e74296804651dcd50edf718f -->
+### Fix Newtv suspend extractor link creation
+
+- Etkilenen alanlar: Newtv
+- Commit: [0b9adc4](https://github.com/Kayracs3/Kayra/commit/0b9adc469aacc413e74296804651dcd50edf718f)
+
+
+## 2026-11-02
+
 <!-- kayra-commit:95f874810446448d476d229573557567099c422c -->
 ### Implement channel ID extraction and update load methods
 
