@@ -2,6 +2,15 @@
 
 ## 2026-11-02
 
+<!-- kayra-commit:95f874810446448d476d229573557567099c422c -->
+### Implement channel ID extraction and update load methods
+
+- Etkilenen alanlar: Newtv
+- Commit: [95f8748](https://github.com/Kayracs3/Kayra/commit/95f874810446448d476d229573557567099c422c)
+
+
+## 2026-11-02
+
 <!-- kayra-commit:c28dbd6739cf864c1f16e7464e5615c0499b0641 -->
 ### Set NewLive plugin metadata and version
 
