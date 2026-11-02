@@ -21,6 +21,7 @@ class NewTV : MainAPI() {
 
     companion object {
         private const val API_BASE = "https://newtvproxy.newtane.com"
+        private const val DLHD_BASE = "https://dlhd.pk"
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
     }
 
@@ -34,6 +35,13 @@ class NewTV : MainAPI() {
     override val mainPage = mainPageOf(
         "$API_BASE/api/channels" to "Tüm Kanallar",
     )
+
+    private fun extractChannelId(input: String): String? {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return null
+        if (trimmed.all { it.isDigit() }) return trimmed
+        return Regex("""(\d+)/?$""").find(trimmed)?.groupValues?.getOrNull(1)
+    }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val channels = fetchChannels()
@@ -55,10 +63,9 @@ class NewTV : MainAPI() {
             val obj = json.optJSONObject(i) ?: continue
             val id = obj.optString("channel_id").takeIf { it.isNotBlank() } ?: continue
             val name = obj.optString("channel_name").takeIf { it.isNotBlank() } ?: continue
-            val logo = obj.optString("logo_url").replace("\\/", "/").takeIf { it.isNotBlank() }
 
             results.add(newLiveSearchResponse(name, id, TvType.Live) {
-                this.posterUrl = logo
+                this.posterUrl = null // Cloudflare logo'ları 403 ile engelliyor
             })
         }
         return results
@@ -73,8 +80,14 @@ class NewTV : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        // url = channel_id
-        return newLiveStreamLoadResponse(name = "Kanal $url", url = url, dataUrl = url)
+        val channelId = extractChannelId(url)
+        Log.d(name, "load: gelen url=$url, channelId=$channelId")
+        if (channelId == null) return null
+        return newLiveStreamLoadResponse(
+            name = "Kanal $channelId",
+            url = url,
+            dataUrl = channelId
+        )
     }
 
     override suspend fun loadLinks(
@@ -83,76 +96,132 @@ class NewTV : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val channelId = data.trim()
-        if (channelId.isBlank()) return false
+        val channelId = extractChannelId(data)
+        Log.d(name, "loadLinks: gelen data=$data, channelId=$channelId")
+        if (channelId == null) return false
 
-        Log.d(name, "loadLinks başladı: channelId=$channelId")
+        val dlhdUrl = "$DLHD_BASE/stream/stream-$channelId.php"
+        Log.d(name, "dlhd.pk deneniyor: $dlhdUrl")
 
-        // Olası stream endpoint'leri (tahmini)
-        val candidates = listOf(
-            "$API_BASE/api/channels/$channelId/stream",
-            "$API_BASE/api/channels/$channelId",
-            "$API_BASE/api/stream/$channelId",
-            "$API_BASE/api/live/$channelId",
-            "$API_BASE/api/play/$channelId",
-            "$API_BASE/api/playlist/$channelId",
-            "$API_BASE/api/player/$channelId",
-            "$API_BASE/api/channels/$channelId/play",
-            "$API_BASE/api/channels/$channelId/playlist",
-            "$API_BASE/api/channels/$channelId/m3u8",
-            "$API_BASE/live/$channelId.m3u8",
-            "$API_BASE/channels/$channelId.m3u8",
-        )
-
-        for (endpoint in candidates) {
-            val resp = runCatching {
-                app.get(endpoint, headers = headers, referer = "$mainUrl/")
-            }.getOrNull() ?: continue
-            if (!resp.isSuccessful) { Log.d(name, "Endpoint başarısız: $endpoint (${resp.code})"); continue }
-
-            val body = resp.text.replace("\\/", "/")
-            Log.d(name, "Endpoint yanıtı ($endpoint): ${body.take(300)}")
-
-            // 1) Doğrudan m3u8 içeriyorsa
-            val m3u8 = Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).find(body)?.value
-            if (m3u8 != null) {
-                callback.invoke(newExtractorLink(source = name, name = name, url = m3u8, type = ExtractorLinkType.M3U8) {
-                    this.referer = "$mainUrl/"
-                    this.quality = Qualities.Unknown.value
-                    this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$mainUrl/")
-                })
-                Log.d(name, "★ Link eklendi (doğrudan): $m3u8")
-                return true
-            }
-
-            // 2) JSON içindeki stream alanları
-            val patterns = listOf(
-                """"stream_url"\s*:\s*"([^"]+)"""",
-                """"streamUrl"\s*:\s*"([^"]+)"""",
-                """"m3u8_url"\s*:\s*"([^"]+)"""",
-                """"url"\s*:\s*"([^"]+)"""",
-                """"stream"\s*:\s*"([^"]+)"""",
-                """"m3u8"\s*:\s*"([^"]+)"""",
-                """"file"\s*:\s*"([^"]+)"""",
-                """"src"\s*:\s*"([^"]+)"""",
-                """"link"\s*:\s*"([^"]+)"""",
+        val resp = runCatching {
+            app.get(
+                dlhdUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to "$DLHD_BASE/",
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                ),
+                referer = "$DLHD_BASE/",
+                allowRedirects = true,
+                timeout = 20000
             )
-            for (p in patterns) {
-                val m = Regex(p, RegexOption.IGNORE_CASE).find(body) ?: continue
-                val u = m.groupValues[1].trim()
-                if (u.isBlank()) continue
-                if (!u.contains(".m3u8", true) && !u.startsWith("http")) continue
-                callback.invoke(newExtractorLink(source = name, name = name, url = u, type = ExtractorLinkType.M3U8) {
-                    this.referer = "$mainUrl/"
-                    this.quality = Qualities.Unknown.value
-                    this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$mainUrl/")
-                })
-                Log.d(name, "★ Link eklendi (JSON): $u")
+        }.getOrNull()
+
+        if (resp == null) { Log.e(name, "dlhd.pk bağlantı hatası"); return false }
+        if (!resp.isSuccessful) { Log.e(name, "dlhd.pk HTTP ${resp.code}"); return false }
+
+        val html = resp.text.replace("\\/", "/")
+        Log.d(name, "dlhd.pk HTML uzunluğu: ${html.length}")
+        Log.d(name, "dlhd.pk ilk 1500 char: ${html.take(1500)}")
+
+        // 1) Doğrudan m3u8
+        Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).find(html)?.value?.let { m3u8 ->
+            emitLink(m3u8, dlhdUrl, callback)
+            return true
+        }
+
+        // 2) playlist-token API'si var mı? (DaddyLive ailesinin yeni sistemi)
+        val slugMatch = Regex("""playlist-token\?slug=([^&"'\s]+)""").find(html)
+            ?: Regex("""stream-(?:stream-)?(\d+)\.php""").find(dlhdUrl)?.let { null }
+        // dlhd.pk'de slug genelde "premium{id}" formatında olur; sayfada ipucu varsa al, yoksa varsayılan dene
+        val slug = slugMatch?.groupValues?.getOrNull(1) ?: "premium$channelId"
+        Log.d(name, "Olası slug: $slug")
+
+        val tokenEndpoints = listOf(
+            "https://edge.wedd48c.top/api/playlist-token?slug=$slug",
+            "$DLHD_BASE/api/playlist-token?slug=$slug",
+            "https://edge.wedd48c.top/api/playlist-token?slug=$channelId",
+        )
+        for (tokenUrl in tokenEndpoints) {
+            val tokenResp = runCatching {
+                app.get(tokenUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to dlhdUrl), referer = dlhdUrl, timeout = 15000)
+            }.getOrNull() ?: continue
+            if (!tokenResp.isSuccessful) { Log.d(name, "token endpoint başarısız: $tokenUrl (${tokenResp.code})"); continue }
+
+            val tokenBody = tokenResp.text
+            Log.d(name, "token yanıtı ($tokenUrl): ${tokenBody.take(300)}")
+
+            val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
+                ?: Regex("""["']([A-Za-z0-9_\-\.]{30,})["']""").find(tokenBody)?.groupValues?.getOrNull(1)
+
+            if (!token.isNullOrBlank()) {
+                val ts = System.currentTimeMillis()
+                val m3u8 = "https://edge.wedd48c.top/$slug/index.m3u8?t=" + java.net.URLEncoder.encode(token, "UTF-8") + "&_=$ts"
+                emitLink(m3u8, dlhdUrl, callback)
                 return true
             }
         }
 
-        Log.e(name, "Kanal $channelId için stream URL bulunamadı")
+        // 3) iframe içinde başka bir player
+        val iframeSrc = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.getOrNull(1)
+        if (!iframeSrc.isNullOrBlank()) {
+            val iframeUrl = absolute(iframeSrc, dlhdUrl)
+            Log.d(name, "iframe bulundu: $iframeUrl")
+            val iframeResp = runCatching {
+                app.get(iframeUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to dlhdUrl), referer = dlhdUrl, allowRedirects = true, timeout = 15000)
+            }.getOrNull()
+            if (iframeResp != null && iframeResp.isSuccessful) {
+                val iframeHtml = iframeResp.text.replace("\\/", "/")
+                Log.d(name, "iframe HTML (${iframeHtml.length}): ${iframeHtml.take(1000)}")
+                Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).find(iframeHtml)?.value?.let { m3u8 ->
+                    emitLink(m3u8, iframeUrl, callback)
+                    return true
+                }
+            }
+        }
+
+        // 4) JSON içinde stream alanı
+        val patterns = listOf(
+            """"stream_url"\s*:\s*"([^"]+)"""",
+            """"streamUrl"\s*:\s*"([^"]+)"""",
+            """"m3u8"\s*:\s*"([^"]+)"""",
+            """"file"\s*:\s*"([^"]+)"""",
+            """"src"\s*:\s*"([^"]+)"""",
+            """"source"\s*:\s*"([^"]+)"""",
+            """"link"\s*:\s*"([^"]+)"""",
+        )
+        for (p in patterns) {
+            val m = Regex(p, RegexOption.IGNORE_CASE).find(html) ?: continue
+            val u = m.groupValues[1].trim()
+            if (u.contains(".m3u8", true) || u.startsWith("http")) {
+                emitLink(u, dlhdUrl, callback)
+                return true
+            }
+        }
+
+        Log.e(name, "dlhd.pk üzerinden stream bulunamadı (id=$channelId)")
         return false
+    }
+
+    private fun emitLink(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+        callback.invoke(newExtractorLink(source = name, name = name, url = url, type = ExtractorLinkType.M3U8) {
+            this.referer = referer
+            this.quality = Qualities.Unknown.value
+            this.headers = mapOf(
+                "User-Agent" to USER_AGENT,
+                "Referer" to referer,
+                "Origin" to DLHD_BASE,
+            )
+        })
+        Log.d(name, "★ Link eklendi: $url")
+    }
+
+    private fun absolute(raw: String, base: String): String {
+        val v = raw.trim()
+        if (v.isEmpty()) return ""
+        if (v.startsWith("http://", true) || v.startsWith("https://", true)) return v
+        if (v.startsWith("//")) return "https:$v"
+        return runCatching { java.net.URI(base).resolve(v).toString() }.getOrElse { DLHD_BASE + "/" + v.removePrefix("/") }
     }
 }
