@@ -605,6 +605,27 @@
         "name": "JetFilmizle"
     },
     {
+        "iconUrl": "https://tv.newtane.com/favicon.ico",
+        "fileHash": "sha256-09083adc181a0f05feda0155c33b011004df78ea96d7b7930be43ad1bed5e33c",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 23346,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "Newtv",
+        "description": "NewTV otomatik sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Newtv.cs3",
+        "name": "Newtv"
+    },
+    {
         "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg-hdTlaRfTO3bpbNN57otxLOQ1iSvgBNOGkXCnePUFZ5bWcvNQEd4LsTWcckMOTA8WMDUZjgS7cz8Qe1DHnsnMz8KsFjr8jGx7OwGwFmAuhGVhiRbiPrJwHlSj_vT2RGIlKBE7Qw1jXBw0n74mZk5ltikRlLqjH24eBTTbeow_XT9Q3uFfR1lz1esWxQk/s230/logo.png",
         "fileHash": "sha256-0bf0c86fa05366d069b4a8b124fe1ec471603e8a46d72ed629eb312513da48d4",
         "apiVersion": 1,
