@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:8290cdb3ed08f390b2d8e642cc152ecf55afc944 -->
+### Update version from 5 to 6 in build.gradle.kts
+
+- Etkilenen alanlar: Newtv
+- Commit: [8290cdb](https://github.com/Kayracs3/Kayra/commit/8290cdb3ed08f390b2d8e642cc152ecf55afc944)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:85b34c006e26cc459a015274dad27f39f6aacbe8 -->
 ### Enhance logging and stream endpoint testing
 
