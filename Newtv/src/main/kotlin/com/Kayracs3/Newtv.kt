@@ -22,6 +22,8 @@ class NewTV : MainAPI() {
     companion object {
         private const val API_BASE = "https://newtvproxy.newtane.com"
         private const val DLHD_BASE = "https://dlhd.pk"
+        private const val EMBED_BASE = "https://dembed.st"
+        private const val EDGE_BASE = "https://edge.wedd48c.top"
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
     }
 
@@ -32,15 +34,13 @@ class NewTV : MainAPI() {
         "Origin" to mainUrl,
     )
 
-    override val mainPage = mainPageOf(
-        "$API_BASE/api/channels" to "Tüm Kanallar",
-    )
+    override val mainPage = mainPageOf("$API_BASE/api/channels" to "Tüm Kanallar")
 
     private fun extractChannelId(input: String): String? {
-        val trimmed = input.trim()
-        if (trimmed.isEmpty()) return null
-        if (trimmed.all { it.isDigit() }) return trimmed
-        return Regex("""(\d+)/?$""").find(trimmed)?.groupValues?.getOrNull(1)
+        val t = input.trim()
+        if (t.isEmpty()) return null
+        if (t.all { it.isDigit() }) return t
+        return Regex("""(\d+)/?$""").find(t)?.groupValues?.getOrNull(1)
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -52,21 +52,15 @@ class NewTV : MainAPI() {
     private suspend fun fetchChannels(): List<SearchResponse> {
         val resp = runCatching {
             app.get("$API_BASE/api/channels", headers = headers, referer = "$mainUrl/")
-        }.getOrNull()
-        if (resp == null) { Log.e(name, "Kanal listesi bağlantı hatası"); return emptyList() }
-        if (!resp.isSuccessful) { Log.e(name, "Kanal listesi HTTP ${resp.code}"); return emptyList() }
-
+        }.getOrNull() ?: return emptyList()
+        if (!resp.isSuccessful) return emptyList()
         val json = runCatching { JSONArray(resp.text) }.getOrNull() ?: return emptyList()
         val results = mutableListOf<SearchResponse>()
-
         for (i in 0 until json.length()) {
             val obj = json.optJSONObject(i) ?: continue
             val id = obj.optString("channel_id").takeIf { it.isNotBlank() } ?: continue
-            val name = obj.optString("channel_name").takeIf { it.isNotBlank() } ?: continue
-
-            results.add(newLiveSearchResponse(name, id, TvType.Live) {
-                this.posterUrl = null // Cloudflare logo'ları 403 ile engelliyor
-            })
+            val nm = obj.optString("channel_name").takeIf { it.isNotBlank() } ?: continue
+            results.add(newLiveSearchResponse(nm, id, TvType.Live) { this.posterUrl = null })
         }
         return results
     }
@@ -74,20 +68,14 @@ class NewTV : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val value = query.trim()
-        if (value.length < 2) return emptyList()
-        return fetchChannels().filter { it.name.contains(value, true) }
+        val v = query.trim()
+        if (v.length < 2) return emptyList()
+        return fetchChannels().filter { it.name.contains(v, true) }
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val channelId = extractChannelId(url)
-        Log.d(name, "load: gelen url=$url, channelId=$channelId")
-        if (channelId == null) return null
-        return newLiveStreamLoadResponse(
-            name = "Kanal $channelId",
-            url = url,
-            dataUrl = channelId
-        )
+        val id = extractChannelId(url) ?: return null
+        return newLiveStreamLoadResponse(name = "Kanal $id", url = url, dataUrl = id)
     }
 
     override suspend fun loadLinks(
@@ -96,132 +84,177 @@ class NewTV : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val channelId = extractChannelId(data)
-        Log.d(name, "loadLinks: gelen data=$data, channelId=$channelId")
-        if (channelId == null) return false
+        val channelId = extractChannelId(data) ?: return false
+        Log.d(name, "loadLinks: channelId=$channelId")
 
         val dlhdUrl = "$DLHD_BASE/stream/stream-$channelId.php"
-        Log.d(name, "dlhd.pk deneniyor: $dlhdUrl")
-
         val resp = runCatching {
             app.get(
                 dlhdUrl,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to "$DLHD_BASE/",
-                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                ),
+                headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$DLHD_BASE/"),
                 referer = "$DLHD_BASE/",
                 allowRedirects = true,
                 timeout = 20000
             )
-        }.getOrNull()
-
-        if (resp == null) { Log.e(name, "dlhd.pk bağlantı hatası"); return false }
-        if (!resp.isSuccessful) { Log.e(name, "dlhd.pk HTTP ${resp.code}"); return false }
+        }.getOrNull() ?: return false
+        if (!resp.isSuccessful) { Log.e(name, "dlhd HTTP ${resp.code}"); return false }
 
         val html = resp.text.replace("\\/", "/")
-        Log.d(name, "dlhd.pk HTML uzunluğu: ${html.length}")
-        Log.d(name, "dlhd.pk ilk 1500 char: ${html.take(1500)}")
+        Log.d(name, "dlhd HTML: ${html.length} char")
 
-        // 1) Doğrudan m3u8
-        Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).find(html)?.value?.let { m3u8 ->
-            emitLink(m3u8, dlhdUrl, callback)
-            return true
+        // iframe'i bul
+        val iframeSrc = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.getOrNull(1)
+        if (iframeSrc.isNullOrBlank()) {
+            Log.e(name, "iframe bulunamadı")
+            return tryDirectOrToken(html, dlhdUrl, channelId, callback)
         }
 
-        // 2) playlist-token API'si var mı? (DaddyLive ailesinin yeni sistemi)
-        val slugMatch = Regex("""playlist-token\?slug=([^&"'\s]+)""").find(html)
-            ?: Regex("""stream-(?:stream-)?(\d+)\.php""").find(dlhdUrl)?.let { null }
-        // dlhd.pk'de slug genelde "premium{id}" formatında olur; sayfada ipucu varsa al, yoksa varsayılan dene
-        val slug = slugMatch?.groupValues?.getOrNull(1) ?: "premium$channelId"
-        Log.d(name, "Olası slug: $slug")
+        val iframeUrl = absolute(iframeSrc, dlhdUrl)
+        Log.d(name, "iframe: $iframeUrl")
 
-        val tokenEndpoints = listOf(
-            "https://edge.wedd48c.top/api/playlist-token?slug=$slug",
-            "$DLHD_BASE/api/playlist-token?slug=$slug",
-            "https://edge.wedd48c.top/api/playlist-token?slug=$channelId",
+        val iframeResp = runCatching {
+            app.get(
+                iframeUrl,
+                headers = mapOf("User-Agent" to USER_AGENT, "Referer" to dlhdUrl, "Accept" to "text/html,*/*"),
+                referer = dlhdUrl,
+                timeout = 20000,
+                allowRedirects = true
+            )
+        }.getOrNull()
+        if (iframeResp == null || !iframeResp.isSuccessful) {
+            Log.e(name, "iframe çekilemedi: ${iframeResp?.code}")
+            return false
+        }
+
+        val iframeHtml = iframeResp.text.replace("\\/", "/").replace("\\\"", "\"")
+        Log.d(name, "iframe HTML: ${iframeHtml.length} char")
+
+        // 1) Token'lı m3u8 doğrudan var mı? (index.m3u8?t=...)
+        Regex("""https?://[^\s"'<>\\]+?/index\.m3u8\?[^\s"'<>\\]*t=[^\s"'<>\\&]+[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+            .find(iframeHtml)?.value?.let { fullM3u8 ->
+                emitLink(fullM3u8, iframeUrl, callback)
+                return true
+            }
+
+        // 2) playlist-token URL'sini iframe HTML'inden tam olarak çıkar
+        val tokenUrlPatterns = listOf(
+            Regex("""["'](https?://[^"']*?/api/playlist-token\?slug=[^"']+)["']""", RegexOption.IGNORE_CASE),
+            Regex("""(https?://[^\s"'<>\\]+?/api/playlist-token\?slug=[^\s"'<>\\&]+)""", RegexOption.IGNORE_CASE),
+            Regex("""["'](/api/playlist-token\?slug=[^"']+)["']""", RegexOption.IGNORE_CASE),
         )
-        for (tokenUrl in tokenEndpoints) {
+        val tokenUrls = mutableSetOf<String>()
+        for (p in tokenUrlPatterns) {
+            p.findAll(iframeHtml).forEach { m ->
+                val raw = m.groupValues.lastOrNull() ?: m.value
+                val cleaned = raw.replace("&amp;", "&").trim()
+                if (cleaned.isNotBlank()) tokenUrls.add(absolute(cleaned, iframeUrl))
+            }
+        }
+        Log.d(name, "iframe içinde bulunan token URL'leri: $tokenUrls")
+
+        for (tokenUrl in tokenUrls) {
             val tokenResp = runCatching {
-                app.get(tokenUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to dlhdUrl), referer = dlhdUrl, timeout = 15000)
+                app.get(
+                    tokenUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to iframeUrl,
+                        "Origin" to EMBED_BASE,
+                        "Accept" to "application/json, text/plain, */*",
+                    ),
+                    referer = iframeUrl,
+                    timeout = 15000,
+                )
             }.getOrNull() ?: continue
-            if (!tokenResp.isSuccessful) { Log.d(name, "token endpoint başarısız: $tokenUrl (${tokenResp.code})"); continue }
+            if (!tokenResp.isSuccessful) { Log.d(name, "token URL HTTP ${tokenResp.code}: $tokenUrl"); continue }
+
+            val tokenBody = tokenResp.text
+            Log.d(name, "token yanıtı: ${tokenBody.take(300)}")
+            val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
+                ?: Regex("""["']([A-Za-z0-9_\-\.]{30,})["']""").find(tokenBody)?.groupValues?.getOrNull(1)
+            if (!token.isNullOrBlank()) {
+                val ts = System.currentTimeMillis()
+                val m3u8 = "$EDGE_BASE/premium$channelId/index.m3u8?t=" +
+                        java.net.URLEncoder.encode(token, "UTF-8") + "&_=$ts"
+                emitLink(m3u8, iframeUrl, callback)
+                return true
+            }
+        }
+
+        // 3) Token endpoint'lerini doğrudan dene (iframe'de bulunamadıysa)
+        val slug = Regex("""premium(\d+)""").find(iframeHtml)?.value ?: "premium$channelId"
+        val directTokenUrls = listOf(
+            "$EDGE_BASE/api/playlist-token?slug=$slug",
+            "$EDGE_BASE/api/playlist-token?slug=$channelId",
+        )
+        for (tokenUrl in directTokenUrls) {
+            val tokenResp = runCatching {
+                app.get(
+                    tokenUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to iframeUrl,
+                        "Origin" to EMBED_BASE,
+                        "Accept" to "application/json, text/plain, */*",
+                    ),
+                    referer = iframeUrl,
+                    timeout = 15000,
+                )
+            }.getOrNull() ?: continue
+            if (!tokenResp.isSuccessful) { Log.d(name, "token endpoint HTTP ${tokenResp.code}: $tokenUrl"); continue }
 
             val tokenBody = tokenResp.text
             Log.d(name, "token yanıtı ($tokenUrl): ${tokenBody.take(300)}")
-
             val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
                 ?: Regex("""["']([A-Za-z0-9_\-\.]{30,})["']""").find(tokenBody)?.groupValues?.getOrNull(1)
-
             if (!token.isNullOrBlank()) {
                 val ts = System.currentTimeMillis()
-                val m3u8 = "https://edge.wedd48c.top/$slug/index.m3u8?t=" + java.net.URLEncoder.encode(token, "UTF-8") + "&_=$ts"
-                emitLink(m3u8, dlhdUrl, callback)
+                val m3u8 = "$EDGE_BASE/$slug/index.m3u8?t=" +
+                        java.net.URLEncoder.encode(token, "UTF-8") + "&_=$ts"
+                emitLink(m3u8, iframeUrl, callback)
                 return true
             }
         }
 
-        // 3) iframe içinde başka bir player
-        val iframeSrc = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-            .find(html)?.groupValues?.getOrNull(1)
-        if (!iframeSrc.isNullOrBlank()) {
-            val iframeUrl = absolute(iframeSrc, dlhdUrl)
-            Log.d(name, "iframe bulundu: $iframeUrl")
-            val iframeResp = runCatching {
-                app.get(iframeUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to dlhdUrl), referer = dlhdUrl, allowRedirects = true, timeout = 15000)
-            }.getOrNull()
-            if (iframeResp != null && iframeResp.isSuccessful) {
-                val iframeHtml = iframeResp.text.replace("\\/", "/")
-                Log.d(name, "iframe HTML (${iframeHtml.length}): ${iframeHtml.take(1000)}")
-                Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE).find(iframeHtml)?.value?.let { m3u8 ->
-                    emitLink(m3u8, iframeUrl, callback)
-                    return true
-                }
-            }
-        }
-
-        // 4) JSON içinde stream alanı
-        val patterns = listOf(
-            """"stream_url"\s*:\s*"([^"]+)"""",
-            """"streamUrl"\s*:\s*"([^"]+)"""",
-            """"m3u8"\s*:\s*"([^"]+)"""",
-            """"file"\s*:\s*"([^"]+)"""",
-            """"src"\s*:\s*"([^"]+)"""",
-            """"source"\s*:\s*"([^"]+)"""",
-            """"link"\s*:\s*"([^"]+)"""",
-        )
-        for (p in patterns) {
-            val m = Regex(p, RegexOption.IGNORE_CASE).find(html) ?: continue
-            val u = m.groupValues[1].trim()
-            if (u.contains(".m3u8", true) || u.startsWith("http")) {
-                emitLink(u, dlhdUrl, callback)
+        // 4) iframe HTML'inde token'sız index.m3u8 varsa
+        Regex("""https?://[^\s"'<>\\]+?/index\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+            .find(iframeHtml)?.value?.let { m3u8 ->
+                emitLink(m3u8, iframeUrl, callback)
                 return true
             }
-        }
 
-        Log.e(name, "dlhd.pk üzerinden stream bulunamadı (id=$channelId)")
+        Log.e(name, "stream bulunamadı: id=$channelId")
         return false
     }
 
-    private suspend fun emitLink(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+    private fun tryDirectOrToken(html: String, referer: String, channelId: String, callback: (ExtractorLink) -> Unit): Boolean {
+        Regex("""https?://[^\s"'<>\\]+?/index\.m3u8\?[^\s"'<>\\]*t=[^\s"'<>\\&]+[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+            .find(html)?.value?.let { m3u8 -> emitLink(m3u8, referer, callback); return true }
+        Regex("""https?://[^\s"'<>\\]+?/index\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+            .find(html)?.value?.let { m3u8 -> emitLink(m3u8, referer, callback); return true }
+        return false
+    }
+
+    private fun emitLink(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
+        // ★ Origin başlığı artık embed.st (iframe'in gerçek origin'i)
         callback.invoke(newExtractorLink(source = name, name = name, url = url, type = ExtractorLinkType.M3U8) {
             this.referer = referer
             this.quality = Qualities.Unknown.value
             this.headers = mapOf(
                 "User-Agent" to USER_AGENT,
                 "Referer" to referer,
-                "Origin" to DLHD_BASE,
+                "Origin" to EMBED_BASE,
             )
         })
         Log.d(name, "★ Link eklendi: $url")
     }
 
     private fun absolute(raw: String, base: String): String {
-        val v = raw.trim()
+        val v = raw.trim().replace("&amp;", "&").replace("\\/", "/")
         if (v.isEmpty()) return ""
         if (v.startsWith("http://", true) || v.startsWith("https://", true)) return v
         if (v.startsWith("//")) return "https:$v"
-        return runCatching { java.net.URI(base).resolve(v).toString() }.getOrElse { DLHD_BASE + "/" + v.removePrefix("/") }
+        return runCatching { java.net.URI(base).resolve(v).toString() }.getOrElse { base + "/" + v.removePrefix("/") }
     }
 }
