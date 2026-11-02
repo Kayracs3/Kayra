@@ -1,0 +1,2 @@
+/home/runner/work/Kayra/Kayra/Newtv/src/main/kotlin/com/Kayracs3/Newtv.kt
+/home/runner/work/Kayra/Kayra/Newtv/src/main/kotlin/com/Kayracs3/NewtvPlugin.kt
