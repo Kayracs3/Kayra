@@ -134,7 +134,7 @@ class BeyazElma : MainAPI() {
             if (tryKporesDirect(kporesUrl, embedHost, embedUrl, callback)) return true
         }
 
-        // 3) Global stream URL değişkenlerini ara
+        // 3) Global stream URL değişkenleri
         for (pattern in listOf(
             """window\.__streamUrl\s*=\s*["']([^"']+)["']""",
             """window\.__liveUrl\s*=\s*["']([^"']+)["']""",
@@ -152,23 +152,21 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 4) StreamPlayer slug'ını çıkar ve API endpoint'lerini dene
+        // 4) StreamPlayer slug'ını çıkar
         val streamPlayerSlug = extractStreamPlayerSlug(embedHtml)
         Log.d(name, "STREAMPLAYER SLUG: $streamPlayerSlug")
-
-        if (!streamPlayerSlug.isNullOrBlank()) {
-            if (tryStreamPlayerApis(streamPlayerSlug, embedHost, embedUrl, callback)) return true
-        }
 
         // 5) JWPlayer
         if (processJwPlayer(embedHtml, embedUrl, callback)) return true
 
-        // 6) Script src'lerini dene
+        // 6) Script src'lerini dene + player.js derin analiz
         val scriptSrcs = mutableListOf<String>()
         Regex("""<script[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(embedHtml).forEach { m ->
             scriptSrcs.add(m.groupValues[1].replace("\\/", "/").trim())
         }
         Log.d(name, "Embed içinde ${scriptSrcs.size} script src bulundu")
+
+        var playerJs: String? = null
 
         for (src in scriptSrcs) {
             if (src.isBlank() || src.startsWith("data:")) continue
@@ -186,13 +184,12 @@ class BeyazElma : MainAPI() {
                 Log.d(name, "Script OK (${scriptResp.text.length} char): $candidate")
                 val js = scriptResp.text.replace("\\/", "/").replace("\\\"", "\"")
 
-                // player.js içindeki API endpoint'lerini logla
-                if (candidate.contains("player.js", true)) {
-                    logPlayerApis(js)
-                    // player.js içinde kpores URL'si var mı?
-                    Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).findAll(js).take(5).forEach { m ->
-                        Log.d(name, "PLAYER KPORES URL: ${m.value.replace("\\/", "/")}")
-                    }
+                if (candidate.contains("player.js", true) && playerJs == null) {
+                    playerJs = js
+                    deepAnalyzePlayerJs(js, streamPlayerSlug, embedHost, embedUrl, callback)
+                    // Derin analiz sırasında link bulunmuş olabilir - kontrol etmek için
+                    // (emitLink içinde state tutmuyoruz, o yüzden deepAnalyze bool dönebilir)
+                    if (deepAnalyzePlayerJs(js, streamPlayerSlug, embedHost, embedUrl, callback)) return true
                 }
 
                 Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
@@ -202,10 +199,143 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 7) Son çare logları
+        // 7) StreamPlayer slug'ı ile olası API endpoint'leri (fallback)
+        if (!streamPlayerSlug.isNullOrBlank()) {
+            if (tryStreamPlayerApis(streamPlayerSlug, embedHost, embedUrl, callback)) return true
+        }
+
+        // 8) Son çare logları
         Log.e(name, "Yayın linki bulunamadı. Göreli yollar dökülüyor:")
         Regex("""["'](/[^"'\s]{3,200})["']""").findAll(embedHtml).map { it.groupValues[1] }.distinct().take(80).forEach {
             Log.d(name, "REL: $it")
+        }
+
+        return false
+    }
+
+    /** player.js'i derinlemesine analiz eder; bulursa link yayınlar ve true döner. */
+    private suspend fun deepAnalyzePlayerJs(
+        js: String,
+        spSlug: String?,
+        embedHost: String,
+        embedUrl: String,
+        callback: (ExtractorLink) -> Unit,
+    ): Boolean {
+        Log.d(name, "=== player.js DERİN ANALİZ ===")
+
+        // 1. Tüm fetch çağrıları
+        Regex("""fetch\s*\(\s*["'`]([^"'`]+)["'`]""", RegexOption.IGNORE_CASE).findAll(js).take(30).forEach {
+            Log.d(name, "PLAYER FETCH URL: ${it.groupValues[1]}")
+        }
+
+        // 2. XHR open çağrıları
+        Regex("""\.open\s*\(\s*["'`][A-Z]+["'`]\s*,\s*["'`]([^"'`]+)["'`]""", RegexOption.IGNORE_CASE).findAll(js).take(30).forEach {
+            Log.d(name, "PLAYER XHR URL: ${it.groupValues[1]}")
+        }
+
+        // 3. Anahtar kelime context'leri
+        for (kw in listOf("api/stream", "kpores", "live.php", "playlist_url", "stream_url", "streamUrl")) {
+            var idx = 0
+            var count = 0
+            while (count < 3) {
+                idx = js.indexOf(kw, idx, ignoreCase = true)
+                if (idx == -1) break
+                val start = maxOf(0, idx - 200)
+                val end = minOf(js.length, idx + 200)
+                Log.d(name, "PLAYER CTX [$kw]: ${js.substring(start, end).replace("\n", " ")}")
+                idx += kw.length
+                count++
+            }
+        }
+
+        // 4. Göreli yollar (/api/... gibi)
+        Regex("""["'`](/api/[a-zA-Z0-9/_.\-${'$'}]+)["'`]""").findAll(js).map { it.groupValues[1] }.distinct().take(30).forEach {
+            Log.d(name, "PLAYER REL PATH: $it")
+        }
+        Regex("""["'`](/[a-zA-Z0-9/_.\-${'$'}]{6,100})["'`]""").findAll(js).map { it.groupValues[1] }.distinct().take(40).forEach {
+            Log.d(name, "PLAYER ANY REL: $it")
+        }
+
+        // 5. Template literal içindeki API yolları (`/api/...${...}...`)
+        Regex("""`([^`]*?/api/[^`]*?)`""").findAll(js).take(20).forEach {
+            Log.d(name, "PLAYER TEMPLATE API: ${it.groupValues[1].take(300)}")
+        }
+
+        // 6. player.js içinde kpores URL'si var mı?
+        Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).findAll(js).take(5).forEach { m ->
+            Log.d(name, "PLAYER KPORES URL: ${m.value.replace("\\/", "/")}")
+        }
+
+        // 7. spSlug ile player.js içinde dinamik endpoint dene
+        if (!spSlug.isNullOrBlank()) {
+            val encoded = runCatching { URLEncoder.encode(spSlug, "UTF-8") }.getOrDefault(spSlug)
+
+            // player.js'te bulduğumuz tüm /api/... göreli yolları bu slug ile dene
+            val apiPaths = Regex("""["'`](/api/[a-zA-Z0-9/_.\-${'$'}]+)["'`]""")
+                .findAll(js).map { it.groupValues[1] }.distinct().toMutableList()
+            apiPaths.add("/api/stream")
+            apiPaths.add("/api/player")
+            apiPaths.add("/api/live")
+
+            for (path in apiPaths) {
+                for (base in listOf(embedHost, mainUrl)) {
+                    for (candidate in listOf(
+                        "$base$path?slug=$encoded",
+                        "$base$path?src=$encoded",
+                        "$base$path?channel=$encoded",
+                        "$base$path/$encoded",
+                        "$base$path?name=$encoded",
+                        "$base$path?id=$encoded",
+                    )) {
+                        val resp = runCatching {
+                            app.get(candidate, headers = mapOf(
+                                "User-Agent" to USER_AGENT,
+                                "Referer" to embedUrl,
+                                "Origin" to embedHost,
+                                "Accept" to "application/json, text/plain, */*",
+                                "X-Requested-With" to "XMLHttpRequest",
+                            ), referer = embedUrl)
+                        }.getOrNull() ?: continue
+                        if (!resp.isSuccessful) continue
+                        val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
+                        if (body.length < 5) continue
+                        Log.d(name, "SP API HIT (${resp.code}): $candidate => ${body.take(400)}")
+
+                        // m3u8
+                        Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                            .find(body)?.value?.let { m3u8 -> emitLink(m3u8, candidate, callback); return true }
+
+                        // kpores
+                        Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).find(body)?.value?.let { kpores ->
+                            Log.d(name, "SP API KPORES: $kpores")
+                            if (tryKporesDirect(kpores, embedHost, embedUrl, callback)) return true
+                        }
+
+                        // JSON alanları
+                        for (p in listOf(
+                            """"url"\s*:\s*"([^"]+)"""",
+                            """"stream"\s*:\s*"([^"]+)"""",
+                            """"file"\s*:\s*"([^"]+)"""",
+                            """"source"\s*:\s*"([^"]+)"""",
+                            """"hls"\s*:\s*"([^"]+)"""",
+                            """"link"\s*:\s*"([^"]+)"""",
+                            """"src"\s*:\s*"([^"]+)"""",
+                            """"playlist"\s*:\s*"([^"]+)"""",
+                            """"video"\s*:\s*"([^"]+)"""",
+                        )) {
+                            Regex(p, RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1)?.let { u ->
+                                val abs = absolute(u, candidate)
+                                if (abs.contains(".m3u8", true) || abs.contains(".mp4", true)) {
+                                    emitLink(abs, candidate, callback); return true
+                                }
+                                if (Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).containsMatchIn(abs)) {
+                                    if (tryKporesDirect(abs, embedHost, embedUrl, callback)) return true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         return false
@@ -217,14 +347,11 @@ class BeyazElma : MainAPI() {
             Log.d(name, "STREAMPLAYER CONFIG: ${config.take(500)}")
             return Regex(""""slug"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
         }
-        // Alternatif: inline JSON objesindeki slug
-        Regex(""""slug"\s*:\s*"(tr-[^"]+)"""").find(embedHtml)?.groupValues?.getOrNull(1)?.let {
-            return it
-        }
+        Regex(""""slug"\s*:\s*"(tr-[^"]+)"""").find(embedHtml)?.groupValues?.getOrNull(1)?.let { return it }
         return null
     }
 
-    /** StreamPlayer slug'ı ile olası API endpoint'lerini dener. */
+    /** StreamPlayer slug'ı ile olası API endpoint'lerini dener (fallback). */
     private suspend fun tryStreamPlayerApis(
         spSlug: String,
         embedHost: String,
@@ -235,18 +362,11 @@ class BeyazElma : MainAPI() {
         val endpoints = mutableListOf<String>()
 
         for (host in listOf(embedHost, mainUrl)) {
-            endpoints.add("$host/api/stream/$encoded")
-            endpoints.add("$host/api/player/$encoded")
-            endpoints.add("$host/api/live/$encoded")
-            endpoints.add("$host/api/source/$encoded")
-            endpoints.add("$host/api/channel/$encoded")
+            endpoints.add("$host/api/stream?src=$encoded")
             endpoints.add("$host/api/stream?slug=$encoded")
+            endpoints.add("$host/api/stream/$encoded")
             endpoints.add("$host/api/player?slug=$encoded")
             endpoints.add("$host/api/live?slug=$encoded")
-            endpoints.add("$host/api/source?slug=$encoded")
-            endpoints.add("$host/api/channel?slug=$encoded")
-            endpoints.add("$host/api/player?channel=$encoded")
-            endpoints.add("$host/api/stream?src=$encoded")
         }
 
         for (url in endpoints) {
@@ -258,33 +378,23 @@ class BeyazElma : MainAPI() {
                     "Accept" to "application/json, text/plain, */*",
                 ), referer = embedUrl)
             }.getOrNull() ?: continue
-            if (!resp.isSuccessful) {
-                Log.d(name, "SP API HTTP ${resp.code}: $url")
-                continue
-            }
+            if (!resp.isSuccessful) { Log.d(name, "SP API HTTP ${resp.code}: $url"); continue }
             val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
             Log.d(name, "SP API OK (${body.length} char): $url => ${body.take(300)}")
 
-            // m3u8 doğrudan
             Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
                 .find(body)?.value?.let { m3u8 -> emitLink(m3u8, url, callback); return true }
 
-            // kpores URL'si
             Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).find(body)?.value?.let { kpores ->
-                Log.d(name, "SP API KPORES BULDU: $kpores")
                 if (tryKporesDirect(kpores, embedHost, embedUrl, callback)) return true
             }
 
-            // JSON alanları
             for (p in listOf(
                 """"url"\s*:\s*"([^"]+)"""",
                 """"stream"\s*:\s*"([^"]+)"""",
                 """"file"\s*:\s*"([^"]+)"""",
-                """"source"\s*:\s*"([^"]+)"""",
-                """"hls"\s*:\s*"([^"]+)"""",
-                """"link"\s*:\s*"([^"]+)"""",
                 """"src"\s*:\s*"([^"]+)"""",
-                """"playlist"\s*:\s*"([^"]+)"""",
+                """"hls"\s*:\s*"([^"]+)"""",
             )) {
                 Regex(p, RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1)?.let { u ->
                     val abs = absolute(u, url)
@@ -300,14 +410,13 @@ class BeyazElma : MainAPI() {
         return false
     }
 
-    /** Bir kpores URL'sini önce doğrudan, sonra /api/stream proxy'si ile dener. */
+    /** kpores URL'sini önce /api/stream proxy, sonra doğrudan dener. */
     private suspend fun tryKporesDirect(
         kporesUrl: String,
         embedHost: String,
         embedUrl: String,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        // Önce /api/stream?src=<kporesUrl> proxy'sini dene
         val encoded = runCatching { URLEncoder.encode(kporesUrl, "UTF-8") }.getOrDefault(kporesUrl)
         for (proxyBase in listOf(embedHost, mainUrl)) {
             val proxyUrl = "$proxyBase/api/stream?src=$encoded"
@@ -330,10 +439,8 @@ class BeyazElma : MainAPI() {
                 """"url"\s*:\s*"([^"]+)"""",
                 """"stream"\s*:\s*"([^"]+)"""",
                 """"file"\s*:\s*"([^"]+)"""",
-                """"source"\s*:\s*"([^"]+)"""",
-                """"hls"\s*:\s*"([^"]+)"""",
-                """"link"\s*:\s*"([^"]+)"""",
                 """"src"\s*:\s*"([^"]+)"""",
+                """"hls"\s*:\s*"([^"]+)"""",
             )) {
                 Regex(p, RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1)?.let { u ->
                     val abs = absolute(u, proxyUrl)
@@ -343,14 +450,11 @@ class BeyazElma : MainAPI() {
                 }
             }
 
-            // Yanıt doğrudan m3u8 içeriği mi?
-            val trimmed = body.trim()
-            if (trimmed.startsWith("#EXTM3U")) {
+            if (body.trim().startsWith("#EXTM3U")) {
                 emitLink(proxyUrl, proxyUrl, callback); return true
             }
         }
 
-        // Doğrudan kpores URL'sini dene
         val directResp = runCatching {
             app.get(kporesUrl, headers = mapOf(
                 "User-Agent" to USER_AGENT,
@@ -368,17 +472,6 @@ class BeyazElma : MainAPI() {
         }
 
         return false
-    }
-
-    /** player.js içindeki tüm /api/ endpoint'lerini loglar. */
-    private fun logPlayerApis(js: String) {
-        Log.d(name, "=== player.js API endpoint'leri ===")
-        Regex("""["'`](/api/[a-zA-Z0-9/_.\-${'$'}]+)["'`]""").findAll(js).map { it.groupValues[1] }.distinct().forEach {
-            Log.d(name, "PLAYER API: $it")
-        }
-        Regex("""["'`](https?://[^"'`]*?/api/[a-zA-Z0-9/_.\-${'$'}]+)["'`]""").findAll(js).map { it.groupValues[1] }.distinct().take(20).forEach {
-            Log.d(name, "PLAYER FULL API: $it")
-        }
     }
 
     private fun findEmbedHost(html: String): String? {
