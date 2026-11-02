@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:2680954592ea5c38bbecb263f8729930af9a560d -->
+### Refactor channel fetching and embed URL processing
+
+- Etkilenen alanlar: Newtv
+- Commit: [2680954](https://github.com/Kayracs3/Kayra/commit/2680954592ea5c38bbecb263f8729930af9a560d)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:b900cafadc863ec4d40a61ffe123e457ef882046 -->
 ### Fix BeyazElma plugin registration
 
