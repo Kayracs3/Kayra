@@ -2,6 +2,23 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:b3d67f464098fd3bea697a486a99f51bcc55b092 -->
+### Update version from 8 to 9 in build.gradle.kts
+
+- Etkilenen alanlar: Newtv
+- Commit: [b3d67f4](https://github.com/Kayracs3/Kayra/commit/b3d67f464098fd3bea697a486a99f51bcc55b092)
+
+## 2026-11-03
+
+<!-- kayra-commit:f5b92f854e2306dad424af6ec7e1947ad08e1b07 -->
+### Update Newtv.kt
+
+- Etkilenen alanlar: Newtv
+- Commit: [f5b92f8](https://github.com/Kayracs3/Kayra/commit/f5b92f854e2306dad424af6ec7e1947ad08e1b07)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:778a14c65e22ed58422205d7a4ae3ef0ed8b2bef -->
 ### Update version from 7 to 8 in build.gradle.kts
 
