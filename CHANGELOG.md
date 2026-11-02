@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-03
+
+<!-- kayra-commit:eab03848c78b208910df739d383521c275310787 -->
+### Refactor NewTV class to BeyazElma with updates
+
+- Etkilenen alanlar: Newtv
+- Commit: [eab0384](https://github.com/Kayracs3/Kayra/commit/eab03848c78b208910df739d383521c275310787)
+
+
 ## 2026-11-02
 
 <!-- kayra-commit:50cb0e58889d5f91eb2b5572b5c69712bd6f9a24 -->
