@@ -95,16 +95,12 @@ class BeyazElma : MainAPI() {
         val html = pageResp.text.replace("\\/", "/")
         Log.d(name, "Kanal HTML: ${html.length} char")
 
-        // 1) Sayfada doğrudan m3u8
         Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(html)?.value?.let { m3u8 -> emitLink(m3u8, channelPageUrl, callback); return true }
 
-        // 2) Embed URL
-        val embedUrl = findEmbedUrl(html)
-        if (embedUrl.isNullOrBlank()) { Log.e(name, "Embed URL bulunamadı"); return false }
+        val embedUrl = findEmbedUrl(html) ?: return false.also { Log.e(name, "Embed URL bulunamadı") }
         Log.d(name, "Embed URL: $embedUrl")
 
-        // 3) Embed sayfası
         val embedResp = runCatching {
             app.get(
                 embedUrl,
@@ -122,235 +118,191 @@ class BeyazElma : MainAPI() {
         val embedHtml = embedResp.text.replace("\\/", "/").replace("\\\"", "\"")
         Log.d(name, "Embed HTML: ${embedHtml.length} char")
 
-        // 4) Embed içinde doğrudan m3u8
+        // Embed HTML'deki ipuçlarından embed host'unu türet
+        val embedHost = findEmbedHost(embedHtml) ?: "https://embed.${URI(mainUrl).host}"
+        Log.d(name, "Türetilen embed host: $embedHost")
+
+        // 1) Doğrudan m3u8
         Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(embedHtml)?.value?.let { m3u8 -> emitLink(m3u8, embedUrl, callback); return true }
 
-        // 5) JWPlayer setup / config
+        // 2) JWPlayer
         if (processJwPlayer(embedHtml, embedUrl, callback)) return true
 
-        // 6) JSON alanları
-        for (p in listOf(
-            """"file"\s*:\s*"([^"]+)"""",
-            """"source"\s*:\s*"([^"]+)"""",
-            """"stream"\s*:\s*"([^"]+)"""",
-            """"hls"\s*:\s*"([^"]+)"""",
-            """"playlist"\s*:\s*"([^"]+)"""",
-        )) {
-            Regex(p, RegexOption.IGNORE_CASE).find(embedHtml)?.groupValues?.getOrNull(1)?.let { u ->
-                if (u.contains(".m3u8", true) || u.startsWith("http")) {
-                    emitLink(u, embedUrl, callback); return true
-                }
-            }
-        }
-
-        // 7) iframe / video / source
-        Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-            .find(embedHtml)?.groupValues?.getOrNull(1)?.let { nested ->
-                val nestedUrl = absolute(nested, embedUrl)
-                Log.d(name, "Nested iframe: $nestedUrl")
-                val nestedResp = runCatching {
-                    app.get(nestedUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to embedUrl), referer = embedUrl)
-                }.getOrNull()
-                if (nestedResp != null && nestedResp.isSuccessful) {
-                    val nestedHtml = nestedResp.text.replace("\\/", "/").replace("\\\"", "\"")
-                    Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                        .find(nestedHtml)?.value?.let { m3u8 -> emitLink(m3u8, nestedUrl, callback); return true }
-                    if (processJwPlayer(nestedHtml, nestedUrl, callback)) return true
-                }
-            }
-
-        Regex("""(?:video|source)[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-            .find(embedHtml)?.groupValues?.getOrNull(1)?.let { src ->
-                if (src.contains(".m3u8", true) || src.contains(".mp4", true)) {
-                    emitLink(absolute(src, embedUrl), embedUrl, callback); return true
-                }
-            }
-
-        // 8) ★ YENİ: Embed HTML'deki tüm script src'lerini indir ve tara
-        val scriptUrls = mutableSetOf<String>()
-        Regex("""<script[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(embedHtml).forEach { m ->
-            val src = m.groupValues[1].replace("\\/", "/").trim()
-            if (src.isNotBlank() && !src.startsWith("data:")) {
-                scriptUrls.add(absolute(src, embedUrl))
-            }
-        }
-        Log.d(name, "Embed içindeki ${scriptUrls.size} script taranacak")
-        for (scriptUrl in scriptUrls) {
-            // Harici kütüphaneleri atla (unpkg, jsdelivr, cloudflare, google)
-            val host = runCatching { URI(scriptUrl).host.orEmpty() }.getOrDefault("")
-            if (host.contains("unpkg.com") || host.contains("jsdelivr.net") ||
-                host.contains("cloudflareinsights.com") || host.contains("google")) {
-                Log.d(name, "Script atlandı (harici): $scriptUrl")
-                continue
-            }
-            Log.d(name, "Script çekiliyor: $scriptUrl")
-            val scriptResp = runCatching {
-                app.get(scriptUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to embedUrl), referer = embedUrl)
-            }.getOrNull() ?: continue
-            if (!scriptResp.isSuccessful) { Log.d(name, "Script HTTP ${scriptResp.code}: $scriptUrl"); continue }
-            val js = scriptResp.text.replace("\\/", "/").replace("\\\"", "\"")
-
-            // Script içinde doğrudan m3u8
+        // 3) Inline <script> içerikleri
+        Regex("""<script(?![^>]+src=)[^>]*>([\s\S]*?)</script>""", RegexOption.IGNORE_CASE).findAll(embedHtml).forEach { m ->
+            val inline = m.groupValues[1].replace("\\/", "/").replace("\\\"", "\"")
             Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                .find(js)?.value?.let { m3u8 -> emitLink(m3u8, scriptUrl, callback); return true }
-
-            // Script içinde JWPlayer setup
-            if (processJwPlayer(js, scriptUrl, callback)) return true
-
-            // Script içinde file/source
+                .find(inline)?.value?.let { m3u8 -> emitLink(m3u8, embedUrl, callback); return true }
+            if (processJwPlayer(inline, embedUrl, callback)) return true
             for (p in listOf(
                 """"file"\s*:\s*"([^"]+)"""",
                 """"source"\s*:\s*"([^"]+)"""",
                 """"stream"\s*:\s*"([^"]+)"""",
-                """"hls"\s*:\s*"([^"]+)"""",
             )) {
-                Regex(p, RegexOption.IGNORE_CASE).find(js)?.groupValues?.getOrNull(1)?.let { u ->
+                Regex(p, RegexOption.IGNORE_CASE).find(inline)?.groupValues?.getOrNull(1)?.let { u ->
                     if (u.contains(".m3u8", true) || u.startsWith("http")) {
-                        emitLink(u, scriptUrl, callback); return true
+                        emitLink(u, embedUrl, callback); return true
+                    }
+                }
+            }
+            // location redirect
+            Regex("""location(?:\.href)?\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(inline)?.groupValues?.getOrNull(1)?.let { loc ->
+                val target = absolute(loc, embedUrl)
+                if (target.contains(".m3u8", true)) { emitLink(target, embedUrl, callback); return true }
+            }
+        }
+
+        // 4) iframe / video / source
+        Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(embedHtml)?.groupValues?.getOrNull(1)?.let { nested ->
+            for (candidate in resolveCandidates(nested, embedUrl, embedHost)) {
+                Log.d(name, "Nested iframe deneniyor: $candidate")
+                val r = runCatching { app.get(candidate, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to embedUrl), referer = embedUrl) }.getOrNull() ?: continue
+                if (!r.isSuccessful) continue
+                val nestedHtml = r.text.replace("\\/", "/").replace("\\\"", "\"")
+                Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                    .find(nestedHtml)?.value?.let { m3u8 -> emitLink(m3u8, candidate, callback); return true }
+                if (processJwPlayer(nestedHtml, candidate, callback)) return true
+            }
+        }
+
+        Regex("""(?:video|source)[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(embedHtml)?.groupValues?.getOrNull(1)?.let { src ->
+            if (src.contains(".m3u8", true) || src.contains(".mp4", true)) {
+                emitLink(absolute(src, embedUrl), embedUrl, callback); return true
+            }
+        }
+
+        // 5) ★ KRİTİK: Script src'lerini çoklu host ile dene
+        val scriptSrcs = mutableListOf<String>()
+        Regex("""<script[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(embedHtml).forEach { m ->
+            scriptSrcs.add(m.groupValues[1].replace("\\/", "/").trim())
+        }
+        Log.d(name, "Embed içinde ${scriptSrcs.size} script src bulundu")
+
+        for (src in scriptSrcs) {
+            if (src.isBlank() || src.startsWith("data:")) continue
+            for (candidate in resolveCandidates(src, embedUrl, embedHost)) {
+                val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
+                if (host.contains("unpkg.com") || host.contains("jsdelivr.net") ||
+                    host.contains("cloudflareinsights.com") || host.contains("google")) {
+                    continue
+                }
+                Log.d(name, "Script deneniyor: $candidate")
+                val scriptResp = runCatching {
+                    app.get(candidate, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to embedUrl), referer = embedUrl)
+                }.getOrNull() ?: continue
+                if (!scriptResp.isSuccessful) { Log.d(name, "Script HTTP ${scriptResp.code}: $candidate"); continue }
+                Log.d(name, "Script OK (${scriptResp.text.length} char): $candidate")
+                val js = scriptResp.text.replace("\\/", "/").replace("\\\"", "\"")
+
+                Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                    .find(js)?.value?.let { m3u8 -> emitLink(m3u8, candidate, callback); return true }
+
+                if (processJwPlayer(js, candidate, callback)) return true
+
+                for (p in listOf(
+                    """"file"\s*:\s*"([^"]+)"""",
+                    """"source"\s*:\s*"([^"]+)"""",
+                    """"stream"\s*:\s*"([^"]+)"""",
+                    """"hls"\s*:\s*"([^"]+)"""",
+                )) {
+                    Regex(p, RegexOption.IGNORE_CASE).find(js)?.groupValues?.getOrNull(1)?.let { u ->
+                        if (u.contains(".m3u8", true) || u.startsWith("http")) {
+                            emitLink(u, candidate, callback); return true
+                        }
                     }
                 }
             }
         }
 
-        // 9) Son çare: embed HTML'deki tüm URL'leri logla
-        Log.e(name, "Yayın linki bulunamadı. Embed HTML URL'leri:")
-        Regex("""(?:https?:)?//[^\s"'<>\\]+""", RegexOption.IGNORE_CASE)
-            .findAll(embedHtml)
-            .map { it.value }
-            .filter { it.length in 10..500 }
-            .distinct()
-            .take(100)
-            .forEach { Log.d(name, "EMBED URL: $it") }
-
-        // Script URL'lerini de logla
-        Log.d(name, "=== Embed script URL'leri ===")
-        scriptUrls.forEach { Log.d(name, "SCRIPT: $it") }
+        // 6) Son çare: tüm göreli yolları logla
+        Log.e(name, "Yayın linki bulunamadı. Göreli yolları dökülüyor:")
+        Regex("""["'](/[^"'\s]{3,200})["']""").findAll(embedHtml).map { it.groupValues[1] }.distinct().take(80).forEach {
+            Log.d(name, "REL: $it")
+        }
+        Log.d(name, "=== Embed script src'leri ===")
+        scriptSrcs.forEach { Log.d(name, "SCRIPT: $it") }
 
         return false
     }
 
+    /** Embed HTML'deki ipuçlarından embed host'unu türetir. */
+    private fun findEmbedHost(html: String): String? {
+        Regex("""https?://(embed\.[a-z0-9.-]+)""", RegexOption.IGNORE_CASE).find(html)?.let {
+            return "https://${it.groupValues[1]}"
+        }
+        // <base href="...">
+        Regex("""<base[^>]+href=["'](https?://[^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.let {
+            return it.groupValues[1].trimEnd('/')
+        }
+        return null
+    }
+
+    /** Göreli URL için olası tüm mutlak adayları üretir. */
+    private fun resolveCandidates(src: String, embedUrl: String, embedHost: String): List<String> {
+        val s = src.trim().replace("\\", "").trimEnd('"', '\'', ' ')
+        if (s.isEmpty()) return emptyList()
+        val list = mutableListOf<String>()
+        if (s.startsWith("http://", true) || s.startsWith("https://", true)) {
+            list.add(s)
+        } else if (s.startsWith("//")) {
+            list.add("https:$s")
+        } else if (s.startsWith("/")) {
+            list.add("$mainUrl$s")
+            if (embedHost.isNotBlank()) list.add("$embedHost$s")
+        } else {
+            list.add(absolute(s, embedUrl))
+            if (embedHost.isNotBlank()) list.add("$embedHost/$s")
+        }
+        return list.distinct()
+    }
+
     private fun findEmbedUrl(html: String): String? {
         fun clean(url: String): String = url.trim().trimEnd('\\', '"', '\'', '/', ' ')
-
         Regex("""["'](/api/embed\?[^"'\\]+)["'\\]?""").find(html)?.groupValues?.getOrNull(1)?.let {
             return "$mainUrl${clean(it)}"
         }
         Regex("""["'](https?://[^"'\\]*?/api/embed\?[^"'\\]+)["'\\]?""").find(html)?.groupValues?.getOrNull(1)?.let {
             return clean(it)
         }
-        Regex("""["'](/kanal/[^"'\\]+/api/embed\?[^"'\\]+)["'\\]?""").find(html)?.groupValues?.getOrNull(1)?.let {
-            val fixed = clean(it).replace(Regex("""^/kanal/[^/]+"""), "")
-            return "$mainUrl$fixed"
-        }
-        Regex("""<iframe[^>]+src=["']([^"'\\]+)["']""", RegexOption.IGNORE_CASE)
-            .find(html)?.groupValues?.getOrNull(1)?.let {
+        Regex("""<iframe[^>]+src=["']([^"'\\]+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1)?.let {
             return absolute(clean(it), mainUrl)
         }
         return null
     }
 
-    private suspend fun processJwPlayer(
-        source: String,
-        referer: String,
-        callback: (ExtractorLink) -> Unit,
-    ): Boolean {
+    private suspend fun processJwPlayer(source: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
         val setupBlock = Regex("""\.setup\s*\(\s*(\{[\s\S]*?\})\s*\)""").find(source)?.groupValues?.getOrNull(1)
             ?: Regex("""setup\s*\(\s*(\{[\s\S]*?"(?:playlist|sources|file|mediaid|key)"[\s\S]*?\})\s*\)""").find(source)?.groupValues?.getOrNull(1)
-        if (setupBlock.isNullOrBlank()) {
-            return processJwConfig(source, referer, callback)
-        }
-        Log.d(name, "JWPlayer setup bulundu (${setupBlock.length} char)")
+        if (setupBlock.isNullOrBlank()) return processJwConfig(source, referer, callback)
         Log.d(name, "JWPlayer setup: ${setupBlock.take(600)}")
         return processJwConfig(setupBlock, referer, callback)
     }
 
-    private suspend fun processJwConfig(
-        config: String,
-        referer: String,
-        callback: (ExtractorLink) -> Unit,
-    ): Boolean {
-        Regex(""""file"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)?.let { fileUrl ->
-            if (fileUrl.contains(".m3u8", true) || fileUrl.contains(".mp4", true)) {
-                emitLink(fileUrl, referer, callback); return true
+    private suspend fun processJwConfig(config: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
+        Regex(""""file"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)?.let {
+            if (it.contains(".m3u8", true) || it.contains(".mp4", true)) { emitLink(it, referer, callback); return true }
+        }
+        Regex(""""sources"\s*:\s*\[([\s\S]*?)]""").find(config)?.groupValues?.getOrNull(1)?.let { block ->
+            Regex(""""file"\s*:\s*"([^"]+)"""").find(block)?.groupValues?.getOrNull(1)?.let {
+                if (it.contains(".m3u8", true) || it.contains(".mp4", true)) { emitLink(it, referer, callback); return true }
             }
         }
-
-        Regex(""""sources"\s*:\s*\[([\s\S]*?)]""").find(config)?.groupValues?.getOrNull(1)?.let { sourcesBlock ->
-            Regex(""""file"\s*:\s*"([^"]+)"""").find(sourcesBlock)?.groupValues?.getOrNull(1)?.let { src ->
-                if (src.contains(".m3u8", true) || src.contains(".mp4", true)) {
-                    emitLink(src, referer, callback); return true
-                }
-            }
-        }
-
-        Regex(""""playlist"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)?.let { playlistUrl ->
-            Log.d(name, "JWPlayer playlist URL: $playlistUrl")
-            val resolved = absolute(playlistUrl, referer)
-            val playlistResp = runCatching {
-                app.get(resolved, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer), referer = referer)
-            }.getOrNull()
-            if (playlistResp != null && playlistResp.isSuccessful) {
-                val playlistBody = playlistResp.text.replace("\\/", "/")
-                Regex(""""file"\s*:\s*"([^"]+)"""").find(playlistBody)?.groupValues?.getOrNull(1)?.let { src ->
-                    if (src.contains(".m3u8", true) || src.contains(".mp4", true)) {
-                        emitLink(src, resolved, callback); return true
-                    }
-                }
-                if (processJwConfig(playlistBody, resolved, callback)) return true
-            }
-        }
-
         val mediaid = Regex(""""mediaid"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
             ?: Regex(""""mediaId"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
-
         if (mediaid != null) {
             for (url in listOf(
                 "https://cdn.jwplayer.com/v2/media/$mediaid",
                 "https://cdn.jwplayer.com/v2/playlists/$mediaid",
                 "https://content.jwplatform.com/feeds/$mediaid.json",
             )) {
-                val r = runCatching {
-                    app.get(url, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer), referer = referer)
-                }.getOrNull() ?: continue
+                val r = runCatching { app.get(url, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer), referer = referer) }.getOrNull() ?: continue
                 if (!r.isSuccessful) continue
-                val body = r.text.replace("\\/", "/")
-                Regex(""""file"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.getOrNull(1)?.let { src ->
-                    if (src.contains(".m3u8", true) || src.contains(".mp4", true)) {
-                        emitLink(src, url, callback); return true
-                    }
+                Regex(""""file"\s*:\s*"([^"]+)"""").find(r.text.replace("\\/", "/"))?.groupValues?.getOrNull(1)?.let {
+                    if (it.contains(".m3u8", true) || it.contains(".mp4", true)) { emitLink(it, url, callback); return true }
                 }
             }
         }
-
-        val key = Regex(""""key"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
-        val pid = Regex(""""pid"\s*:\s*"([^"]+)"""").find(config)?.groupValues?.getOrNull(1)
-
-        if (key != null && pid != null) {
-            val mediaIdOnly = key.substringBefore("/")
-            val signature = key.substringAfter("/", "")
-            Log.d(name, "JW key → mediaId=$mediaIdOnly, pid=$pid")
-            for (url in listOf(
-                "https://cdn.jwplayer.com/v2/media/$mediaIdOnly?sig=$signature",
-                "https://cdn.jwplayer.com/v2/media/$mediaIdOnly?token=$signature",
-                "https://cdn.jwplayer.com/v2/playlists/$mediaIdOnly?sig=$signature",
-                "https://content.jwplatform.com/feeds/$mediaIdOnly.json?sig=$signature",
-                "https://cdn.jwplayer.com/v2/media/$key",
-            )) {
-                val r = runCatching {
-                    app.get(url, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer), timeout = 10000)
-                }.getOrNull() ?: continue
-                if (!r.isSuccessful) { Log.d(name, "JW HTTP ${r.code}: $url"); continue }
-                val body = r.text.replace("\\/", "/")
-                Log.d(name, "JW yanıt: ${body.take(300)}")
-                Regex(""""file"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.getOrNull(1)?.let { src ->
-                    if (src.contains(".m3u8", true) || src.contains(".mp4", true)) {
-                        emitLink(src, url, callback); return true
-                    }
-                }
-            }
-        }
-
         return false
     }
 
@@ -358,11 +310,7 @@ class BeyazElma : MainAPI() {
         callback.invoke(newExtractorLink(source = name, name = name, url = url, type = ExtractorLinkType.M3U8) {
             this.referer = referer
             this.quality = Qualities.Unknown.value
-            this.headers = mapOf(
-                "User-Agent" to USER_AGENT,
-                "Referer" to referer,
-                "Origin" to mainUrl,
-            )
+            this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to referer, "Origin" to mainUrl)
         })
         Log.d(name, "★ Link eklendi: $url")
     }
@@ -372,7 +320,6 @@ class BeyazElma : MainAPI() {
         if (v.isEmpty()) return ""
         if (v.startsWith("http://", true) || v.startsWith("https://", true)) return v
         if (v.startsWith("//")) return "https:$v"
-        return runCatching { URI(base).resolve(v).toString() }
-            .getOrElse { base.trimEnd('/') + "/" + v.trimStart('/') }
+        return runCatching { URI(base).resolve(v).toString() }.getOrElse { base.trimEnd('/') + "/" + v.trimStart('/') }
     }
 }
