@@ -1,4 +1,4 @@
-version = 8
+version = 9
 cloudstream {
     description = "BeyazElma canlı TV sağlayıcısı"
     authors = listOf("Kayracs3")
