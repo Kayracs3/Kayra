@@ -39,7 +39,6 @@ class BeyazElma : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val channels = fetchChannels()
-        Log.d(name, "getMainPage: ${channels.size} kanal")
         return newHomePageResponse(request.name, channels, hasNext = false)
     }
 
@@ -61,10 +60,7 @@ class BeyazElma : MainAPI() {
             val nameCh = obj.optString("name").takeIf { it.isNotBlank() } ?: continue
             val logo = obj.optString("logo").takeIf { it.isNotBlank() }?.let { absolute(it, mainUrl) }
             if (!obj.optBoolean("isLive", true)) continue
-
-            results.add(newLiveSearchResponse(nameCh, slug, TvType.Live) {
-                this.posterUrl = logo
-            })
+            results.add(newLiveSearchResponse(nameCh, slug, TvType.Live) { this.posterUrl = logo })
         }
         return results
     }
@@ -103,29 +99,71 @@ class BeyazElma : MainAPI() {
         val html = pageResp.text.replace("\\/", "/")
         Log.d(name, "Kanal HTML: ${html.length} char")
 
-        // 1) Kanal sayfasında doğrudan m3u8
+        // 1) Doğrudan m3u8
         Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(html)?.value?.let { m3u8 -> emitLink(m3u8, channelPageUrl, callback); return true }
 
-        // 2) iframe src'sini bul
-        val iframeSrc = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        // 2) /api/embed URL'sini bul
+        val embedUrl = findEmbedUrl(html, channelPageUrl)
+        if (!embedUrl.isNullOrBlank()) {
+            Log.d(name, "Embed URL: $embedUrl")
+            if (processEmbed(embedUrl, channelPageUrl, callback)) return true
+        } else {
+            Log.e(name, "/api/embed URL'si bulunamadı")
+        }
+
+        Log.e(name, "Yayın linki bulunamadı: $slug")
+        return false
+    }
+
+    private fun findEmbedUrl(html: String, baseUrl: String): String? {
+        // 1) __NEXT_DATA__ içinde
+        val nextData = Regex("""<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)</script>""", RegexOption.IGNORE_CASE)
             .find(html)?.groupValues?.getOrNull(1)
-        if (iframeSrc.isNullOrBlank()) { Log.e(name, "iframe bulunamadı"); return false }
+        if (!nextData.isNullOrBlank()) {
+            Regex("""["'](/api/embed\?[^"']+)["']""").find(nextData)?.groupValues?.getOrNull(1)?.let {
+                return absolute(it, baseUrl)
+            }
+        }
 
-        val embedUrl = absolute(iframeSrc, channelPageUrl)
-        Log.d(name, "embed URL: $embedUrl")
+        // 2) Tüm <script> içeriklerinde
+        Regex("""<script[^>]*>([\s\S]*?)</script>""", RegexOption.IGNORE_CASE).findAll(html).forEach { m ->
+            val script = m.groupValues[1]
+            Regex("""["'](/api/embed\?[^"']+)["']""").find(script)?.groupValues?.getOrNull(1)?.let {
+                return absolute(it, baseUrl)
+            }
+            Regex("""["'](https?://[^"']*?/api/embed\?[^"']+)["']""").find(script)?.groupValues?.getOrNull(1)?.let {
+                return it
+            }
+        }
 
-        // 3) Embed sayfasını doğru Referer ile çek
+        // 3) RSC payload içinde
+        Regex("""self\.__next_f\.push\(\[1,"([\s\S]*?)"\]\)""").findAll(html).forEach { m ->
+            val payload = m.groupValues[1].replace("\\\"", "\"").replace("\\/", "/")
+            Regex("""["'](/api/embed\?[^"']+)["']""").find(payload)?.groupValues?.getOrNull(1)?.let {
+                return absolute(it, baseUrl)
+            }
+        }
+
+        return null
+    }
+
+    private suspend fun processEmbed(
+        embedUrl: String,
+        referer: String,
+        callback: (ExtractorLink) -> Unit,
+    ): Boolean {
+        Log.d(name, "Embed çekiliyor: $embedUrl")
         val embedResp = runCatching {
             app.get(
                 embedUrl,
                 headers = mapOf(
                     "User-Agent" to USER_AGENT,
-                    "Referer" to channelPageUrl,
+                    "Referer" to referer,
                     "Origin" to mainUrl,
                     "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 ),
-                referer = channelPageUrl,
+                referer = referer,
             )
         }.getOrNull() ?: return false
         if (!embedResp.isSuccessful) { Log.e(name, "Embed HTTP ${embedResp.code}"); return false }
@@ -134,16 +172,17 @@ class BeyazElma : MainAPI() {
         Log.d(name, "Embed HTML: ${embedHtml.length} char")
         Log.d(name, "Embed ilk 500: ${embedHtml.take(500)}")
 
-        // 4) Embed içinde m3u8
+        // Doğrudan m3u8
         Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(embedHtml)?.value?.let { m3u8 -> emitLink(m3u8, embedUrl, callback); return true }
 
-        // 5) JSON içindeki kaynak alanları
+        // JSON alanları
         for (p in listOf(
             """"file"\s*:\s*"([^"]+)"""",
             """"source"\s*:\s*"([^"]+)"""",
             """"stream"\s*:\s*"([^"]+)"""",
             """"src"\s*:\s*"([^"]+)"""",
+            """"hls"\s*:\s*"([^"]+)"""",
         )) {
             Regex(p, RegexOption.IGNORE_CASE).find(embedHtml)?.groupValues?.getOrNull(1)?.let { u ->
                 if (u.contains(".m3u8", true) || u.startsWith("http")) {
@@ -152,22 +191,23 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 6) Embed içinde nested iframe varsa
+        // Nested iframe
         Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
             .find(embedHtml)?.groupValues?.getOrNull(1)?.let { nested ->
                 val nestedUrl = absolute(nested, embedUrl)
-                Log.d(name, "nested iframe: $nestedUrl")
-                val nestedResp = runCatching {
-                    app.get(nestedUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to embedUrl), referer = embedUrl)
-                }.getOrNull()
-                if (nestedResp != null && nestedResp.isSuccessful) {
-                    val nestedHtml = nestedResp.text.replace("\\/", "/").replace("\\\"", "\"")
-                    Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                        .find(nestedHtml)?.value?.let { m3u8 -> emitLink(m3u8, nestedUrl, callback); return true }
-                }
+                Log.d(name, "Nested iframe: $nestedUrl")
+                return runCatching { processEmbed(nestedUrl, embedUrl, callback) }.getOrDefault(false)
             }
 
-        Log.e(name, "Yayın linki bulunamadı: $slug")
+        // Embed içinde __NEXT_DATA__
+        val embedNextData = Regex("""<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)</script>""", RegexOption.IGNORE_CASE)
+            .find(embedHtml)?.groupValues?.getOrNull(1)
+        if (!embedNextData.isNullOrBlank()) {
+            Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                .find(embedNextData)?.value?.let { m3u8 -> emitLink(m3u8, embedUrl, callback); return true }
+        }
+
+        Log.d(name, "Embed içinde m3u8 bulunamadı")
         return false
     }
 
