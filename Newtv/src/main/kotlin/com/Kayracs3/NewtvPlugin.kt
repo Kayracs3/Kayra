@@ -7,6 +7,6 @@ import android.content.Context
 @CloudstreamPlugin
 class NewtvPlugin : Plugin() {
     override fun load(context: Context) {
-        registerMainAPI(Newtv())
+        registerMainAPI(NewTV())
     }
 }
