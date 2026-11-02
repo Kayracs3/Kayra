@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:199ae2ed4e3b9ed16cc2fbe77618789bbd9e0579 -->
+### Enhance embed URL handling with KPORES regex
+
+- Etkilenen alanlar: Newtv
+- Commit: [199ae2e](https://github.com/Kayracs3/Kayra/commit/199ae2ed4e3b9ed16cc2fbe77618789bbd9e0579)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:6f296cf122a7eda56c07d20f9db6eb27d595c405 -->
 ### Fix Newtv cookie map compilation error
 
