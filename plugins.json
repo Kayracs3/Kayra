@@ -606,22 +606,21 @@
     },
     {
         "iconUrl": "https://tv.newtane.com/favicon.ico",
-        "fileHash": "sha256-09083adc181a0f05feda0155c33b011004df78ea96d7b7930be43ad1bed5e33c",
+        "fileHash": "sha256-cc2d53c6667335273c8b0bdd25629aac153c301af4020dd3d00cc0de38f7b654",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 23346,
+        "fileSize": 12813,
         "status": 1,
         "language": "tr",
         "authors": [
             "Kayracs3"
         ],
         "tvTypes": [
-            "Movie",
-            "TvSeries"
+            "Live"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "Newtv",
-        "description": "NewTV otomatik sa\u011flay\u0131c\u0131s\u0131",
+        "description": "NewLive canl\u0131 TV sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Newtv.cs3",
         "name": "Newtv"
     },
