@@ -606,10 +606,10 @@
     },
     {
         "iconUrl": "https://tv.newtane.com/favicon.ico",
-        "fileHash": "sha256-f546d236c5d2d630f79a684960809892eb6d477b6ec86b49fab379e783cd92d0",
+        "fileHash": "sha256-6a6e1c0b41a7c2e2d475d033cf37b5de7858896f7f9d8c8751b3d51f08155d94",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 26912,
+        "fileSize": 26771,
         "status": 1,
         "language": "tr",
         "authors": [
