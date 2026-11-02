@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:b900cafadc863ec4d40a61ffe123e457ef882046 -->
+### Fix BeyazElma plugin registration
+
+- Etkilenen alanlar: Newtv
+- Commit: [b900caf](https://github.com/Kayracs3/Kayra/commit/b900cafadc863ec4d40a61ffe123e457ef882046)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:eab03848c78b208910df739d383521c275310787 -->
 ### Refactor NewTV class to BeyazElma with updates
 
