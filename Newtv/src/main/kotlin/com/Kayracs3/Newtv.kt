@@ -10,6 +10,7 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
+import java.net.URLEncoder
 
 class BeyazElma : MainAPI() {
     override var mainUrl = "https://beyazelma78.com"
@@ -101,6 +102,9 @@ class BeyazElma : MainAPI() {
         val embedUrl = findEmbedUrl(html) ?: return false.also { Log.e(name, "Embed URL bulunamadı") }
         Log.d(name, "Embed URL: $embedUrl")
 
+        val embedToken = extractQueryParam(embedUrl, "u")
+        Log.d(name, "Embed token: ${embedToken?.take(40)}...")
+
         val embedResp = runCatching {
             app.get(
                 embedUrl,
@@ -118,7 +122,6 @@ class BeyazElma : MainAPI() {
         val embedHtml = embedResp.text.replace("\\/", "/").replace("\\\"", "\"")
         Log.d(name, "Embed HTML: ${embedHtml.length} char")
 
-        // Embed HTML'deki ipuçlarından embed host'unu türet
         val embedHost = findEmbedHost(embedHtml) ?: "https://embed.${URI(mainUrl).host}"
         Log.d(name, "Türetilen embed host: $embedHost")
 
@@ -146,7 +149,6 @@ class BeyazElma : MainAPI() {
                     }
                 }
             }
-            // location redirect
             Regex("""location(?:\.href)?\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(inline)?.groupValues?.getOrNull(1)?.let { loc ->
                 val target = absolute(loc, embedUrl)
                 if (target.contains(".m3u8", true)) { emitLink(target, embedUrl, callback); return true }
@@ -172,12 +174,14 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 5) ★ KRİTİK: Script src'lerini çoklu host ile dene
+        // 5) Script src'lerini çoklu host ile dene
         val scriptSrcs = mutableListOf<String>()
         Regex("""<script[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(embedHtml).forEach { m ->
             scriptSrcs.add(m.groupValues[1].replace("\\/", "/").trim())
         }
         Log.d(name, "Embed içinde ${scriptSrcs.size} script src bulundu")
+
+        var playerJs: String? = null
 
         for (src in scriptSrcs) {
             if (src.isBlank() || src.startsWith("data:")) continue
@@ -194,6 +198,10 @@ class BeyazElma : MainAPI() {
                 if (!scriptResp.isSuccessful) { Log.d(name, "Script HTTP ${scriptResp.code}: $candidate"); continue }
                 Log.d(name, "Script OK (${scriptResp.text.length} char): $candidate")
                 val js = scriptResp.text.replace("\\/", "/").replace("\\\"", "\"")
+
+                if (candidate.contains("player.js", true) && playerJs == null) {
+                    playerJs = js
+                }
 
                 Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
                     .find(js)?.value?.let { m3u8 -> emitLink(m3u8, candidate, callback); return true }
@@ -215,7 +223,52 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 6) Son çare: tüm göreli yolları logla
+        // 6) player.js'teki api/stream bağlamını logla (manuel analiz için)
+        if (playerJs != null) {
+            logApiStreamContext(playerJs)
+        }
+
+        // 7) /api/stream endpoint'ini doğrudan dene
+        val streamCandidates = buildStreamCandidates(embedToken, slug, embedUrl, channelPageUrl)
+        for (streamUrl in streamCandidates) {
+            Log.d(name, "Denenen stream endpoint: $streamUrl")
+            val resp = runCatching {
+                app.get(streamUrl, headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to embedUrl,
+                    "Origin" to embedHost,
+                    "Accept" to "application/json, text/plain, */*",
+                ), referer = embedUrl)
+            }.getOrNull() ?: continue
+            if (!resp.isSuccessful) { Log.d(name, "Stream HTTP ${resp.code}: $streamUrl"); continue }
+            val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
+            Log.d(name, "Stream yanıtı (${body.length} char): ${body.take(400)}")
+
+            Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                .find(body)?.value?.let { m3u8 -> emitLink(m3u8, streamUrl, callback); return true }
+
+            for (p in listOf(
+                """"url"\s*:\s*"([^"]+)"""",
+                """"stream"\s*:\s*"([^"]+)"""",
+                """"file"\s*:\s*"([^"]+)"""",
+                """"source"\s*:\s*"([^"]+)"""",
+                """"hls"\s*:\s*"([^"]+)"""",
+                """"link"\s*:\s*"([^"]+)"""",
+            )) {
+                Regex(p, RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1)?.let { u ->
+                    if (u.contains(".m3u8", true) || u.contains(".mp4", true) || u.startsWith("http")) {
+                        emitLink(u, streamUrl, callback); return true
+                    }
+                }
+            }
+
+            val trimmed = body.trim()
+            if (trimmed.startsWith("http") && (trimmed.contains(".m3u8") || trimmed.contains(".mp4"))) {
+                emitLink(trimmed, streamUrl, callback); return true
+            }
+        }
+
+        // 8) Son çare: tüm göreli yolları logla
         Log.e(name, "Yayın linki bulunamadı. Göreli yolları dökülüyor:")
         Regex("""["'](/[^"'\s]{3,200})["']""").findAll(embedHtml).map { it.groupValues[1] }.distinct().take(80).forEach {
             Log.d(name, "REL: $it")
@@ -226,19 +279,74 @@ class BeyazElma : MainAPI() {
         return false
     }
 
-    /** Embed HTML'deki ipuçlarından embed host'unu türetir. */
+    /** player.js içinde api/stream etrafındaki kodu loglar (manuel analiz için). */
+    private fun logApiStreamContext(js: String) {
+        Log.d(name, "=== player.js api/stream bağlamları ===")
+        var idx = 0
+        var count = 0
+        while (count < 5) {
+            idx = js.indexOf("api/stream", idx)
+            if (idx == -1) break
+            val start = maxOf(0, idx - 400)
+            val end = minOf(js.length, idx + 400)
+            Log.d(name, "API/STREAM CONTEXT [$count]: ${js.substring(start, end).replace("\n", " ")}")
+            idx += 10
+            count++
+        }
+        Regex("""src\s*=\s*([^;,\n]{1,200})""").findAll(js).take(10).forEach { m ->
+            Log.d(name, "SRC ASSIGN: src = ${m.groupValues[1].take(200)}")
+        }
+        Regex("""function\s+(\w+)\s*\([^)]*\)\s*\{[^}]{0,500}(?:stream|src|token)""", RegexOption.IGNORE_CASE).findAll(js).take(5).forEach { m ->
+            Log.d(name, "FONKSIYON: ${m.value.take(400)}")
+        }
+    }
+
+    /** /api/stream için olası src adayları üretir. */
+    private fun buildStreamCandidates(
+        embedToken: String?,
+        slug: String,
+        embedUrl: String,
+        channelPageUrl: String,
+    ): List<String> {
+        val embedHost = "https://embed.beyazelma78.com"
+        val candidates = mutableListOf<String>()
+        val tokens = mutableListOf<String>()
+
+        if (!embedToken.isNullOrBlank()) {
+            tokens.add(embedToken)
+            runCatching { tokens.add(URLEncoder.encode(embedToken, "UTF-8")) }
+            tokens.add(embedToken.substringBefore("_"))
+            tokens.add(embedToken.substringBefore("."))
+        }
+        tokens.add(slug)
+
+        for (token in tokens.distinct()) {
+            if (token.isBlank()) continue
+            val enc = runCatching { URLEncoder.encode(token, "UTF-8") }.getOrDefault(token)
+            candidates.add("$embedHost/api/stream?src=$enc")
+            candidates.add("$mainUrl/api/stream?src=$enc")
+        }
+
+        return candidates.distinct()
+    }
+
+    /** URL'den query parametresi çıkarır. */
+    private fun extractQueryParam(url: String, key: String): String? {
+        return runCatching {
+            Regex("""[?&]$key=([^&]+)""").find(url)?.groupValues?.getOrNull(1)
+        }.getOrNull()
+    }
+
     private fun findEmbedHost(html: String): String? {
         Regex("""https?://(embed\.[a-z0-9.-]+)""", RegexOption.IGNORE_CASE).find(html)?.let {
             return "https://${it.groupValues[1]}"
         }
-        // <base href="...">
         Regex("""<base[^>]+href=["'](https?://[^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.let {
             return it.groupValues[1].trimEnd('/')
         }
         return null
     }
 
-    /** Göreli URL için olası tüm mutlak adayları üretir. */
     private fun resolveCandidates(src: String, embedUrl: String, embedHost: String): List<String> {
         val s = src.trim().replace("\\", "").trimEnd('"', '\'', ' ')
         if (s.isEmpty()) return emptyList()
