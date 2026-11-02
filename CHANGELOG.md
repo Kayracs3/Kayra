@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:560300f4476bdd5be302b87fff86e94a413570c0 -->
+### Update Newtv.kt
+
+- Etkilenen alanlar: Newtv
+- Commit: [560300f](https://github.com/Kayracs3/Kayra/commit/560300f4476bdd5be302b87fff86e94a413570c0)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:2680954592ea5c38bbecb263f8729930af9a560d -->
 ### Refactor channel fetching and embed URL processing
 
