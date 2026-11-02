@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:939a23635c23617489ea4bd028076ff193ddab50 -->
+### Refactor Newtv.kt for clarity and structure
+
+- Etkilenen alanlar: Newtv
+- Commit: [939a236](https://github.com/Kayracs3/Kayra/commit/939a23635c23617489ea4bd028076ff193ddab50)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:daec5981d64373640c72d4628a869ec2276db46c -->
 ### Increment version from 4 to 5
 
