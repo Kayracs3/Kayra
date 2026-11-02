@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:778a14c65e22ed58422205d7a4ae3ef0ed8b2bef -->
+### Update version from 7 to 8 in build.gradle.kts
+
+- Etkilenen alanlar: Newtv
+- Commit: [778a14c](https://github.com/Kayracs3/Kayra/commit/778a14c65e22ed58422205d7a4ae3ef0ed8b2bef)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:199ae2ed4e3b9ed16cc2fbe77618789bbd9e0579 -->
 ### Enhance embed URL handling with KPORES regex
 
