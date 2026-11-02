@@ -1,6 +1,6 @@
-version = 3
+version = 4
 cloudstream {
-    description = "NewLive canlı TV sağlayıcısı"
+    description = "BeyazElma canlı TV sağlayıcısı"
     authors = listOf("Kayracs3")
     status = 1
     tvTypes = listOf("Live")
