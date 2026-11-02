@@ -223,48 +223,52 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 6) player.js'teki api/stream bağlamını logla (manuel analiz için)
+        // 6) player.js'teki api/stream bağlamını ve fetch/XHR çağrılarını logla
         if (playerJs != null) {
             logApiStreamContext(playerJs)
+            logFetchCalls(playerJs)
+            logCryptoUsage(playerJs)
         }
 
-        // 7) /api/stream endpoint'ini doğrudan dene
+        // 7) /api/stream endpoint'ini doğrudan dene (farklı başlıklarla)
         val streamCandidates = buildStreamCandidates(embedToken, slug, embedUrl, channelPageUrl)
         for (streamUrl in streamCandidates) {
-            Log.d(name, "Denenen stream endpoint: $streamUrl")
-            val resp = runCatching {
-                app.get(streamUrl, headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to embedUrl,
-                    "Origin" to embedHost,
-                    "Accept" to "application/json, text/plain, */*",
-                ), referer = embedUrl)
-            }.getOrNull() ?: continue
-            if (!resp.isSuccessful) { Log.d(name, "Stream HTTP ${resp.code}: $streamUrl"); continue }
-            val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
-            Log.d(name, "Stream yanıtı (${body.length} char): ${body.take(400)}")
-
-            Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                .find(body)?.value?.let { m3u8 -> emitLink(m3u8, streamUrl, callback); return true }
-
-            for (p in listOf(
-                """"url"\s*:\s*"([^"]+)"""",
-                """"stream"\s*:\s*"([^"]+)"""",
-                """"file"\s*:\s*"([^"]+)"""",
-                """"source"\s*:\s*"([^"]+)"""",
-                """"hls"\s*:\s*"([^"]+)"""",
-                """"link"\s*:\s*"([^"]+)"""",
+            for (extraHeaders in listOf(
+                mapOf("User-Agent" to USER_AGENT, "Referer" to embedUrl, "Origin" to embedHost, "Accept" to "application/json, text/plain, */*"),
+                mapOf("User-Agent" to USER_AGENT, "Referer" to channelPageUrl, "Origin" to mainUrl, "Accept" to "application/json, text/plain, */*"),
+                mapOf("User-Agent" to USER_AGENT, "Referer" to mainUrl, "X-Requested-With" to "XMLHttpRequest", "Accept" to "application/json, text/plain, */*"),
             )) {
-                Regex(p, RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1)?.let { u ->
-                    if (u.contains(".m3u8", true) || u.contains(".mp4", true) || u.startsWith("http")) {
-                        emitLink(u, streamUrl, callback); return true
+                Log.d(name, "Denenen stream endpoint: $streamUrl | Headers: ${extraHeaders.keys}")
+                val resp = runCatching {
+                    app.get(streamUrl, headers = extraHeaders, referer = extraHeaders["Referer"] ?: embedUrl)
+                }.getOrNull() ?: continue
+                if (!resp.isSuccessful) { Log.d(name, "Stream HTTP ${resp.code}: $streamUrl"); continue }
+                val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
+                Log.d(name, "Stream yanıtı (${body.length} char): ${body.take(600)}")
+
+                Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                    .find(body)?.value?.let { m3u8 -> emitLink(m3u8, streamUrl, callback); return true }
+
+                for (p in listOf(
+                    """"url"\s*:\s*"([^"]+)"""",
+                    """"stream"\s*:\s*"([^"]+)"""",
+                    """"file"\s*:\s*"([^"]+)"""",
+                    """"source"\s*:\s*"([^"]+)"""",
+                    """"hls"\s*:\s*"([^"]+)"""",
+                    """"link"\s*:\s*"([^"]+)"""",
+                    """"playlist"\s*:\s*"([^"]+)"""",
+                )) {
+                    Regex(p, RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1)?.let { u ->
+                        if (u.contains(".m3u8", true) || u.contains(".mp4", true) || u.startsWith("http")) {
+                            emitLink(u, streamUrl, callback); return true
+                        }
                     }
                 }
-            }
 
-            val trimmed = body.trim()
-            if (trimmed.startsWith("http") && (trimmed.contains(".m3u8") || trimmed.contains(".mp4"))) {
-                emitLink(trimmed, streamUrl, callback); return true
+                val trimmed = body.trim()
+                if (trimmed.startsWith("http") && (trimmed.contains(".m3u8") || trimmed.contains(".mp4"))) {
+                    emitLink(trimmed, streamUrl, callback); return true
+                }
             }
         }
 
@@ -279,25 +283,48 @@ class BeyazElma : MainAPI() {
         return false
     }
 
-    /** player.js içinde api/stream etrafındaki kodu loglar (manuel analiz için). */
+    /** player.js içinde api/stream etrafındaki kodu loglar. */
     private fun logApiStreamContext(js: String) {
         Log.d(name, "=== player.js api/stream bağlamları ===")
         var idx = 0
         var count = 0
-        while (count < 5) {
+        while (count < 10) {
             idx = js.indexOf("api/stream", idx)
             if (idx == -1) break
-            val start = maxOf(0, idx - 400)
-            val end = minOf(js.length, idx + 400)
+            val start = maxOf(0, idx - 500)
+            val end = minOf(js.length, idx + 500)
             Log.d(name, "API/STREAM CONTEXT [$count]: ${js.substring(start, end).replace("\n", " ")}")
             idx += 10
             count++
         }
-        Regex("""src\s*=\s*([^;,\n]{1,200})""").findAll(js).take(10).forEach { m ->
+        Regex("""src\s*=\s*([^;,\n]{1,200})""").findAll(js).take(20).forEach { m ->
             Log.d(name, "SRC ASSIGN: src = ${m.groupValues[1].take(200)}")
         }
-        Regex("""function\s+(\w+)\s*\([^)]*\)\s*\{[^}]{0,500}(?:stream|src|token)""", RegexOption.IGNORE_CASE).findAll(js).take(5).forEach { m ->
-            Log.d(name, "FONKSIYON: ${m.value.take(400)}")
+    }
+
+    /** player.js içindeki fetch/XHR çağrılarını loglar. */
+    private fun logFetchCalls(js: String) {
+        Log.d(name, "=== player.js fetch/XHR çağrıları ===")
+        Regex("""fetch\s*\(\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(js).take(10).forEach {
+            Log.d(name, "FETCH: ${it.groupValues[1]}")
+        }
+        Regex("""XMLHttpRequest""", RegexOption.IGNORE_CASE).findAll(js).take(5).forEach {
+            val start = maxOf(0, it.range.first - 200)
+            val end = minOf(js.length, it.range.last + 200)
+            Log.d(name, "XHR CONTEXT: ${js.substring(start, end).replace("\n", " ")}")
+        }
+    }
+
+    /** player.js içindeki şifreleme/kodlama kullanımını loglar. */
+    private fun logCryptoUsage(js: String) {
+        Log.d(name, "=== player.js crypto kullanımı ===")
+        for (keyword in listOf("atob", "btoa", "CryptoJS", "encrypt", "decrypt", "AES", "subtle")) {
+            val idx = js.indexOf(keyword, ignoreCase = true)
+            if (idx != -1) {
+                val start = maxOf(0, idx - 200)
+                val end = minOf(js.length, idx + 200)
+                Log.d(name, "CRYPTO [$keyword]: ${js.substring(start, end).replace("\n", " ")}")
+            }
         }
     }
 
@@ -317,6 +344,7 @@ class BeyazElma : MainAPI() {
             runCatching { tokens.add(URLEncoder.encode(embedToken, "UTF-8")) }
             tokens.add(embedToken.substringBefore("_"))
             tokens.add(embedToken.substringBefore("."))
+            tokens.add(embedToken.substringAfterLast("_"))
         }
         tokens.add(slug)
 
