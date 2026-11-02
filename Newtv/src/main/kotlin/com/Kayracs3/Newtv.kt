@@ -229,7 +229,7 @@ class BeyazElma : MainAPI() {
                 "Accept" to "application/json, text/plain, */*",
             )
             cfCookies?.forEach { cookie ->
-                requestHeaders["Cookie"] = (requestHeaders["Cookie"] ?: "") + "${cookie.name}=${cookie.value}; "
+                requestHeaders["Cookie"] = (requestHeaders["Cookie"] ?: "") + "${cookie.key}=${cookie.value}; "
             }
 
             Log.d(name, "Denenen stream endpoint: $streamUrl | Cookies: ${cfCookies?.size ?: 0}")
