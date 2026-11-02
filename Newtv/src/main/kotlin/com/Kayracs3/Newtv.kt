@@ -1,5 +1,7 @@
 package com.Kayracs3
 
+import com.lagradost.cloudstream3.newHomePageResponse
+
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.app
