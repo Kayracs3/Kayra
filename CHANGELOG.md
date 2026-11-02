@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:85b34c006e26cc459a015274dad27f39f6aacbe8 -->
+### Enhance logging and stream endpoint testing
+
+- Etkilenen alanlar: Newtv
+- Commit: [85b34c0](https://github.com/Kayracs3/Kayra/commit/85b34c006e26cc459a015274dad27f39f6aacbe8)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:db6f77c1171628f73ad4ac7e291106faeed8b513 -->
 ### Update Newtv.kt
 
