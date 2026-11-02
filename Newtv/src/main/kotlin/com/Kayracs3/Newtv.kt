@@ -11,7 +11,7 @@ import org.json.JSONArray
 
 class NewTV : MainAPI() {
     override var mainUrl = "https://tv.newtane.com"
-    override var name = "NewTV"
+    override var name = "NewLive"
     override var lang = "tr"
     override val hasMainPage = true
     override val hasQuickSearch = true
@@ -74,7 +74,7 @@ class NewTV : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         // url = channel_id
-        return newLiveStreamLoadResponse(url = url, name = "Kanal $url", posterUrl = null)
+        return newLiveStreamLoadResponse(name = "Kanal $url", url = url, dataUrl = url)
     }
 
     override suspend fun loadLinks(
