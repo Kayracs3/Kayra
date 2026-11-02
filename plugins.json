@@ -606,10 +606,10 @@
     },
     {
         "iconUrl": "https://tv.newtane.com/favicon.ico",
-        "fileHash": "sha256-8dfbc3ad7e842847279e04202552dc7276a79b3f84e5778f7b76efccbf75f7b1",
+        "fileHash": "sha256-463f09704f2a7aeb4251fbf787039754819957290b0cc72d086f02f973ab1bcb",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 19595,
+        "fileSize": 15829,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -618,9 +618,9 @@
         "tvTypes": [
             "Live"
         ],
-        "version": 3,
+        "version": 4,
         "internalName": "Newtv",
-        "description": "NewLive canl\u0131 TV sa\u011flay\u0131c\u0131s\u0131",
+        "description": "BeyazElma canl\u0131 TV sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Newtv.cs3",
         "name": "Newtv"
     },
