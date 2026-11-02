@@ -1,5 +1,30 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-02
+
+<!-- kayra-commit:cd95d9a208147c6db496a6bb91744daac8ce1dd5 -->
+### Refactor Newtv class and update API integration
+
+- Etkilenen alanlar: Newtv
+- Commit: [cd95d9a](https://github.com/Kayracs3/Kayra/commit/cd95d9a208147c6db496a6bb91744daac8ce1dd5)
+
+## 2026-11-02
+
+<!-- kayra-commit:d39562ea15d53532e30184ea9e6461e74d3a48f6 -->
+### Add URL-generated CloudStream provider: Newtv
+
+- Etkilenen alanlar: Newtv
+- Commit: [d39562e](https://github.com/Kayracs3/Kayra/commit/d39562ea15d53532e30184ea9e6461e74d3a48f6)
+
+## 2026-11-01
+
+<!-- kayra-commit:dcff2208bcf2bea3abe385db47b0f2e0bb337386 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [dcff220](https://github.com/Kayracs3/Kayra/commit/dcff2208bcf2bea3abe385db47b0f2e0bb337386)
+
+
 ## 2026-11-01
 
 <!-- kayra-commit:a85974b186ca285233b161ac76d5e3767f631d61 -->
