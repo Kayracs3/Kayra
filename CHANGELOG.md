@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:3b51e306e7ff1827a24139e82f2819b150a15a62 -->
+### Refactor embed URL handling and regex patterns
+
+- Etkilenen alanlar: Newtv
+- Commit: [3b51e30](https://github.com/Kayracs3/Kayra/commit/3b51e306e7ff1827a24139e82f2819b150a15a62)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:939a23635c23617489ea4bd028076ff193ddab50 -->
 ### Refactor Newtv.kt for clarity and structure
 
