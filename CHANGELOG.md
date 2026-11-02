@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:6f296cf122a7eda56c07d20f9db6eb27d595c405 -->
+### Fix Newtv cookie map compilation error
+
+- Etkilenen alanlar: Newtv
+- Commit: [6f296cf](https://github.com/Kayracs3/Kayra/commit/6f296cf122a7eda56c07d20f9db6eb27d595c405)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:304378011cc64e406dd9fa8efa56556998fb4314 -->
 ### Update version from 6 to 7
 
