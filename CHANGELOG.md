@@ -2,6 +2,31 @@
 
 ## 2026-11-02
 
+<!-- kayra-commit:c28dbd6739cf864c1f16e7464e5615c0499b0641 -->
+### Set NewLive plugin metadata and version
+
+- Etkilenen alanlar: Newtv
+- Commit: [c28dbd6](https://github.com/Kayracs3/Kayra/commit/c28dbd6739cf864c1f16e7464e5615c0499b0641)
+
+## 2026-11-02
+
+<!-- kayra-commit:2c2d7ac722ad4613e9c3063d75ab89a2c0abe920 -->
+### Register correctly cased NewTV provider class
+
+- Etkilenen alanlar: Newtv
+- Commit: [2c2d7ac](https://github.com/Kayracs3/Kayra/commit/2c2d7ac722ad4613e9c3063d75ab89a2c0abe920)
+
+## 2026-11-02
+
+<!-- kayra-commit:6c660473c2d9dcb10365ff936096b2811e2e2b94 -->
+### Fix NewLive stream response arguments
+
+- Etkilenen alanlar: Newtv
+- Commit: [6c66047](https://github.com/Kayracs3/Kayra/commit/6c660473c2d9dcb10365ff936096b2811e2e2b94)
+
+
+## 2026-11-02
+
 <!-- kayra-commit:cd95d9a208147c6db496a6bb91744daac8ce1dd5 -->
 ### Refactor Newtv class and update API integration
 
