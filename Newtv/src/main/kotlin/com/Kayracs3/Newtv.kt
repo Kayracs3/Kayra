@@ -100,9 +100,6 @@ class NewTV : MainAPI() {
         if (!resp.isSuccessful) { Log.e(name, "dlhd HTTP ${resp.code}"); return false }
 
         val html = resp.text.replace("\\/", "/")
-        Log.d(name, "dlhd HTML: ${html.length} char")
-
-        // iframe'i bul
         val iframeSrc = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
             .find(html)?.groupValues?.getOrNull(1)
         if (iframeSrc.isNullOrBlank()) {
@@ -121,103 +118,48 @@ class NewTV : MainAPI() {
                 timeout = 20000,
                 allowRedirects = true
             )
-        }.getOrNull()
-        if (iframeResp == null || !iframeResp.isSuccessful) {
-            Log.e(name, "iframe çekilemedi: ${iframeResp?.code}")
-            return false
-        }
+        }.getOrNull() ?: return false
+        if (!iframeResp.isSuccessful) { Log.e(name, "iframe ${iframeResp.code}"); return false }
 
         val iframeHtml = iframeResp.text.replace("\\/", "/").replace("\\\"", "\"")
         Log.d(name, "iframe HTML: ${iframeHtml.length} char")
 
-        // 1) Token'lı m3u8 doğrudan var mı? (index.m3u8?t=...)
+        // 1) Token'lı m3u8 doğrudan var mı?
         Regex("""https?://[^\s"'<>\\]+?/index\.m3u8\?[^\s"'<>\\]*t=[^\s"'<>\\&]+[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(iframeHtml)?.value?.let { fullM3u8 ->
                 emitLink(fullM3u8, iframeUrl, callback)
                 return true
             }
 
-        // 2) playlist-token URL'sini iframe HTML'inden tam olarak çıkar
-        val tokenUrlPatterns = listOf(
+        // 2) playlist-token URL'leri
+        val tokenUrls = mutableSetOf<String>()
+        for (p in listOf(
             Regex("""["'](https?://[^"']*?/api/playlist-token\?slug=[^"']+)["']""", RegexOption.IGNORE_CASE),
             Regex("""(https?://[^\s"'<>\\]+?/api/playlist-token\?slug=[^\s"'<>\\&]+)""", RegexOption.IGNORE_CASE),
             Regex("""["'](/api/playlist-token\?slug=[^"']+)["']""", RegexOption.IGNORE_CASE),
-        )
-        val tokenUrls = mutableSetOf<String>()
-        for (p in tokenUrlPatterns) {
+        )) {
             p.findAll(iframeHtml).forEach { m ->
                 val raw = m.groupValues.lastOrNull() ?: m.value
                 val cleaned = raw.replace("&amp;", "&").trim()
                 if (cleaned.isNotBlank()) tokenUrls.add(absolute(cleaned, iframeUrl))
             }
         }
-        Log.d(name, "iframe içinde bulunan token URL'leri: $tokenUrls")
+        Log.d(name, "iframe token URL'leri: $tokenUrls")
 
         for (tokenUrl in tokenUrls) {
-            val tokenResp = runCatching {
-                app.get(
-                    tokenUrl,
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to iframeUrl,
-                        "Origin" to EMBED_BASE,
-                        "Accept" to "application/json, text/plain, */*",
-                    ),
-                    referer = iframeUrl,
-                    timeout = 15000,
-                )
-            }.getOrNull() ?: continue
-            if (!tokenResp.isSuccessful) { Log.d(name, "token URL HTTP ${tokenResp.code}: $tokenUrl"); continue }
-
-            val tokenBody = tokenResp.text
-            Log.d(name, "token yanıtı: ${tokenBody.take(300)}")
-            val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
-                ?: Regex("""["']([A-Za-z0-9_\-\.]{30,})["']""").find(tokenBody)?.groupValues?.getOrNull(1)
-            if (!token.isNullOrBlank()) {
-                val ts = System.currentTimeMillis()
-                val m3u8 = "$EDGE_BASE/premium$channelId/index.m3u8?t=" +
-                        java.net.URLEncoder.encode(token, "UTF-8") + "&_=$ts"
-                emitLink(m3u8, iframeUrl, callback)
-                return true
-            }
+            if (tryTokenEndpoint(tokenUrl, iframeUrl, channelId, callback)) return true
         }
 
-        // 3) Token endpoint'lerini doğrudan dene (iframe'de bulunamadıysa)
+        // 3) Doğrudan token endpoint'leri
         val slug = Regex("""premium(\d+)""").find(iframeHtml)?.value ?: "premium$channelId"
-        val directTokenUrls = listOf(
+        for (tokenUrl in listOf(
             "$EDGE_BASE/api/playlist-token?slug=$slug",
             "$EDGE_BASE/api/playlist-token?slug=$channelId",
-        )
-        for (tokenUrl in directTokenUrls) {
-            val tokenResp = runCatching {
-                app.get(
-                    tokenUrl,
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to iframeUrl,
-                        "Origin" to EMBED_BASE,
-                        "Accept" to "application/json, text/plain, */*",
-                    ),
-                    referer = iframeUrl,
-                    timeout = 15000,
-                )
-            }.getOrNull() ?: continue
-            if (!tokenResp.isSuccessful) { Log.d(name, "token endpoint HTTP ${tokenResp.code}: $tokenUrl"); continue }
-
-            val tokenBody = tokenResp.text
-            Log.d(name, "token yanıtı ($tokenUrl): ${tokenBody.take(300)}")
-            val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
-                ?: Regex("""["']([A-Za-z0-9_\-\.]{30,})["']""").find(tokenBody)?.groupValues?.getOrNull(1)
-            if (!token.isNullOrBlank()) {
-                val ts = System.currentTimeMillis()
-                val m3u8 = "$EDGE_BASE/$slug/index.m3u8?t=" +
-                        java.net.URLEncoder.encode(token, "UTF-8") + "&_=$ts"
-                emitLink(m3u8, iframeUrl, callback)
-                return true
-            }
+        )) {
+            if (tryTokenEndpoint(tokenUrl, iframeUrl, channelId, callback)) return true
         }
 
-        // 4) iframe HTML'inde token'sız index.m3u8 varsa
+        // 4) Token'sız m3u8
         Regex("""https?://[^\s"'<>\\]+?/index\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(iframeHtml)?.value?.let { m3u8 ->
                 emitLink(m3u8, iframeUrl, callback)
@@ -228,7 +170,50 @@ class NewTV : MainAPI() {
         return false
     }
 
-    private suspend fun tryDirectOrToken(html: String, referer: String, channelId: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun tryTokenEndpoint(
+        tokenUrl: String,
+        iframeUrl: String,
+        channelId: String,
+        callback: (ExtractorLink) -> Unit,
+    ): Boolean {
+        val tokenResp = runCatching {
+            app.get(
+                tokenUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to iframeUrl,
+                    "Origin" to EMBED_BASE,
+                    "Accept" to "application/json, text/plain, */*",
+                ),
+                referer = iframeUrl,
+                timeout = 15000,
+            )
+        }.getOrNull() ?: return false
+        if (!tokenResp.isSuccessful) {
+            Log.d(name, "token URL HTTP ${tokenResp.code}: $tokenUrl")
+            return false
+        }
+
+        val tokenBody = tokenResp.text
+        Log.d(name, "token yanıtı: ${tokenBody.take(300)}")
+        val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(tokenBody)?.groupValues?.getOrNull(1)
+            ?: Regex("""["']([A-Za-z0-9_\-\.]{30,})["']""").find(tokenBody)?.groupValues?.getOrNull(1)
+            ?: return false
+
+        // ★ DEĞİŞİKLİK: `_` parametresini kaldırıyoruz (segment çözümlemesini bozabilir)
+        val m3u8 = "$EDGE_BASE/premium$channelId/index.m3u8?t=" +
+                java.net.URLEncoder.encode(token, "UTF-8")
+
+        emitLink(m3u8, iframeUrl, callback)
+        return true
+    }
+
+    private suspend fun tryDirectOrToken(
+        html: String,
+        referer: String,
+        channelId: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
         Regex("""https?://[^\s"'<>\\]+?/index\.m3u8\?[^\s"'<>\\]*t=[^\s"'<>\\&]+[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
             .find(html)?.value?.let { m3u8 -> emitLink(m3u8, referer, callback); return true }
         Regex("""https?://[^\s"'<>\\]+?/index\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
@@ -236,8 +221,44 @@ class NewTV : MainAPI() {
         return false
     }
 
+    // ★★★ TEŞHİS EKLENDİ: m3u8 içeriğini log'a yaz ★★★
     private suspend fun emitLink(url: String, referer: String, callback: (ExtractorLink) -> Unit) {
-        // ★ Origin başlığı artık embed.st (iframe'in gerçek origin'i)
+        // m3u8 içeriğini incele
+        try {
+            val diagResp = app.get(
+                url,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to referer,
+                    "Origin" to EMBED_BASE,
+                    "Accept" to "*/*",
+                ),
+                referer = referer,
+            )
+            if (diagResp.isSuccessful) {
+                val m = diagResp.text
+                Log.d(name, "=== M3U8 İÇERİĞİ (${m.length} char) ===")
+                Log.d(name, m.take(2500))
+                Log.d(name, "=== M3U8 SONU ===")
+
+                // Şifreleme var mı?
+                Regex("""#EXT-X-KEY[^\r\n]*""").findAll(m).forEach {
+                    Log.w(name, "!!! ENCRYPTION: ${it.value}")
+                }
+                // fMP4 init segment var mı?
+                Regex("""#EXT-X-MAP[^\r\n]*""").findAll(m).forEach {
+                    Log.d(name, "MAP: ${it.value}")
+                }
+                // İlk 5 segment URL'si
+                val segs = m.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+                Log.d(name, "İlk 5 segment: ${segs.take(5)}")
+            } else {
+                Log.e(name, "M3U8 fetch HTTP ${diagResp.code}")
+            }
+        } catch (e: Exception) {
+            Log.e(name, "M3U8 diag hata: ${e.message}")
+        }
+
         callback.invoke(newExtractorLink(source = name, name = name, url = url, type = ExtractorLinkType.M3U8) {
             this.referer = referer
             this.quality = Qualities.Unknown.value
