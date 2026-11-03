@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:eb104f6630800f4560f1fab918e4d490e20c3831 -->
+### Fix Newtv coroutines compile dependency
+
+- Etkilenen alanlar: Newtv
+- Commit: [eb104f6](https://github.com/Kayracs3/Kayra/commit/eb104f6630800f4560f1fab918e4d490e20c3831)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:5f7f6783ff0fd1e87835ebe28439c344921e91d9 -->
 ### Update version from 10 to 11
 
