@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:282f89478137644dddbcdc86c1f216e7f1fdc588 -->
+### Fix Dizilla main page card fallbacks
+
+- Etkilenen alanlar: Dizilla
+- Commit: [282f894](https://github.com/Kayracs3/Kayra/commit/282f89478137644dddbcdc86c1f216e7f1fdc588)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:26b03e6ba6e377aae9e0fc24639b050ded8daeeb -->
 ### Harden Dizilla parsing fallback
 
