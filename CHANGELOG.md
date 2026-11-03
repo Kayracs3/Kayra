@@ -2,6 +2,31 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:5e4d30a0358f1c092738992e821b0a7772775c15 -->
+### Update Dizilla diagnostic script domain
+
+- Etkilenen alanlar: Dizilla
+- Commit: [5e4d30a](https://github.com/Kayracs3/Kayra/commit/5e4d30a0358f1c092738992e821b0a7772775c15)
+
+## 2026-11-03
+
+<!-- kayra-commit:e172bb4fff73d99bc5003c42c3dd63c4c9bbb0c2 -->
+### Update Dizilla plugin domain and version
+
+- Etkilenen alanlar: Dizilla
+- Commit: [e172bb4](https://github.com/Kayracs3/Kayra/commit/e172bb4fff73d99bc5003c42c3dd63c4c9bbb0c2)
+
+## 2026-11-03
+
+<!-- kayra-commit:ffc6f84343e7c179b7d021a9a5d01584a374b946 -->
+### Switch Dizilla plugin to dizilla.la
+
+- Etkilenen alanlar: Dizilla
+- Commit: [ffc6f84](https://github.com/Kayracs3/Kayra/commit/ffc6f84343e7c179b7d021a9a5d01584a374b946)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:22ce6b55bf3578e87aadb02170efab8748af82a1 -->
 ### Restore Dizilla legacy player extraction fallback
 
