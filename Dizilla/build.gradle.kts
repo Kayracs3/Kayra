@@ -1,4 +1,4 @@
-version = 14
+version = 15
 
 cloudstream {
     authors     = listOf("Kayracs3")
@@ -14,5 +14,5 @@ cloudstream {
     **/
     status  = 1 // will be 3 if unspecified
     tvTypes = listOf("TvSeries")
-    iconUrl = "https://www.google.com/s2/favicons?domain=dizilla.club&sz=%size%"
+    iconUrl = "https://www.google.com/s2/favicons?domain=dizilla.la&sz=%size%"
 }
