@@ -233,11 +233,11 @@
         "name": "DiziLife"
     },
     {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=dizilla.club&sz=%size%",
-        "fileHash": "sha256-c0046d98bd7a2003ac3c5808684e3d7bf0fb64222707902a2427e14691517e34",
+        "iconUrl": "https://www.google.com/s2/favicons?domain=dizilla.la&sz=%size%",
+        "fileHash": "sha256-18f5fa89d03ff4485e8f04ea814ca8e8c8b2d55f6782d1b437bde8a5700d0f71",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 64767,
+        "fileSize": 65676,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -246,7 +246,7 @@
         "tvTypes": [
             "TvSeries"
         ],
-        "version": 14,
+        "version": 15,
         "internalName": "Dizilla",
         "description": "Dizilla t\u00fcm yabanc\u0131 dizileri \u00fccretsiz olarak T\u00fcrk\u00e7e Dublaj ve altyaz\u0131l\u0131 se\u00e7enekleri ile 1080P kalite izleyebilece\u011finiz yeni nesil yabanc\u0131 dizi izleme siteniz.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizilla.cs3",
