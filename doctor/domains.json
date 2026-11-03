@@ -636,6 +636,31 @@
           "yerli"
         ]
       }
+    },
+    "Newtv": {
+      "identityProfile": {
+        "title": "BeyazElma – Canlı Maç İzle | Beyaz Elma · Elmacı Baba",
+        "h1": "BeyazElma – Canlı Maç İzle",
+        "siteName": "BeyazElma",
+        "description": "Bugünün canlı maç programı, aktif spor kanalları, canlı skorlar ve maç tahminleri BeyazElma’da (Beyaz Elma · Elmacı Baba).",
+        "tokens": [
+          "aktif",
+          "baba",
+          "beyaz",
+          "beyazelma",
+          "bugunun",
+          "canl",
+          "elma",
+          "elmac",
+          "izle",
+          "kanallar",
+          "mac",
+          "program",
+          "skorlar",
+          "spor",
+          "tahminleri"
+        ]
+      }
     }
   }
 }
