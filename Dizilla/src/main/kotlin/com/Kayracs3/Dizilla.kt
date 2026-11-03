@@ -659,14 +659,18 @@ class Dizilla : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
 
+        val requestData =
+            canonicalizeDizillaUrl(request.data)
+                ?: request.data
+
         val candidates =
             buildPageCandidates(
-                request.data,
+                requestData,
                 page
             )
 
         val previousSignature =
-            paginationSignatures[request.data]
+            paginationSignatures[requestData]
 
         var selectedResults =
             emptyList<SearchResponse>()
@@ -716,7 +720,7 @@ class Dizilla : MainAPI() {
             val results =
                 extractMainPageResults(
                     document,
-                    request.data
+                    requestData
                 )
 
             Log.d(
@@ -768,7 +772,7 @@ class Dizilla : MainAPI() {
         val signature =
             pageSignature(selectedResults)
 
-        paginationSignatures[request.data] =
+        paginationSignatures[requestData] =
             signature
 
         Log.d(
@@ -1589,7 +1593,8 @@ class Dizilla : MainAPI() {
             finalEpisodes
         ) {
 
-            this.posterUrl = poster
+            this.posterUrl =
+                canonicalizeDizillaUrl(poster) ?: poster
             this.plot = description
             this.year = year
             this.tags = tags
@@ -2180,7 +2185,7 @@ class Dizilla : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val fixed =
-            fixUrlNull(
+            canonicalizeDizillaUrl(
                 url.trim()
                     .replace("\\/", "/")
                     .replace("&amp;", "&")
@@ -2251,7 +2256,7 @@ class Dizilla : MainAPI() {
                     ?: element.attr("data-url").takeIf { it.isNotBlank() }
                     ?: continue
 
-            val playerUrl = fixUrlNull(raw) ?: continue
+            val playerUrl = canonicalizeDizillaUrl(raw) ?: continue
             if (!visited.add(playerUrl)) continue
 
             val playerDocument =
@@ -2528,7 +2533,7 @@ class Dizilla : MainAPI() {
                     if (
                         tryDizillaExtractor(
                             iframe,
-                            data,
+                            episodeUrl,
                             subtitleCallback,
                             callback
                         )
@@ -2542,7 +2547,7 @@ class Dizilla : MainAPI() {
                         !direct.isNullOrBlank() &&
                         tryDizillaExtractor(
                             direct,
-                            data,
+                            episodeUrl,
                             subtitleCallback,
                             callback
                         )
@@ -2615,7 +2620,7 @@ class Dizilla : MainAPI() {
                     }
                     ?.trim()
 
-            fixUrlNull(src)?.let { return it }
+            canonicalizeDizillaUrl(src)?.let { return it }
         } catch (_: Exception) {
         }
 
@@ -2624,7 +2629,7 @@ class Dizilla : MainAPI() {
             clean.startsWith("https://", ignoreCase = true) ||
             clean.startsWith("//")
         ) {
-            fixUrlNull(clean)?.let { return it }
+            canonicalizeDizillaUrl(clean)?.let { return it }
         }
 
         val attributeMatch =
@@ -2637,7 +2642,7 @@ class Dizilla : MainAPI() {
                 ?.replace("\\/", "/")
                 ?.replace("&amp;", "&")
 
-        fixUrlNull(attributeUrl)?.let { return it }
+        canonicalizeDizillaUrl(attributeUrl)?.let { return it }
 
         val urlMatch =
             Regex(
@@ -2646,7 +2651,7 @@ class Dizilla : MainAPI() {
                 ?.value
                 ?.trimEnd(')', ']', '}', ',', ';', '.')
 
-        return fixUrlNull(urlMatch)
+        return canonicalizeDizillaUrl(urlMatch)
     }
 
     private suspend fun extractFromIframe(
