@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:5f7f6783ff0fd1e87835ebe28439c344921e91d9 -->
+### Update version from 10 to 11
+
+- Etkilenen alanlar: Newtv
+- Commit: [5f7f678](https://github.com/Kayracs3/Kayra/commit/5f7f6783ff0fd1e87835ebe28439c344921e91d9)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:d29213c799999de6847e9518027ecdb6f0b018dc -->
 ### Refactor comments and enhance m3u8 validation
 
