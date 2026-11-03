@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:d03aaa9239b45917056c496a7ca673d4a24adc30 -->
+### Normalize Dizilla legacy and cached URLs
+
+- Etkilenen alanlar: Dizilla
+- Commit: [d03aaa9](https://github.com/Kayracs3/Kayra/commit/d03aaa9239b45917056c496a7ca673d4a24adc30)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:5e4d30a0358f1c092738992e821b0a7772775c15 -->
 ### Update Dizilla diagnostic script domain
 
