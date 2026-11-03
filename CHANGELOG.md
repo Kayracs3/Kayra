@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:14d30dcfe76b54046d920a392b76dd3c75dabe9d -->
+### Improve Dizilla metadata and episode parsing fallbacks
+
+- Etkilenen alanlar: Dizilla
+- Commit: [14d30dc](https://github.com/Kayracs3/Kayra/commit/14d30dcfe76b54046d920a392b76dd3c75dabe9d)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:776bcbd49e84c80fd91ea54e5e6a27b0a944de9c -->
 ### Update Kotlin version from 11 to 12
 
