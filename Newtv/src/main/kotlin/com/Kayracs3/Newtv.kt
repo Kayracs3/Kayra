@@ -26,6 +26,8 @@ class BeyazElma : MainAPI() {
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
         private const val KPORES_REGEX = """https?://[^\s"'<>\\]*(?:kpores\.(?:ru|com|net|org|to)|kpo\.re)[^\s"'<>\\]*"""
+        // RepoLinkGenerator önbelleğini atlatmak için dataUrl ayırıcısı (slug'da görünmez)
+        private const val CB_SEP = "|cb|"
     }
 
     private val apiChannels = "$mainUrl/api/channels"
@@ -75,7 +77,14 @@ class BeyazElma : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val slug = url.substringAfterLast("/").substringBefore("?").trim()
         if (slug.isBlank()) return null
-        return newLiveStreamLoadResponse(name = "Kanal", url = url, dataUrl = slug)
+        // ★ CACHE BUSTING: her ziyaret için farklı dataUrl üret.
+        // Böylece RepoLinkGenerator eski sonucu tekrar kullanmaz ve loadLinks her seferinde çağrılır.
+        val bust = System.currentTimeMillis()
+        return newLiveStreamLoadResponse(
+            name = "Kanal",
+            url = url,
+            dataUrl = "$slug$CB_SEP$bust",
+        )
     }
 
     override suspend fun loadLinks(
@@ -84,11 +93,12 @@ class BeyazElma : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val slug = data.trim()
+        // ★ load() içinde eklenen cache-bust ekini temizle
+        val slug = data.substringBefore(CB_SEP).trim()
         if (slug.isBlank()) return false
 
         val channelPageUrl = "$mainUrl/kanal/$slug"
-        Log.d(name, "loadLinks: slug=$slug")
+        Log.d(name, "loadLinks: slug=$slug (cache-bust temizlendi)")
 
         val pageResp = runCatching {
             app.get(channelPageUrl, headers = mapOf("User-Agent" to USER_AGENT), referer = "$mainUrl/")
@@ -147,7 +157,7 @@ class BeyazElma : MainAPI() {
         // 5) JWPlayer
         if (processJwPlayer(embedHtml, embedUrl, callback)) return true
 
-        // 6) Script src'lerini dene (player.js dahil)
+        // 6) Script src'lerini dene
         val scriptSrcs = mutableListOf<String>()
         Regex("""<script[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(embedHtml).forEach { m ->
             scriptSrcs.add(m.groupValues[1].replace("\\/", "/").trim())
@@ -177,7 +187,6 @@ class BeyazElma : MainAPI() {
             }
         }
 
-        // 7) Son çare logları
         Log.e(name, "Yayın linki bulunamadı. Göreli yollar dökülüyor:")
         Regex("""["'](/[^"'\s]{3,200})["']""").findAll(embedHtml).map { it.groupValues[1] }.distinct().take(80).forEach {
             Log.d(name, "REL: $it")
@@ -231,13 +240,11 @@ class BeyazElma : MainAPI() {
                 val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
                 Log.d(name, "PLAY API OK (${body.length} char): ${body.take(600)}")
 
-                // Doğrudan #EXTM3U içerikli yanıt
                 if (body.trim().startsWith("#EXTM3U")) {
                     emitLink(url, url, callback)
                     return true
                 }
 
-                // Aday URL'leri topla
                 val candidates = mutableListOf<String>()
 
                 Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
@@ -266,10 +273,8 @@ class BeyazElma : MainAPI() {
                     }
                 }
 
-                // Her adayı doğrula
                 for (candidate in candidates.distinct()) {
                     if (Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).containsMatchIn(candidate)) {
-                        // kpores ise /api/stream proxy'si üzerinden doğrula ve yayınla
                         if (tryKporesDirect(candidate, embedHost, embedUrl, callback)) return true
                         continue
                     }
@@ -289,10 +294,7 @@ class BeyazElma : MainAPI() {
         return false
     }
 
-    /**
-     * Bir m3u8 linkinin gerçekten oynatılabilir olduğunu doğrular.
-     * 200 dönerse ve içeriği #EXTM3U ile başlıyorsa geçerli sayılır.
-     */
+    /** m3u8 linkinin hâlâ geçerli olduğunu doğrular (200 + #EXTM3U). */
     private suspend fun validateStreamUrl(
         streamUrl: String,
         referer: String,
