@@ -26,8 +26,6 @@ class BeyazElma : MainAPI() {
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
         private const val KPORES_REGEX = """https?://[^\s"'<>\\]*(?:kpores\.(?:ru|com|net|org|to)|kpo\.re)[^\s"'<>\\]*"""
-        // RepoLinkGenerator önbelleğini atlatmak için dataUrl ayırıcısı (slug'da görünmez)
-        private const val CB_SEP = "|cb|"
     }
 
     private val apiChannels = "$mainUrl/api/channels"
@@ -75,15 +73,20 @@ class BeyazElma : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val slug = url.substringAfterLast("/").substringBefore("?").trim()
+        val slug = url.substringAfterLast("/").substringBefore("?").substringBefore("#").trim()
         if (slug.isBlank()) return null
-        // ★ CACHE BUSTING: her ziyaret için farklı dataUrl üret.
-        // Böylece RepoLinkGenerator eski sonucu tekrar kullanmaz ve loadLinks her seferinde çağrılır.
+
+        // ★ CACHE BUSTING (URL üzerinden):
+        // RepoLinkGenerator önbellek anahtarı olarak `url` alanını kullanıyor.
+        // Her yüklemede benzersiz bir fragment (#cb=<timestamp>) ekleyerek
+        // önbelleği atlıyoruz. Fragment sunucuya gönderilmez, güvenli.
         val bust = System.currentTimeMillis()
+        val freshUrl = "$mainUrl/kanal/$slug#cb=$bust"
+
         return newLiveStreamLoadResponse(
             name = "Kanal",
-            url = url,
-            dataUrl = "$slug$CB_SEP$bust",
+            url = freshUrl,
+            dataUrl = slug,
         )
     }
 
@@ -93,12 +96,11 @@ class BeyazElma : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        // ★ load() içinde eklenen cache-bust ekini temizle
-        val slug = data.substringBefore(CB_SEP).trim()
+        val slug = data.trim()
         if (slug.isBlank()) return false
 
         val channelPageUrl = "$mainUrl/kanal/$slug"
-        Log.d(name, "loadLinks: slug=$slug (cache-bust temizlendi)")
+        Log.d(name, "loadLinks: slug=$slug (cache-bust'lı çağrı)")
 
         val pageResp = runCatching {
             app.get(channelPageUrl, headers = mapOf("User-Agent" to USER_AGENT), referer = "$mainUrl/")
