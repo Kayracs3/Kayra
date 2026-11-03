@@ -2,6 +2,23 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:d29213c799999de6847e9518027ecdb6f0b018dc -->
+### Refactor comments and enhance m3u8 validation
+
+- Etkilenen alanlar: Newtv
+- Commit: [d29213c](https://github.com/Kayracs3/Kayra/commit/d29213c799999de6847e9518027ecdb6f0b018dc)
+
+## 2026-11-03
+
+<!-- kayra-commit:6e05924f8382ffb516b0e8950bd9af19e436ee22 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [6e05924](https://github.com/Kayracs3/Kayra/commit/6e05924f8382ffb516b0e8950bd9af19e436ee22)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:f8ae0a895e4b71046d2cc351c061c8840be04d1c -->
 ### Update version from 9 to 10 in build.gradle.kts
 
