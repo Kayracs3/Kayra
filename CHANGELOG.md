@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:26b03e6ba6e377aae9e0fc24639b050ded8daeeb -->
+### Harden Dizilla parsing fallback
+
+- Etkilenen alanlar: Dizilla
+- Commit: [26b03e6](https://github.com/Kayracs3/Kayra/commit/26b03e6ba6e377aae9e0fc24639b050ded8daeeb)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:14d30dcfe76b54046d920a392b76dd3c75dabe9d -->
 ### Improve Dizilla metadata and episode parsing fallbacks
 
