@@ -544,71 +544,9 @@ class Dizilla : MainAPI() {
         // .new-added-list > a[href^="/dizi/"]
         // =====================================================
         if (isNewAddedArchive(requestData)) {
-
-            document
-                .select(
-                    ".new-added-list > a[href^='/dizi/']"
-                )
-                .forEach { element ->
-
-                    val href =
-                        fixUrlNull(
-                            element.attr("href")
-                        )
-                            ?: return@forEach
-
-                    val title =
-                        element
-                            .selectFirst("h3")
-                            ?.text()
-                            ?.trim()
-                            ?.takeIf { it.isNotBlank() }
-                            ?: element
-                                .attr("title")
-                                .trim()
-                                .removeSuffix(" izle")
-                                .trim()
-                                .takeIf { it.isNotBlank() }
-                            ?: element
-                                .selectFirst("img")
-                                ?.attr("alt")
-                                ?.trim()
-                                ?.replace(
-                                    Regex(
-                                        """\s*-\s*\d{4}\s+izle$"""
-                                    ),
-                                    ""
-                                )
-                                ?.trim()
-                                ?.takeIf { it.isNotBlank() }
-                            ?: return@forEach
-
-                    val image =
-                        element.selectFirst("img")
-
-                    val poster =
-                        image?.let {
-                            listOf(
-                                it.attr("src"),
-                                it.attr("data-src"),
-                                it.attr("data-lazy-src"),
-                                it.attr("data-original"),
-                                it.attr("data-image")
-                            )
-                                .firstNotNullOfOrNull { candidate ->
-                                    fixUrlNull(candidate)
-                                        ?.takeIf { url -> url.isNotBlank() }
-                                }
-                        }
-
-                    results[href] =
-                        newTvSeriesSearchResponse(
-                            title,
-                            href,
-                            TvType.TvSeries
-                        ) {
-                            this.posterUrl = poster
-                        }
+            collectHtmlSeries(document, ".new-added-list")
+                .forEach { item ->
+                    results[item.url] = item
                 }
 
             Log.d(
@@ -616,9 +554,11 @@ class Dizilla : MainAPI() {
                 "Yeni Eklenen Diziler HTML kart sayısı = ${results.size}"
             )
 
-            return results.values
-                .take(24)
-                .toList()
+            // Eski kart kapsayıcısı değişmişse genel HTML/JSON
+            // yedeklerine geç; boş listeyi burada döndürme.
+            if (results.isNotEmpty()) {
+                return results.values.take(24).toList()
+            }
         }
 
         // =====================================================
@@ -663,17 +603,15 @@ class Dizilla : MainAPI() {
         }
 
         if (results.isEmpty()) {
-
-            document
-                .select("a[href^='/dizi/']")
-                .forEach { element ->
-
-                    val item =
-                        element.toSearchResponse()
-                            ?: return@forEach
-
+            collectHtmlSeries(document)
+                .forEach { item ->
                     results[item.url] = item
                 }
+
+            Log.d(
+                "Dizilla",
+                "Genel HTML dizi kartı sayısı = ${results.size}"
+            )
         }
 
         return results.values
@@ -715,16 +653,26 @@ class Dizilla : MainAPI() {
 
             val document =
                 try {
-                    app.get(
-                        candidate,
-                        headers = mapOf(
-                            "User-Agent" to USER_AGENT,
-                            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                            "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
-                            "Referer" to "$mainUrl/"
-                        ),
-                        referer = "$mainUrl/"
-                    ).document
+                    val response =
+                        app.get(
+                            candidate,
+                            headers = mapOf(
+                                "User-Agent" to USER_AGENT,
+                                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                                "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                                "Referer" to "$mainUrl/"
+                            ),
+                            referer = "$mainUrl/"
+                        )
+
+                    val parsedDocument = response.document
+                    Log.d(
+                        "Dizilla",
+                        "Page response status=${response.code} bytes=${response.text.length} " +
+                            "title=${parsedDocument.title()} " +
+                            "body=${parsedDocument.body().text().take(140)}"
+                    )
+                    parsedDocument
                 } catch (e: Exception) {
                     Log.d(
                         "Dizilla",
@@ -1004,28 +952,86 @@ class Dizilla : MainAPI() {
         return null
     }
 
-    private fun Element.toSearchResponse(): SearchResponse? {
+    private fun isSeriesDetailUrl(
+        rawUrl: String?
+    ): Boolean {
+        if (rawUrl.isNullOrBlank()) return false
+
+        val fixed =
+            fixUrlNull(rawUrl.trim())
+                ?: return false
+
+        return fixed.startsWith(mainUrl.trimEnd('/') + "/", ignoreCase = true) &&
+            fixed.contains("/dizi/", ignoreCase = true)
+    }
+
+    private fun collectHtmlSeries(
+        document: Document,
+        containerSelector: String? = null
+    ): List<SearchResponse> {
+        val selector =
+            if (containerSelector.isNullOrBlank()) {
+                "a[href], [data-href], [data-url]"
+            } else {
+                "$containerSelector a[href], " +
+                    "$containerSelector [data-href], " +
+                    "$containerSelector [data-url]"
+            }
+
+        val output = LinkedHashMap<String, SearchResponse>()
+
+        document.select(selector).forEach { element ->
+            val rawHref =
+                element.attr("href").takeIf { it.isNotBlank() }
+                    ?: element.attr("data-href").takeIf { it.isNotBlank() }
+                    ?: element.attr("data-url").takeIf { it.isNotBlank() }
+                    ?: element.selectFirst("a[href]")?.attr("href")
+                        ?.takeIf { it.isNotBlank() }
+                    ?: return@forEach
+
+            if (!isSeriesDetailUrl(rawHref)) return@forEach
+
+            val item =
+                element.toSearchResponse(rawHref)
+                    ?: return@forEach
+
+            output.putIfAbsent(item.url, item)
+            if (output.size >= MAX_MAIN_RESULTS) return@forEach
+        }
+
+        return output.values.toList()
+    }
+
+    private fun Element.toSearchResponse(
+        candidateHref: String? = null
+    ): SearchResponse? {
+        val rawHref =
+            candidateHref?.takeIf { it.isNotBlank() }
+                ?: attr("href").takeIf { it.isNotBlank() }
+                ?: attr("data-href").takeIf { it.isNotBlank() }
+                ?: attr("data-url").takeIf { it.isNotBlank() }
+                ?: selectFirst("a[href]")?.attr("href")
+                    ?.takeIf { it.isNotBlank() }
+                ?: return null
 
         val href =
-            fixUrlNull(attr("href"))
+            fixUrlNull(rawHref)
                 ?: return null
 
         val title =
-            selectFirst("h2")
-                ?.text()
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?: selectFirst("h3")
-                    ?.text()
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                ?: attr("title")
-                    .trim()
+            selectFirst("h1, h2, h3, h4, .title, .name, .card-title, [data-title]")
+                ?.let { heading ->
+                    heading.attr("data-title").takeIf { it.isNotBlank() }
+                        ?: heading.text().trim().takeIf { it.isNotBlank() }
+                }
+                ?: attr("data-title").trim().takeIf { it.isNotBlank() }
+                ?: attr("title").trim().removeSuffix(" izle").trim()
                     .takeIf { it.isNotBlank() }
-                ?: selectFirst("img")
-                    ?.attr("alt")
-                    ?.trim()
+                ?: attr("aria-label").trim().takeIf { it.isNotBlank() }
+                ?: selectFirst("img")?.attr("alt")?.trim()
                     ?.takeIf { it.isNotBlank() }
+                ?: text().replace(Regex("""\s+"""), " ").trim()
+                    .takeIf { it.isNotBlank() && it.length <= 120 }
                 ?: return null
 
         return newTvSeriesSearchResponse(
@@ -1033,8 +1039,7 @@ class Dizilla : MainAPI() {
             href,
             TvType.TvSeries
         ) {
-            this.posterUrl =
-                extractPoster(this@toSearchResponse)
+            this.posterUrl = extractPoster(this@toSearchResponse)
         }
     }
 
