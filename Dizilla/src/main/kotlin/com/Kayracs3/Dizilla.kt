@@ -18,7 +18,7 @@ import javax.crypto.spec.SecretKeySpec
 
 class Dizilla : MainAPI() {
 
-    override var mainUrl = "https://dizilla.now"
+    override var mainUrl = "https://dizilla.la"
     override var name = "Dizilla"
     override val hasMainPage = true
     override var lang = "tr"
@@ -32,6 +32,33 @@ class Dizilla : MainAPI() {
 
     private val paginationSignatures =
         HashMap<String, String>()
+
+    /**
+     * Resolve relative paths against the current site host and migrate links
+     * saved with the former Dizilla domains. External player hosts stay intact.
+     */
+    private fun canonicalizeDizillaUrl(rawUrl: String?): String? {
+        if (rawUrl.isNullOrBlank()) return null
+
+        val cleaned =
+            rawUrl
+                .trim()
+                .replace("\\/", "/")
+                .replace("\\u002F", "/")
+                .replace("&amp;", "&")
+
+        val resolved =
+            fixUrlNull(cleaned)
+                ?: return null
+
+        val legacyHost =
+            Regex("""(?i)^https?://(?:www\.)?dizilla\.(?:now|club)(?=[:/]|$)""")
+
+        return legacyHost.replaceFirst(
+            resolved,
+            mainUrl.trimEnd('/')
+        )
+    }
 
     companion object {
 
@@ -520,7 +547,7 @@ class Dizilla : MainAPI() {
         requestData: String
     ): Boolean {
         val normalized =
-            requestData
+            (canonicalizeDizillaUrl(requestData) ?: requestData)
                 .trimEnd('/')
                 .removeSuffix("/")
                 .lowercase()
@@ -579,11 +606,8 @@ class Dizilla : MainAPI() {
                         ?: return@forEach
 
                 val href =
-                    if (slug.startsWith("http")) {
-                        slug
-                    } else {
-                        "$mainUrl/${slug.trimStart('/')}"
-                    }
+                    canonicalizeDizillaUrl(slug)
+                        ?: return@forEach
 
                 val title =
                     item.title
@@ -597,7 +621,8 @@ class Dizilla : MainAPI() {
                         href,
                         TvType.TvSeries
                     ) {
-                        this.posterUrl = item.poster
+                        this.posterUrl =
+                            canonicalizeDizillaUrl(item.poster) ?: item.poster
                     }
             }
         }
@@ -958,7 +983,7 @@ class Dizilla : MainAPI() {
         if (rawUrl.isNullOrBlank()) return false
 
         val fixed =
-            fixUrlNull(rawUrl.trim())
+            canonicalizeDizillaUrl(rawUrl)
                 ?: return false
 
         return fixed.startsWith(mainUrl.trimEnd('/') + "/", ignoreCase = true) &&
@@ -1015,7 +1040,7 @@ class Dizilla : MainAPI() {
                 ?: return null
 
         val href =
-            fixUrlNull(rawHref)
+            canonicalizeDizillaUrl(rawHref)
                 ?: return null
 
         val title =
@@ -1067,7 +1092,7 @@ class Dizilla : MainAPI() {
 
         for (candidate in candidates) {
             val fixed =
-                fixUrlNull(candidate)
+                canonicalizeDizillaUrl(candidate)
 
             if (!fixed.isNullOrBlank()) {
                 return fixed
@@ -1087,7 +1112,7 @@ class Dizilla : MainAPI() {
                     ?.trim()
                     ?.substringBefore(" ")
 
-            return fixUrlNull(first)
+            return canonicalizeDizillaUrl(first)
         }
 
         return null
@@ -1219,11 +1244,8 @@ class Dizilla : MainAPI() {
                     ?: continue
 
             val href =
-                if (slug.startsWith("http")) {
-                    slug
-                } else {
-                    "$mainUrl/${slug.trimStart('/')}"
-                }
+                canonicalizeDizillaUrl(slug)
+                    ?: continue
 
             val poster =
                 firstString(
@@ -1238,7 +1260,8 @@ class Dizilla : MainAPI() {
                     href,
                     TvType.TvSeries
                 ) {
-                    this.posterUrl = poster
+                    this.posterUrl =
+                        canonicalizeDizillaUrl(poster) ?: poster
                 }
         }
 
@@ -1257,15 +1280,18 @@ class Dizilla : MainAPI() {
     override suspend fun load(
         url: String
     ): LoadResponse? {
+        val seriesUrl =
+            canonicalizeDizillaUrl(url)
+                ?: url
 
         Log.d(
             "Dizilla",
-            "Current series slug=${url.trimEnd('/').substringAfterLast('/')}"
+            "Current series slug=${seriesUrl.trimEnd('/').substringAfterLast('/')}"
         )
 
         val document =
             app.get(
-                url,
+                seriesUrl,
                 headers = mapOf(
                     "User-Agent" to USER_AGENT,
                     "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -1296,7 +1322,7 @@ class Dizilla : MainAPI() {
                     .selectFirst("h1")
                     ?.text()
                     ?.trim()
-                ?: url
+                ?: seriesUrl
                     .trimEnd('/')
                     .substringAfterLast('/')
                     .replace("-", " ")
@@ -1421,11 +1447,8 @@ class Dizilla : MainAPI() {
                         ?: return@forEach
 
                 val href =
-                    if (slug.startsWith("http")) {
-                        slug
-                    } else {
-                        "$mainUrl/${slug.trimStart('/')}"
-                    }
+                    canonicalizeDizillaUrl(slug)
+                        ?: return@forEach
 
                 episodes +=
                     newEpisode(href) {
@@ -1441,7 +1464,7 @@ class Dizilla : MainAPI() {
                         this.season = info.season
                         this.episode = info.episode
                         this.description = info.description
-                        this.posterUrl = info.poster
+                        this.posterUrl = canonicalizeDizillaUrl(info.poster) ?: info.poster
                     }
             }
         }
@@ -1478,11 +1501,8 @@ class Dizilla : MainAPI() {
                                 ?: return@forEach
 
                         val href =
-                            if (slug.startsWith("http")) {
-                                slug
-                            } else {
-                                "$mainUrl/${slug.trimStart('/')}"
-                            }
+                            canonicalizeDizillaUrl(slug)
+                                ?: return@forEach
 
                         episodes +=
                             newEpisode(href) {
@@ -1498,7 +1518,7 @@ class Dizilla : MainAPI() {
                                 this.season = info.season
                                 this.episode = info.episode
                                 this.description = info.description
-                                this.posterUrl = info.poster
+                                this.posterUrl = canonicalizeDizillaUrl(info.poster) ?: info.poster
                             }
                     }
 
@@ -1564,7 +1584,7 @@ class Dizilla : MainAPI() {
 
         return newTvSeriesLoadResponse(
             title.trim(),
-            url,
+            seriesUrl,
             TvType.TvSeries,
             finalEpisodes
         ) {
@@ -2017,7 +2037,7 @@ class Dizilla : MainAPI() {
             }
 
             val fixed =
-                fixUrlNull(href)
+                canonicalizeDizillaUrl(href)
                     ?: return
 
             val parsed =
@@ -2079,7 +2099,7 @@ class Dizilla : MainAPI() {
                         it.attr("data-original"),
                         it.attr("data-image")
                     ).firstNotNullOfOrNull { candidate ->
-                        fixUrlNull(candidate)?.takeIf { url -> url.isNotBlank() }
+                        canonicalizeDizillaUrl(candidate)?.takeIf { url -> url.isNotBlank() }
                     }
                 }
 
@@ -2203,7 +2223,7 @@ class Dizilla : MainAPI() {
                         ?: frame.attr("src").takeIf { it.isNotBlank() }
                         ?: return@forEach
 
-                fixUrlNull(raw)?.let { output.add(it) }
+                canonicalizeDizillaUrl(raw)?.let { output.add(it) }
             }
 
         return output.toList()
@@ -2322,12 +2342,16 @@ class Dizilla : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        Log.d("Dizilla", "loadLinks = " + data)
+        val episodeUrl =
+            canonicalizeDizillaUrl(data)
+                ?: data
+
+        Log.d("Dizilla", "loadLinks = " + episodeUrl)
 
         val response =
             try {
                 app.get(
-                    data,
+                    episodeUrl,
                     headers = mapOf(
                         "User-Agent" to USER_AGENT,
                         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -2535,7 +2559,7 @@ class Dizilla : MainAPI() {
         if (
             loadLegacyDizillaPlayers(
                 episodeDocument,
-                data,
+                episodeUrl,
                 subtitleCallback,
                 callback
             )
@@ -2548,7 +2572,7 @@ class Dizilla : MainAPI() {
             if (
                 tryDizillaExtractor(
                     frame,
-                    data,
+                    episodeUrl,
                     subtitleCallback,
                     callback
                 )
