@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
@@ -131,7 +132,7 @@ class BeyazElma : MainAPI() {
         val streamPlayerSlug = extractStreamPlayerSlug(embedHtml)
         Log.d(name, "STREAMPLAYER SLUG: $streamPlayerSlug")
 
-        // 3) ★ KRİTİK: /api/play/<slug> endpoint'ini dene
+        // 3) ★ /api/play/<slug> endpoint'ini doğrulama + yenileme ile dene
         if (!streamPlayerSlug.isNullOrBlank()) {
             if (tryPlayApi(streamPlayerSlug, embedHost, embedUrl, callback)) return true
         }
@@ -186,8 +187,8 @@ class BeyazElma : MainAPI() {
     }
 
     /**
-     * ★ Ana çözüm: /api/play/<slug> endpoint'ini çağırır.
-     * Hem mainUrl hem embedHost üzerinde dener; JSON veya düz metin yanıtı işler.
+     * /api/play/<slug> endpoint'ini çağırır ve linki DOĞRULAYARAK döner.
+     * Geçersiz/süresi dolmuş linkte 3 kez yeniden dener (1.5 sn arayla).
      */
     private suspend fun tryPlayApi(
         spSlug: String,
@@ -198,78 +199,126 @@ class BeyazElma : MainAPI() {
         val encoded = runCatching { URLEncoder.encode(spSlug, "UTF-8") }.getOrDefault(spSlug)
         val bases = listOf(mainUrl, embedHost).distinct()
 
-        for (base in bases) {
-            val url = "$base/api/play/$encoded"
-            Log.d(name, "PLAY API deneniyor: $url")
-
-            val resp = runCatching {
-                app.get(
-                    url,
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to embedUrl,
-                        "Origin" to embedHost,
-                        "Accept" to "application/json, text/plain, */*",
-                        "X-Requested-With" to "XMLHttpRequest",
-                    ),
-                    referer = embedUrl,
-                )
-            }.getOrNull() ?: continue
-
-            if (!resp.isSuccessful) {
-                Log.d(name, "PLAY API HTTP ${resp.code}: $url")
-                continue
+        repeat(3) { attempt ->
+            if (attempt > 0) {
+                Log.d(name, "PLAY API yeniden deneniyor (deneme ${attempt + 1}/3), 1.5 sn bekleniyor...")
+                delay(1500)
             }
 
-            val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
-            Log.d(name, "PLAY API OK (${body.length} char): ${body.take(600)}")
+            for (base in bases) {
+                val url = "$base/api/play/$encoded"
+                Log.d(name, "PLAY API deneniyor: $url")
 
-            // A) Doğrudan m3u8 URL'si
-            Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
-                .find(body)?.value?.let { m3u8 ->
-                    emitLink(m3u8, url, callback)
+                val resp = runCatching {
+                    app.get(
+                        url,
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to embedUrl,
+                            "Origin" to embedHost,
+                            "Accept" to "application/json, text/plain, */*",
+                            "X-Requested-With" to "XMLHttpRequest",
+                        ),
+                        referer = embedUrl,
+                    )
+                }.getOrNull() ?: continue
+
+                if (!resp.isSuccessful) {
+                    Log.d(name, "PLAY API HTTP ${resp.code}: $url")
+                    continue
+                }
+
+                val body = resp.text.replace("\\/", "/").replace("\\\"", "\"")
+                Log.d(name, "PLAY API OK (${body.length} char): ${body.take(600)}")
+
+                // Doğrudan #EXTM3U içerikli yanıt
+                if (body.trim().startsWith("#EXTM3U")) {
+                    emitLink(url, url, callback)
                     return true
                 }
 
-            // B) kpores URL'si
-            Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).find(body)?.value?.let { kpores ->
-                Log.d(name, "PLAY API KPORES: $kpores")
-                if (tryKporesDirect(kpores, embedHost, embedUrl, callback)) return true
-            }
+                // Aday URL'leri topla
+                val candidates = mutableListOf<String>()
 
-            // C) JSON alanları
-            for (p in listOf(
-                """"stream"\s*:\s*"([^"]+)"""",
-                """"url"\s*:\s*"([^"]+)"""",
-                """"file"\s*:\s*"([^"]+)"""",
-                """"source"\s*:\s*"([^"]+)"""",
-                """"hls"\s*:\s*"([^"]+)"""",
-                """"link"\s*:\s*"([^"]+)"""",
-                """"src"\s*:\s*"([^"]+)"""",
-                """"playlist"\s*:\s*"([^"]+)"""",
-                """"video"\s*:\s*"([^"]+)"""",
-                """"manifest"\s*:\s*"([^"]+)"""",
-            )) {
-                Regex(p, RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1)?.let { raw ->
-                    val abs = absolute(raw, url)
-                    if (abs.contains(".m3u8", true) || abs.contains(".mp4", true)) {
-                        emitLink(abs, url, callback)
-                        return true
+                Regex("""https?://[^\s"'<>\\]+?\.m3u8[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+                    .find(body)?.value?.let { candidates.add(it) }
+
+                Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).find(body)?.value?.let { candidates.add(it) }
+
+                for (p in listOf(
+                    """"stream"\s*:\s*"([^"]+)"""",
+                    """"url"\s*:\s*"([^"]+)"""",
+                    """"file"\s*:\s*"([^"]+)"""",
+                    """"source"\s*:\s*"([^"]+)"""",
+                    """"hls"\s*:\s*"([^"]+)"""",
+                    """"link"\s*:\s*"([^"]+)"""",
+                    """"src"\s*:\s*"([^"]+)"""",
+                    """"playlist"\s*:\s*"([^"]+)"""",
+                    """"video"\s*:\s*"([^"]+)"""",
+                    """"manifest"\s*:\s*"([^"]+)"""",
+                )) {
+                    Regex(p, RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1)?.let { raw ->
+                        val abs = absolute(raw, url)
+                        if (abs.contains(".m3u8", true) || abs.contains(".mp4", true) ||
+                            Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).containsMatchIn(abs)) {
+                            candidates.add(abs)
+                        }
                     }
-                    if (Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).containsMatchIn(abs)) {
-                        if (tryKporesDirect(abs, embedHost, embedUrl, callback)) return true
+                }
+
+                // Her adayı doğrula
+                for (candidate in candidates.distinct()) {
+                    if (Regex(KPORES_REGEX, RegexOption.IGNORE_CASE).containsMatchIn(candidate)) {
+                        // kpores ise /api/stream proxy'si üzerinden doğrula ve yayınla
+                        if (tryKporesDirect(candidate, embedHost, embedUrl, callback)) return true
+                        continue
+                    }
+
+                    if (validateStreamUrl(candidate, url)) {
+                        Log.d(name, "★ Doğrulanmış link: $candidate")
+                        emitLink(candidate, url, callback)
+                        return true
+                    } else {
+                        Log.d(name, "Link geçersiz/süresi dolmuş: $candidate")
                     }
                 }
             }
-
-            // D) Yanıt doğrudan m3u8 içeriği mi?
-            if (body.trim().startsWith("#EXTM3U")) {
-                emitLink(url, url, callback)
-                return true
-            }
         }
 
+        Log.e(name, "PLAY API tüm denemeler başarısız.")
         return false
+    }
+
+    /**
+     * Bir m3u8 linkinin gerçekten oynatılabilir olduğunu doğrular.
+     * 200 dönerse ve içeriği #EXTM3U ile başlıyorsa geçerli sayılır.
+     */
+    private suspend fun validateStreamUrl(
+        streamUrl: String,
+        referer: String,
+    ): Boolean {
+        val resp = runCatching {
+            app.get(
+                streamUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to referer,
+                    "Origin" to mainUrl,
+                ),
+                referer = referer,
+                allowRedirects = true,
+            )
+        }.getOrNull() ?: return false
+
+        Log.d(name, "VALIDATE ${resp.code}: $streamUrl")
+        if (!resp.isSuccessful) return false
+
+        val body = resp.text
+        if (!body.trimStart().startsWith("#EXTM3U")) {
+            Log.d(name, "VALIDATE içerik #EXTM3U değil: ${body.take(200)}")
+            return false
+        }
+        return true
     }
 
     /** Embed HTML'den StreamPlayer slug'ını çıkarır. */
@@ -282,7 +331,7 @@ class BeyazElma : MainAPI() {
         return null
     }
 
-    /** kpores URL'sini /api/stream proxy'si veya doğrudan dener. */
+    /** kpores URL'sini /api/stream proxy'si veya doğrudan dener; geçerliyse yayınlar. */
     private suspend fun tryKporesDirect(
         kporesUrl: String,
         embedHost: String,
