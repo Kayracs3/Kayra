@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:22ce6b55bf3578e87aadb02170efab8748af82a1 -->
+### Restore Dizilla legacy player extraction fallback
+
+- Etkilenen alanlar: Dizilla
+- Commit: [22ce6b5](https://github.com/Kayracs3/Kayra/commit/22ce6b55bf3578e87aadb02170efab8748af82a1)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:282f89478137644dddbcdc86c1f216e7f1fdc588 -->
 ### Fix Dizilla main page card fallbacks
 
