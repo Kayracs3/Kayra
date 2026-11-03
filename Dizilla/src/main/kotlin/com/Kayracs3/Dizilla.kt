@@ -2152,41 +2152,213 @@ class Dizilla : MainAPI() {
     // LOAD LINKS
     // =========================================================
 
+
+    private suspend fun tryDizillaExtractor(
+        url: String,
+        referer: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val fixed =
+            fixUrlNull(
+                url.trim()
+                    .replace("\\/", "/")
+                    .replace("&amp;", "&")
+            ) ?: return false
+
+        return try {
+            val found =
+                loadExtractor(
+                    fixed,
+                    referer,
+                    subtitleCallback
+                ) {
+                    callback(it)
+                }
+
+            Log.d("Dizilla", "Yerleşik extractor url=" + fixed + " found=" + found)
+            found
+        } catch (e: Exception) {
+            Log.w("Dizilla", "Yerleşik extractor başarısız url=" + fixed + ": " + e.message)
+            false
+        }
+    }
+
+    private fun collectPlayerIframes(
+        document: Document
+    ): List<String> {
+        val output = LinkedHashSet<String>()
+
+        document
+            .select(
+                "#playerLsDizilla iframe[src], " +
+                    "#playerLsDizilla iframe[data-src], " +
+                    "#playerLsDizilla iframe[data-lazy-src], " +
+                    "iframe[src], iframe[data-src], iframe[data-lazy-src]"
+            )
+            .forEach { frame ->
+                val raw =
+                    frame.attr("data-src").takeIf { it.isNotBlank() }
+                        ?: frame.attr("data-lazy-src").takeIf { it.isNotBlank() }
+                        ?: frame.attr("src").takeIf { it.isNotBlank() }
+                        ?: return@forEach
+
+                fixUrlNull(raw)?.let { output.add(it) }
+            }
+
+        return output.toList()
+    }
+
+    private suspend fun loadLegacyDizillaPlayers(
+        document: Document,
+        episodeUrl: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val visited = HashSet<String>()
+        var delivered = false
+
+        // Older Dizilla pages expose alternate players as links.
+        val playerLinks =
+            document.select(
+                "a[href*='player'], a[data-href*='player'], a[data-url*='player']"
+            )
+
+        for (element in playerLinks) {
+            val raw =
+                element.attr("href").takeIf { it.isNotBlank() }
+                    ?: element.attr("data-href").takeIf { it.isNotBlank() }
+                    ?: element.attr("data-url").takeIf { it.isNotBlank() }
+                    ?: continue
+
+            val playerUrl = fixUrlNull(raw) ?: continue
+            if (!visited.add(playerUrl)) continue
+
+            val playerDocument =
+                try {
+                    val response =
+                        app.get(
+                            playerUrl,
+                            headers = mapOf(
+                                "User-Agent" to USER_AGENT,
+                                "Referer" to episodeUrl
+                            ),
+                            referer = episodeUrl
+                        )
+
+                    Log.d(
+                        "Dizilla",
+                        "Player alternative status=" + response.code + " url=" + playerUrl
+                    )
+                    response.document
+                } catch (e: Exception) {
+                    Log.w(
+                        "Dizilla",
+                        "Player alternative failed url=" + playerUrl + ": " + e.message
+                    )
+                    null
+                }
+
+            if (playerDocument != null) {
+                val frames = collectPlayerIframes(playerDocument)
+                for (frame in frames) {
+                    if (!visited.add(frame)) continue
+                    if (
+                        tryDizillaExtractor(
+                            frame,
+                            playerUrl,
+                            subtitleCallback,
+                            callback
+                        )
+                    ) {
+                        delivered = true
+                    }
+                }
+            }
+
+            // Some alternatives point directly to a supported player.
+            if (
+                !delivered &&
+                tryDizillaExtractor(
+                    playerUrl,
+                    episodeUrl,
+                    subtitleCallback,
+                    callback
+                )
+            ) {
+                delivered = true
+            }
+        }
+
+        // The legacy template used #playerLsDizilla iframe directly.
+        val directFrames = collectPlayerIframes(document)
+        for (frame in directFrames) {
+            if (!visited.add(frame)) continue
+            if (
+                tryDizillaExtractor(
+                    frame,
+                    episodeUrl,
+                    subtitleCallback,
+                    callback
+                )
+            ) {
+                delivered = true
+            }
+        }
+
+        Log.d(
+            "Dizilla",
+            "Legacy fallback frames=" + directFrames.size +
+                " alternatives=" + playerLinks.size +
+                " delivered=" + delivered
+        )
+
+        return delivered
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        Log.d("Dizilla", "loadLinks = " + data)
 
-        Log.d(
-            "Dizilla",
-            "loadLinks = $data"
-        )
-
-        val episodeDocument =
+        val response =
             try {
                 app.get(
                     data,
                     headers = mapOf(
                         "User-Agent" to USER_AGENT,
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
                         "Referer" to "$mainUrl/"
                     ),
                     referer = "$mainUrl/"
-                ).document
-            } catch (e: Exception) {
-                Log.e(
-                    "Dizilla",
-                    "Episode page failed: ${e.message}"
                 )
+            } catch (e: Exception) {
+                Log.e("Dizilla", "Episode page failed: " + e.message)
                 return false
             }
 
-        val secure =
-            getSecureData(episodeDocument)
+        val episodeDocument = response.document
+        Log.d(
+            "Dizilla",
+            "Episode page status=" + response.code +
+                " bytes=" + response.text.length +
+                " title=" + episodeDocument.title()
+        )
+
+        val secure = getSecureData(episodeDocument)
+        Log.d(
+            "Dizilla",
+            "Episode secureData available=" + (secure != null) +
+                " topLevelKeys=" + (secure?.keys()?.asSequence()?.take(25)?.toList())
+        )
+
+        var delivered = false
 
         if (secure != null) {
-
             val sources =
                 secure
                     .optJSONObject("RelatedResults")
@@ -2199,65 +2371,119 @@ class Dizilla : MainAPI() {
                         ?.optJSONObject("getEpisodeSources")
                         ?.optJSONArray("result")
 
+            val sourceItems = mutableListOf<JSONObject>()
+
             if (sources != null) {
-
-                var delivered = false
-
                 for (index in 0 until sources.length()) {
+                    sources.optJSONObject(index)?.let { sourceItems.add(it) }
+                }
+            } else {
+                // Search nested source objects when the API response shape changes.
+                fun walk(value: Any?, depth: Int) {
+                    if (depth > MAX_JSON_SEARCH_DEPTH) return
 
-                    val item =
-                        sources.optJSONObject(index)
-                            ?: continue
+                    when (value) {
+                        is JSONObject -> {
+                            val sourceKeys = listOf(
+                                "source_content",
+                                "sourceContent",
+                                "embed_url",
+                                "iframe_url",
+                                "embed",
+                                "iframe"
+                            )
 
-                    val sourceContent =
-                        firstString(
-                            item,
-                            "source_content"
-                        )
-                            ?: continue
-
-                    val iframe =
-                        extractIframeUrl(sourceContent)
-                            ?: continue
-
-                    val sourceName =
-                        firstString(
-                            item,
-                            "source_name"
-                        )
-
-                    val language =
-                        firstString(
-                            item,
-                            "language_name"
-                        )
-
-                    val qualityName =
-                        firstString(
-                            item,
-                            "quality_name"
-                        )
-
-                    val label =
-                        buildString {
-                            append(name)
-
-                            if (!sourceName.isNullOrBlank()) {
-                                append(" • ")
-                                append(sourceName)
+                            if (
+                                sourceKeys.any { key ->
+                                    value.has(key) && value.opt(key) != JSONObject.NULL
+                                }
+                            ) {
+                                sourceItems.add(value)
                             }
 
-                            if (!language.isNullOrBlank()) {
-                                append(" • ")
-                                append(language)
-                            }
-
-                            if (!qualityName.isNullOrBlank()) {
-                                append(" • ")
-                                append(qualityName)
+                            val keys = value.keys()
+                            while (keys.hasNext()) {
+                                walk(value.opt(keys.next()), depth + 1)
                             }
                         }
 
+                        is JSONArray -> {
+                            for (index in 0 until value.length()) {
+                                walk(value.opt(index), depth + 1)
+                            }
+                        }
+                    }
+                }
+
+                walk(secure, 0)
+            }
+
+            Log.d(
+                "Dizilla",
+                "Episode source objects=" + sourceItems.size +
+                    " directResultCount=" + (sources?.length() ?: 0)
+            )
+
+            for (item in sourceItems.distinctBy {
+                firstString(
+                    it,
+                    "source_content",
+                    "sourceContent",
+                    "embed_url",
+                    "iframe_url",
+                    "embed",
+                    "iframe",
+                    "url"
+                ).orEmpty()
+            }) {
+                val sourceContent =
+                    firstString(
+                        item,
+                        "source_content",
+                        "sourceContent",
+                        "embed_url",
+                        "iframe_url",
+                        "embed",
+                        "iframe",
+                        "url",
+                        "link"
+                    ) ?: metadataValueToString(item.opt("source_content"))
+                    ?: continue
+
+                val sourceName =
+                    firstString(item, "source_name", "name", "title")
+                val language =
+                    firstString(item, "language_name", "language")
+                val qualityName =
+                    firstString(item, "quality_name", "quality")
+
+                val label =
+                    buildString {
+                        append(name)
+                        if (!sourceName.isNullOrBlank()) {
+                            append(" • ")
+                            append(sourceName)
+                        }
+                        if (!language.isNullOrBlank()) {
+                            append(" • ")
+                            append(language)
+                        }
+                        if (!qualityName.isNullOrBlank()) {
+                            append(" • ")
+                            append(qualityName)
+                        }
+                    }
+
+                val iframe = extractIframeUrl(sourceContent)
+
+                Log.d(
+                    "Dizilla",
+                    "Source candidate name=" + sourceName.orEmpty() +
+                        " contentLength=" + sourceContent.length +
+                        " iframe=" + (!iframe.isNullOrBlank())
+                )
+
+                if (!iframe.isNullOrBlank()) {
                     try {
                         if (
                             extractFromIframe(
@@ -2269,63 +2495,134 @@ class Dizilla : MainAPI() {
                             )
                         ) {
                             delivered = true
+                            continue
                         }
                     } catch (e: Exception) {
-                        Log.e(
-                            "Dizilla",
-                            "Source error: ${e.message}"
-                        )
+                        Log.w("Dizilla", "Custom iframe resolver failed: " + e.message)
                     }
-                }
 
-                if (delivered) {
-                    return true
+                    if (
+                        tryDizillaExtractor(
+                            iframe,
+                            data,
+                            subtitleCallback,
+                            callback
+                        )
+                    ) {
+                        delivered = true
+                        continue
+                    }
+                } else {
+                    val direct = fixUrlNull(sourceContent.trim())
+                    if (
+                        !direct.isNullOrBlank() &&
+                        tryDizillaExtractor(
+                            direct,
+                            data,
+                            subtitleCallback,
+                            callback
+                        )
+                    ) {
+                        delivered = true
+                    }
                 }
             }
         }
 
-        return fallbackIframe(
-            episodeDocument,
-            subtitleCallback,
-            callback
-        )
+        if (delivered) return true
+
+        // Restore the older Dizilla player-page and iframe flow.
+        if (
+            loadLegacyDizillaPlayers(
+                episodeDocument,
+                data,
+                subtitleCallback,
+                callback
+            )
+        ) {
+            return true
+        }
+
+        val fallbackFrames = collectPlayerIframes(episodeDocument)
+        for (frame in fallbackFrames) {
+            if (
+                tryDizillaExtractor(
+                    frame,
+                    data,
+                    subtitleCallback,
+                    callback
+                )
+            ) {
+                delivered = true
+            }
+        }
+
+        if (!delivered) {
+            Log.w(
+                "Dizilla",
+                "No playable link extracted. secureData=" + (secure != null) +
+                    " iframes=" + fallbackFrames.size
+            )
+        }
+
+        return delivered
     }
+
 
     private fun extractIframeUrl(
         sourceContent: String
     ): String? {
+        val clean =
+            sourceContent
+                .replace("\\/", "/")
+                .replace("\\u002F", "/")
+                .replace("&amp;", "&")
+                .trim()
 
         try {
-
-            val parsed =
-                Jsoup.parse(sourceContent)
-
+            val parsed = Jsoup.parse(clean)
             val src =
                 parsed
-                    .selectFirst("iframe")
-                    ?.attr("src")
+                    .selectFirst("iframe[src], iframe[data-src], iframe[data-lazy-src]")
+                    ?.let { frame ->
+                        frame.attr("data-src").takeIf { it.isNotBlank() }
+                            ?: frame.attr("data-lazy-src").takeIf { it.isNotBlank() }
+                            ?: frame.attr("src").takeIf { it.isNotBlank() }
+                    }
                     ?.trim()
 
-            fixUrlNull(src)?.let {
-                return it
-            }
+            fixUrlNull(src)?.let { return it }
         } catch (_: Exception) {
         }
 
-        val regex =
+        if (
+            clean.startsWith("http://", ignoreCase = true) ||
+            clean.startsWith("https://", ignoreCase = true) ||
+            clean.startsWith("//")
+        ) {
+            fixUrlNull(clean)?.let { return it }
+        }
+
+        val attributeMatch =
             Regex(
-                """(?:https?:)?//([A-Za-z0-9.-]+/iframe\.php\?v=[A-Za-z0-9+/=]+)"""
-            )
+                """(?is)(?:src|url|iframe_url|embed_url)\s*[:=]\s*['"]([^'"]+)['"]"""
+            ).find(clean)
 
-        val match =
-            regex.find(sourceContent)
+        val attributeUrl =
+            attributeMatch?.groupValues?.getOrNull(1)
+                ?.replace("\\/", "/")
+                ?.replace("&amp;", "&")
 
-        return match
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.let {
-                "https://$it"
-            }
+        fixUrlNull(attributeUrl)?.let { return it }
+
+        val urlMatch =
+            Regex(
+                """(?i)(?:https?:)?//[^\s"'<>]+"""
+            ).find(clean)
+                ?.value
+                ?.trimEnd(')', ']', '}', ',', ';', '.')
+
+        return fixUrlNull(urlMatch)
     }
 
     private suspend fun extractFromIframe(
