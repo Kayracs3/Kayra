@@ -49,7 +49,7 @@ class Dizilla : MainAPI() {
             "9bYMCNQiWsXIYFWYAu7EkdsSbmGBTyUI"
 
         private const val MAX_MAIN_RESULTS = 24
-        private const val MAX_JSON_SEARCH_DEPTH = 10
+        private const val MAX_JSON_SEARCH_DEPTH = 32
 
         private val INVALID_EPISODE_TITLES =
             setOf(
@@ -127,13 +127,51 @@ class Dizilla : MainAPI() {
     ): JSONObject? {
         if (encrypted.isBlank()) return null
 
+        val clean =
+            encrypted
+                .trim()
+                .removePrefix("\"")
+                .removeSuffix("\"")
+                .replace("\\/", "/")
+
+        // Some site revisions expose this payload as plain JSON.
+        try {
+            return JSONObject(clean)
+        } catch (_: Exception) {
+        }
+
+        // Also accept a Base64-wrapped JSON payload before trying AES.
+        val decodedPayload =
+            try {
+                String(
+                    Base64.decode(clean, Base64.DEFAULT),
+                    Charsets.UTF_8
+                )
+            } catch (_: Exception) {
+                try {
+                    String(
+                        Base64.decode(clean, Base64.URL_SAFE or Base64.NO_WRAP),
+                        Charsets.UTF_8
+                    )
+                } catch (_: Exception) {
+                    ""
+                }
+            }
+
+        if (decodedPayload.isNotBlank()) {
+            try {
+                return JSONObject(decodedPayload)
+            } catch (_: Exception) {
+            }
+        }
+
         decryptWithKey(
-            encrypted,
+            clean,
             aesKey
         )?.let { return it }
 
         return decryptWithKey(
-            encrypted,
+            clean,
             STATIC_AES_KEY.toByteArray(Charsets.UTF_8)
         )
     }
@@ -141,10 +179,89 @@ class Dizilla : MainAPI() {
     private fun getNextData(
         document: Document
     ): String? {
-        return document
-            .selectFirst("script#__NEXT_DATA__")
-            ?.data()
-            ?.takeIf { it.isNotBlank() }
+        val preferred =
+            document
+                .selectFirst("script#__NEXT_DATA__")
+                ?.let { script ->
+                    script.data().takeIf { it.isNotBlank() }
+                        ?: script.html().takeIf { it.isNotBlank() }
+                }
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+
+        if (!preferred.isNullOrBlank()) {
+            return preferred
+        }
+
+        val scripts =
+            document
+                .select("script")
+                .mapNotNull { script ->
+                    val content =
+                        script.data().takeIf { it.isNotBlank() }
+                            ?: script.html().takeIf { it.isNotBlank() }
+                            ?: return@mapNotNull null
+
+                    content.trim().takeIf { it.isNotBlank() }
+                }
+
+        return scripts.firstOrNull {
+            it.contains("secureData", ignoreCase = true)
+        } ?: scripts.firstOrNull {
+            val value = it.trimStart()
+            value.startsWith("{") || value.startsWith("[")
+        }
+    }
+
+    private fun getStructuredData(
+        document: Document
+    ): JSONObject? {
+        val graph = JSONArray()
+
+        document
+            .select("script[type='application/ld+json']")
+            .forEach { script ->
+                val raw =
+                    script.data().takeIf { it.isNotBlank() }
+                        ?: script.html().takeIf { it.isNotBlank() }
+                        ?: return@forEach
+
+                val value = raw.trim()
+                if (value.isBlank()) return@forEach
+
+                try {
+                    graph.put(JSONObject(value))
+                } catch (_: Exception) {
+                    try {
+                        graph.put(JSONArray(value))
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+
+        if (graph.length() == 0) return null
+
+        return try {
+            JSONObject().put("@graph", graph)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun combineMetadata(
+        primary: JSONObject?,
+        structured: JSONObject?
+    ): JSONObject? {
+        if (primary == null) return structured
+        if (structured == null) return primary
+
+        return try {
+            JSONObject()
+                .put("primary", primary)
+                .put("structured", structured)
+        } catch (_: Exception) {
+            primary
+        }
     }
 
     private fun getSecureData(
@@ -194,27 +311,33 @@ class Dizilla : MainAPI() {
          * Fallback: yalnızca hızlı arama başarısızsa JSON oluştur.
          */
         return try {
+            val nextJson = JSONObject(nextData)
 
-            val nextJson =
-                JSONObject(nextData)
+            when (
+                val secureValue =
+                    findValueRecursive(
+                        nextJson,
+                        setOf("secureData")
+                    )
+            ) {
+                is JSONObject -> secureValue
+                is JSONArray -> JSONObject().put("result", secureValue)
+                is String -> decryptSecureData(secureValue)
+                else -> {
+                    val encrypted =
+                        findStringRecursive(
+                            nextJson,
+                            setOf("secureData")
+                        )
 
-            val encrypted =
-                findStringRecursive(
-                    nextJson,
-                    setOf("secureData")
-                )
-
-            encrypted?.let {
-                decryptSecureData(it)
+                    encrypted?.let { decryptSecureData(it) }
+                }
             }
-
         } catch (e: Exception) {
-
             Log.e(
                 "Dizilla",
                 "secureData bulunamadı: ${e.message}"
             )
-
             null
         }
     }
@@ -1147,7 +1270,10 @@ class Dizilla : MainAPI() {
             ).document
 
         val secure =
-            getSecureData(document)
+            combineMetadata(
+                getSecureData(document),
+                getStructuredData(document)
+            )
 
         val title =
             firstMetadata(
@@ -1177,7 +1303,10 @@ class Dizilla : MainAPI() {
                     "poster_url",
                     "object_poster_url",
                     "series_poster",
-                    "poster"
+                    "poster",
+                    "image_url",
+                    "thumbnailUrl",
+                    "image"
                 )
             )
                 ?: document
@@ -1210,6 +1339,8 @@ class Dizilla : MainAPI() {
                 secure,
                 setOf(
                     "release_date",
+                    "datePublished",
+                    "startDate",
                     "object_release_year",
                     "release_year",
                     "year"
@@ -1232,6 +1363,7 @@ class Dizilla : MainAPI() {
                     "imdb_point",
                     "imdb_score",
                     "imdb_rating",
+                    "ratingValue",
                     "rating",
                     "score"
                 )
@@ -1451,6 +1583,34 @@ class Dizilla : MainAPI() {
     // METADATA
     // =========================================================
 
+    private fun metadataValueToString(
+        value: Any?
+    ): String? {
+        return when (value) {
+            is String -> value.trim().takeIf { it.isNotBlank() }
+            is Number -> value.toString()
+            is JSONObject -> {
+                listOf("url", "contentUrl", "src", "name", "value")
+                    .firstNotNullOfOrNull { key ->
+                        val nested = value.opt(key)
+                        if (nested == null || nested == JSONObject.NULL) {
+                            null
+                        } else {
+                            metadataValueToString(nested)
+                        }
+                    }
+            }
+            is JSONArray -> {
+                for (index in 0 until value.length()) {
+                    val nested = metadataValueToString(value.opt(index))
+                    if (!nested.isNullOrBlank()) return nested
+                }
+                null
+            }
+            else -> null
+        }
+    }
+
     private fun firstMetadata(
         document: Document,
         secure: JSONObject?,
@@ -1458,20 +1618,17 @@ class Dizilla : MainAPI() {
     ): String? {
 
         if (secure != null) {
-
             findValueRecursive(
                 secure,
                 keys
-            )?.let {
-
-                val value =
-                    it.toString().trim()
-
-                if (
-                    value.isNotBlank() &&
-                    value != "null"
-                ) {
-                    return value
+            )?.let { rawValue ->
+                metadataValueToString(rawValue)?.let { value ->
+                    if (
+                        value.isNotBlank() &&
+                        value != "null"
+                    ) {
+                        return value
+                    }
                 }
             }
         }
@@ -1739,10 +1896,20 @@ class Dizilla : MainAPI() {
                 .trim()
                 .substringBefore("?")
                 .substringBefore("#")
-                .substringAfterLast("/")
+                .lowercase()
 
         val patterns =
             listOf(
+
+                Regex(
+                    """(?:^|[-_/])(?:season|sezon)[-_/]?(\d{1,2})[-_/]+(?:episode|bolum|ep)[-_/]?(\d{1,3})(?:[-_/]|$)""",
+                    RegexOption.IGNORE_CASE
+                ),
+
+                Regex(
+                    """(?:^|[-_/])s(\d{1,2})[-_/]?e(\d{1,3})(?:[-_/]|$)""",
+                    RegexOption.IGNORE_CASE
+                ),
 
                 Regex(
                     """-(\d+)-sezon-(\d+)-bolum""",
@@ -1855,14 +2022,24 @@ class Dizilla : MainAPI() {
                     .substringBefore("#")
 
             val parsed =
-                parseSeasonEpisodeFromSlug(rawSlug)
+                parseSeasonEpisodeFromSlug(fixed)
+
+            fun readDataNumber(attribute: String): Int? {
+                return element?.attr(attribute)?.toIntOrNull()
+                    ?: element?.selectFirst("[$attribute]")?.attr(attribute)?.toIntOrNull()
+                    ?: element?.parent()?.attr(attribute)?.toIntOrNull()
+            }
 
             val season =
                 parsed.first
+                    ?: readDataNumber("data-season")
+                    ?: readDataNumber("data-season-number")
                     ?: return
 
             val episode =
                 parsed.second
+                    ?: readDataNumber("data-episode")
+                    ?: readDataNumber("data-episode-number")
                     ?: return
 
             val title =
@@ -1880,7 +2057,39 @@ class Dizilla : MainAPI() {
                         ?.attr("alt")
                         ?.trim()
                         ?.takeIf { it.isNotBlank() }
+                    ?: element
+                        ?.attr("aria-label")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                    ?: element
+                        ?.text()
+                        ?.replace(Regex("""\\s+"""), " ")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() && it.length <= 180 }
                     ?: "${episode}. Bölüm"
+
+            val image =
+                element?.selectFirst("img")
+
+            val episodePoster =
+                image?.let {
+                    listOf(
+                        it.attr("src"),
+                        it.attr("data-src"),
+                        it.attr("data-lazy-src"),
+                        it.attr("data-original"),
+                        it.attr("data-image")
+                    ).firstNotNullOfOrNull { candidate ->
+                        fixUrlNull(candidate)?.takeIf { url -> url.isNotBlank() }
+                    }
+                }
+
+            val episodeDescription =
+                element
+                    ?.selectFirst(".episode-description, .description, .desc, p")
+                    ?.text()
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
 
             if (isInvalidEpisodeTitle(title)) {
                 return
@@ -1895,6 +2104,8 @@ class Dizilla : MainAPI() {
                     this.name = title
                     this.season = season
                     this.episode = episode
+                    this.posterUrl = episodePoster
+                    this.description = episodeDescription
                 }
         }
 
@@ -1906,8 +2117,11 @@ class Dizilla : MainAPI() {
             .select(
                 "a[href*='-sezon-'][href*='-bolum'], " +
                     "a[href*='sezon-'][href*='bolum-'], " +
+                    "a[href*='season'][href*='episode'], " +
+                    "a[href*='/episode/'], a[href*='/bolum/'], " +
                     "[data-href*='-sezon-'][data-href*='-bolum'], " +
-                    "[data-url*='-sezon-'][data-url*='-bolum']"
+                    "[data-url*='-sezon-'][data-url*='-bolum'], " +
+                    "[data-season][data-episode]"
             )
             .forEach { element ->
 
@@ -1921,6 +2135,10 @@ class Dizilla : MainAPI() {
                         ?: element
                             .attr("data-url")
                             .takeIf { it.isNotBlank() }
+                        ?: element
+                            .selectFirst("a[href]")
+                            ?.attr("href")
+                            ?.takeIf { it.isNotBlank() }
 
                 addEpisode(
                     href,
