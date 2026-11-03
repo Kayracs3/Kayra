@@ -2,6 +2,15 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:669e5cd4c2885dc9d57b8f48bf58845b0db1eaf3 -->
+### Implement cache busting in load methods
+
+- Etkilenen alanlar: Newtv
+- Commit: [669e5cd](https://github.com/Kayracs3/Kayra/commit/669e5cd4c2885dc9d57b8f48bf58845b0db1eaf3)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:eb104f6630800f4560f1fab918e4d490e20c3831 -->
 ### Fix Newtv coroutines compile dependency
 
