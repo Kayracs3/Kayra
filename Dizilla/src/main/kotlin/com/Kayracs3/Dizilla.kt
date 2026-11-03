@@ -103,10 +103,11 @@ class Dizilla : MainAPI() {
             )
 
             val decoded =
-                Base64.decode(
-                    clean,
-                    Base64.DEFAULT
-                )
+                try {
+                    Base64.decode(clean, Base64.DEFAULT)
+                } catch (_: Exception) {
+                    Base64.decode(clean, Base64.URL_SAFE or Base64.NO_WRAP)
+                }
 
             val plain =
                 cipher.doFinal(decoded)
@@ -2014,13 +2015,6 @@ class Dizilla : MainAPI() {
                 fixUrlNull(href)
                     ?: return
 
-            val rawSlug =
-                fixed
-                    .trimEnd('/')
-                    .substringAfterLast('/')
-                    .substringBefore("?")
-                    .substringBefore("#")
-
             val parsed =
                 parseSeasonEpisodeFromSlug(fixed)
 
@@ -2063,7 +2057,7 @@ class Dizilla : MainAPI() {
                         ?.takeIf { it.isNotBlank() }
                     ?: element
                         ?.text()
-                        ?.replace(Regex("""\\s+"""), " ")
+                        ?.replace(Regex("""\s+"""), " ")
                         ?.trim()
                         ?.takeIf { it.isNotBlank() && it.length <= 180 }
                     ?: "${episode}. Bölüm"
