@@ -2,6 +2,23 @@
 
 ## 2026-11-03
 
+<!-- kayra-commit:776bcbd49e84c80fd91ea54e5e6a27b0a944de9c -->
+### Update Kotlin version from 11 to 12
+
+- Etkilenen alanlar: Newtv
+- Commit: [776bcbd](https://github.com/Kayracs3/Kayra/commit/776bcbd49e84c80fd91ea54e5e6a27b0a944de9c)
+
+## 2026-11-03
+
+<!-- kayra-commit:d5bffb4c62120bced8999ff843955b00a0c4331f -->
+### Fix formatting and add newline at end of Newtv.kt
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [d5bffb4](https://github.com/Kayracs3/Kayra/commit/d5bffb4c62120bced8999ff843955b00a0c4331f)
+
+
+## 2026-11-03
+
 <!-- kayra-commit:77bdbec5cfe60a6ceca4596d8fc06eed98253e66 -->
 ### Enhance load function with cache-busting mechanism
 
