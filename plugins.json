@@ -234,10 +234,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=dizilla.la&sz=%size%",
-        "fileHash": "sha256-f609ef36a3f59a92bd97b6623017656862a3135b4bd889d55b0640ea4f7b4e82",
+        "fileHash": "sha256-c37799cdcc78df24aa323a645eec792ccd87843bfba707a8c6786b140dac9552",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 100297,
+        "fileSize": 100298,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -246,7 +246,7 @@
         "tvTypes": [
             "TvSeries"
         ],
-        "version": 24,
+        "version": 25,
         "internalName": "Dizilla",
         "description": "Dizilla t\u00fcm yabanc\u0131 dizileri \u00fccretsiz olarak T\u00fcrk\u00e7e Dublaj ve altyaz\u0131l\u0131 se\u00e7enekleri ile 1080P kalite izleyebilece\u011finiz yeni nesil yabanc\u0131 dizi izleme siteniz.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Dizilla.cs3",
