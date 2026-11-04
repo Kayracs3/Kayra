@@ -2185,8 +2185,52 @@ class Dizilla : MainAPI() {
      * Current Dizilla episodes may expose secureData only through Next.js
      * data requests, not in the rendered episode HTML.
      */
-    private suspend fun fetchDizillaBuildId(): String? {
-        val response = try {
+    private fun extractNextBuildId(html: String): String? {
+        if (html.isBlank()) return null
+
+        val script = Regex(
+            """(?is)<script[^>]*id=["']__NEXT_DATA__["'][^>]*>(.*?)</script>"""
+        ).find(html)?.groupValues?.getOrNull(1)
+
+        val candidates = listOfNotNull(script, html)
+        val buildIdPattern = Regex(
+            """"buildId"\s*:\s*"([^"]+)"""",
+            RegexOption.IGNORE_CASE
+        )
+
+        for (candidate in candidates) {
+            val normalized = candidate
+                .replace("\\\"", "\"")
+                .replace("\\\\\"", "\"")
+                .replace("\\u0022", "\"")
+
+            val direct = buildIdPattern.find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.takeIf { it.isNotBlank() }
+
+            if (!direct.isNullOrBlank()) return direct
+
+            try {
+                val json = JSONObject(normalized)
+                json.optString("buildId")
+                    .takeIf { it.isNotBlank() }
+                    ?.let { return it }
+            } catch (_: Exception) {
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Match the site's Next.js data flow: check the homepage first, then use
+     * the current episode HTML as the documented fallback.
+     */
+    private suspend fun fetchDizillaBuildId(
+        fallbackHtml: String
+    ): String? {
+        val homepageHtml = try {
             app.get(
                 "$mainUrl/",
                 headers = mapOf(
@@ -2194,34 +2238,26 @@ class Dizilla : MainAPI() {
                     "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8"
                 )
-            )
+            ).text
         } catch (e: Exception) {
             Log.w("Dizilla", "BuildId homepage request failed: ${e.message}")
-            return null
+            ""
         }
 
-        val nextData = getNextData(response.document)
-        val fromJson = try {
-            if (nextData.isNullOrBlank()) {
-                null
-            } else {
-                JSONObject(nextData).optString("buildId").takeIf { it.isNotBlank() }
-            }
-        } catch (_: Exception) {
-            null
+        val homepageBuildId = extractNextBuildId(homepageHtml)
+        if (!homepageBuildId.isNullOrBlank()) {
+            Log.d("Dizilla", "Next.js buildId found on homepage")
+            return homepageBuildId
         }
 
-        val fromHtml = Regex(
-            """"buildId"\s*:\s*"([^"]+)""""
-        ).find(response.text)?.groupValues?.getOrNull(1)
-
-        val buildId = fromJson ?: fromHtml
-        Log.d("Dizilla", "Next.js buildId found=${!buildId.isNullOrBlank()}")
-        return buildId?.takeIf { it.isNotBlank() }
+        val pageBuildId = extractNextBuildId(fallbackHtml)
+        Log.d("Dizilla", "Next.js buildId found on episode page=${!pageBuildId.isNullOrBlank()}")
+        return pageBuildId
     }
 
     private suspend fun loadEpisodeSecureData(
-        episodeUrl: String
+        episodeUrl: String,
+        fallbackHtml: String
     ): JSONObject? {
         val slug = episodeUrl
             .substringBefore('?')
@@ -2231,7 +2267,7 @@ class Dizilla : MainAPI() {
             .takeIf { it.isNotBlank() }
             ?: return null
 
-        val buildId = fetchDizillaBuildId() ?: return null
+        val buildId = fetchDizillaBuildId(fallbackHtml) ?: return null
         val dataUrl = "$mainUrl/_next/data/$buildId/$slug.json"
 
         val response = try {
@@ -2835,7 +2871,7 @@ class Dizilla : MainAPI() {
         )
 
         // Current Dizilla builds sometimes keep episode secureData only in /_next/data/*.json.
-        val secure = loadEpisodeSecureData(episodeUrl)
+        val secure = loadEpisodeSecureData(episodeUrl, response.text)
             ?: getSecureData(episodeDocument)
 
         Log.d(
