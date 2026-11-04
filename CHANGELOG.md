@@ -1,5 +1,22 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-04
+
+<!-- kayra-commit:f8a36faf92161a286004c582ba36f230fedf23a3 -->
+### Bump Dizilla plugin version to 16
+
+- Etkilenen alanlar: Dizilla
+- Commit: [f8a36fa](https://github.com/Kayracs3/Kayra/commit/f8a36faf92161a286004c582ba36f230fedf23a3)
+
+## 2026-11-04
+
+<!-- kayra-commit:38a363a8869c5606e5d74038777bda8b93496a8d -->
+### Fix Dizilla RSC player extraction and legacy Pichive referer
+
+- Etkilenen alanlar: Dizilla
+- Commit: [38a363a](https://github.com/Kayracs3/Kayra/commit/38a363a8869c5606e5d74038777bda8b93496a8d)
+
+
 ## 2026-11-03
 
 <!-- kayra-commit:d03aaa9239b45917056c496a7ca673d4a24adc30 -->
