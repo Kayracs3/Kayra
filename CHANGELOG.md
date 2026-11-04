@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:a0d7461023fa2894e2d2475bc7b01c6b1c2df5d4 -->
+### Bump Dizilla plugin version to 18
+
+- Etkilenen alanlar: Dizilla
+- Commit: [a0d7461](https://github.com/Kayracs3/Kayra/commit/a0d7461023fa2894e2d2475bc7b01c6b1c2df5d4)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:2cb7d06b0555973b80454cbfefae28a82ad3e183 -->
 ### Harden Dizilla Flight payload source parsing
 
