@@ -1529,7 +1529,7 @@ class Dizilla : MainAPI() {
 
         val backgroundElements = listOf(element) + element.select("[style]")
         val backgroundPattern =
-            Regex("""(?i)background(?:-image)?\\s*:\\s*url\\([\\s'"]*([^)'"]+)""")
+            Regex("""(?i)background(?:-image)?\s*:\s*url\([\s'"]*([^)'"]+)""")
 
         for (node in backgroundElements) {
             val style = node.attr("style")
