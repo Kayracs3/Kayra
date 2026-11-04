@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:468952c44653c74a2eda58d519cd62c01a7aee72 -->
+### Fix Dizilla player diagnostic interpolation
+
+- Etkilenen alanlar: Dizilla
+- Commit: [468952c](https://github.com/Kayracs3/Kayra/commit/468952c44653c74a2eda58d519cd62c01a7aee72)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:f8a36faf92161a286004c582ba36f230fedf23a3 -->
 ### Bump Dizilla plugin version to 16
 
