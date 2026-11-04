@@ -2454,16 +2454,12 @@ class Dizilla : MainAPI() {
 
     private fun extractRscSources(
         rawHtml: String
-    ): JSONArray? {
-        // Match the site's Flight payload format: its JSON is embedded in a JS string.
-        val normalized = rawHtml
-            .replace("\\\\\"", "\"")
-            .replace("\\u0022", "\"")
-
+    ): List<JSONArray> {
+        // Flight values may be escaped once or twice inside the HTML response.
         val candidates = listOf(
-            normalized,
-            normalized.replace("\\\"", "\""),
-            normalized.replace("\\\\u0022", "\"")
+            rawHtml.replace("\\\"", "\""),
+            rawHtml.replace("\\\\\"", "\"").replace("\\u0022", "\""),
+            rawHtml.replace("\\u0022", "\"")
         ).distinct()
 
         val markers = listOf(
@@ -2472,7 +2468,10 @@ class Dizilla : MainAPI() {
             "\"sources\" :[",
             "\"sources\" : ["
         )
+        val arrays = mutableListOf<JSONArray>()
 
+        // Do not stop at the first non-empty "sources" array: Next.js pages can
+        // contain unrelated arrays before the actual episode player list.
         for (html in candidates) {
             for (marker in markers) {
                 var cursor = 0
@@ -2480,56 +2479,80 @@ class Dizilla : MainAPI() {
                     val at = html.indexOf(marker, cursor)
                     if (at < 0) break
 
-                    val openIndex = at + marker.lastIndex
+                    val openIndex = html.indexOf('[', at + marker.lastIndex)
                     val json = extractBalancedJson(html, openIndex)
                     if (!json.isNullOrBlank()) {
                         try {
                             val array = JSONArray(json)
-                            if (array.length() > 0) {
-                                Log.d("Dizilla", "RSC sources array parsed count=${array.length()}")
-                                return array
-                            }
+                            if (array.length() > 0) arrays.add(array)
                         } catch (_: Exception) {
                         }
                     }
-
                     cursor = at + marker.length
                 }
             }
         }
 
+        val unique = arrays.distinctBy { it.toString() }
         Log.d(
             "Dizilla",
-            "RSC sources marker not parsed rawBytes=${rawHtml.length} normalizedBytes=${normalized.length} " +
-                "containsSources=${normalized.contains("sources", ignoreCase = true)}"
+            "RSC sources arrays parsed=${unique.size} counts=${unique.map { it.length() }}"
         )
-        return null
+        return unique
     }
 
     private fun collectRscPlayers(
         rawHtml: String
     ): List<DizillaRscPlayer> {
-        val sources = extractRscSources(rawHtml) ?: return emptyList()
+        val sourceArrays = extractRscSources(rawHtml)
+        if (sourceArrays.isEmpty()) return emptyList()
+
         val players = mutableListOf<DizillaRscPlayer>()
+        val urlKeys = arrayOf(
+            "src", "url", "file", "embed", "iframe",
+            "source_content", "sourceContent", "embed_url", "embedUrl",
+            "iframe_url", "iframeUrl", "player_url", "playerUrl",
+            "link", "source", "content", "value"
+        )
 
-        for (index in 0 until sources.length()) {
-            val item = sources.optJSONObject(index) ?: continue
-            if (item.optBoolean("trailer", false)) continue
+        for (sources in sourceArrays) {
+            for (index in 0 until sources.length()) {
+                val item = sources.optJSONObject(index) ?: continue
+                if (item.optBoolean("trailer", false)) continue
 
-            val url = firstString(item, "src", "url", "file", "embed", "iframe").orEmpty().trim()
-            if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
-                continue
+                val rawUrl = firstString(item, *urlKeys)
+                    ?: metadataValueToString(item.opt("src"))
+                    ?: metadataValueToString(item.opt("source"))
+                    ?: continue
+
+                // Some builds provide an iframe snippet or a relative URL instead
+                // of a fully-qualified src string.
+                val playerUrl = extractIframeUrl(rawUrl)
+                    ?: canonicalizeDizillaUrl(rawUrl)
+                    ?: continue
+                if (
+                    !playerUrl.startsWith("http://", true) &&
+                    !playerUrl.startsWith("https://", true)
+                ) {
+                    continue
+                }
+
+                players += DizillaRscPlayer(
+                    url = playerUrl,
+                    name = firstString(item, "name", "title", "source_name").orEmpty(),
+                    quality = firstString(item, "quality", "quality_name").orEmpty(),
+                    language = firstString(
+                        item,
+                        "langLabel",
+                        "language_name",
+                        "language",
+                        "lang"
+                    ).orEmpty()
+                )
             }
-
-            players += DizillaRscPlayer(
-                url = url,
-                name = firstString(item, "name", "title").orEmpty(),
-                quality = firstString(item, "quality", "quality_name").orEmpty(),
-                language = firstString(item, "langLabel", "language", "lang").orEmpty()
-            )
         }
 
-        return players
+        val result = players
             .groupBy { it.url }
             .values
             .map { entries ->
@@ -2541,6 +2564,23 @@ class Dizilla : MainAPI() {
                         .joinToString(" / ")
                 )
             }
+
+        if (result.isEmpty()) {
+            val details = sourceArrays.take(4).mapIndexed { arrayIndex, array ->
+                val itemDetails = (0 until minOf(array.length(), 3)).mapNotNull { index ->
+                    val item = array.optJSONObject(index) ?: return@mapNotNull null
+                    val keys = item.keys().asSequence().take(12).toList()
+                    val sample = firstString(item, *urlKeys)?.take(100).orEmpty()
+                    "keys=$keys urlSample=$sample"
+                }
+                "array$arrayIndex(size=${array.length()}): ${itemDetails.joinToString("; ")}"
+            }
+            Log.w("Dizilla", "RSC arrays found but no player URLs: ${details.joinToString(" | ")}")
+        } else {
+            Log.d("Dizilla", "RSC playable players collected=${result.size}")
+        }
+
+        return result
     }
 
     private fun extractPlayerConfig(
