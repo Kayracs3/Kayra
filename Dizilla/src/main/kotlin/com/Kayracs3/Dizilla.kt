@@ -75,6 +75,9 @@ class Dizilla : MainAPI() {
         private const val STATIC_AES_KEY =
             "9bYMCNQiWsXIYFWYAu7EkdsSbmGBTyUI"
 
+        // The current Pichive player still validates the legacy Dizilla origin.
+        private const val PLAYER_REFERER = "https://dizilla.now/"
+
         private const val MAX_MAIN_RESULTS = 24
         private const val MAX_JSON_SEARCH_DEPTH = 32
 
@@ -2178,6 +2181,263 @@ class Dizilla : MainAPI() {
     // =========================================================
 
 
+    private data class DizillaRscPlayer(
+        val url: String,
+        val name: String,
+        val quality: String,
+        val language: String
+    )
+
+    /**
+     * The current site puts its player list in a Next.js Flight/RSC payload,
+     * not in secureData or a normal iframe element.
+     */
+    private fun extractBalancedJson(
+        text: String,
+        startIndex: Int,
+        openChar: Char,
+        closeChar: Char
+    ): String? {
+        if (startIndex < 0 || startIndex >= text.length || text[startIndex] != openChar) {
+            return null
+        }
+
+        var depth = 0
+        var inString = false
+        var escaped = false
+
+        for (index in startIndex until text.length) {
+            val char = text[index]
+
+            if (inString) {
+                when {
+                    escaped -> escaped = false
+                    char == '\\' -> escaped = true
+                    char == '"' -> inString = false
+                }
+                continue
+            }
+
+            when (char) {
+                '"' -> inString = true
+                openChar -> depth++
+                closeChar -> {
+                    depth--
+                    if (depth == 0) {
+                        return text.substring(startIndex, index + 1)
+                    }
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun extractRscSources(
+        rawHtml: String
+    ): JSONArray? {
+        // Next.js Flight data escapes quotes inside its script string.
+        val html = rawHtml.replace("\\\"", "\"")
+        val marker = Regex("\"sources\"\\s*:\\s*\\[", RegexOption.IGNORE_CASE)
+        var cursor = 0
+
+        while (cursor < html.length) {
+            val match = marker.find(html, cursor) ?: return null
+            val openIndex = html.indexOf('[', match.range.first)
+            if (openIndex < 0) return null
+
+            val json = extractBalancedJson(html, openIndex, '[', ']')
+            if (!json.isNullOrBlank()) {
+                try {
+                    return JSONArray(json)
+                } catch (_: Exception) {
+                }
+            }
+
+            cursor = openIndex + 1
+        }
+
+        return null
+    }
+
+    private fun collectRscPlayers(
+        rawHtml: String
+    ): List<DizillaRscPlayer> {
+        val sources = extractRscSources(rawHtml) ?: return emptyList()
+        val players = mutableListOf<DizillaRscPlayer>()
+
+        for (index in 0 until sources.length()) {
+            val item = sources.optJSONObject(index) ?: continue
+            if (item.optBoolean("trailer", false)) continue
+
+            val url = item.optString("src").trim()
+            if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
+                continue
+            }
+
+            players += DizillaRscPlayer(
+                url = url,
+                name = firstString(item, "name").orEmpty(),
+                quality = firstString(item, "quality").orEmpty(),
+                language = firstString(item, "langLabel", "lang").orEmpty()
+            )
+        }
+
+        return players
+            .groupBy { it.url }
+            .values
+            .map { entries ->
+                val first = entries.first()
+                first.copy(
+                    language = entries.map { it.language }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .joinToString(" / ")
+                )
+            }
+    }
+
+    private fun extractPlayerConfig(
+        html: String
+    ): JSONObject? {
+        val markerIndex = html.indexOf("NP_CONFIG", ignoreCase = true)
+        if (markerIndex < 0) return null
+
+        val objectStart = html.indexOf('{', markerIndex)
+        if (objectStart < 0) return null
+
+        val json = extractBalancedJson(html, objectStart, '{', '}')
+            ?: return null
+
+        return try {
+            JSONObject(json)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun loadRscPlayer(
+        player: DizillaRscPlayer,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit,
+        seenSubtitles: MutableSet<String>
+    ): Boolean {
+        val playerHtml = try {
+            app.get(
+                player.url,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                    "Referer" to PLAYER_REFERER
+                ),
+                referer = PLAYER_REFERER
+            ).text
+        } catch (e: Exception) {
+            Log.w("Dizilla", "RSC player request failed url=\${player.url}: \${e.message}")
+            return false
+        }
+
+        val config = extractPlayerConfig(playerHtml)
+        if (config == null) {
+            Log.w("Dizilla", "Pichive NP_CONFIG not found url=\${player.url} bytes=\${playerHtml.length}")
+            return false
+        }
+
+        val masters = config.optJSONArray("sources") ?: return false
+        val quality = Regex("""\d{3,4}""")
+            .find(player.quality)
+            ?.value
+            ?.toIntOrNull()
+            ?: Qualities.Unknown.value
+
+        val linkName = buildString {
+            append(name)
+            if (player.language.isNotBlank()) {
+                append(" • ")
+                append(player.language)
+            }
+            if (player.name.isNotBlank()) {
+                append(" • ")
+                append(player.name)
+            }
+            if (player.quality.isNotBlank()) {
+                append(" • ")
+                append(player.quality)
+            }
+        }
+
+        var delivered = false
+
+        for (index in 0 until masters.length()) {
+            val source = masters.optJSONObject(index) ?: continue
+            val master = source.optString("master").trim()
+            if (!master.startsWith("http://", true) && !master.startsWith("https://", true)) {
+                continue
+            }
+
+            val generated = try {
+                M3u8Helper.generateM3u8(linkName, master, player.url)
+            } catch (e: Exception) {
+                Log.d("Dizilla", "Pichive M3U8 variants failed: \${e.message}")
+                emptyList()
+            }
+
+            if (generated.isNotEmpty()) {
+                generated.forEach(callback)
+            } else {
+                callback(
+                    newExtractorLink(
+                        source = name,
+                        name = linkName,
+                        url = master,
+                        type = ExtractorLinkType.M3U8
+                    ) {
+                        this.referer = player.url
+                        this.headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to player.url
+                        )
+                        this.quality = quality
+                    }
+                )
+            }
+
+            delivered = true
+        }
+
+        val subtitles = config.optJSONArray("subtitles")
+        if (subtitles != null) {
+            for (index in 0 until subtitles.length()) {
+                val item = subtitles.optJSONObject(index) ?: continue
+                val subtitleUrl = item.optString("url").trim()
+                if (
+                    (!subtitleUrl.startsWith("http://", true) &&
+                        !subtitleUrl.startsWith("https://", true)) ||
+                    !seenSubtitles.add(subtitleUrl)
+                ) {
+                    continue
+                }
+
+                val language = item.optString("label").trim().ifBlank { "Türkçe" }
+                subtitleCallback(
+                    newSubtitleFile(language, subtitleUrl) {
+                        this.headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to player.url
+                        )
+                    }
+                )
+            }
+        }
+
+        Log.d(
+            "Dizilla",
+            "Pichive player parsed url=\${player.url} masters=\${masters.length()} delivered=$delivered subtitles=\${subtitles?.length() ?: 0}"
+        )
+        return delivered
+    }
+
     private suspend fun tryDizillaExtractor(
         url: String,
         referer: String,
@@ -2378,14 +2638,35 @@ class Dizilla : MainAPI() {
                 " title=" + episodeDocument.title()
         )
 
+        // New dizilla.la pages expose player iframes in the Next.js Flight payload.
+        // Pichive still requires the legacy .now origin as Referer.
+        val rscPlayers = collectRscPlayers(response.text)
+        Log.d("Dizilla", "RSC player candidates=${rscPlayers.size}")
+
+        var delivered = false
+        val seenSubtitles = HashSet<String>()
+
+        for (player in rscPlayers) {
+            try {
+                if (loadRscPlayer(player, subtitleCallback, callback, seenSubtitles)) {
+                    delivered = true
+                }
+            } catch (e: Exception) {
+                Log.w("Dizilla", "RSC player resolver failed url=${player.url}: ${e.message}")
+            }
+        }
+
+        if (delivered) {
+            Log.d("Dizilla", "RSC playback links delivered")
+            return true
+        }
+
         val secure = getSecureData(episodeDocument)
         Log.d(
             "Dizilla",
             "Episode secureData available=" + (secure != null) +
                 " topLevelKeys=" + (secure?.keys()?.asSequence()?.take(25)?.toList())
         )
-
-        var delivered = false
 
         if (secure != null) {
             val sources =
