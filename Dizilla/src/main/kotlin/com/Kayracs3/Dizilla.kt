@@ -60,6 +60,7 @@ class Dizilla : MainAPI() {
         )
     }
 
+    // The series title must travel with each episode to the playback resolver.
     private fun encodeEpisodeData(episodeUrl: String, seriesTitle: String): String {
         val encodedTitle = Base64.encodeToString(
             seriesTitle.toByteArray(Charsets.UTF_8),
@@ -2708,7 +2709,8 @@ class Dizilla : MainAPI() {
             (0 until array.length()).any { index ->
                 val item = array.optJSONObject(index) ?: return@any false
                 val candidate = firstString(item, "master", "src", "file", "url").orEmpty()
-                candidate.startsWith("http://", true) || candidate.startsWith("https://", true)
+                (candidate.startsWith("http://", true) || candidate.startsWith("https://", true)) &&
+                    (candidate.contains(".m3u8", true) || candidate.contains("m.php", true))
             }
         }
         if (directSources != null) {
