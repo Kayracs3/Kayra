@@ -2,6 +2,23 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:eccf0a92d1e6a1668e1c8d6bb041c3fd6c600dc2 -->
+### Fix actor card whitespace normalization
+
+- Etkilenen alanlar: Dizilla
+- Commit: [eccf0a9](https://github.com/Kayracs3/Kayra/commit/eccf0a92d1e6a1668e1c8d6bb041c3fd6c600dc2)
+
+## 2026-11-04
+
+<!-- kayra-commit:4357cb2b81d4b14b81ed5a18092e1478b8d4e94a -->
+### Read Dizilla cast cards for actor portraits
+
+- Etkilenen alanlar: Dizilla
+- Commit: [4357cb2](https://github.com/Kayracs3/Kayra/commit/4357cb2b81d4b14b81ed5a18092e1478b8d4e94a)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:30141a446a57da95cc39ecc97ba93ce19145c4df -->
 ### Correct lazy poster CSS URL matching
 
