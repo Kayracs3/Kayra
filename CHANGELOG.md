@@ -2,6 +2,23 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:170cfda4300d89b7a86a1f96d27e7b8d4bd79b51 -->
+### Bump Dizilla plugin version to 19
+
+- Etkilenen alanlar: Dizilla
+- Commit: [170cfda](https://github.com/Kayracs3/Kayra/commit/170cfda4300d89b7a86a1f96d27e7b8d4bd79b51)
+
+## 2026-11-04
+
+<!-- kayra-commit:8221791fe9f7440563264f7f6ac8fac3f5ee84af -->
+### Improve Dizilla RSC player source extraction
+
+- Etkilenen alanlar: Dizilla
+- Commit: [8221791](https://github.com/Kayracs3/Kayra/commit/8221791fe9f7440563264f7f6ac8fac3f5ee84af)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:f04d0c601151388364f26731e36fe291a8e82e21 -->
 ### Fix Dizilla balanced JSON parser call
 
