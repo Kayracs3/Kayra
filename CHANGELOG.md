@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:322329c6a6f2e872c29ce045b96b65a9ab00f63a -->
+### Dizilla: add IMDb card scores and detail metadata
+
+- Etkilenen alanlar: Dizilla
+- Commit: [322329c](https://github.com/Kayracs3/Kayra/commit/322329c6a6f2e872c29ce045b96b65a9ab00f63a)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:c538f5f13749b718f2b5e8226ccc1ac97af5be97 -->
 ### Bump Dizilla plugin version to 22
 
