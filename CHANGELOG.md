@@ -2,6 +2,23 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:bcebf750c1209aa44e98fef33ac6cc376dc02861 -->
+### Bump Dizilla plugin version to 20
+
+- Etkilenen alanlar: Dizilla
+- Commit: [bcebf75](https://github.com/Kayracs3/Kayra/commit/bcebf750c1209aa44e98fef33ac6cc376dc02861)
+
+## 2026-11-04
+
+<!-- kayra-commit:1f7e64086733ef3fa74df2d706b29e02099dc6a1 -->
+### Add Pichive desktop UA fallback and robust config parsing
+
+- Etkilenen alanlar: Dizilla
+- Commit: [1f7e640](https://github.com/Kayracs3/Kayra/commit/1f7e64086733ef3fa74df2d706b29e02099dc6a1)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:170cfda4300d89b7a86a1f96d27e7b8d4bd79b51 -->
 ### Bump Dizilla plugin version to 19
 
