@@ -1427,7 +1427,7 @@ class Dizilla : MainAPI() {
                 ?: return null
 
         val titleCandidates = listOfNotNull(
-            selectFirst("h1, h2, h3, h4, .title, .name, .card-title, [data-title]")?.let { heading ->
+            selectFirst("span.mvk-t, .mvk-t, h1, h2, h3, h4, .title, .name, .card-title, [data-title]")?.let { heading ->
                 heading.attr("data-title").takeIf { it.isNotBlank() }
                     ?: heading.text().trim().takeIf { it.isNotBlank() }
             },
@@ -1537,123 +1537,107 @@ class Dizilla : MainAPI() {
     override suspend fun search(
         query: String
     ): List<SearchResponse> {
-
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) return emptyList()
-        val encoded =
-            URLEncoder.encode(
-                cleanQuery,
-                "UTF-8"
+
+        // Current Dizilla frontend search route: /ara?q=...
+        val encoded = URLEncoder.encode(cleanQuery, "UTF-8").replace("+", "%20")
+        val searchUrl = "$mainUrl/ara?q=$encoded&page=1"
+
+        val pageResults = try {
+            val response = app.get(
+                searchUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                    "Referer" to "$mainUrl/"
+                ),
+                referer = "$mainUrl/"
             )
 
-        val response =
-            try {
-                app.post(
-                    "$mainUrl$SEARCH_PATH$encoded",
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Accept" to "application/json, text/plain, */*",
-                        "X-Requested-With" to "XMLHttpRequest",
-                        "Referer" to "$mainUrl/"
-                    ),
-                    referer = "$mainUrl/"
-                )
-            } catch (e: Exception) {
-                Log.e(
-                    "Dizilla",
-                    "Search failed: ${e.message}"
-                )
-                return emptyList()
+            Log.d("Dizilla", "Search page status=" + response.code + " bytes=" + response.text.length)
+
+            if (response.isSuccessful) {
+                val document = response.document
+                val cards = document.select("a.pcard")
+                    .distinctBy { it.attr("href") }
+                    .mapNotNull { card ->
+                        val href = card.attr("href")
+                        if (!isSeriesDetailUrl(href)) null else card.toSearchResponse(href)
+                    }
+
+                if (cards.isNotEmpty()) cards else collectHtmlSeries(document)
+            } else {
+                Log.w("Dizilla", "Search page HTTP status=" + response.code)
+                emptyList()
             }
+        } catch (e: Exception) {
+            Log.w("Dizilla", "Search page request failed: " + e.message)
+            emptyList()
+        }
+
+        if (pageResults.isNotEmpty()) {
+            Log.d("Dizilla", "Search page results=" + pageResults.size)
+            return pageResults.distinctBy { it.url }.take(50)
+        }
+
+        // Backward-compatible fallback for the former encrypted API.
+        return searchLegacyApi(cleanQuery)
+    }
+
+    private suspend fun searchLegacyApi(query: String): List<SearchResponse> {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val response = try {
+            app.post(
+                "$mainUrl$SEARCH_PATH$encoded",
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "application/json, text/plain, */*",
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "Referer" to "$mainUrl/"
+                ),
+                referer = "$mainUrl/"
+            )
+        } catch (e: Exception) {
+            Log.w("Dizilla", "Legacy search request failed: " + e.message)
+            return emptyList()
+        }
 
         if (!response.isSuccessful) {
-            Log.w("Dizilla", "Search HTTP status=${response.code}")
+            Log.w("Dizilla", "Legacy search HTTP status=" + response.code)
             return emptyList()
         }
 
-        val outer =
-            try {
-                JSONObject(response.text)
-            } catch (_: Exception) {
-                return emptyList()
-            }
+        val outer = try { JSONObject(response.text) } catch (_: Exception) { return emptyList() }
+        if (!outer.optBoolean("success", false)) return emptyList()
 
-        if (
-            !outer.optBoolean(
-                "success",
-                false
-            )
-        ) {
-            return emptyList()
-        }
-
-        val encrypted =
-            outer
-                .optString("response")
-                .trim()
-
-        val json =
-            decryptSecureData(encrypted)
-                ?: return emptyList()
-
-        val result =
-            json.optJSONArray("result")
-                ?: return emptyList()
-
-        val output =
-            mutableListOf<SearchResponse>()
+        val encrypted = outer.optString("response").trim()
+        val json = decryptSecureData(encrypted) ?: return emptyList()
+        val result = json.optJSONArray("result") ?: return emptyList()
+        val output = mutableListOf<SearchResponse>()
 
         for (index in 0 until result.length()) {
-
-            val item =
-                result.optJSONObject(index)
-                    ?: continue
-
-            val slug =
-                firstString(
-                    item,
-                    "used_slug",
-                    "slug"
-                )
-                    ?: continue
-
-            val title =
-                listOf("object_name", "name", "title")
-                    .firstNotNullOfOrNull { key ->
-                        cleanSeriesTitle(firstString(item, key))
-                    }
-                    ?: titleFromSeriesUrl(slug)
-                    ?: continue
-
-            val href =
-                canonicalizeDizillaUrl(slug)
-                    ?: continue
-
-            val poster =
-                firstString(
-                    item,
-                    "object_poster_url",
-                    "poster_url"
-                )
+            val item = result.optJSONObject(index) ?: continue
+            val slug = firstString(item, "used_slug", "slug") ?: continue
+            val title = listOf("object_name", "name", "title")
+                .firstNotNullOfOrNull { key -> cleanSeriesTitle(firstString(item, key)) }
+                ?: titleFromSeriesUrl(slug)
+                ?: continue
+            val href = canonicalizeDizillaUrl(slug) ?: continue
+            val poster = firstString(item, "object_poster_url", "poster_url")
             val score = parseImdbScore(
                 firstString(item, "imdb_point", "imdb_score", "imdb_rating", "ratingValue", "score")
             )
 
-            output +=
-                newTvSeriesSearchResponse(
-                    title,
-                    href,
-                    TvType.TvSeries
-                ) {
-                    this.posterUrl =
-                        canonicalizeDizillaUrl(poster) ?: poster
-                    this.score = score?.let { Score.from10(it) }
-                }
+            output += newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+                this.posterUrl = canonicalizeDizillaUrl(poster) ?: poster
+                this.score = score?.let { Score.from10(it) }
+            }
         }
 
-        return output.distinctBy { it.url }.filter { matchesSearchQuery(cleanQuery, it.name) }
+        return output.distinctBy { it.url }.filter { matchesSearchQuery(query, it.name) }
     }
-
     override suspend fun quickSearch(
         query: String
     ): List<SearchResponse> =
@@ -2130,14 +2114,14 @@ class Dizilla : MainAPI() {
         document.select("a[href*='oyuncu'], [class*='actor'] a[href]").forEach { anchor ->
             val image = extractPoster(anchor)
                 ?: anchor.parent()?.let { extractPoster(it) }
-            val actorName = firstNotNullOfOrNull(
-                listOf(
-                    anchor.attr("title"),
-                    anchor.attr("aria-label"),
-                    anchor.text(),
-                    anchor.selectFirst("img")?.attr("alt")
-                )
-            ) { it.trim().takeIf { text -> text.isNotBlank() } }
+            val actorName = listOf(
+                anchor.attr("title"),
+                anchor.attr("aria-label"),
+                anchor.text(),
+                anchor.selectFirst("img")?.attr("alt")
+            ).firstNotNullOfOrNull { candidate ->
+                candidate.trim().takeIf { it.isNotBlank() }
+            }
             addActor(actorName, image)
         }
 
