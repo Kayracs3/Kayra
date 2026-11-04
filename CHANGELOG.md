@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:a33f729f30125421dabd209d3e8f04c7d1fe34f2 -->
+### Read Dizilla cast portraits from page metadata
+
+- Etkilenen alanlar: Dizilla
+- Commit: [a33f729](https://github.com/Kayracs3/Kayra/commit/a33f729f30125421dabd209d3e8f04c7d1fe34f2)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:fad7d6cacd07cea10d633d05e241a68720d47154 -->
 ### Update iconUrl to use Google favicon service
 
