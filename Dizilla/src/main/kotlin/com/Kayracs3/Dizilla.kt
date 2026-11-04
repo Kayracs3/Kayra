@@ -66,6 +66,10 @@ class Dizilla : MainAPI() {
             "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
+        private const val PLAYER_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
         private const val SEARCH_PATH =
             "/api/bg/searchContent?searchterm="
 
@@ -2586,20 +2590,37 @@ class Dizilla : MainAPI() {
     private fun extractPlayerConfig(
         html: String
     ): JSONObject? {
-        val markerIndex = html.indexOf("NP_CONFIG", ignoreCase = true)
-        if (markerIndex < 0) return null
+        // Pichive may serialize the inline config with escaped quotes in its HTML.
+        val candidates = listOf(
+            html,
+            html.replace("\\\"", "\""),
+            html.replace("\\\\\"", "\"").replace("\\u0022", "\""),
+            html.replace("\\u0022", "\"")
+        ).distinct()
 
-        val objectStart = html.indexOf('{', markerIndex)
-        if (objectStart < 0) return null
+        for (candidate in candidates) {
+            var cursor = 0
+            while (cursor < candidate.length) {
+                val markerIndex = candidate.indexOf("NP_CONFIG", cursor, ignoreCase = true)
+                if (markerIndex < 0) break
 
-        val json = extractBalancedJson(html, objectStart)
-            ?: return null
-
-        return try {
-            JSONObject(json)
-        } catch (_: Exception) {
-            null
+                val objectStart = candidate.indexOf('{', markerIndex)
+                if (objectStart >= 0) {
+                    val json = extractBalancedJson(candidate, objectStart)
+                    if (!json.isNullOrBlank()) {
+                        try {
+                            val config = JSONObject(json)
+                            if (config.optJSONArray("sources") != null) {
+                                return config
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                cursor = markerIndex + "NP_CONFIG".length
+            }
         }
+        return null
     }
 
     private suspend fun loadRscPlayer(
@@ -2608,25 +2629,49 @@ class Dizilla : MainAPI() {
         callback: (ExtractorLink) -> Unit,
         seenSubtitles: MutableSet<String>
     ): Boolean {
-        val playerHtml = try {
-            app.get(
-                player.url,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
-                    "Referer" to PLAYER_REFERER
-                ),
-                referer = PLAYER_REFERER
-            ).text
-        } catch (e: Exception) {
-            Log.w("Dizilla", "RSC player request failed url=${player.url}: ${e.message}")
-            return false
+        var playerHtml = ""
+        var config: JSONObject? = null
+        var responseCode = -1
+
+        // Pichive serves different page variants depending on the browser identity.
+        // Try the desktop UA used by the working reference provider first, then the
+        // provider's normal UA for compatibility.
+        val playerUserAgents = listOf(PLAYER_USER_AGENT, USER_AGENT).distinct()
+        for (playerUa in playerUserAgents) {
+            try {
+                val response = app.get(
+                    player.url,
+                    headers = mapOf(
+                        "User-Agent" to playerUa,
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                        "Referer" to PLAYER_REFERER
+                    ),
+                    referer = PLAYER_REFERER
+                )
+                responseCode = response.code
+                playerHtml = response.text
+                config = extractPlayerConfig(playerHtml)
+                val uaLabel = if (playerUa == PLAYER_USER_AGENT) "desktop" else "mobile"
+                Log.d(
+                    "Dizilla",
+                    "Pichive response status=$responseCode bytes=${playerHtml.length} ua=$uaLabel config=${config != null}"
+                )
+                if (config != null) break
+            } catch (e: Exception) {
+                val uaLabel = if (playerUa == PLAYER_USER_AGENT) "desktop" else "mobile"
+                Log.w("Dizilla", "Pichive request failed ua=$uaLabel: ${e.message}")
+            }
         }
 
-        val config = extractPlayerConfig(playerHtml)
         if (config == null) {
-            Log.w("Dizilla", "Pichive NP_CONFIG not found url=${player.url} bytes=${playerHtml.length}")
+            Log.w(
+                "Dizilla",
+                "Pichive config missing url=${player.url} status=$responseCode bytes=${playerHtml.length} " +
+                    "hasIframe=${playerHtml.contains("<iframe", true)} " +
+                    "hasSources=${playerHtml.contains("sources", true)} " +
+                    "hasCloudflare=${playerHtml.contains("cloudflare", true)}"
+            )
             return false
         }
 
