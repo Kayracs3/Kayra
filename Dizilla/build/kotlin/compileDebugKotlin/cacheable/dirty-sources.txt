@@ -1,0 +1,5 @@
+/home/runner/work/Kayra/Kayra/Dizilla/src/main/kotlin/com/Kayracs3/DizillaPlugin.kt
+/home/runner/work/Kayra/Kayra/Dizilla/src/main/kotlin/com/Kayracs3/HotlingerExtractor.kt
+/home/runner/work/Kayra/Kayra/Dizilla/src/main/kotlin/com/Kayracs3/DizillaModels.kt
+/home/runner/work/Kayra/Kayra/Dizilla/src/main/kotlin/com/Kayracs3/Dizilla.kt
+/home/runner/work/Kayra/Kayra/Dizilla/src/main/kotlin/com/Kayracs3/ContentXExtractor.kt
