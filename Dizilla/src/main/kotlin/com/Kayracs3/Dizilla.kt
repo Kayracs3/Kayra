@@ -2196,7 +2196,7 @@ class Dizilla : MainAPI() {
                 )
             )
         } catch (e: Exception) {
-            Log.w("Dizilla", "BuildId homepage request failed: \${e.message}")
+            Log.w("Dizilla", "BuildId homepage request failed: ${e.message}")
             return null
         }
 
@@ -2216,7 +2216,7 @@ class Dizilla : MainAPI() {
         ).find(response.text)?.groupValues?.getOrNull(1)
 
         val buildId = fromJson ?: fromHtml
-        Log.d("Dizilla", "Next.js buildId found=\${!buildId.isNullOrBlank()}")
+        Log.d("Dizilla", "Next.js buildId found=${!buildId.isNullOrBlank()}")
         return buildId?.takeIf { it.isNotBlank() }
     }
 
@@ -2247,20 +2247,20 @@ class Dizilla : MainAPI() {
                 referer = episodeUrl
             )
         } catch (e: Exception) {
-            Log.w("Dizilla", "Next data request failed url=$dataUrl: \${e.message}")
+            Log.w("Dizilla", "Next data request failed url=$dataUrl: ${e.message}")
             return null
         }
 
         Log.d(
             "Dizilla",
-            "Next data response status=\${response.code} bytes=\${response.text.length}"
+            "Next data response status=${response.code} bytes=${response.text.length}"
         )
         if (!response.isSuccessful) return null
 
         val page = try {
             JSONObject(response.text)
         } catch (e: Exception) {
-            Log.w("Dizilla", "Next data JSON parse failed: \${e.message}")
+            Log.w("Dizilla", "Next data JSON parse failed: ${e.message}")
             return null
         }
 
@@ -2275,7 +2275,7 @@ class Dizilla : MainAPI() {
         }
 
         val decrypted = decryptSecureData(encrypted)
-        Log.d("Dizilla", "Next data secureData decrypted=\${decrypted != null}")
+        Log.d("Dizilla", "Next data secureData decrypted=${decrypted != null}")
         return decrypted
     }
 
@@ -2850,7 +2850,7 @@ class Dizilla : MainAPI() {
 
         Log.d(
             "Dizilla",
-            "Playback candidates secureData=\${securePlayers.size} RSC=\${rscPlayers.size} total=\${candidates.size}"
+            "Playback candidates secureData=${securePlayers.size} RSC=${rscPlayers.size} total=${candidates.size}"
         )
 
         var delivered = false
@@ -2862,7 +2862,7 @@ class Dizilla : MainAPI() {
                     delivered = true
                 }
             } catch (e: Exception) {
-                Log.w("Dizilla", "Player resolver failed url=\${player.url}: \${e.message}")
+                Log.w("Dizilla", "Player resolver failed url=${player.url}: ${e.message}")
             }
         }
 
