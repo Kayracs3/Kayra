@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-05
+
+<!-- kayra-commit:f5298a2e67c8bc140fbf5b538e2322eaf540e516 -->
+### Match Dizilla cast names to TMDB profile images
+
+- Etkilenen alanlar: Dizilla
+- Commit: [f5298a2](https://github.com/Kayracs3/Kayra/commit/f5298a2e67c8bc140fbf5b538e2322eaf540e516)
+
+
 ## 2026-11-04
 
 <!-- kayra-commit:30b6cef717e25528ed4b7ef7125325153c27772e -->
