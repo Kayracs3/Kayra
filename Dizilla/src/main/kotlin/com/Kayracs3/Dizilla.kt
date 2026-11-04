@@ -2552,7 +2552,7 @@ class Dizilla : MainAPI() {
         val objectStart = html.indexOf('{', markerIndex)
         if (objectStart < 0) return null
 
-        val json = extractBalancedJson(html, objectStart, '{', '}')
+        val json = extractBalancedJson(html, objectStart)
             ?: return null
 
         return try {
