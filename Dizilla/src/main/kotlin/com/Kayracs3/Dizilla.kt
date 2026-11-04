@@ -2190,7 +2190,7 @@ class Dizilla : MainAPI() {
                 anchor?.text(),
                 card.text().takeIf { it.length <= 80 }
             ).firstNotNullOfOrNull { candidate ->
-                candidate?.trim()?.replace(Regex("""\\s+"""), " ")
+                candidate?.trim()?.replace(Regex("""\s+"""), " ")
                     ?.takeIf { it.isNotBlank() && it.length <= 80 }
             }
 
