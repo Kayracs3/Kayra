@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:6f717f41b7337c1230bad1116127519130555faf -->
+### Dizilla: fix detail score conversion and metadata logs
+
+- Etkilenen alanlar: Dizilla
+- Commit: [6f717f4](https://github.com/Kayracs3/Kayra/commit/6f717f41b7337c1230bad1116127519130555faf)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:e0a8bf663e5822c55b512dae4b2d8a37dec8733e -->
 ### Dizilla: parse cast portraits and similar series
 
