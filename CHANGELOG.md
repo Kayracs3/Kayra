@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:30b6cef717e25528ed4b7ef7125325153c27772e -->
+### Recover missing Dizilla recommendation posters
+
+- Etkilenen alanlar: Dizilla
+- Commit: [30b6cef](https://github.com/Kayracs3/Kayra/commit/30b6cef717e25528ed4b7ef7125325153c27772e)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:a33f729f30125421dabd209d3e8f04c7d1fe34f2 -->
 ### Read Dizilla cast portraits from page metadata
 
