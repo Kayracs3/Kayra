@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:24cb7b956d5a70224adf94ff064f7de218b69f25 -->
+### Update iconUrl to use Google favicon service
+
+- Etkilenen alanlar: DiziKorea
+- Commit: [24cb7b9](https://github.com/Kayracs3/Kayra/commit/24cb7b956d5a70224adf94ff064f7de218b69f25)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:a771ba95a3fa09cd33d40ca2482ec07894d78be2 -->
 ### Update version to 25 in build.gradle.kts
 
