@@ -2,6 +2,23 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:0c150197927761f807071879d979b761aae4822f -->
+### Bump Dizilla plugin version to 21
+
+- Etkilenen alanlar: Dizilla
+- Commit: [0c15019](https://github.com/Kayracs3/Kayra/commit/0c150197927761f807071879d979b761aae4822f)
+
+## 2026-11-04
+
+<!-- kayra-commit:6b7966d4d098713a523001eee29b665817f5003a -->
+### Handle direct HLS source arrays in Pichive pages
+
+- Etkilenen alanlar: Dizilla
+- Commit: [6b7966d](https://github.com/Kayracs3/Kayra/commit/6b7966d4d098713a523001eee29b665817f5003a)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:41b3df8129ef4f3f42cb3dcd15489082bcf634a8 -->
 ### Show series title and add Pichive legacy fallback
 
