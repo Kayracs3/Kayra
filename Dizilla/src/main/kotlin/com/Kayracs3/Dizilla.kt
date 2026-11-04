@@ -2415,13 +2415,11 @@ class Dizilla : MainAPI() {
      */
     private fun extractBalancedJson(
         text: String,
-        startIndex: Int,
-        openChar: Char,
-        closeChar: Char
+        startIndex: Int
     ): String? {
-        if (startIndex < 0 || startIndex >= text.length || text[startIndex] != openChar) {
-            return null
-        }
+        if (startIndex < 0 || startIndex >= text.length) return null
+        val first = text[startIndex]
+        if (first != '[' && first != '{') return null
 
         var depth = 0
         var inString = false
@@ -2441,8 +2439,8 @@ class Dizilla : MainAPI() {
 
             when (char) {
                 '"' -> inString = true
-                openChar -> depth++
-                closeChar -> {
+                '[', '{' -> depth++
+                ']', '}' -> {
                     depth--
                     if (depth == 0) {
                         return text.substring(startIndex, index + 1)
@@ -2457,38 +2455,54 @@ class Dizilla : MainAPI() {
     private fun extractRscSources(
         rawHtml: String
     ): JSONArray? {
-        // Flight payloads may be escaped more than once by the HTML response wrapper.
+        // Match the site's Flight payload format: its JSON is embedded in a JS string.
+        val normalized = rawHtml
+            .replace("\\\\\"", "\"")
+            .replace("\\u0022", "\"")
+
         val candidates = listOf(
-            rawHtml,
-            rawHtml.replace("\\\\\"", "\\\""),
-            rawHtml.replace("\\\"", "\""),
-            rawHtml.replace("\\u0022", "\"").replace("\\/", "/")
+            normalized,
+            normalized.replace("\\\"", "\""),
+            normalized.replace("\\\\u0022", "\"")
         ).distinct()
 
-        val marker = Regex(
-            """"sources"\s*:\s*\[""",
-            RegexOption.IGNORE_CASE
+        val markers = listOf(
+            "\"sources\":[",
+            "\"sources\": [",
+            "\"sources\" :[",
+            "\"sources\" : ["
         )
 
         for (html in candidates) {
-            var cursor = 0
-            while (cursor < html.length) {
-                val match = marker.find(html, cursor) ?: break
-                val openIndex = html.indexOf('[', match.range.first)
-                if (openIndex < 0) break
+            for (marker in markers) {
+                var cursor = 0
+                while (cursor < html.length) {
+                    val at = html.indexOf(marker, cursor)
+                    if (at < 0) break
 
-                val json = extractBalancedJson(html, openIndex, '[', ']')
-                if (!json.isNullOrBlank()) {
-                    try {
-                        return JSONArray(json)
-                    } catch (_: Exception) {
+                    val openIndex = at + marker.lastIndex
+                    val json = extractBalancedJson(html, openIndex)
+                    if (!json.isNullOrBlank()) {
+                        try {
+                            val array = JSONArray(json)
+                            if (array.length() > 0) {
+                                Log.d("Dizilla", "RSC sources array parsed count=${array.length()}")
+                                return array
+                            }
+                        } catch (_: Exception) {
+                        }
                     }
-                }
 
-                cursor = openIndex + 1
+                    cursor = at + marker.length
+                }
             }
         }
 
+        Log.d(
+            "Dizilla",
+            "RSC sources marker not parsed rawBytes=${rawHtml.length} normalizedBytes=${normalized.length} " +
+                "containsSources=${normalized.contains("sources", ignoreCase = true)}"
+        )
         return null
     }
 
@@ -2502,16 +2516,16 @@ class Dizilla : MainAPI() {
             val item = sources.optJSONObject(index) ?: continue
             if (item.optBoolean("trailer", false)) continue
 
-            val url = item.optString("src").trim()
+            val url = firstString(item, "src", "url", "file", "embed", "iframe").orEmpty().trim()
             if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
                 continue
             }
 
             players += DizillaRscPlayer(
                 url = url,
-                name = firstString(item, "name").orEmpty(),
-                quality = firstString(item, "quality").orEmpty(),
-                language = firstString(item, "langLabel", "lang").orEmpty()
+                name = firstString(item, "name", "title").orEmpty(),
+                quality = firstString(item, "quality", "quality_name").orEmpty(),
+                language = firstString(item, "langLabel", "language", "lang").orEmpty()
             )
         }
 
