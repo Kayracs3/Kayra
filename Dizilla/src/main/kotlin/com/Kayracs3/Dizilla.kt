@@ -2701,6 +2701,25 @@ class Dizilla : MainAPI() {
                 cursor = markerIndex + "NP_CONFIG".length
             }
         }
+
+        // Some Pichive responses expose the HLS entries directly in a JSON
+        // "sources" array without the window.NP_CONFIG assignment.
+        val directSources = extractRscSources(html).firstOrNull { array ->
+            (0 until array.length()).any { index ->
+                val item = array.optJSONObject(index) ?: return@any false
+                val candidate = firstString(item, "master", "src", "file", "url").orEmpty()
+                candidate.startsWith("http://", true) || candidate.startsWith("https://", true)
+            }
+        }
+        if (directSources != null) {
+            Log.d("Dizilla", "Pichive direct sources array recovered count=${directSources.length()}")
+            return try {
+                JSONObject().put("sources", directSources)
+            } catch (_: Exception) {
+                null
+            }
+        }
+
         return null
     }
 
@@ -2805,8 +2824,11 @@ class Dizilla : MainAPI() {
 
         for (index in 0 until masters.length()) {
             val source = masters.optJSONObject(index) ?: continue
-            val master = source.optString("master").trim()
-            if (!master.startsWith("http://", true) && !master.startsWith("https://", true)) {
+            val master = firstString(source, "master", "src", "file", "url").orEmpty().trim()
+            if (
+                (!master.startsWith("http://", true) && !master.startsWith("https://", true)) ||
+                (!master.contains(".m3u8", true) && !master.contains("m.php", true))
+            ) {
                 continue
             }
 
