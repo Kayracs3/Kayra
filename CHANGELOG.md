@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:fad7d6cacd07cea10d633d05e241a68720d47154 -->
+### Update iconUrl to use Google favicon service
+
+- Etkilenen alanlar: FilmModu
+- Commit: [fad7d6c](https://github.com/Kayracs3/Kayra/commit/fad7d6cacd07cea10d633d05e241a68720d47154)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:3f671429c8ad145e67e408f3d4d31441847cdabf -->
 ### Update iconUrl to use Google favicon service
 
