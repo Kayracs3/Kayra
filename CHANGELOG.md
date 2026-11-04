@@ -2,6 +2,31 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:5763321e7e27e6f6ed4c88b9f763265c72507378 -->
+### Bump Dizilla plugin version to 17
+
+- Etkilenen alanlar: Dizilla
+- Commit: [5763321](https://github.com/Kayracs3/Kayra/commit/5763321e7e27e6f6ed4c88b9f763265c72507378)
+
+## 2026-11-04
+
+<!-- kayra-commit:925995f660bf17007c00243a20d24d747428026d -->
+### Fix Dizilla Next.js playback diagnostics
+
+- Etkilenen alanlar: Dizilla
+- Commit: [925995f](https://github.com/Kayracs3/Kayra/commit/925995f660bf17007c00243a20d24d747428026d)
+
+## 2026-11-04
+
+<!-- kayra-commit:35ebded79ea5bbd7ca421d34c9885550f0738ac5 -->
+### Add Next.js episode data playback fallback for Dizilla
+
+- Etkilenen alanlar: Dizilla
+- Commit: [35ebded](https://github.com/Kayracs3/Kayra/commit/35ebded79ea5bbd7ca421d34c9885550f0738ac5)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:468952c44653c74a2eda58d519cd62c01a7aee72 -->
 ### Fix Dizilla player diagnostic interpolation
 
