@@ -2,6 +2,23 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:b378e2d97d3a7831d4dfcfe034b3da98dc2ac521 -->
+### Dizilla: release compile and search fixes v24
+
+- Etkilenen alanlar: Dizilla
+- Commit: [b378e2d](https://github.com/Kayracs3/Kayra/commit/b378e2d97d3a7831d4dfcfe034b3da98dc2ac521)
+
+## 2026-11-04
+
+<!-- kayra-commit:2c07fb982ed57059b16f9b8849eea71b75a2a70d -->
+### Dizilla: fix cast compile error and restore current search route
+
+- Etkilenen alanlar: Dizilla
+- Commit: [2c07fb9](https://github.com/Kayracs3/Kayra/commit/2c07fb982ed57059b16f9b8849eea71b75a2a70d)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:615504f22196974dc1a9b3ed03ff0e69c8442318 -->
 ### Dizilla: bump metadata update to v23
 
