@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:a2040234bb585ca34ccf0f6d8d3197a2d54b6177 -->
+### Fix nullable actor name in Dizilla
+
+- Etkilenen alanlar: Dizilla
+- Commit: [a204023](https://github.com/Kayracs3/Kayra/commit/a2040234bb585ca34ccf0f6d8d3197a2d54b6177)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:b378e2d97d3a7831d4dfcfe034b3da98dc2ac521 -->
 ### Dizilla: release compile and search fixes v24
 
