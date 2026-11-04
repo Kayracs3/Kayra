@@ -2,6 +2,15 @@
 
 ## 2026-11-05
 
+<!-- kayra-commit:4b4605b3514026b62f4e7e06fd997b6e480d127a -->
+### Update iconUrl to use Google favicon service
+
+- Etkilenen alanlar: Dizigecesi
+- Commit: [4b4605b](https://github.com/Kayracs3/Kayra/commit/4b4605b3514026b62f4e7e06fd997b6e480d127a)
+
+
+## 2026-11-05
+
 <!-- kayra-commit:f5298a2e67c8bc140fbf5b538e2322eaf540e516 -->
 ### Match Dizilla cast names to TMDB profile images
 
