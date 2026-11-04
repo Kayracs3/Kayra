@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:c538f5f13749b718f2b5e8226ccc1ac97af5be97 -->
+### Bump Dizilla plugin version to 22
+
+- Etkilenen alanlar: Dizilla
+- Commit: [c538f5f](https://github.com/Kayracs3/Kayra/commit/c538f5f13749b718f2b5e8226ccc1ac97af5be97)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:827e2ce891dbd4173cf643efc5dd30323ed32107 -->
 ### Fix Dizilla series title resolution
 
