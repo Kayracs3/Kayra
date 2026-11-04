@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:f04d0c601151388364f26731e36fe291a8e82e21 -->
+### Fix Dizilla balanced JSON parser call
+
+- Etkilenen alanlar: Dizilla
+- Commit: [f04d0c6](https://github.com/Kayracs3/Kayra/commit/f04d0c601151388364f26731e36fe291a8e82e21)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:a0d7461023fa2894e2d2475bc7b01c6b1c2df5d4 -->
 ### Bump Dizilla plugin version to 18
 
