@@ -2120,7 +2120,7 @@ class Dizilla : MainAPI() {
                 anchor.text(),
                 anchor.selectFirst("img")?.attr("alt")
             ).firstNotNullOfOrNull { candidate ->
-                candidate.trim().takeIf { it.isNotBlank() }
+                candidate?.trim()?.takeIf { it.isNotBlank() }
             }
             addActor(actorName, image)
         }
