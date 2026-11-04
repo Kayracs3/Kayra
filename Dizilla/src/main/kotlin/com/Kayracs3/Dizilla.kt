@@ -2181,6 +2181,191 @@ class Dizilla : MainAPI() {
     // =========================================================
 
 
+    /**
+     * Current Dizilla episodes may expose secureData only through Next.js
+     * data requests, not in the rendered episode HTML.
+     */
+    private suspend fun fetchDizillaBuildId(): String? {
+        val response = try {
+            app.get(
+                "$mainUrl/",
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8"
+                )
+            )
+        } catch (e: Exception) {
+            Log.w("Dizilla", "BuildId homepage request failed: \${e.message}")
+            return null
+        }
+
+        val nextData = getNextData(response.document)
+        val fromJson = try {
+            if (nextData.isNullOrBlank()) {
+                null
+            } else {
+                JSONObject(nextData).optString("buildId").takeIf { it.isNotBlank() }
+            }
+        } catch (_: Exception) {
+            null
+        }
+
+        val fromHtml = Regex(
+            """"buildId"\s*:\s*"([^"]+)""""
+        ).find(response.text)?.groupValues?.getOrNull(1)
+
+        val buildId = fromJson ?: fromHtml
+        Log.d("Dizilla", "Next.js buildId found=\${!buildId.isNullOrBlank()}")
+        return buildId?.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun loadEpisodeSecureData(
+        episodeUrl: String
+    ): JSONObject? {
+        val slug = episodeUrl
+            .substringBefore('?')
+            .substringBefore('#')
+            .trimEnd('/')
+            .substringAfterLast('/')
+            .takeIf { it.isNotBlank() }
+            ?: return null
+
+        val buildId = fetchDizillaBuildId() ?: return null
+        val dataUrl = "$mainUrl/_next/data/$buildId/$slug.json"
+
+        val response = try {
+            app.get(
+                dataUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "application/json,text/plain,*/*",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                    "Referer" to episodeUrl,
+                    "X-Requested-With" to "XMLHttpRequest"
+                ),
+                referer = episodeUrl
+            )
+        } catch (e: Exception) {
+            Log.w("Dizilla", "Next data request failed url=$dataUrl: \${e.message}")
+            return null
+        }
+
+        Log.d(
+            "Dizilla",
+            "Next data response status=\${response.code} bytes=\${response.text.length}"
+        )
+        if (!response.isSuccessful) return null
+
+        val page = try {
+            JSONObject(response.text)
+        } catch (e: Exception) {
+            Log.w("Dizilla", "Next data JSON parse failed: \${e.message}")
+            return null
+        }
+
+        val encrypted = page.optJSONObject("pageProps")
+            ?.optString("secureData")
+            ?.takeIf { it.isNotBlank() }
+            ?: findStringRecursive(page, setOf("secureData"))
+
+        if (encrypted.isNullOrBlank()) {
+            Log.w("Dizilla", "Next data pageProps.secureData missing")
+            return null
+        }
+
+        val decrypted = decryptSecureData(encrypted)
+        Log.d("Dizilla", "Next data secureData decrypted=\${decrypted != null}")
+        return decrypted
+    }
+
+    private fun collectPlayersFromSecureData(
+        secure: JSONObject?
+    ): List<DizillaRscPlayer> {
+        if (secure == null) return emptyList()
+
+        val sources = secure
+            .optJSONObject("RelatedResults")
+            ?.optJSONObject("getEpisodeSources")
+            ?.optJSONArray("result")
+            ?: secure
+                .optJSONObject("content")
+                ?.optJSONObject("result")
+                ?.optJSONObject("RelatedResults")
+                ?.optJSONObject("getEpisodeSources")
+                ?.optJSONArray("result")
+
+        val items = mutableListOf<JSONObject>()
+        if (sources != null) {
+            for (index in 0 until sources.length()) {
+                sources.optJSONObject(index)?.let(items::add)
+            }
+        } else {
+            fun walk(value: Any?, depth: Int) {
+                if (depth > MAX_JSON_SEARCH_DEPTH) return
+                when (value) {
+                    is JSONObject -> {
+                        if (
+                            listOf("source_content", "sourceContent", "embed_url", "iframe_url", "src")
+                                .any { key -> value.has(key) && value.opt(key) != JSONObject.NULL }
+                        ) {
+                            items.add(value)
+                        }
+                        val keys = value.keys()
+                        while (keys.hasNext()) {
+                            walk(value.opt(keys.next()), depth + 1)
+                        }
+                    }
+                    is JSONArray -> {
+                        for (index in 0 until value.length()) {
+                            walk(value.opt(index), depth + 1)
+                        }
+                    }
+                }
+            }
+            walk(secure, 0)
+        }
+
+        val output = mutableListOf<DizillaRscPlayer>()
+        for (item in items) {
+            val rawContent = firstString(
+                item,
+                "source_content",
+                "sourceContent",
+                "embed_url",
+                "iframe_url",
+                "embed",
+                "iframe",
+                "src",
+                "url",
+                "link"
+            ) ?: metadataValueToString(item.opt("source_content"))
+                ?: continue
+
+            val playerUrl = extractIframeUrl(rawContent)
+                ?: rawContent.trim().takeIf {
+                    it.startsWith("http://", true) || it.startsWith("https://", true)
+                }
+                ?: continue
+
+            if (
+                !playerUrl.startsWith("http://", true) &&
+                !playerUrl.startsWith("https://", true)
+            ) {
+                continue
+            }
+
+            output += DizillaRscPlayer(
+                url = playerUrl,
+                name = firstString(item, "source_name", "name", "title").orEmpty(),
+                quality = firstString(item, "quality_name", "quality").orEmpty(),
+                language = firstString(item, "language_name", "langLabel", "language", "lang").orEmpty()
+            )
+        }
+
+        return output.distinctBy { it.url }
+    }
+
     private data class DizillaRscPlayer(
         val url: String,
         val name: String,
@@ -2236,25 +2421,36 @@ class Dizilla : MainAPI() {
     private fun extractRscSources(
         rawHtml: String
     ): JSONArray? {
-        // Next.js Flight data escapes quotes inside its script string.
-        val html = rawHtml.replace("\\\"", "\"")
-        val marker = Regex("\"sources\"\\s*:\\s*\\[", RegexOption.IGNORE_CASE)
-        var cursor = 0
+        // Flight payloads may be escaped more than once by the HTML response wrapper.
+        val candidates = listOf(
+            rawHtml,
+            rawHtml.replace("\\\\\"", "\\\""),
+            rawHtml.replace("\\\"", "\""),
+            rawHtml.replace("\\u0022", "\"").replace("\\/", "/")
+        ).distinct()
 
-        while (cursor < html.length) {
-            val match = marker.find(html, cursor) ?: return null
-            val openIndex = html.indexOf('[', match.range.first)
-            if (openIndex < 0) return null
+        val marker = Regex(
+            """"sources"\s*:\s*\[""",
+            RegexOption.IGNORE_CASE
+        )
 
-            val json = extractBalancedJson(html, openIndex, '[', ']')
-            if (!json.isNullOrBlank()) {
-                try {
-                    return JSONArray(json)
-                } catch (_: Exception) {
+        for (html in candidates) {
+            var cursor = 0
+            while (cursor < html.length) {
+                val match = marker.find(html, cursor) ?: break
+                val openIndex = html.indexOf('[', match.range.first)
+                if (openIndex < 0) break
+
+                val json = extractBalancedJson(html, openIndex, '[', ']')
+                if (!json.isNullOrBlank()) {
+                    try {
+                        return JSONArray(json)
+                    } catch (_: Exception) {
+                    }
                 }
-            }
 
-            cursor = openIndex + 1
+                cursor = openIndex + 1
+            }
         }
 
         return null
@@ -2638,35 +2834,42 @@ class Dizilla : MainAPI() {
                 " title=" + episodeDocument.title()
         )
 
-        // New dizilla.la pages expose player iframes in the Next.js Flight payload.
-        // Pichive still requires the legacy .now origin as Referer.
-        val rscPlayers = collectRscPlayers(response.text)
-        Log.d("Dizilla", "RSC player candidates=${rscPlayers.size}")
+        // Current Dizilla builds sometimes keep episode secureData only in /_next/data/*.json.
+        val secure = loadEpisodeSecureData(episodeUrl)
+            ?: getSecureData(episodeDocument)
 
-        var delivered = false
-        val seenSubtitles = HashSet<String>()
-
-        for (player in rscPlayers) {
-            try {
-                if (loadRscPlayer(player, subtitleCallback, callback, seenSubtitles)) {
-                    delivered = true
-                }
-            } catch (e: Exception) {
-                Log.w("Dizilla", "RSC player resolver failed url=${player.url}: ${e.message}")
-            }
-        }
-
-        if (delivered) {
-            Log.d("Dizilla", "RSC playback links delivered")
-            return true
-        }
-
-        val secure = getSecureData(episodeDocument)
         Log.d(
             "Dizilla",
             "Episode secureData available=" + (secure != null) +
                 " topLevelKeys=" + (secure?.keys()?.asSequence()?.take(25)?.toList())
         )
+
+        val securePlayers = collectPlayersFromSecureData(secure)
+        val rscPlayers = collectRscPlayers(response.text)
+        val candidates = (securePlayers + rscPlayers).distinctBy { it.url }
+
+        Log.d(
+            "Dizilla",
+            "Playback candidates secureData=\${securePlayers.size} RSC=\${rscPlayers.size} total=\${candidates.size}"
+        )
+
+        var delivered = false
+        val seenSubtitles = HashSet<String>()
+
+        for (player in candidates) {
+            try {
+                if (loadRscPlayer(player, subtitleCallback, callback, seenSubtitles)) {
+                    delivered = true
+                }
+            } catch (e: Exception) {
+                Log.w("Dizilla", "Player resolver failed url=\${player.url}: \${e.message}")
+            }
+        }
+
+        if (delivered) {
+            Log.d("Dizilla", "New Dizilla player links delivered")
+            return true
+        }
 
         if (secure != null) {
             val sources =
