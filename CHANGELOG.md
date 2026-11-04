@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:827e2ce891dbd4173cf643efc5dd30323ed32107 -->
+### Fix Dizilla series title resolution
+
+- Etkilenen alanlar: Dizilla
+- Commit: [827e2ce](https://github.com/Kayracs3/Kayra/commit/827e2ce891dbd4173cf643efc5dd30323ed32107)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:60f54540a501c76796c50cc466b72b912e7d2075 -->
 ### Trigger Dizilla v21 build with title and player fallback changes
 
