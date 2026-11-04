@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:30141a446a57da95cc39ecc97ba93ce19145c4df -->
+### Correct lazy poster CSS URL matching
+
+- Etkilenen alanlar: Dizilla
+- Commit: [30141a4](https://github.com/Kayracs3/Kayra/commit/30141a446a57da95cc39ecc97ba93ce19145c4df)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:bfd2491c0a5390d651cd12d5ec546403dc70be8a -->
 ### Fix missing posters in Dizilla recommendations
 
