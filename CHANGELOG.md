@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:bfd2491c0a5390d651cd12d5ec546403dc70be8a -->
+### Fix missing posters in Dizilla recommendations
+
+- Etkilenen alanlar: Dizilla
+- Commit: [bfd2491](https://github.com/Kayracs3/Kayra/commit/bfd2491c0a5390d651cd12d5ec546403dc70be8a)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:a2040234bb585ca34ccf0f6d8d3197a2d54b6177 -->
 ### Fix nullable actor name in Dizilla
 
