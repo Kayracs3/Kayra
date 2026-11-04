@@ -1965,6 +1965,13 @@ class Dizilla : MainAPI() {
 
         Log.d(
             "Dizilla",
+            "Detail metadata: JSON-LD=" + (schemaSeries != null) +
+                " IMDb=" + (score?.toString() ?: "yok") +
+                " actors=" + actors.size + " similar=" + recommendations.size
+        )
+
+        Log.d(
+            "Dizilla",
             "Bulunan sezon sayısı = $seasonCount"
         )
 
@@ -1980,7 +1987,7 @@ class Dizilla : MainAPI() {
             this.plot = description
             this.year = year
             this.tags = tags
-            this.score = score
+            this.score = score?.let { Score.from10(it) }
             this.duration = null
             this.actors = actors.map { ActorData(it) }
             this.recommendations = recommendations
