@@ -1455,50 +1455,111 @@ class Dizilla : MainAPI() {
     // POSTER
     // =========================================================
 
+    private fun normalizePosterUrl(rawUrl: String?): String? {
+        if (rawUrl.isNullOrBlank()) return null
+
+        val candidate = rawUrl
+            .trim()
+            .replace("\\/", "/")
+            .replace("&amp;", "&")
+            .substringBefore(",")
+            .trim()
+            .substringBefore(" ")
+            .trim(' ', '"', '\'')
+
+        if (
+            candidate.isBlank() ||
+            candidate.equals("null", true) ||
+            candidate.equals("undefined", true) ||
+            candidate.equals("true", true) ||
+            candidate.equals("false", true) ||
+            candidate.startsWith("data:", true) ||
+            candidate.startsWith("javascript:", true) ||
+            candidate.startsWith("about:", true)
+        ) {
+            return null
+        }
+
+        val fixed = canonicalizeDizillaUrl(candidate) ?: return null
+        val lower = fixed.lowercase()
+
+        if (
+            lower.contains("no-poster") ||
+            lower.contains("no_poster") ||
+            lower.contains("no-image") ||
+            lower.contains("no_image") ||
+            lower.contains("placeholder") ||
+            lower.contains("blank-poster") ||
+            lower.contains("default-poster") ||
+            lower.endsWith("/none.png")
+        ) {
+            return null
+        }
+
+        return fixed
+    }
+
     private fun extractPoster(
         element: Element
     ): String? {
+        // Dizilla cards may lazy-load their posters through data-* attributes,
+        // picture/source srcsets, or CSS background images.
+        val images = element.select("img, source")
 
-        val image =
-            element.selectFirst("img")
-                ?: return null
-
-        val candidates =
-            listOf(
-                image.attr("src"),
-                image.attr("data-src"),
-                image.attr("data-lazy-src"),
-                image.attr("data-original"),
+        for (image in images) {
+            val candidates = listOf(
+                image.attr("data-poster"),
                 image.attr("data-image"),
+                image.attr("data-image-url"),
+                image.attr("data-original-src"),
+                image.attr("data-original"),
+                image.attr("data-lazy-src"),
+                image.attr("data-src"),
+                image.attr("data-srcset"),
+                image.attr("srcset"),
+                image.attr("data-cfsrc"),
+                image.attr("src"),
                 image.attr("data-lazy")
             )
 
-        for (candidate in candidates) {
-            val fixed =
-                canonicalizeDizillaUrl(candidate)
-
-            if (!fixed.isNullOrBlank()) {
-                return fixed
+            for (candidate in candidates) {
+                normalizePosterUrl(candidate)?.let { return it }
             }
         }
 
-        val srcSet =
-            image
-                .attr("srcset")
-                .trim()
+        val backgroundElements = listOf(element) + element.select("[style]")
+        val backgroundPattern =
+            Regex("""(?i)background(?:-image)?\\s*:\\s*url\\([\\s'"]*([^)'"]+)""")
 
-        if (srcSet.isNotBlank()) {
-            val first =
-                srcSet
-                    .split(",")
-                    .firstOrNull()
-                    ?.trim()
-                    ?.substringBefore(" ")
-
-            return canonicalizeDizillaUrl(first)
+        for (node in backgroundElements) {
+            val style = node.attr("style")
+            val backgroundUrl = backgroundPattern.find(style)?.groupValues?.getOrNull(1)
+            normalizePosterUrl(backgroundUrl)?.let { return it }
         }
 
         return null
+    }
+
+    private fun findRelatedSeriesPoster(
+        document: Document,
+        seriesUrl: String
+    ): String? {
+        val target = (canonicalizeDizillaUrl(seriesUrl) ?: seriesUrl).trimEnd('/')
+
+        val matchingCard = document
+            .select("a[href], [data-href], [data-url]")
+            .firstOrNull { element ->
+                val rawUrl = element.attr("href").takeIf { it.isNotBlank() }
+                    ?: element.attr("data-href").takeIf { it.isNotBlank() }
+                    ?: element.attr("data-url").takeIf { it.isNotBlank() }
+
+                val candidate = canonicalizeDizillaUrl(rawUrl)?.trimEnd('/')
+                candidate.equals(target, ignoreCase = true)
+            } ?: return null
+
+        return extractPoster(matchingCard)
+            ?: matchingCard.parent()?.let(::extractPoster)
+            ?: matchingCard.parent()?.parent()?.let(::extractPoster)
     }
 
     // =========================================================
@@ -1989,8 +2050,11 @@ class Dizilla : MainAPI() {
             is String -> value.trim().takeIf { it.isNotBlank() }
             is Number -> value.toString()
             is JSONObject -> {
-                listOf("url", "contentUrl", "src", "name", "value")
-                    .firstNotNullOfOrNull { key ->
+                listOf(
+                    "url", "contentUrl", "src", "image", "poster", "thumbnail",
+                    "original", "large", "medium", "path", "poster_path",
+                    "image_url", "thumbnailUrl", "href", "name", "value"
+                ).firstNotNullOfOrNull { key ->
                         val nested = value.opt(key)
                         if (nested == null || nested == JSONObject.NULL) {
                             null
@@ -2927,6 +2991,42 @@ class Dizilla : MainAPI() {
         currentSeriesUrl: String
     ): List<SearchResponse> {
         val current = (canonicalizeDizillaUrl(currentSeriesUrl) ?: currentSeriesUrl).trimEnd('/')
+
+        // Always inspect the rendered cards as well as the Next.js data. Some
+        // "similar" objects contain a title and URL but omit the poster entirely.
+        val relatedContainers = document.select(
+            "section[class*='similar'], div[class*='similar'], " +
+                "section[id*='similar'], div[id*='similar'], " +
+                "section[class*='related'], div[class*='related'], " +
+                "section[id*='related'], div[id*='related'], " +
+                "section[class*='recommend'], div[class*='recommend'], " +
+                "section[id*='recommend'], div[id*='recommend'], " +
+                "section[class*='suggest'], div[class*='suggest'], " +
+                "section[id*='suggest'], div[id*='suggest']"
+        ).filter { container ->
+            val heading = container.selectFirst("h2, h3, h4")?.text().orEmpty()
+            heading.contains("benzer", true) ||
+                heading.contains("öner", true) ||
+                heading.contains("similar", true) ||
+                heading.contains("related", true) ||
+                heading.contains("recommend", true) ||
+                heading.contains("suggest", true) ||
+                heading.contains("ilgili", true)
+        }
+
+        val htmlRecommendations = relatedContainers
+            .flatMap { container ->
+                container.select("a[href*='/dizi/'], [data-href*='/dizi/'], [data-url*='/dizi/']")
+                    .mapNotNull { card -> card.toSearchResponse() }
+            }
+            .filter { it.url.trimEnd('/') != current }
+            .distinctBy { it.url }
+            .take(MAX_MAIN_RESULTS)
+
+        val htmlPosters = htmlRecommendations.associate { response ->
+            response.url.trimEnd('/') to response.posterUrl
+        }
+
         val fromRsc = mutableListOf<SearchResponse>()
         val seen = HashSet<String>()
         val similar = extractRscArray(pageHtml, "similar")
@@ -2936,46 +3036,51 @@ class Dizilla : MainAPI() {
                 val item = similar.optJSONObject(index) ?: continue
                 val rawUrl = firstString(item, "url", "href", "slug") ?: continue
                 val relatedUrl = canonicalizeDizillaUrl(rawUrl) ?: continue
-                if (relatedUrl.trimEnd('/') == current || !seen.add(relatedUrl)) continue
+                val normalizedUrl = relatedUrl.trimEnd('/')
+                if (normalizedUrl.equals(current, true) || !seen.add(normalizedUrl)) continue
 
                 val title =
                     cleanSeriesTitle(firstString(item, "title", "name"))
                         ?: titleFromSeriesUrl(relatedUrl)
                         ?: continue
-                val posterRaw =
-                    firstString(item, "poster", "poster_url", "image", "thumbnail")
-                        ?: metadataValueToString(item.opt("poster"))
+
+                val posterRaw = listOf(
+                    "poster_url", "posterUrl", "poster",
+                    "image_url", "imageUrl", "image",
+                    "thumbnail", "thumbnailUrl",
+                    "cover", "cover_url", "coverUrl"
+                ).firstNotNullOfOrNull { key ->
+                    metadataValueToString(item.opt(key))
+                }
+
+                val poster = normalizePosterUrl(posterRaw)
+                    ?: htmlPosters[normalizedUrl]?.let(::normalizePosterUrl)
+                    ?: findRelatedSeriesPoster(document, relatedUrl)
+
                 val score = parseImdbScore(
                     firstString(item, "imdb_point", "imdb_score", "imdb_rating", "ratingValue", "score")
                 )
 
                 fromRsc += newTvSeriesSearchResponse(title, relatedUrl, TvType.TvSeries) {
-                    this.posterUrl = canonicalizeDizillaUrl(posterRaw) ?: posterRaw
+                    this.posterUrl = poster
                     this.score = score?.let { Score.from10(it) }
                 }
             }
         }
 
-        if (fromRsc.isNotEmpty()) return fromRsc
-
-        // HTML fallback for deployments where the similar list is rendered normally.
-        val relatedContainers = document.select(
-            "section[class*='similar'], div[class*='similar'], " +
-                "section[id*='similar'], div[id*='similar'], " +
-                "section[class*='related'], div[class*='related'], " +
-                "section[id*='related'], div[id*='related']"
-        ).filter { container ->
-            val heading = container.selectFirst("h2, h3, h4")?.text().orEmpty()
-            heading.contains("benzer", true) ||
-                heading.contains("similar", true) ||
-                heading.contains("ilgili", true)
+        if (fromRsc.isEmpty()) {
+            return htmlRecommendations
         }
 
-        return relatedContainers
-            .flatMap { it.select("a[href*='/dizi/']").mapNotNull { anchor -> anchor.toSearchResponse() } }
-            .filter { it.url.trimEnd('/') != current }
-            .distinctBy { it.url }
-            .take(MAX_MAIN_RESULTS)
+        // Keep all RSC recommendations, then append any rendered cards missing
+        // from the data array. This also preserves working posters from HTML.
+        val output = LinkedHashMap<String, SearchResponse>()
+        fromRsc.forEach { output[it.url.trimEnd('/')] = it }
+        htmlRecommendations.forEach { response ->
+            output.putIfAbsent(response.url.trimEnd('/'), response)
+        }
+
+        return output.values.take(MAX_MAIN_RESULTS)
     }
 
     private fun extractRscSources(
