@@ -3082,7 +3082,41 @@ class Dizilla : MainAPI() {
         return null
     }
 
-    private fun extractSimilarSeries(
+    private suspend fun fetchRelatedSeriesPoster(seriesUrl: String): String? {
+        return try {
+            val response = app.get(
+                seriesUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
+                    "Referer" to "$mainUrl/"
+                ),
+                referer = "$mainUrl/"
+            )
+
+            if (!response.isSuccessful) return null
+            val document = response.document
+
+            val metaPoster = document
+                .select("meta[property='og:image'], meta[property='og:image:url'], meta[name='twitter:image'], meta[name='thumbnail']")
+                .firstNotNullOfOrNull { meta ->
+                    normalizePosterUrl(meta.attr("content"))
+                }
+
+            metaPoster
+                ?: jsonLdSeriesObject(document, seriesUrl)
+                    ?.let { schema -> normalizePosterUrl(metadataValueToString(schema.opt("image"))) }
+                ?: document
+                    .selectFirst("[class*='poster'], [class*='cover'], [data-poster]")
+                    ?.let(::extractPoster)
+        } catch (e: Exception) {
+            Log.d("Dizilla", "Related poster lookup failed: " + e.message)
+            null
+        }
+    }
+
+    private suspend fun extractSimilarSeries(
         document: Document,
         pageHtml: String,
         currentSeriesUrl: String
@@ -3165,19 +3199,49 @@ class Dizilla : MainAPI() {
             }
         }
 
-        if (fromRsc.isEmpty()) {
-            return htmlRecommendations
-        }
-
-        // Keep all RSC recommendations, then append any rendered cards missing
-        // from the data array. This also preserves working posters from HTML.
+        // Merge both sources before recovery so an RSC record with no image does
+        // not hide a rendered card that already has its poster.
         val output = LinkedHashMap<String, SearchResponse>()
         fromRsc.forEach { output[it.url.trimEnd('/')] = it }
         htmlRecommendations.forEach { response ->
-            output.putIfAbsent(response.url.trimEnd('/'), response)
+            val key = response.url.trimEnd('/')
+            val existing = output[key]
+            if (existing == null) {
+                output[key] = response
+            } else if (
+                existing is TvSeriesSearchResponse &&
+                existing.posterUrl.isNullOrBlank() &&
+                response is TvSeriesSearchResponse &&
+                !response.posterUrl.isNullOrBlank()
+            ) {
+                existing.posterUrl = response.posterUrl
+            }
         }
 
-        return output.values.take(MAX_MAIN_RESULTS)
+        val recommendations = output.values.take(MAX_MAIN_RESULTS).toList()
+        var posterLookups = 0
+
+        // Last fallback: read the poster metadata from the recommended series'
+        // own detail page, but cap requests to avoid slowing down every load.
+        for (recommendation in recommendations) {
+            val tvResponse = recommendation as? TvSeriesSearchResponse ?: continue
+            if (!tvResponse.posterUrl.isNullOrBlank() || posterLookups >= 6) continue
+
+            posterLookups++
+            tvResponse.posterUrl = fetchRelatedSeriesPoster(tvResponse.url)
+        }
+
+        val missingPosters = recommendations.count {
+            (it as? TvSeriesSearchResponse)?.posterUrl.isNullOrBlank()
+        }
+        Log.d(
+            "Dizilla",
+            "Recommendations total=" + recommendations.size +
+                " posterLookups=" + posterLookups +
+                " missingPosters=" + missingPosters
+        )
+
+        return recommendations
     }
 
     private fun extractRscSources(
