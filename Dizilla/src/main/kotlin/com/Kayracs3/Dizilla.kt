@@ -2334,13 +2334,13 @@ class Dizilla : MainAPI() {
                 referer = PLAYER_REFERER
             ).text
         } catch (e: Exception) {
-            Log.w("Dizilla", "RSC player request failed url=\${player.url}: \${e.message}")
+            Log.w("Dizilla", "RSC player request failed url=${player.url}: ${e.message}")
             return false
         }
 
         val config = extractPlayerConfig(playerHtml)
         if (config == null) {
-            Log.w("Dizilla", "Pichive NP_CONFIG not found url=\${player.url} bytes=\${playerHtml.length}")
+            Log.w("Dizilla", "Pichive NP_CONFIG not found url=${player.url} bytes=${playerHtml.length}")
             return false
         }
 
@@ -2379,7 +2379,7 @@ class Dizilla : MainAPI() {
             val generated = try {
                 M3u8Helper.generateM3u8(linkName, master, player.url)
             } catch (e: Exception) {
-                Log.d("Dizilla", "Pichive M3U8 variants failed: \${e.message}")
+                Log.d("Dizilla", "Pichive M3U8 variants failed: ${e.message}")
                 emptyList()
             }
 
@@ -2433,7 +2433,7 @@ class Dizilla : MainAPI() {
 
         Log.d(
             "Dizilla",
-            "Pichive player parsed url=\${player.url} masters=\${masters.length()} delivered=$delivered subtitles=\${subtitles?.length() ?: 0}"
+            "Pichive player parsed url=${player.url} masters=${masters.length()} delivered=$delivered subtitles=${subtitles?.length() ?: 0}"
         )
         return delivered
     }
