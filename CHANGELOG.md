@@ -2,6 +2,15 @@
 
 ## 2026-11-05
 
+<!-- kayra-commit:7bc22bd89327ebf1f2a888b41e3222dc468ec8ec -->
+### Fix Dizilla actor image URLs appearing as actor names
+
+- Etkilenen alanlar: Dizilla
+- Commit: [7bc22bd](https://github.com/Kayracs3/Kayra/commit/7bc22bd89327ebf1f2a888b41e3222dc468ec8ec)
+
+
+## 2026-11-05
+
 <!-- kayra-commit:4b4605b3514026b62f4e7e06fd997b6e480d127a -->
 ### Update iconUrl to use Google favicon service
 
