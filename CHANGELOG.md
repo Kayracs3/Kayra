@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:e0a8bf663e5822c55b512dae4b2d8a37dec8733e -->
+### Dizilla: parse cast portraits and similar series
+
+- Etkilenen alanlar: Dizilla
+- Commit: [e0a8bf6](https://github.com/Kayracs3/Kayra/commit/e0a8bf663e5822c55b512dae4b2d8a37dec8733e)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:322329c6a6f2e872c29ce045b96b65a9ab00f63a -->
 ### Dizilla: add IMDb card scores and detail metadata
 
