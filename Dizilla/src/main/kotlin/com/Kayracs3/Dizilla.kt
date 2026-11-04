@@ -61,6 +61,167 @@ class Dizilla : MainAPI() {
     }
 
     // The series title must travel with each episode to the playback resolver.
+    private fun cleanSeriesTitle(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+
+        var value = raw
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+        value = value
+            .replace(Regex("""(?i)\s*[-|–—]\s*dizilla\b.*$"""), "")
+            .replace(Regex("""(?i)\s*[-|–—]\s*yabancı dizi izle.*$"""), "")
+            .replace(Regex("""(?i)\s+izle$"""), "")
+            .trim(' ', '-', '|', '–', '—')
+
+        if (value.startsWith("Dizilla |", ignoreCase = true)) {
+            value = value.substringAfter('|').trim()
+        }
+
+        val normalized = value.lowercase(java.util.Locale.ROOT)
+        if (
+            normalized.isBlank() ||
+            normalized == "dizilla" ||
+            normalized == "yabancı dizi" ||
+            normalized == "yabancı dizi izle" ||
+            normalized == "dizi izle" ||
+            normalized == "ana sayfa"
+        ) {
+            return null
+        }
+
+        return value.takeIf { it.length <= 120 }
+    }
+
+    private fun titleFromSeriesUrl(rawUrl: String): String? {
+        var slug = rawUrl
+            .substringBefore('?')
+            .substringBefore('#')
+            .trimEnd('/')
+            .substringAfterLast('/')
+            .trim()
+
+        slug = slug
+            .replace(Regex("""(?i)-izle$"""), "")
+            .replace(Regex("""(?i)-(?:hd|1080p)$"""), "")
+            .replace('-', ' ')
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+        val cleaned = cleanSeriesTitle(slug) ?: return null
+        return cleaned.split(Regex("""\s+""")).joinToString(" ") { word ->
+            word.replaceFirstChar { first -> first.uppercase() }
+        }
+    }
+
+    private fun jsonLdSeriesTitle(
+        document: Document,
+        seriesUrl: String
+    ): String? {
+        val candidates = mutableListOf<Pair<Int, String>>()
+        val currentUrl = (canonicalizeDizillaUrl(seriesUrl) ?: seriesUrl).trimEnd('/')
+
+        fun walk(value: Any?, depth: Int) {
+            if (depth > MAX_JSON_SEARCH_DEPTH) return
+
+            when (value) {
+                is JSONObject -> {
+                    val typeValue = value.opt("@type")
+                    val typeNames = when (typeValue) {
+                        is String -> listOf(typeValue)
+                        is JSONArray -> (0 until typeValue.length()).map { typeValue.optString(it) }
+                        else -> emptyList()
+                    }
+                    val isTvSeries = typeNames.any {
+                        it.contains("TVSeries", ignoreCase = true) ||
+                            it.equals("Series", ignoreCase = true)
+                    }
+
+                    if (isTvSeries) {
+                        val title = cleanSeriesTitle(value.optString("name").takeIf { it.isNotBlank() })
+                        if (title != null) {
+                            val references = mutableListOf<String>()
+                            firstString(value, "url", "@id")?.let(references::add)
+
+                            when (val mainEntity = value.opt("mainEntityOfPage")) {
+                                is String -> references.add(mainEntity)
+                                is JSONObject -> firstString(mainEntity, "@id", "url")?.let(references::add)
+                            }
+
+                            val matchesCurrentPage = references.any { reference ->
+                                (canonicalizeDizillaUrl(reference) ?: reference).trimEnd('/') == currentUrl
+                            }
+                            val seasons = value.opt("containsSeason")
+                            val seasonCount = when (seasons) {
+                                is JSONArray -> seasons.length()
+                                is JSONObject -> 1
+                                else -> 0
+                            }
+                            val score = 100 + seasonCount + if (matchesCurrentPage) 1000 else 0
+                            candidates.add(score to title)
+                        }
+                    }
+
+                    val keys = value.keys()
+                    while (keys.hasNext()) {
+                        walk(value.opt(keys.next()), depth + 1)
+                    }
+                }
+
+                is JSONArray -> {
+                    for (index in 0 until value.length()) {
+                        walk(value.opt(index), depth + 1)
+                    }
+                }
+            }
+        }
+
+        document.select("script[type='application/ld+json']").forEach { script ->
+            val raw = script.data().takeIf { it.isNotBlank() }
+                ?: script.html().takeIf { it.isNotBlank() }
+                ?: return@forEach
+
+            try {
+                walk(JSONObject(raw), 0)
+            } catch (_: Exception) {
+                try {
+                    walk(JSONArray(raw), 0)
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+        return candidates.maxByOrNull { it.first }?.second
+    }
+
+    private fun resolveSeriesTitle(
+        document: Document,
+        secure: JSONObject?,
+        seriesUrl: String
+    ): String {
+        // Current Dizilla pages publish the actual series name in TVSeries JSON-LD.
+        jsonLdSeriesTitle(document, seriesUrl)?.let { return it }
+
+        // Only use series-specific fields here. Generic "name" and "title" keys
+        // can belong to the site's own "Dizilla" branding in nested metadata.
+        for (key in listOf("series_title", "object_name")) {
+            val raw = findValueRecursive(secure, setOf(key))
+            val candidate = cleanSeriesTitle(metadataValueToString(raw))
+            if (candidate != null) return candidate
+        }
+
+        val pageCandidates = listOfNotNull(
+            document.selectFirst("h1")?.text(),
+            document.selectFirst("[data-series-title]")?.attr("data-series-title"),
+            document.selectFirst("meta[property='og:title']")?.attr("content"),
+            document.selectFirst("meta[name='twitter:title']")?.attr("content"),
+            document.title()
+        )
+
+        pageCandidates.firstNotNullOfOrNull(::cleanSeriesTitle)?.let { return it }
+        return titleFromSeriesUrl(seriesUrl) ?: name
+    }
+
     private fun encodeEpisodeData(episodeUrl: String, seriesTitle: String): String {
         val encodedTitle = Base64.encodeToString(
             seriesTitle.toByteArray(Charsets.UTF_8),
@@ -953,15 +1114,6 @@ class Dizilla : MainAPI() {
 
                 is JSONObject -> {
 
-                    val title =
-                        firstString(
-                            value,
-                            "series_title",
-                            "object_name",
-                            "name",
-                            "title"
-                        )
-
                     val slug =
                         firstString(
                             value,
@@ -969,6 +1121,13 @@ class Dizilla : MainAPI() {
                             "used_slug",
                             "slug"
                         )
+
+                    val title =
+                        listOf("series_title", "object_name", "name", "title")
+                            .firstNotNullOfOrNull { key ->
+                                cleanSeriesTitle(firstString(value, key))
+                            }
+                            ?: slug?.let(::titleFromSeriesUrl)
 
                     val poster =
                         firstString(
@@ -1126,21 +1285,20 @@ class Dizilla : MainAPI() {
             canonicalizeDizillaUrl(rawHref)
                 ?: return null
 
-        val title =
-            selectFirst("h1, h2, h3, h4, .title, .name, .card-title, [data-title]")
-                ?.let { heading ->
-                    heading.attr("data-title").takeIf { it.isNotBlank() }
-                        ?: heading.text().trim().takeIf { it.isNotBlank() }
-                }
-                ?: attr("data-title").trim().takeIf { it.isNotBlank() }
-                ?: attr("title").trim().removeSuffix(" izle").trim()
-                    .takeIf { it.isNotBlank() }
-                ?: attr("aria-label").trim().takeIf { it.isNotBlank() }
-                ?: selectFirst("img")?.attr("alt")?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                ?: text().replace(Regex("""\s+"""), " ").trim()
-                    .takeIf { it.isNotBlank() && it.length <= 120 }
-                ?: return null
+        val titleCandidates = listOfNotNull(
+            selectFirst("h1, h2, h3, h4, .title, .name, .card-title, [data-title]")?.let { heading ->
+                heading.attr("data-title").takeIf { it.isNotBlank() }
+                    ?: heading.text().trim().takeIf { it.isNotBlank() }
+            },
+            attr("data-title").takeIf { it.isNotBlank() },
+            attr("title").removeSuffix(" izle").trim().takeIf { it.isNotBlank() },
+            attr("aria-label").substringBefore(",").trim().takeIf { it.isNotBlank() },
+            selectFirst("img")?.attr("alt")?.trim()?.takeIf { it.isNotBlank() },
+            text().replace(Regex("""\s+"""), " ").trim().takeIf { it.isNotBlank() && it.length <= 120 }
+        )
+        val title = titleCandidates.firstNotNullOfOrNull(::cleanSeriesTitle)
+            ?: titleFromSeriesUrl(href)
+            ?: return null
 
         return newTvSeriesSearchResponse(
             title,
@@ -1309,21 +1467,20 @@ class Dizilla : MainAPI() {
                 result.optJSONObject(index)
                     ?: continue
 
-            val title =
-                firstString(
-                    item,
-                    "object_name",
-                    "name",
-                    "title"
-                )
-                    ?: continue
-
             val slug =
                 firstString(
                     item,
                     "used_slug",
                     "slug"
                 )
+                    ?: continue
+
+            val title =
+                listOf("object_name", "name", "title")
+                    .firstNotNullOfOrNull { key ->
+                        cleanSeriesTitle(firstString(item, key))
+                    }
+                    ?: titleFromSeriesUrl(slug)
                     ?: continue
 
             val href =
@@ -1390,25 +1547,12 @@ class Dizilla : MainAPI() {
                 getStructuredData(document)
             )
 
-        val title =
-            firstMetadata(
-                document,
-                secure,
-                setOf(
-                    "series_title",
-                    "object_name",
-                    "title",
-                    "name"
-                )
-            )
-                ?: document
-                    .selectFirst("h1")
-                    ?.text()
-                    ?.trim()
-                ?: seriesUrl
-                    .trimEnd('/')
-                    .substringAfterLast('/')
-                    .replace("-", " ")
+        val title = resolveSeriesTitle(document, secure, seriesUrl)
+
+        Log.d(
+            "Dizilla",
+            "Series display title resolved=$title url=$seriesUrl"
+        )
 
         val poster =
             firstMetadata(
