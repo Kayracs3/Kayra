@@ -194,6 +194,87 @@ class Dizilla : MainAPI() {
         return candidates.maxByOrNull { it.first }?.second
     }
 
+    private fun jsonLdSeriesObject(
+        document: Document,
+        seriesUrl: String
+    ): JSONObject? {
+        val currentUrl = (canonicalizeDizillaUrl(seriesUrl) ?: seriesUrl).trimEnd('/')
+        val candidates = mutableListOf<Pair<Int, JSONObject>>()
+
+        fun walk(value: Any?, depth: Int) {
+            if (depth > MAX_JSON_SEARCH_DEPTH) return
+
+            when (value) {
+                is JSONObject -> {
+                    val rawType = value.opt("@type")
+                    val types = when (rawType) {
+                        is String -> listOf(rawType)
+                        is JSONArray -> (0 until rawType.length()).map { rawType.optString(it) }
+                        else -> emptyList()
+                    }
+                    val isSeries = types.any {
+                        it.contains("TVSeries", ignoreCase = true) ||
+                            it.equals("Series", ignoreCase = true)
+                    }
+
+                    if (isSeries) {
+                        val references = mutableListOf<String>()
+                        firstString(value, "url", "@id")?.let(references::add)
+                        when (val mainEntity = value.opt("mainEntityOfPage")) {
+                            is String -> references.add(mainEntity)
+                            is JSONObject -> firstString(mainEntity, "@id", "url")?.let(references::add)
+                        }
+
+                        val matchesPage = references.any { reference ->
+                            (canonicalizeDizillaUrl(reference) ?: reference).trimEnd('/') == currentUrl
+                        }
+                        val seasonCount = when (val seasons = value.opt("containsSeason")) {
+                            is JSONArray -> seasons.length()
+                            is JSONObject -> 1
+                            else -> 0
+                        }
+                        val actorCount = when (val actors = value.opt("actor")) {
+                            is JSONArray -> actors.length()
+                            is JSONObject -> 1
+                            else -> 0
+                        }
+                        val candidateScore =
+                            (if (matchesPage) 10000 else 0) + seasonCount * 10 + actorCount
+                        candidates.add(candidateScore to value)
+                    }
+
+                    val keys = value.keys()
+                    while (keys.hasNext()) {
+                        walk(value.opt(keys.next()), depth + 1)
+                    }
+                }
+
+                is JSONArray -> {
+                    for (index in 0 until value.length()) {
+                        walk(value.opt(index), depth + 1)
+                    }
+                }
+            }
+        }
+
+        document.select("script[type='application/ld+json']").forEach { script ->
+            val raw = script.data().takeIf { it.isNotBlank() }
+                ?: script.html().takeIf { it.isNotBlank() }
+                ?: return@forEach
+
+            try {
+                walk(JSONObject(raw), 0)
+            } catch (_: Exception) {
+                try {
+                    walk(JSONArray(raw), 0)
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+        return candidates.maxByOrNull { it.first }?.second
+    }
+
     private fun resolveSeriesTitle(
         document: Document,
         secure: JSONObject?,
@@ -1997,6 +2078,65 @@ class Dizilla : MainAPI() {
         return null
     }
 
+    private fun extractSeriesActors(
+        document: Document,
+        schemaSeries: JSONObject?
+    ): List<Actor> {
+        val actors = LinkedHashMap<String, Actor>()
+
+        fun addActor(nameRaw: String?, imageRaw: Any? = null) {
+            val actorName = nameRaw?.trim()?.replace(Regex("""\s+"""), " ")
+                ?.takeIf { it.isNotBlank() && !it.equals("null", true) }
+                ?: return
+            val rawImage = metadataValueToString(imageRaw)
+            val image = canonicalizeDizillaUrl(rawImage) ?: rawImage
+            val key = actorName.lowercase(java.util.Locale.ROOT)
+            val previous = actors[key]
+            if (previous == null || (previous.image.isNullOrBlank() && !image.isNullOrBlank())) {
+                actors[key] = Actor(actorName, image)
+            }
+        }
+
+        fun readSchemaActor(value: Any?) {
+            when (value) {
+                is JSONObject -> {
+                    addActor(
+                        firstString(value, "name", "title"),
+                        value.opt("image") ?: value.opt("photo")
+                    )
+                }
+
+                is JSONArray -> {
+                    for (index in 0 until value.length()) {
+                        readSchemaActor(value.opt(index))
+                    }
+                }
+
+                is String -> addActor(value)
+            }
+        }
+
+        readSchemaActor(schemaSeries?.opt("actor"))
+
+        // Some Dizilla page revisions keep portraits in the cast cards rather than
+        // in the JSON-LD Person object. Use the matching actor card image as fallback.
+        document.select("a[href*='oyuncu'], [class*='actor'] a[href]").forEach { anchor ->
+            val image = extractPoster(anchor)
+                ?: anchor.parent()?.let { extractPoster(it) }
+            val actorName = firstNotNullOfOrNull(
+                listOf(
+                    anchor.attr("title"),
+                    anchor.attr("aria-label"),
+                    anchor.text(),
+                    anchor.selectFirst("img")?.attr("alt")
+                )
+            ) { it.trim().takeIf { text -> text.isNotBlank() } }
+            addActor(actorName, image)
+        }
+
+        return actors.values.toList()
+    }
+
     // =========================================================
     // EPISODE MODEL
     // =========================================================
@@ -2743,6 +2883,108 @@ class Dizilla : MainAPI() {
         }
 
         return null
+    }
+
+    private fun extractRscArray(
+        rawHtml: String,
+        propertyName: String
+    ): JSONArray? {
+        if (rawHtml.isBlank()) return null
+
+        val candidates = listOf(
+            rawHtml,
+            rawHtml.replace("\\\"", "\""),
+            rawHtml.replace("\\\\\"", "\"").replace("\\u0022", "\""),
+            rawHtml.replace("\\u0022", "\"")
+        ).distinct()
+
+        val markers = listOf(
+            "\"$propertyName\":[",
+            "\"$propertyName\": [",
+            "\"$propertyName\" :[",
+            "\"$propertyName\" : ["
+        )
+
+        for (candidate in candidates) {
+            for (marker in markers) {
+                var cursor = 0
+                while (cursor < candidate.length) {
+                    val at = candidate.indexOf(marker, cursor)
+                    if (at < 0) break
+
+                    val openIndex = candidate.indexOf('[', at)
+                    val json = extractBalancedJson(candidate, openIndex)
+                    if (!json.isNullOrBlank()) {
+                        try {
+                            val array = JSONArray(json)
+                            if (array.length() > 0) return array
+                        } catch (_: Exception) {
+                        }
+                    }
+
+                    cursor = at + marker.length
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun extractSimilarSeries(
+        document: Document,
+        pageHtml: String,
+        currentSeriesUrl: String
+    ): List<SearchResponse> {
+        val current = (canonicalizeDizillaUrl(currentSeriesUrl) ?: currentSeriesUrl).trimEnd('/')
+        val fromRsc = mutableListOf<SearchResponse>()
+        val seen = HashSet<String>()
+        val similar = extractRscArray(pageHtml, "similar")
+
+        if (similar != null) {
+            for (index in 0 until similar.length()) {
+                val item = similar.optJSONObject(index) ?: continue
+                val rawUrl = firstString(item, "url", "href", "slug") ?: continue
+                val relatedUrl = canonicalizeDizillaUrl(rawUrl) ?: continue
+                if (relatedUrl.trimEnd('/') == current || !seen.add(relatedUrl)) continue
+
+                val title =
+                    cleanSeriesTitle(firstString(item, "title", "name"))
+                        ?: titleFromSeriesUrl(relatedUrl)
+                        ?: continue
+                val posterRaw =
+                    firstString(item, "poster", "poster_url", "image", "thumbnail")
+                        ?: metadataValueToString(item.opt("poster"))
+                val score = parseImdbScore(
+                    firstString(item, "imdb_point", "imdb_score", "imdb_rating", "ratingValue", "score")
+                )
+
+                fromRsc += newTvSeriesSearchResponse(title, relatedUrl, TvType.TvSeries) {
+                    this.posterUrl = canonicalizeDizillaUrl(posterRaw) ?: posterRaw
+                    this.score = score?.let { Score.from10(it) }
+                }
+            }
+        }
+
+        if (fromRsc.isNotEmpty()) return fromRsc
+
+        // HTML fallback for deployments where the similar list is rendered normally.
+        val relatedContainers = document.select(
+            "section[class*='similar'], div[class*='similar'], " +
+                "section[id*='similar'], div[id*='similar'], " +
+                "section[class*='related'], div[class*='related'], " +
+                "section[id*='related'], div[id*='related']"
+        ).filter { container ->
+            val heading = container.selectFirst("h2, h3, h4")?.text().orEmpty()
+            heading.contains("benzer", true) ||
+                heading.contains("similar", true) ||
+                heading.contains("ilgili", true)
+        }
+
+        return relatedContainers
+            .flatMap { it.select("a[href*='/dizi/']").mapNotNull { anchor -> anchor.toSearchResponse() } }
+            .filter { it.url.trimEnd('/') != current }
+            .distinctBy { it.url }
+            .take(MAX_MAIN_RESULTS)
     }
 
     private fun extractRscSources(
