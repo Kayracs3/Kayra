@@ -1502,39 +1502,28 @@ class Dizilla : MainAPI() {
     private fun extractPoster(
         element: Element
     ): String? {
-        // Dizilla cards may lazy-load their posters through data-* attributes,
-        // picture/source srcsets, or CSS background images.
-        val images = element.select("img, source")
+        // Do not assume the image is an <img>: Dizilla cast cards can store it
+        // on a nested div as a data-* attribute or a CSS url().
+        val nodes = listOf(element) + element.select("*")
+        val imageAttributes = listOf(
+            "data-profile-image", "data-profile", "data-avatar", "data-portrait",
+            "data-poster-url", "data-poster", "data-photo", "data-thumbnail",
+            "data-thumb", "data-background-image", "data-background", "data-bg",
+            "data-image-url", "data-image", "data-original-src", "data-original",
+            "data-lazy-src", "data-lazy", "data-srcset", "data-src",
+            "data-cfsrc", "srcset", "src", "poster"
+        )
+        val urlPattern = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
 
-        for (image in images) {
-            val candidates = listOf(
-                image.attr("data-poster"),
-                image.attr("data-image"),
-                image.attr("data-image-url"),
-                image.attr("data-original-src"),
-                image.attr("data-original"),
-                image.attr("data-lazy-src"),
-                image.attr("data-src"),
-                image.attr("data-srcset"),
-                image.attr("srcset"),
-                image.attr("data-cfsrc"),
-                image.attr("src"),
-                image.attr("data-lazy")
-            )
-
-            for (candidate in candidates) {
-                normalizePosterUrl(candidate)?.let { return it }
+        for (node in nodes) {
+            for (attribute in imageAttributes) {
+                normalizePosterUrl(node.attr(attribute))?.let { return it }
             }
-        }
 
-        val backgroundElements = listOf(element) + element.select("[style]")
-        val backgroundPattern =
-            Regex("""(?i)background(?:-image)?\s*:\s*url\([\s'"]*([^)'"]+)""")
-
-        for (node in backgroundElements) {
             val style = node.attr("style")
-            val backgroundUrl = backgroundPattern.find(style)?.groupValues?.getOrNull(1)
-            normalizePosterUrl(backgroundUrl)?.let { return it }
+            for (match in urlPattern.findAll(style)) {
+                normalizePosterUrl(match.groupValues.getOrNull(1))?.let { return it }
+            }
         }
 
         return null
@@ -1839,7 +1828,7 @@ class Dizilla : MainAPI() {
                 .filter { it.isNotBlank() }
                 .distinct()
 
-        val actors = extractSeriesActors(document, schemaSeries)
+        val actors = extractSeriesActors(document, schemaSeries, secure, pageHtml)
 
         // =====================================================
         // TÜM BÖLÜMLER
@@ -2051,9 +2040,12 @@ class Dizilla : MainAPI() {
             is Number -> value.toString()
             is JSONObject -> {
                 listOf(
-                    "url", "contentUrl", "src", "image", "poster", "thumbnail",
-                    "original", "large", "medium", "path", "poster_path",
-                    "image_url", "thumbnailUrl", "href", "name", "value"
+                    "url", "contentUrl", "src", "image", "imageUrl", "image_url",
+                    "poster", "posterUrl", "poster_url", "thumbnail", "thumbnailUrl",
+                    "profileImage", "profile_image", "profilePath", "profile_path",
+                    "photo", "photoUrl", "photo_url", "avatar", "picture",
+                    "original", "originalUrl", "original_url", "large", "medium",
+                    "path", "poster_path", "href", "name", "value", "default"
                 ).firstNotNullOfOrNull { key ->
                         val nested = value.opt(key)
                         if (nested == null || nested == JSONObject.NULL) {
@@ -2135,7 +2127,9 @@ class Dizilla : MainAPI() {
 
     private fun extractSeriesActors(
         document: Document,
-        schemaSeries: JSONObject?
+        schemaSeries: JSONObject?,
+        secure: JSONObject?,
+        pageHtml: String
     ): List<Actor> {
         val actors = LinkedHashMap<String, Actor>()
 
@@ -2144,7 +2138,7 @@ class Dizilla : MainAPI() {
                 ?.takeIf { it.isNotBlank() && !it.equals("null", true) }
                 ?: return
             val rawImage = metadataValueToString(imageRaw)
-            val image = canonicalizeDizillaUrl(rawImage) ?: rawImage
+            val image = normalizePosterUrl(rawImage) ?: canonicalizeDizillaUrl(rawImage)
             val key = actorName.lowercase(java.util.Locale.ROOT)
             val previous = actors[key]
             if (previous == null || (previous.image.isNullOrBlank() && !image.isNullOrBlank())) {
@@ -2156,7 +2150,7 @@ class Dizilla : MainAPI() {
             when (value) {
                 is JSONObject -> {
                     addActor(
-                        firstString(value, "name", "title"),
+                        firstString(value, "name", "title", "fullName", "displayName"),
                         value.opt("image") ?: value.opt("photo")
                     )
                 }
@@ -2173,15 +2167,89 @@ class Dizilla : MainAPI() {
 
         readSchemaActor(schemaSeries?.opt("actor"))
 
-        // Dizilla's cast section uses list items with the exact "ccard" class.
-        // Read the card itself so its lazy-loaded portrait is not missed.
-        document.select("li.ccard").forEach { card ->
+        // The site's client-rendered cast data is sometimes present in Next/RSC
+        // JSON but absent from Jsoup's initial DOM. Walk only actor/cast branches.
+        val actorContainers = setOf(
+            "actor", "actors", "cast", "cast_members", "castmembers",
+            "cast_list", "castlist", "performers", "people", "person", "persons"
+        )
+        val actorNameKeys = arrayOf(
+            "name", "full_name", "fullName", "actor_name", "actorName",
+            "person_name", "personName", "display_name", "displayName", "title"
+        )
+        val actorImageKeys = arrayOf(
+            "profile_image", "profileImage", "profile_path", "profilePath",
+            "photo_url", "photoUrl", "photo", "image_url", "imageUrl",
+            "image", "avatar", "picture", "portrait", "poster", "thumbnail"
+        )
+
+        fun walkActorData(value: Any?, context: String, depth: Int) {
+            if (depth > MAX_JSON_SEARCH_DEPTH) return
+
+            when (value) {
+                is JSONObject -> {
+                    val type = firstString(value, "@type", "type").orEmpty()
+                    val isPerson = type.contains("Person", true) ||
+                        type.contains("Actor", true) ||
+                        context in actorContainers
+
+                    if (isPerson) {
+                        val actorName = firstString(value, *actorNameKeys)
+                        val actorImage = actorImageKeys.firstNotNullOfOrNull { key ->
+                            metadataValueToString(value.opt(key))
+                        }
+                        addActor(actorName, actorImage)
+                    }
+
+                    val keys = value.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val normalizedKey = key.lowercase(java.util.Locale.ROOT)
+                            .replace('-', '_').replace(' ', '_')
+                        val nextContext = if (normalizedKey in actorContainers) {
+                            normalizedKey
+                        } else {
+                            context
+                        }
+                        walkActorData(value.opt(key), nextContext, depth + 1)
+                    }
+                }
+
+                is JSONArray -> {
+                    for (index in 0 until value.length()) {
+                        walkActorData(value.opt(index), context, depth + 1)
+                    }
+                }
+
+                is String -> {
+                    if (context == "actor" || context == "actors" || context == "cast") {
+                        addActor(value)
+                    }
+                }
+            }
+        }
+
+        if (secure != null) {
+            walkActorData(secure, "", 0)
+        }
+
+        // Some RSC payloads serialize the cast as a standalone array.
+        for (key in listOf("actors", "cast", "castMembers", "cast_members", "performers")) {
+            extractRscArray(pageHtml, key)?.let { array ->
+                walkActorData(array, key.lowercase().replace('-', '_'), 0)
+            }
+        }
+
+        // HTML fallback for server-rendered cards, including li.ccard.
+        val actorCards = document.select("li.ccard")
+        actorCards.forEach { card ->
             val anchor = card.selectFirst("a[href]")
             val image = extractPoster(card)
                 ?: anchor?.let { extractPoster(it) }
 
             val actorName = listOf(
                 card.attr("data-name"),
+                card.attr("data-actor"),
                 card.selectFirst("[itemprop='name']")?.attr("content"),
                 card.selectFirst(".name, .cname, .actor-name, .ccard-name, h3, h4")?.text(),
                 anchor?.attr("title"),
@@ -2197,7 +2265,7 @@ class Dizilla : MainAPI() {
             addActor(actorName, image)
         }
 
-        // Retain compatibility with older page layouts that link directly to actor pages.
+        // Legacy layouts may link directly to actor pages.
         document.select("a[href*='oyuncu'], [class*='actor'] a[href]").forEach { anchor ->
             val image = extractPoster(anchor)
                 ?: anchor.parent()?.let { extractPoster(it) }
@@ -2212,6 +2280,12 @@ class Dizilla : MainAPI() {
             addActor(actorName, image)
         }
 
+        Log.d(
+            "Dizilla",
+            "Actor extraction cards=" + actorCards.size +
+                " total=" + actors.size +
+                " withImages=" + actors.values.count { !it.image.isNullOrBlank() }
+        )
         return actors.values.toList()
     }
 
