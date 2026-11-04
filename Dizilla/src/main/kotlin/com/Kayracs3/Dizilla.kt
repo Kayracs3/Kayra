@@ -2173,8 +2173,31 @@ class Dizilla : MainAPI() {
 
         readSchemaActor(schemaSeries?.opt("actor"))
 
-        // Some Dizilla page revisions keep portraits in the cast cards rather than
-        // in the JSON-LD Person object. Use the matching actor card image as fallback.
+        // Dizilla's cast section uses list items with the exact "ccard" class.
+        // Read the card itself so its lazy-loaded portrait is not missed.
+        document.select("li.ccard").forEach { card ->
+            val anchor = card.selectFirst("a[href]")
+            val image = extractPoster(card)
+                ?: anchor?.let { extractPoster(it) }
+
+            val actorName = listOf(
+                card.attr("data-name"),
+                card.selectFirst("[itemprop='name']")?.attr("content"),
+                card.selectFirst(".name, .cname, .actor-name, .ccard-name, h3, h4")?.text(),
+                anchor?.attr("title"),
+                anchor?.attr("aria-label"),
+                card.selectFirst("img")?.attr("alt"),
+                anchor?.text(),
+                card.text().takeIf { it.length <= 80 }
+            ).firstNotNullOfOrNull { candidate ->
+                candidate?.trim()?.replace(Regex("""\\s+"""), " ")
+                    ?.takeIf { it.isNotBlank() && it.length <= 80 }
+            }
+
+            addActor(actorName, image)
+        }
+
+        // Retain compatibility with older page layouts that link directly to actor pages.
         document.select("a[href*='oyuncu'], [class*='actor'] a[href]").forEach { anchor ->
             val image = extractPoster(anchor)
                 ?: anchor.parent()?.let { extractPoster(it) }
