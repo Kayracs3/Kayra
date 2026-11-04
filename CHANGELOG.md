@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:41b3df8129ef4f3f42cb3dcd15489082bcf634a8 -->
+### Show series title and add Pichive legacy fallback
+
+- Etkilenen alanlar: Dizilla
+- Commit: [41b3df8](https://github.com/Kayracs3/Kayra/commit/41b3df8129ef4f3f42cb3dcd15489082bcf634a8)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:bcebf750c1209aa44e98fef33ac6cc376dc02861 -->
 ### Bump Dizilla plugin version to 20
 
