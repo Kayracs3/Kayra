@@ -60,6 +60,75 @@ class Dizilla : MainAPI() {
         )
     }
 
+    private fun encodeEpisodeData(episodeUrl: String, seriesTitle: String): String {
+        val encodedTitle = Base64.encodeToString(
+            seriesTitle.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+        )
+        return episodeUrl + EPISODE_TITLE_MARKER + encodedTitle
+    }
+
+    private fun decodeEpisodeData(data: String): Pair<String, String?> {
+        val markerIndex = data.lastIndexOf(EPISODE_TITLE_MARKER)
+        if (markerIndex < 0) return data to null
+
+        val episodeUrl = data.substring(0, markerIndex)
+        val encodedTitle = data.substring(markerIndex + EPISODE_TITLE_MARKER.length)
+        val title = try {
+            String(
+                Base64.decode(
+                    encodedTitle,
+                    Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+                ),
+                Charsets.UTF_8
+            ).trim().takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+
+        return if (
+            episodeUrl.startsWith("http://", true) ||
+            episodeUrl.startsWith("https://", true)
+        ) {
+            episodeUrl to title
+        } else {
+            data to null
+        }
+    }
+
+    private fun resolveEpisodeDisplayTitle(
+        document: Document,
+        episodeUrl: String,
+        storedTitle: String?
+    ): String {
+        storedTitle?.takeIf { it.isNotBlank() && !it.equals("Dizilla", true) }?.let { return it }
+
+        val pageTitle = listOfNotNull(
+            document.selectFirst("meta[property='og:title']")?.attr("content"),
+            document.selectFirst("meta[name='twitter:title']")?.attr("content"),
+            document.selectFirst("h1")?.text(),
+            document.selectFirst("title")?.text()
+        ).asSequence()
+            .map { it.substringBefore("|").substringBefore(" - Dizilla").trim() }
+            .firstOrNull { it.isNotBlank() && !it.equals("Dizilla", true) }
+
+        if (!pageTitle.isNullOrBlank()) return pageTitle
+
+        val slug = episodeUrl
+            .substringBefore('?')
+            .substringBefore('#')
+            .trimEnd('/')
+            .substringAfterLast('/')
+            .replace(Regex("""-\d+-sezon-\d+-bolum.*$"""), "")
+            .replace('-', ' ')
+            .trim()
+
+        if (slug.isBlank()) return name
+        return slug.split(Regex("""\s+""")).joinToString(" ") { word ->
+            word.replaceFirstChar { first -> first.uppercase() }
+        }
+    }
+
     companion object {
 
         private const val USER_AGENT =
@@ -81,6 +150,8 @@ class Dizilla : MainAPI() {
 
         // The current Pichive player still validates the legacy Dizilla origin.
         private const val PLAYER_REFERER = "https://dizilla.now/"
+
+        private const val EPISODE_TITLE_MARKER = "::DIZILLA_SERIES_TITLE::"
 
         private const val MAX_MAIN_RESULTS = 24
         private const val MAX_JSON_SEARCH_DEPTH = 32
@@ -1570,6 +1641,16 @@ class Dizilla : MainAPI() {
                         { it.name }
                     )
                 )
+                .map { episode ->
+                    // Carry the series title into loadLinks without losing episode metadata.
+                    newEpisode(encodeEpisodeData(episode.data, title.trim())) {
+                        this.name = episode.name
+                        this.season = episode.season
+                        this.episode = episode.episode
+                        this.description = episode.description
+                        this.posterUrl = episode.posterUrl
+                    }
+                }
 
         if (finalEpisodes.isEmpty()) {
             throw ErrorLoadingException(
@@ -2625,6 +2706,7 @@ class Dizilla : MainAPI() {
 
     private suspend fun loadRscPlayer(
         player: DizillaRscPlayer,
+        mediaTitle: String,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
         seenSubtitles: MutableSet<String>
@@ -2665,14 +2747,35 @@ class Dizilla : MainAPI() {
         }
 
         if (config == null) {
-            Log.w(
+            val fallbackLabel = buildString {
+                append(mediaTitle)
+                if (player.language.isNotBlank()) append(" • ${player.language}")
+                if (player.name.isNotBlank()) append(" • ${player.name}")
+                if (player.quality.isNotBlank()) append(" • ${player.quality}")
+            }
+            val legacyDelivered = try {
+                extractFromIframe(
+                    iframeUrl = player.url,
+                    label = fallbackLabel,
+                    qualityName = player.quality,
+                    subtitleCallback = subtitleCallback,
+                    callback = callback,
+                    mediaTitle = mediaTitle,
+                    requestReferer = PLAYER_REFERER
+                )
+            } catch (e: Exception) {
+                Log.w("Dizilla", "Pichive legacy player fallback failed: ${e.message}")
+                false
+            }
+            Log.d(
                 "Dizilla",
-                "Pichive config missing url=${player.url} status=$responseCode bytes=${playerHtml.length} " +
+                "Pichive NP_CONFIG missing; legacy openPlayer fallback delivered=$legacyDelivered " +
+                    "status=$responseCode bytes=${playerHtml.length} " +
                     "hasIframe=${playerHtml.contains("<iframe", true)} " +
-                    "hasSources=${playerHtml.contains("sources", true)} " +
-                    "hasCloudflare=${playerHtml.contains("cloudflare", true)}"
+                    "hasOpenPlayer=${playerHtml.contains("openPlayer", true)} " +
+                    "hasSources=${playerHtml.contains("sources", true)}"
             )
-            return false
+            return legacyDelivered
         }
 
         val masters = config.optJSONArray("sources") ?: return false
@@ -2683,7 +2786,7 @@ class Dizilla : MainAPI() {
             ?: Qualities.Unknown.value
 
         val linkName = buildString {
-            append(name)
+            append(mediaTitle)
             if (player.language.isNotBlank()) {
                 append(" • ")
                 append(player.language)
@@ -2719,7 +2822,7 @@ class Dizilla : MainAPI() {
             } else {
                 callback(
                     newExtractorLink(
-                        source = name,
+                        source = mediaTitle,
                         name = linkName,
                         url = master,
                         type = ExtractorLinkType.M3U8
@@ -2938,9 +3041,10 @@ class Dizilla : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        val (rawEpisodeUrl, storedSeriesTitle) = decodeEpisodeData(data)
         val episodeUrl =
-            canonicalizeDizillaUrl(data)
-                ?: data
+            canonicalizeDizillaUrl(rawEpisodeUrl)
+                ?: rawEpisodeUrl
 
         Log.d("Dizilla", "loadLinks = " + episodeUrl)
 
@@ -2962,11 +3066,17 @@ class Dizilla : MainAPI() {
             }
 
         val episodeDocument = response.document
+        val displayTitle = resolveEpisodeDisplayTitle(
+            episodeDocument,
+            episodeUrl,
+            storedSeriesTitle
+        )
         Log.d(
             "Dizilla",
             "Episode page status=" + response.code +
                 " bytes=" + response.text.length +
-                " title=" + episodeDocument.title()
+                " pageTitle=" + episodeDocument.title() +
+                " mediaTitle=" + displayTitle
         )
 
         // Current Dizilla builds sometimes keep episode secureData only in /_next/data/*.json.
@@ -2993,7 +3103,7 @@ class Dizilla : MainAPI() {
 
         for (player in candidates) {
             try {
-                if (loadRscPlayer(player, subtitleCallback, callback, seenSubtitles)) {
+                if (loadRscPlayer(player, displayTitle, subtitleCallback, callback, seenSubtitles)) {
                     delivered = true
                 }
             } catch (e: Exception) {
@@ -3107,7 +3217,7 @@ class Dizilla : MainAPI() {
 
                 val label =
                     buildString {
-                        append(name)
+                        append(displayTitle)
                         if (!sourceName.isNullOrBlank()) {
                             append(" • ")
                             append(sourceName)
@@ -3278,7 +3388,9 @@ class Dizilla : MainAPI() {
         label: String,
         qualityName: String,
         subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
+        callback: (ExtractorLink) -> Unit,
+        mediaTitle: String = label.substringBefore(" • ").ifBlank { name },
+        requestReferer: String = "$mainUrl/"
     ): Boolean {
 
         val iframeHtml =
@@ -3287,9 +3399,9 @@ class Dizilla : MainAPI() {
                     iframeUrl,
                     headers = mapOf(
                         "User-Agent" to USER_AGENT,
-                        "Referer" to "$mainUrl/"
+                        "Referer" to requestReferer
                     ),
-                    referer = "$mainUrl/"
+                    referer = requestReferer
                 ).text
             } catch (e: Exception) {
                 Log.e(
@@ -3321,7 +3433,10 @@ class Dizilla : MainAPI() {
                     .find(iframeHtml)
                     ?.groupValues
                     ?.getOrNull(1)
-                ?: return false
+                ?: run {
+                    Log.w("Dizilla", "Player page has no openPlayer token url=$iframeUrl bytes=${iframeHtml.length}")
+                    return false
+                }
 
         val host =
             iframeUrl
@@ -3440,7 +3555,7 @@ class Dizilla : MainAPI() {
 
                 callback.invoke(
                     newExtractorLink(
-                        source = name,
+                        source = mediaTitle,
                         name = label,
                         url = masterUrl,
                         type = ExtractorLinkType.M3U8
