@@ -2240,29 +2240,48 @@ class Dizilla : MainAPI() {
             }
         }
 
-        // HTML fallback for server-rendered cards, including li.ccard.
+        // Actual Dizilla markup:
+        // li.ccard > span.cav > img[src], followed by the actor-name span
+        // and then the character-name span. Do not use card.text(), because it
+        // also includes the BAŞROL badge and character name.
         val actorCards = document.select("li.ccard")
         actorCards.forEach { card ->
-            val anchor = card.selectFirst("a[href]")
-            val image = extractPoster(card)
-                ?: anchor?.let { extractPoster(it) }
+            val avatar = card.selectFirst("span.cav")
+            val avatarImage = avatar?.selectFirst("img")
+            val directChildren = card.children().toList()
+            val avatarIndex = directChildren.indexOfFirst { it.hasClass("cav") }
+            val directActorName = if (avatarIndex >= 0) {
+                directChildren.drop(avatarIndex + 1)
+                    .firstOrNull { it.tagName().equals("span", true) }
+                    ?.text()
+            } else {
+                null
+            }
+
+            val image = normalizePosterUrl(avatarImage?.attr("src"))
+                ?: normalizePosterUrl(avatarImage?.attr("data-src"))
+                ?: normalizePosterUrl(avatarImage?.attr("data-original"))
+                ?: extractPoster(avatar ?: card)
 
             val actorName = listOf(
+                directActorName,
                 card.attr("data-name"),
                 card.attr("data-actor"),
                 card.selectFirst("[itemprop='name']")?.attr("content"),
                 card.selectFirst(".name, .cname, .actor-name, .ccard-name, h3, h4")?.text(),
-                anchor?.attr("title"),
-                anchor?.attr("aria-label"),
                 card.selectFirst("img")?.attr("alt"),
-                anchor?.text(),
-                card.text().takeIf { it.length <= 80 }
+                card.attr("title")
             ).firstNotNullOfOrNull { candidate ->
                 candidate?.trim()?.replace(Regex("""\s+"""), " ")
                     ?.takeIf { it.isNotBlank() && it.length <= 80 }
             }
 
             addActor(actorName, image)
+            Log.d(
+                "Dizilla",
+                "Cast card actor=" + actorName.orEmpty() +
+                    " image=" + (!image.isNullOrBlank())
+            )
         }
 
         // Legacy layouts may link directly to actor pages.
@@ -3108,8 +3127,15 @@ class Dizilla : MainAPI() {
                 ?: jsonLdSeriesObject(document, seriesUrl)
                     ?.let { schema -> normalizePosterUrl(metadataValueToString(schema.opt("image"))) }
                 ?: document
-                    .selectFirst("[class*='poster'], [class*='cover'], [data-poster]")
-                    ?.let(::extractPoster)
+                    .select("[class*='poster'], [class*='cover'], [data-poster], [class*='image']")
+                    .firstNotNullOfOrNull { node -> extractPoster(node) }
+                ?: document
+                    .select("img[src], img[data-src], img[data-original]")
+                    .firstNotNullOfOrNull { image ->
+                        normalizePosterUrl(image.attr("src"))
+                            ?: normalizePosterUrl(image.attr("data-src"))
+                            ?: normalizePosterUrl(image.attr("data-original"))
+                    }
         } catch (e: Exception) {
             Log.d("Dizilla", "Related poster lookup failed: " + e.message)
             null
@@ -3225,7 +3251,7 @@ class Dizilla : MainAPI() {
         // own detail page, but cap requests to avoid slowing down every load.
         for (recommendation in recommendations) {
             val tvResponse = recommendation as? TvSeriesSearchResponse ?: continue
-            if (!tvResponse.posterUrl.isNullOrBlank() || posterLookups >= 6) continue
+            if (!tvResponse.posterUrl.isNullOrBlank() || posterLookups >= MAX_MAIN_RESULTS) continue
 
             posterLookups++
             tvResponse.posterUrl = fetchRelatedSeriesPoster(tvResponse.url)
