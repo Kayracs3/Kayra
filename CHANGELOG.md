@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:60f54540a501c76796c50cc466b72b912e7d2075 -->
+### Trigger Dizilla v21 build with title and player fallback changes
+
+- Etkilenen alanlar: Dizilla
+- Commit: [60f5454](https://github.com/Kayracs3/Kayra/commit/60f54540a501c76796c50cc466b72b912e7d2075)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:0c150197927761f807071879d979b761aae4822f -->
 ### Bump Dizilla plugin version to 21
 
