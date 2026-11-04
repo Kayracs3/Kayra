@@ -2183,7 +2183,12 @@ class Dizilla : MainAPI() {
             "image", "avatar", "picture", "portrait", "poster", "thumbnail"
         )
 
-        fun walkActorData(value: Any?, context: String, depth: Int) {
+        fun walkActorData(
+            value: Any?,
+            context: String,
+            depth: Int,
+            allowStringActor: Boolean = false
+        ) {
             if (depth > MAX_JSON_SEARCH_DEPTH) return
 
             when (value) {
@@ -2211,18 +2216,26 @@ class Dizilla : MainAPI() {
                         } else {
                             context
                         }
-                        walkActorData(value.opt(key), nextContext, depth + 1)
+                        // Only a string that is an item inside an actor collection
+                        // may be treated as an actor name. Nested strings such as
+                        // image/profile URLs must stay attached to their parent actor.
+                        walkActorData(
+                            value.opt(key),
+                            nextContext,
+                            depth + 1,
+                            normalizedKey in actorContainers
+                        )
                     }
                 }
 
                 is JSONArray -> {
                     for (index in 0 until value.length()) {
-                        walkActorData(value.opt(index), context, depth + 1)
+                        walkActorData(value.opt(index), context, depth + 1, allowStringActor)
                     }
                 }
 
                 is String -> {
-                    if (context == "actor" || context == "actors" || context == "cast") {
+                    if (allowStringActor && context in actorContainers) {
                         addActor(value)
                     }
                 }
@@ -2236,7 +2249,7 @@ class Dizilla : MainAPI() {
         // Some RSC payloads serialize the cast as a standalone array.
         for (key in listOf("actors", "cast", "castMembers", "cast_members", "performers")) {
             extractRscArray(pageHtml, key)?.let { array ->
-                walkActorData(array, key.lowercase().replace('-', '_'), 0)
+                walkActorData(array, key.lowercase().replace('-', '_'), 0, true)
             }
         }
 
