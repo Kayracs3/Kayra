@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:a771ba95a3fa09cd33d40ca2482ec07894d78be2 -->
+### Update version to 25 in build.gradle.kts
+
+- Etkilenen alanlar: Dizilla
+- Commit: [a771ba9](https://github.com/Kayracs3/Kayra/commit/a771ba95a3fa09cd33d40ca2482ec07894d78be2)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:eccf0a92d1e6a1668e1c8d6bb041c3fd6c600dc2 -->
 ### Fix actor card whitespace normalization
 
