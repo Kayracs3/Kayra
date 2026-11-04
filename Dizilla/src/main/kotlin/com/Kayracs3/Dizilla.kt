@@ -863,6 +863,7 @@ class Dizilla : MainAPI() {
                     ) {
                         this.posterUrl =
                             canonicalizeDizillaUrl(item.poster) ?: item.poster
+                        this.score = item.score?.let { Score.from10(it) }
                     }
             }
         }
@@ -1027,10 +1028,63 @@ class Dizilla : MainAPI() {
         )
     }
 
+    private fun parseImdbScore(raw: String?): Double? {
+        if (raw.isNullOrBlank()) return null
+        val normalized = raw.trim().replace(',', '.')
+        val number = Regex("""(?<![\d.])(?:10(?:\.0{1,2})?|[0-9](?:\.[0-9]{1,2})?)(?![\d.])""")
+            .find(normalized)
+            ?.value
+            ?.toDoubleOrNull()
+        return number?.takeIf { it in 0.0..10.0 }
+    }
+
+    private fun extractImdbScore(element: Element): Double? {
+        val selectors = listOf(
+            "[data-imdb]", "[data-imdb-rating]", "[data-imdb-score]",
+            "[data-rating]", "[data-score]", "[class*='imdb']",
+            "[class*='rating']", "[aria-label*='IMDb']", "[title*='IMDb']"
+        )
+        val nodes = buildList {
+            add(element)
+            selectors.forEach { selector ->
+                element.select(selector).forEach { add(it) }
+            }
+        }.distinct()
+
+        val attributes = listOf(
+            "data-imdb", "data-imdb-rating", "data-imdb-score",
+            "data-rating", "data-score", "data-value", "aria-label", "title"
+        )
+        val explicitScore = Regex(
+            """(?i)(?:imdb|puan|rating|score)\D{0,16}(10(?:[.,]\d{1,2})?|[0-9](?:[.,]\d{1,2})?)"""
+        )
+
+        for (node in nodes) {
+            for (attribute in attributes) {
+                val value = node.attr(attribute).trim()
+                if (value.isBlank()) continue
+                parseImdbScore(value)?.let { return it }
+                explicitScore.find(value)?.groupValues?.getOrNull(1)
+                    ?.let(::parseImdbScore)?.let { return it }
+            }
+
+            val className = node.className().lowercase()
+            if (className.contains("imdb") || className.contains("rating") || className.contains("score")) {
+                parseImdbScore(node.ownText().ifBlank { node.text() })?.let { return it }
+            }
+
+            explicitScore.find(node.ownText())?.groupValues?.getOrNull(1)
+                ?.let(::parseImdbScore)?.let { return it }
+        }
+
+        return null
+    }
+
     private data class SeriesInfo(
         val title: String?,
         val slug: String?,
-        val poster: String?
+        val poster: String?,
+        val score: Double?
     )
 
     private fun normalizeMenuText(
@@ -1138,6 +1192,11 @@ class Dizilla : MainAPI() {
                             "poster"
                         )
 
+                    val score =
+                        parseImdbScore(
+                            firstString(value, "imdb_point", "imdb_score", "imdb_rating", "ratingValue")
+                        )
+
                     if (
                         !title.isNullOrBlank() &&
                         !slug.isNullOrBlank()
@@ -1151,7 +1210,8 @@ class Dizilla : MainAPI() {
                                 SeriesInfo(
                                     title,
                                     slug,
-                                    poster?.replace("\\/", "/")
+                                    poster?.replace("\\/", "/"),
+                                    score
                                 )
                         }
                     }
@@ -1306,6 +1366,7 @@ class Dizilla : MainAPI() {
             TvType.TvSeries
         ) {
             this.posterUrl = extractPoster(this@toSearchResponse)
+            this.score = extractImdbScore(this@toSearchResponse)?.let { Score.from10(it) }
         }
     }
 
@@ -1493,6 +1554,9 @@ class Dizilla : MainAPI() {
                     "object_poster_url",
                     "poster_url"
                 )
+            val score = parseImdbScore(
+                firstString(item, "imdb_point", "imdb_score", "imdb_rating", "ratingValue", "score")
+            )
 
             output +=
                 newTvSeriesSearchResponse(
@@ -1502,6 +1566,7 @@ class Dizilla : MainAPI() {
                 ) {
                     this.posterUrl =
                         canonicalizeDizillaUrl(poster) ?: poster
+                    this.score = score?.let { Score.from10(it) }
                 }
         }
 
@@ -1529,7 +1594,7 @@ class Dizilla : MainAPI() {
             "Current series slug=${seriesUrl.trimEnd('/').substringAfterLast('/')}"
         )
 
-        val document =
+        val pageResponse =
             app.get(
                 seriesUrl,
                 headers = mapOf(
@@ -1539,7 +1604,11 @@ class Dizilla : MainAPI() {
                     "Referer" to "$mainUrl/"
                 ),
                 referer = "$mainUrl/"
-            ).document
+            )
+
+        val document = pageResponse.document
+        val pageHtml = pageResponse.text
+        val schemaSeries = jsonLdSeriesObject(document, seriesUrl)
 
         val secure =
             combineMetadata(
@@ -1574,17 +1643,21 @@ class Dizilla : MainAPI() {
                     ?.trim()
 
         val description =
-            firstMetadata(
-                document,
-                secure,
-                setOf(
-                    "series_description",
-                    "description",
-                    "plot",
-                    "overview",
-                    "summary"
+            schemaSeries
+                ?.optString("description")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() && it != "null" }
+                ?: firstMetadata(
+                    document,
+                    secure,
+                    setOf(
+                        "series_description",
+                        "description",
+                        "plot",
+                        "overview",
+                        "summary"
+                    )
                 )
-            )
                 ?: document
                     .selectFirst(
                         "meta[property='og:description']"
@@ -1614,24 +1687,24 @@ class Dizilla : MainAPI() {
                     ?.toIntOrNull()
             }
 
-        val scoreText =
-            firstMetadata(
-                document,
-                secure,
-                setOf(
-                    "imdb_point",
-                    "imdb_score",
-                    "imdb_rating",
-                    "ratingValue",
-                    "rating",
-                    "score"
-                )
-            )
-
         val score =
-            scoreText
-                ?.replace(",", ".")
-                ?.toDoubleOrNull()
+            schemaSeries
+                ?.optJSONObject("aggregateRating")
+                ?.let { rating -> parseImdbScore(firstString(rating, "ratingValue", "rating")) }
+                ?: parseImdbScore(
+                    firstMetadata(
+                        document,
+                        secure,
+                        setOf(
+                            "imdb_point",
+                            "imdb_score",
+                            "imdb_rating",
+                            "ratingValue",
+                            "rating",
+                            "score"
+                        )
+                    )
+                )
 
         val tags =
             document
@@ -1640,15 +1713,7 @@ class Dizilla : MainAPI() {
                 .filter { it.isNotBlank() }
                 .distinct()
 
-        val actors =
-            document
-                .select("a[href*='oyuncu']")
-                .map {
-                    Actor(it.text().trim())
-                }
-                .filter {
-                    it.name.isNotBlank()
-                }
+        val actors = extractSeriesActors(document, schemaSeries)
 
         // =====================================================
         // TÜM BÖLÜMLER
@@ -1814,6 +1879,9 @@ class Dizilla : MainAPI() {
                 .distinct()
                 .size
 
+        val recommendations =
+            extractSimilarSeries(document, pageHtml, seriesUrl)
+
         Log.d(
             "Dizilla",
             "Bulunan sezon sayısı = $seasonCount"
@@ -1831,15 +1899,10 @@ class Dizilla : MainAPI() {
             this.plot = description
             this.year = year
             this.tags = tags
-
-            if (score != null) {
-                this.score =
-                    Score.from10(score)
-            }
-
+            this.score = score
             this.duration = null
-
-            addActors(actors)
+            this.actors = actors.map { ActorData(it) }
+            this.recommendations = recommendations
         }
     }
 
