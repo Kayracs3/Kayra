@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:615504f22196974dc1a9b3ed03ff0e69c8442318 -->
+### Dizilla: bump metadata update to v23
+
+- Etkilenen alanlar: Dizilla
+- Commit: [615504f](https://github.com/Kayracs3/Kayra/commit/615504f22196974dc1a9b3ed03ff0e69c8442318)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:6f717f41b7337c1230bad1116127519130555faf -->
 ### Dizilla: fix detail score conversion and metadata logs
 
