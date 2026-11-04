@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:2cb7d06b0555973b80454cbfefae28a82ad3e183 -->
+### Harden Dizilla Flight payload source parsing
+
+- Etkilenen alanlar: Dizilla
+- Commit: [2cb7d06](https://github.com/Kayracs3/Kayra/commit/2cb7d06b0555973b80454cbfefae28a82ad3e183)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:16ba1bb747371ad817fb181589eb40d215361627 -->
 ### Read Dizilla Next.js buildId from episode page fallback
 
