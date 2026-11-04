@@ -2,6 +2,15 @@
 
 ## 2026-11-04
 
+<!-- kayra-commit:16ba1bb747371ad817fb181589eb40d215361627 -->
+### Read Dizilla Next.js buildId from episode page fallback
+
+- Etkilenen alanlar: Dizilla
+- Commit: [16ba1bb](https://github.com/Kayracs3/Kayra/commit/16ba1bb747371ad817fb181589eb40d215361627)
+
+
+## 2026-11-04
+
 <!-- kayra-commit:5763321e7e27e6f6ed4c88b9f763265c72507378 -->
 ### Bump Dizilla plugin version to 17
 
