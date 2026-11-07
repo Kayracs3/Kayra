@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:ed647387a69b42751d1ddf44b10539fc511061b9 -->
+### Refactor m3u8 extraction and link building logic
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [ed64738](https://github.com/Kayracs3/Kayra/commit/ed647387a69b42751d1ddf44b10539fc511061b9)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:e99b0ff522a346f3121c24c37747be453c6e8a3f -->
 ### Fix DaddyLive suspend extractor link builder
 
