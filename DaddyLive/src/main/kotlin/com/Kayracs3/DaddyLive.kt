@@ -12,7 +12,6 @@ class DaddyLiveProvider : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
 
     private val ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    // CDN'in izin verdiği origin (response header'dan)
     private val dembedOrigin = "https://dembed.st"
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -33,9 +32,6 @@ class DaddyLiveProvider : MainAPI() {
         return newLiveStreamLoadResponse(url = url, name = doc.title(), dataUrl = url)
     }
 
-    // ============================================================
-    // ANA MANTIK: 7 player yolu × çoklu iframe derinliği
-    // ============================================================
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -46,20 +42,14 @@ class DaddyLiveProvider : MainAPI() {
         val id = watchUrl.substringAfter("id=", "").substringBefore("&")
         if (id.isBlank()) return false
 
-        // 7 farklı player yolu
         val playerPaths = listOf("stream", "cast", "watch", "plus", "casting", "player", "hub")
-
         for (path in playerPaths) {
             val streamPageUrl = "$mainUrl/$path/stream-$id.php"
-            val found = tryToExtract(streamPageUrl, watchUrl, path, callback)
-            if (found) return true
+            if (tryToExtract(streamPageUrl, watchUrl, path, callback)) return true
         }
         return false
     }
 
-    /**
-     * Bir player sayfasını açar, iframe'lerin içine iner, token'lı m3u8 arar.
-     */
     private suspend fun tryToExtract(
         streamPageUrl: String,
         watchUrl: String,
@@ -67,54 +57,38 @@ class DaddyLiveProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         return try {
-            // 1. Player sayfasını çek
             val pageDoc = app.get(
                 streamPageUrl,
-                headers = mapOf(
-                    "Referer" to watchUrl,
-                    "Origin" to mainUrl,
-                    "User-Agent" to ua
-                )
+                headers = mapOf("Referer" to watchUrl, "Origin" to mainUrl, "User-Agent" to ua)
             ).document
 
-            // 2. Sayfa kaynağında token'lı/token'sız m3u8 var mı?
+            // Önce sayfa kaynağında token'lı m3u8 ara
             extractM3u8(pageDoc.html())?.let { url ->
                 callback(buildLink(label, url, dembedOrigin + "/"))
                 return true
             }
 
-            // 3. Iframe varsa içine gir (derinlik 3'e kadar)
+            // Iframe zincirini takip et
             var iframeUrl = pageDoc.selectFirst("iframe[src]")?.attr("src")
             var referer = streamPageUrl
             var depth = 0
 
             while (!iframeUrl.isNullOrBlank() && depth < 3) {
                 val doc = try {
-                    app.get(
-                        iframeUrl,
-                        headers = mapOf(
-                            "Referer" to referer,
-                            "Origin" to dembedOrigin,
-                            "User-Agent" to ua
-                        )
-                    ).document
+                    app.get(iframeUrl, headers = mapOf("Referer" to referer, "Origin" to dembedOrigin, "User-Agent" to ua)).document
                 } catch (_: Exception) { return false }
 
-                // Iframe içinde m3u8
                 extractM3u8(doc.html())?.let { url ->
                     callback(buildLink(label, url, dembedOrigin + "/"))
                     return true
                 }
 
-                // Alt iframe'e in
                 val nested = doc.selectFirst("iframe[src]")?.attr("src")
                 if (!nested.isNullOrBlank()) {
                     referer = iframeUrl!!
                     iframeUrl = nested
                     depth++
-                } else {
-                    break
-                }
+                } else break
             }
             false
         } catch (_: Exception) {
@@ -122,35 +96,69 @@ class DaddyLiveProvider : MainAPI() {
         }
     }
 
-    // ============================================================
-    // ExtractorLink oluşturma — DOĞRU Origin: dembed.st
-    // ============================================================
     private suspend fun buildLink(label: String, url: String, referer: String): ExtractorLink {
+        // URL'de token varsa doğrudan kullan, yoksa resolveM3u8 dene
+        val finalUrl = if (url.contains("?t=")) {
+            url
+        } else {
+            resolveM3u8(url, referer) ?: url
+        }
+
         return newExtractorLink(
             source = this.name,
             name = "${this.name} - $label",
-            url = url,
+            url = finalUrl,
             type = ExtractorLinkType.M3U8
         ) {
             this.referer = referer
             this.headers = mapOf(
                 "Referer" to referer,
-                "Origin" to dembedOrigin,      // ✅ CDN'in izin verdiği origin
+                "Origin" to dembedOrigin,
                 "User-Agent" to ua,
                 "Accept" to "*/*"
             )
         }
     }
 
+    /** Ana listeyi indirip içindeki varyant (media) m3u8 URL'sini bulur. */
+    private suspend fun resolveM3u8(masterUrl: String, referer: String): String? {
+        return try {
+            val content = app.get(masterUrl, headers = mapOf("Referer" to referer, "Origin" to dembedOrigin, "User-Agent" to ua)).text
+            if (content.contains("#EXT-X-STREAM-INF")) {
+                val lines = content.lines()
+                for (i in lines.indices) {
+                    if (lines[i].contains("#EXT-X-STREAM-INF")) {
+                        for (j in i + 1 until lines.size) {
+                            val line = lines[j].trim()
+                            if (line.isNotBlank() && !line.startsWith("#")) {
+                                return if (line.startsWith("http")) line
+                                else masterUrl.substringBeforeLast("/") + "/" + line
+                            }
+                        }
+                    }
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
-     * HTML içinde m3u8 arar. Önce token'lı (?t=...), sonra token'sız.
+     * HTML içinde m3u8 arar. Öncelik sırası:
+     * 1. Token'lı (?t=...&_=...)
+     * 2. Token'lı (?t=...)
+     * 3. Token'sız
      */
     private fun extractM3u8(html: String): String? {
-        // 1. Token'lı: .m3u8?t=...&_=...
-        Regex("""(https?://[^\s"'<>]+\.m3u8\?[^\s"'<>]*t=[^\s"'<>]*)""")
+        // 1. Tam token formatı
+        Regex("""(https?://[^\s"'<>]+\.m3u8\?t=[^\s"'<>]+&_=[^\s"'<>]+)""")
             .find(html)?.value?.let { return it }
-        // 2. Token'sız: .m3u8
-        Regex("""(https?://[^\s"'<>]+\.m3u8[^\s"'<>]*)""")
+        // 2. Sadece t parametresi
+        Regex("""(https?://[^\s"'<>]+\.m3u8\?t=[^\s"'<>]+)""")
+            .find(html)?.value?.let { return it }
+        // 3. Token'sız
+        Regex("""(https?://[^\s"'<>]+\.m3u8)""")
             .find(html)?.value?.let { return it }
         return null
     }
