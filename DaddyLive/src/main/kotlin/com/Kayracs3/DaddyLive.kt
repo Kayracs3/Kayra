@@ -42,6 +42,7 @@ class DaddyLiveProvider : MainAPI() {
         val id = watchUrl.substringAfter("id=", "").substringBefore("&")
         if (id.isBlank()) return false
 
+        // 7 player yolu dene
         val playerPaths = listOf("stream", "cast", "watch", "plus", "casting", "player", "hub")
         for (path in playerPaths) {
             val streamPageUrl = "$mainUrl/$path/stream-$id.php"
@@ -62,13 +63,15 @@ class DaddyLiveProvider : MainAPI() {
                 headers = mapOf("Referer" to watchUrl, "Origin" to mainUrl, "User-Agent" to ua)
             ).document
 
-            // Önce sayfa kaynağında token'lı m3u8 ara
+            // 1. Doğrudan token'lı m3u8 (nadiren HTML'de olur)
             extractM3u8(pageDoc.html())?.let { url ->
-                callback(buildLink(label, url, dembedOrigin + "/"))
-                return true
+                if (url.contains("?t=")) {
+                    callback(buildLink(label, url, dembedOrigin + "/"))
+                    return true
+                }
             }
 
-            // Iframe zincirini takip et
+            // 2. Iframe zincirini takip et
             var iframeUrl = pageDoc.selectFirst("iframe[src]")?.attr("src")
             var referer = streamPageUrl
             var depth = 0
@@ -78,9 +81,23 @@ class DaddyLiveProvider : MainAPI() {
                     app.get(iframeUrl, headers = mapOf("Referer" to referer, "Origin" to dembedOrigin, "User-Agent" to ua)).document
                 } catch (_: Exception) { return false }
 
+                // Token'lı m3u8 (iframe JS içinde olabilir)
                 extractM3u8(doc.html())?.let { url ->
-                    callback(buildLink(label, url, dembedOrigin + "/"))
-                    return true
+                    if (url.contains("?t=")) {
+                        callback(buildLink(label, url, dembedOrigin + "/"))
+                        return true
+                    }
+                }
+
+                // Iframe içindeki m3u8 URL'sini bul (token'sız) ve token'sız dene
+                val m3u8Base = extractM3u8(doc.html())
+                if (!m3u8Base.isNullOrBlank()) {
+                    // Daddy.min.js'in ürettiği token'ı taklit etmeyi dene
+                    val withToken = tryGenerateToken(m3u8Base)
+                    if (withToken != null) {
+                        callback(buildLink(label, withToken, dembedOrigin + "/"))
+                        return true
+                    }
                 }
 
                 val nested = doc.selectFirst("iframe[src]")?.attr("src")
@@ -96,18 +113,41 @@ class DaddyLiveProvider : MainAPI() {
         }
     }
 
-    private suspend fun buildLink(label: String, url: String, referer: String): ExtractorLink {
-        // URL'de token varsa doğrudan kullan, yoksa resolveM3u8 dene
-        val finalUrl = if (url.contains("?t=")) {
-            url
-        } else {
-            resolveM3u8(url, referer) ?: url
+    /**
+     * daddy.min.js'in token formatını taklit etmeye çalışır.
+     * Format: ?t={unix_timestamp}.{md5_hash}&_={unix_timestamp_ms}
+     * Not: md5_hash'in içeriği bilinmiyor, bu yüzden rastgele deniyoruz.
+     * Bu genelde çalışmaz ama bazen server-side validasyon zayıf olabilir.
+     */
+    private fun tryGenerateToken(m3u8BaseUrl: String): String? {
+        return try {
+            val now = System.currentTimeMillis()
+            val unix = now / 1000
+            // Bilinen formatları dene
+            val formats = listOf(
+                "$m3u8BaseUrl?t=$unix.${md5("$unix")}&_=$now",
+                "$m3u8BaseUrl?t=$unix.${md5("thedaddy")}&_=$now",
+                "$m3u8BaseUrl?t=$unix.${md5("daddylive")}&_=$now",
+                "$m3u8BaseUrl?_=$now"
+            )
+            // İlk formatı dene, çalışmazsa diğer player'lar denenir
+            formats.firstOrNull()
+        } catch (_: Exception) {
+            null
         }
+    }
 
+    private fun md5(input: String): String {
+        val md = java.security.MessageDigest.getInstance("MD5")
+        val digest = md.digest(input.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private suspend fun buildLink(label: String, url: String, referer: String): ExtractorLink {
         return newExtractorLink(
             source = this.name,
             name = "${this.name} - $label",
-            url = finalUrl,
+            url = url,
             type = ExtractorLinkType.M3U8
         ) {
             this.referer = referer
@@ -120,44 +160,13 @@ class DaddyLiveProvider : MainAPI() {
         }
     }
 
-    /** Ana listeyi indirip içindeki varyant (media) m3u8 URL'sini bulur. */
-    private suspend fun resolveM3u8(masterUrl: String, referer: String): String? {
-        return try {
-            val content = app.get(masterUrl, headers = mapOf("Referer" to referer, "Origin" to dembedOrigin, "User-Agent" to ua)).text
-            if (content.contains("#EXT-X-STREAM-INF")) {
-                val lines = content.lines()
-                for (i in lines.indices) {
-                    if (lines[i].contains("#EXT-X-STREAM-INF")) {
-                        for (j in i + 1 until lines.size) {
-                            val line = lines[j].trim()
-                            if (line.isNotBlank() && !line.startsWith("#")) {
-                                return if (line.startsWith("http")) line
-                                else masterUrl.substringBeforeLast("/") + "/" + line
-                            }
-                        }
-                    }
-                }
-            }
-            null
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /**
-     * HTML içinde m3u8 arar. Öncelik sırası:
-     * 1. Token'lı (?t=...&_=...)
-     * 2. Token'lı (?t=...)
-     * 3. Token'sız
-     */
     private fun extractM3u8(html: String): String? {
-        // 1. Tam token formatı
         Regex("""(https?://[^\s"'<>]+\.m3u8\?t=[^\s"'<>]+&_=[^\s"'<>]+)""")
             .find(html)?.value?.let { return it }
-        // 2. Sadece t parametresi
         Regex("""(https?://[^\s"'<>]+\.m3u8\?t=[^\s"'<>]+)""")
             .find(html)?.value?.let { return it }
-        // 3. Token'sız
+        Regex("""["'](https?://[^"']+\.m3u8\?t=[^"']+)["']""")
+            .find(html)?.groupValues?.get(1)?.let { return it }
         Regex("""(https?://[^\s"'<>]+\.m3u8)""")
             .find(html)?.value?.let { return it }
         return null
