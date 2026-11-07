@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:b4012456aaa27873ceaa26cc77d741015b7f269e -->
+### Enhance DaddyLiveProvider with logging and error handling
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [b401245](https://github.com/Kayracs3/Kayra/commit/b4012456aaa27873ceaa26cc77d741015b7f269e)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:5bc85f33f29615b936c4592e05f34ea74a7ec510 -->
 ### Refactor token fetching and decryption process
 
