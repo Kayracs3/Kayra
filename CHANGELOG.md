@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:4a03530fddec080d86124a002f2cc7b69c412b47 -->
+### Fix DaddyLive extractor false-positive success
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [4a03530](https://github.com/Kayracs3/Kayra/commit/4a03530fddec080d86124a002f2cc7b69c412b47)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:996629640e4c9de2cbb3503777265922c7adff32 -->
 ### Fix DaddyLive Kotlin substringBefore compile error
 
