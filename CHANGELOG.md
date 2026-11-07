@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-07
+
+<!-- kayra-commit:5f09039290cda28b8c70fcd83c7a532c218ae34a -->
+### Update mainUrl to new DiziPalOrjinal domain
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [5f09039](https://github.com/Kayracs3/Kayra/commit/5f09039290cda28b8c70fcd83c7a532c218ae34a)
+
+
 ## 2026-11-05
 
 <!-- kayra-commit:7bc22bd89327ebf1f2a888b41e3222dc468ec8ec -->
