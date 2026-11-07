@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:49267cf4ccc83099df5f4f095147b1a5bb7013b8 -->
+### Add DramaDizilerim playback API and subtitles
+
+- Etkilenen alanlar: Dramadizilerim
+- Commit: [49267cf](https://github.com/Kayracs3/Kayra/commit/49267cf4ccc83099df5f4f095147b1a5bb7013b8)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:5f09039290cda28b8c70fcd83c7a532c218ae34a -->
 ### Update mainUrl to new DiziPalOrjinal domain
 
