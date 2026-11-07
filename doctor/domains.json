@@ -661,6 +661,34 @@
           "tahminleri"
         ]
       }
+    },
+    "DaddyLive": {
+      "identityProfile": {
+        "title": "HOME | DaddyLiveHD - Live Sports Streaming Free - DaddyLive.PK - DLHD",
+        "h1": "",
+        "siteName": "DaddyLiveHD - Live Sports Streaming Free - DaddyLive.PK - DLHD",
+        "description": "Today's live events schedule by category. Filter and search to find your stream.",
+        "tokens": [
+          "and",
+          "category",
+          "daddylive",
+          "daddylivehd",
+          "dlhd",
+          "events",
+          "filter",
+          "find",
+          "free",
+          "home",
+          "live",
+          "schedule",
+          "search",
+          "sports",
+          "stream",
+          "streaming",
+          "today",
+          "your"
+        ]
+      }
     }
   }
 }
