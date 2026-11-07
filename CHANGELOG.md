@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:5bc85f33f29615b936c4592e05f34ea74a7ec510 -->
+### Refactor token fetching and decryption process
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [5bc85f3](https://github.com/Kayracs3/Kayra/commit/5bc85f33f29615b936c4592e05f34ea74a7ec510)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:6991dc485281041d462860d205bb1e443df38c48 -->
 ### Refactor DaddyLiveProvider for improved functionality
 
