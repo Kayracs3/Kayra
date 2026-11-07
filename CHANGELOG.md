@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:271a9763c46cc68c5fc7d39e215fce6a3e244350 -->
+### Scope DramaDizilerim age filter to title metadata
+
+- Etkilenen alanlar: Dramadizilerim
+- Commit: [271a976](https://github.com/Kayracs3/Kayra/commit/271a9763c46cc68c5fc7d39e215fce6a3e244350)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:468f2df332caf39544a0ef36ae37bf187bc17bdc -->
 ### Fix DramaDizilerim age tag filter and add playback diagnostics
 
