@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:49827a91a093805d8b53acb84660539e4809a7f3 -->
+### DiziPal ana sayfa içerik ayrıştırmasını güncelle
+
+- Etkilenen alanlar: DiziPal
+- Commit: [49827a9](https://github.com/Kayracs3/Kayra/commit/49827a91a093805d8b53acb84660539e4809a7f3)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:c1575c9b635e878de28bfbb9d19109e431ce3cfd -->
 ### DiziPal: HTTP ve istek hata günlüklerini ekle
 
