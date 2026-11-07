@@ -16,7 +16,7 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 class DiziPal : MainAPI() {
-    override var mainUrl = "https://dizipal1592.com"
+    override var mainUrl = "https://dizipal1594.com"
     override var name = "DiziPal"
     override var lang = "tr"
     override val hasMainPage = true
@@ -53,26 +53,48 @@ class DiziPal : MainAPI() {
             Log.e("DiziPal", "Ana sayfa HTTP hatası: ${homeResponse.code}")
             throw ErrorLoadingException("DiziPal ana sayfa HTTP ${homeResponse.code}")
         }
+
         val document = homeResponse.document
+        val results = document.select("a[href]")
+            .mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
+            .take(40)
+
+        Log.d("DiziPal", "Ana sayfa bağlantı sayısı: ${document.select("a[href]").size}, bulunan içerik: ${results.size}")
+        if (results.isEmpty()) {
+            Log.e("DiziPal", "Ana sayfada içerik kartı bulunamadı. Başlıklar: ${document.select("h1,h2,h3,h4").eachText().take(12)}")
+            throw ErrorLoadingException("DiziPal ana sayfa içeriği çözümlenemedi")
+        }
+
         val home = mutableListOf<HomePageList>()
-
-        val popular = document.select("div.movie-box, div.detail, article.item, .result-item, .ml-item")
-            .mapNotNull { it.toSearchResult() }
-        if (popular.isNotEmpty()) home.add(HomePageList("Popüler", popular))
-
-        val latest = document.select("div.last-episodes div.item, div.weekly div.item, .movies-list .ml-item, div.item")
-            .mapNotNull { it.toSearchResult() }
-        if (latest.isNotEmpty()) home.add(HomePageList("Son Eklenenler", latest))
-
+        home.add(HomePageList("DiziPal'de Öne Çıkanlar", results))
         return newHomePageResponse(home)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
-        val title = this.selectFirst("h2, h3, h4, .title, .movie-name, strong")?.text()?.trim() ?: return null
-        val href = (this.selectFirst("a[href]") ?: this).attr("href")
-        if (href.isBlank()) return null
-        val poster = this.selectFirst("img")?.let { it.attr("data-src").ifBlank { it.attr("src") } }
+        val anchor = if (tagName().equals("a", ignoreCase = true)) this else selectFirst("a[href]") ?: return null
+        val href = anchor.attr("href").trim()
+        if (href.isBlank() || href.startsWith("#") || href.startsWith("javascript:", true)) return null
+
+        val image = anchor.selectFirst("img") ?: selectFirst("img")
+        val title = anchor.attr("title").ifBlank { anchor.text().trim() }
+            .ifBlank { image?.attr("alt").orEmpty().trim() }
+            .ifBlank { image?.attr("title").orEmpty().trim() }
+            .replace(Regex("""\\s+"""), " ")
+            .trim()
+        if (title.length < 2) return null
+
+        val normalizedTitle = title.lowercase()
+        if (normalizedTitle in setOf("ana sayfa", "diziler", "filmler", "bölümler", "keşfet", "platform", "giriş yap", "tümü", "ara", "hakkımızda", "gizlilik", "iletişim", "reklam", "forum")) return null
+
         val url = normalizeUrl(href, mainUrl)
+        val host = runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
+        if (host.isBlank() || (!host.contains("dizipal", true) && !host.endsWith("cdnhipter.xyz"))) return null
+
+        val poster = image?.let {
+            it.attr("data-src").ifBlank { it.attr("data-lazy-src") }
+                .ifBlank { it.attr("src") }.ifBlank { it.attr("data-original") }
+        }
         return newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
             this.posterUrl = poster?.takeIf { it.isNotBlank() }?.let { normalizeUrl(it, mainUrl) }
         }
