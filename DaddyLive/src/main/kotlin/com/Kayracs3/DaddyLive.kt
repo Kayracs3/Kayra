@@ -273,13 +273,20 @@ class DaddyLiveProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         return try {
+            var linkFound = false
+
             loadExtractor(
                 url,
                 referer,
                 subtitleCallback
             ) {
+                linkFound = true
                 callback(it)
             }
+
+            // loadExtractor true dönebilir ama extractor hiç bağlantı üretmemiş olabilir.
+            // Yalnızca gerçek bir ExtractorLink callback'i geldiyse başarılı say.
+            linkFound
         } catch (_: Exception) {
             false
         }
