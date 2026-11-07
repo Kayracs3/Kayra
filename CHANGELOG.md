@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:dfa0fc03b784d43f9b58162f110cd8140a177041 -->
+### Refactor DaddyLiveProvider for improved URL handling
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [dfa0fc0](https://github.com/Kayracs3/Kayra/commit/dfa0fc03b784d43f9b58162f110cd8140a177041)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:b8083e55e3e4919cbc92d88e4d52374f691fff89 -->
 ### Update cloudstream description and language
 
