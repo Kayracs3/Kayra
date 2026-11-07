@@ -92,7 +92,10 @@ class DaddyLiveProvider : MainAPI() {
             "18+", "18 plus", "adult", "adults", "xxx", "porn", "porno",
             "erotic", "erotica", "playboy", "hustler", "sex channel",
             "adult channel", "live cam", "live cams", "cam feed",
-            "big brother live cam", "big brother live feed"
+            "big brother live cam", "big brother live feed",
+            "fanduel", "draftkings", "bet365", "betway", "sportsbook",
+            "1xbet", "pinnacle", "william hill", "betfair", "pointsbet",
+            "bovada", "caesars sportsbook"
         )
 
         return adultMarkers.none { marker -> normalized.contains(marker) }
