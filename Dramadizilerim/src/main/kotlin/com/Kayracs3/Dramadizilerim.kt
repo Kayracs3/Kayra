@@ -220,6 +220,129 @@ class Dramadizilerim : MainAPI() {
         val html = episodePage.text
         val episodeDoc = episodePage.document
 
+        // Önce sitenin resmi playback API'sini kullan. Ticket'lar her istek için
+        // yeniden üretildiğinden URL'leri önceden saklamıyoruz.
+        var foundLink = false
+        val trackedCallback: (ExtractorLink) -> Unit = { link ->
+            foundLink = true
+            callback(link)
+        }
+
+        val episodeId = extractPlaybackId(html, episodeDoc, "episodeId")
+        val nextEpisodeId = extractPlaybackId(html, episodeDoc, "nextEpisodeId")
+
+        if (!episodeId.isNullOrBlank()) {
+            val playbackParams = buildList {
+                add("episodeId=" + URLEncoder.encode(episodeId, "UTF-8"))
+                if (!nextEpisodeId.isNullOrBlank()) {
+                    add("nextEpisodeId=" + URLEncoder.encode(nextEpisodeId, "UTF-8"))
+                }
+            }.joinToString("&")
+            val playbackUrl = "$mainUrl/api/playback?$playbackParams"
+
+            val playbackResponse = runCatching {
+                app.get(
+                    playbackUrl,
+                    headers = browserHeaders + mapOf(
+                        "Referer" to episodeUrl,
+                        "Origin" to mainUrl,
+                        "Accept" to "application/json, text/plain, */*",
+                        "Cache-Control" to "no-cache"
+                    ),
+                    allowRedirects = true
+                )
+            }.onFailure {
+                android.util.Log.w("DramaDizilerim", "Playback API isteği başarısız", it)
+            }.getOrNull()
+
+            if (playbackResponse != null) {
+                val playbackJson = runCatching {
+                    org.json.JSONObject(playbackResponse.text)
+                }.onFailure {
+                    android.util.Log.w(
+                        "DramaDizilerim",
+                        "Playback API JSON okunamadı; bodyLength=${playbackResponse.text.length}",
+                        it
+                    )
+                }.getOrNull()
+
+                if (playbackJson != null && playbackJson.optBoolean("success", false)) {
+                    val kind = playbackJson.optString("kind", "mp4").lowercase()
+                    val mediaPath = playbackJson.optString("url", "")
+                        .takeIf { it.isNotBlank() && it != "null" }
+
+                    if (mediaPath != null) {
+                        val mediaUrl = fixUrl(mediaPath)
+                        val mediaType = if (kind.contains("hls") || kind.contains("m3u8")) {
+                            ExtractorLinkType.M3U8
+                        } else {
+                            // /api/media?ticket=... uzantısız görünür; API kind=mp4
+                            // dediği için VIDEO tipiyle doğrudan oynatıcıya verilir.
+                            ExtractorLinkType.VIDEO
+                        }
+
+                        trackedCallback(
+                            newExtractorLink(
+                                source = name,
+                                name = "$name (${kind.uppercase()})",
+                                url = mediaUrl,
+                                type = mediaType
+                            ) {
+                                this.referer = episodeUrl
+                                this.quality = Qualities.Unknown.value
+                                this.headers = mapOf(
+                                    "User-Agent" to USER_AGENT,
+                                    "Referer" to episodeUrl,
+                                    "Origin" to mainUrl,
+                                    "Accept" to "*/*"
+                                )
+                            }
+                        )
+                    }
+
+                    val captions = playbackJson.optJSONArray("captions")
+                    val captionCount = captions?.length() ?: 0
+                    for (index in 0 until captionCount) {
+                        val caption = captions?.optJSONObject(index) ?: continue
+                        val captionPath = caption.optString("url", "")
+                            .takeIf { it.isNotBlank() && it != "null" }
+                            ?: continue
+                        val language = caption.optString("label", "")
+                            .takeIf { it.isNotBlank() && it != "null" }
+                            ?: caption.optString("language", "Türkçe")
+                        val subtitleName = if (language.startsWith("tr", true)) {
+                            "Türkçe"
+                        } else {
+                            language.replace('_', '-')
+                        }
+
+                        subtitleCallback(
+                            newSubtitleFile(
+                                subtitleName,
+                                fixUrl(captionPath)
+                            )
+                        )
+                    }
+
+                    android.util.Log.d(
+                        "DramaDizilerim",
+                        "Playback API success=true kind=$kind media=${mediaPath != null} captions=$captionCount"
+                    )
+                    if (foundLink) return true
+                } else {
+                    android.util.Log.w(
+                        "DramaDizilerim",
+                        "Playback API success=false veya yanıt biçimi beklenmiyor"
+                    )
+                }
+            }
+        } else {
+            android.util.Log.w(
+                "DramaDizilerim",
+                "Bölüm HTML içinde episodeId bulunamadı; eski kaynak taraması denenecek"
+            )
+        }
+
         // 1) Önce sayfada doğrudan HLS / MP4 varsa kullan.
         val directCandidates = linkedSetOf<String>()
         directCandidates += findMediaUrls(html)
@@ -229,7 +352,7 @@ class Dramadizilerim : MainAPI() {
             .mapNotNull { it.attr("content").takeIf(String::isNotBlank) }
 
         directCandidates.map(::fixUrl).forEach { url ->
-            emitMediaLink(url, episodeUrl, callback)
+            emitMediaLink(url, episodeUrl, trackedCallback)
         }
 
         // 2) Sayfadaki embed iframe.
@@ -253,7 +376,7 @@ class Dramadizilerim : MainAPI() {
 
                 // 2a) Embed statik olarak URL veriyorsa.
                 findMediaUrls(embedHtml).map(::fixUrl).forEach { url ->
-                    emitMediaLink(url, iframeUrl, callback)
+                    emitMediaLink(url, iframeUrl, trackedCallback)
                 }
                 embedDoc.select("video source[src], video[src], source[src]")
                     .mapNotNull { it.attr("src").takeIf(String::isNotBlank) }
@@ -320,14 +443,14 @@ class Dramadizilerim : MainAPI() {
                     iframeUrl,
                     episodeUrl,
                     subtitleCallback,
-                    callback
+                    trackedCallback
                 )
             }
         }
 
         // Duplicate çağrılarda bile başarı dönmesi CloudStream tarafında daha
         // güvenli davranış verir; callback'e hiç medya düşmediyse false döner.
-        return directCandidates.isNotEmpty() || !iframeUrl.isNullOrBlank()
+        return foundLink
     }
 
     // ------------------------------------------------------------------------
@@ -456,6 +579,66 @@ class Dramadizilerim : MainAPI() {
         }
 
         return result
+    }
+
+    /**
+     * episodeId / nextEpisodeId değerleri bölüm sayfasının HTML veya JSON
+     * state alanlarından çıkarılır. UUID formatı dışında bir değer kabul edilmez.
+     */
+    private fun extractPlaybackId(
+        html: String,
+        doc: org.jsoup.nodes.Document,
+        key: String
+    ): String? {
+        val uuid = """([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"""
+        val keyNames = when (key) {
+            "episodeId" -> listOf("episodeId", "episode_id", "episode-id")
+            else -> listOf("nextEpisodeId", "next_episode_id", "next-episode-id")
+        }
+
+        // Önce açık JSON/JavaScript alanlarını tara.
+        val normalizedHtml = html
+            .replace("&quot;", "\"")
+            .replace("&#34;", "\"")
+            .replace("\\/", "/")
+        for (keyName in keyNames) {
+            val escapedKey = Regex.escape(keyName)
+            val patterns = listOf(
+                Regex("""(?is)["']?$escapedKey["']?\\s*[:=]\\s*["']$uuid["']"""),
+                Regex("""(?is)data-$escapedKey\\s*=\\s*["']$uuid["']""")
+            )
+            for (pattern in patterns) {
+                val found = pattern.find(normalizedHtml)?.groupValues?.getOrNull(1)
+                if (!found.isNullOrBlank()) return found
+            }
+
+            val attrName = if (keyName.contains('-')) keyName else
+                keyName.replace(Regex("([A-Z])")) { "-${it.value.lowercase()}" }
+            val attrValue = doc.selectFirst("[$attrName]")?.attr(attrName)
+                ?.takeIf { Regex("(?i)^$uuid$").matches(it) }
+            if (!attrValue.isNullOrBlank()) return attrValue
+
+            val inputName = keyName.replace('-', '_')
+            val inputValue = doc.selectFirst("input[name='$inputName']")?.attr("value")
+                ?.takeIf { Regex("(?i)^$uuid$").matches(it) }
+            if (!inputValue.isNullOrBlank()) return inputValue
+        }
+
+        // Bazı sayfa sürümleri ID'yi episode/currentEpisode nesnesinin id alanında tutuyor.
+        val containers = if (key == "episodeId") {
+            listOf("episode", "currentEpisode", "current_episode")
+        } else {
+            listOf("nextEpisode", "next_episode")
+        }
+        for (container in containers) {
+            val escapedContainer = Regex.escape(container)
+            val nested = Regex(
+                """(?is)["']$escapedContainer["']\\s*:\\s*\\{[\\s\\S]{0,1500}?["']id["']\\s*:\\s*["']$uuid["']"""
+            ).find(normalizedHtml)?.groupValues?.getOrNull(1)
+            if (!nested.isNullOrBlank()) return nested
+        }
+
+        return null
     }
 
     private fun tryDecryptMedia(ct: String, ivB64: String, keys: Set<String>): Set<String> {
