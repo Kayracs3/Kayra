@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:2d786f7cbc35c152805d6797657e14e4515f175e -->
+### Refactor loadLinks function and improve comments
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [2d786f7](https://github.com/Kayracs3/Kayra/commit/2d786f7cbc35c152805d6797657e14e4515f175e)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:816658ffedfe5cfa8255ca43efe40768332c412c -->
 ### Fix DaddyLive unsupported requiresReferer property
 
