@@ -2,6 +2,39 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:2eabfc7a54a872e65bb9ff9d2f35b2671a56479b -->
+### Remove obsolete API key storage
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [2eabfc7](https://github.com/Kayracs3/Kayra/commit/2eabfc7a54a872e65bb9ff9d2f35b2671a56479b)
+
+## 2026-11-08
+
+<!-- kayra-commit:40e8c821ae800e898aaa2aaceb6c7ba4fa94be5d -->
+### Bump DaddyLive plugin to version 3
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [40e8c82](https://github.com/Kayracs3/Kayra/commit/40e8c821ae800e898aaa2aaceb6c7ba4fa94be5d)
+
+## 2026-11-08
+
+<!-- kayra-commit:e98794624b8f72844ddbdc8313da99f303560cb9 -->
+### Remove unused DaddyLive API key settings
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [e987946](https://github.com/Kayracs3/Kayra/commit/e98794624b8f72844ddbdc8313da99f303560cb9)
+
+## 2026-11-08
+
+<!-- kayra-commit:572038ca931efe304fafe09b686893e03ef09224 -->
+### Use public DaddyLive channel page without API key
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [572038c](https://github.com/Kayracs3/Kayra/commit/572038ca931efe304fafe09b686893e03ef09224)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:d0578c4b1d2ccb08c993cbae10c2ea41fca91019 -->
 ### Bump DaddyLive plugin version
 
