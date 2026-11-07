@@ -50,43 +50,29 @@ class DaddyLiveProvider : MainAPI() {
         val id = watchUrl.substringAfter("id=", "").substringBefore("&")
         if (id.isBlank()) return false
 
-        // 1. m3u8 URL'sini oluştur (token olmadan da dene, token varsa daha iyi)
-        val tokenData = fetchToken(id)
-        val token = tokenData?.first ?: generateFakeToken()
-        val aesKeyB64 = tokenData?.second
+        // 1. Token + AES key al
+        val tokenData = fetchToken(id) ?: return false
+        val token = tokenData.first
+        val aesKeyB64 = tokenData.second ?: return false
 
+        // 2. m3u8 URL oluştur
         val m3u8Url = "$edgeHost/premium$id/index.m3u8?t=$token&_=${System.currentTimeMillis()}"
 
         try {
-            // 2. m3u8'i indir
+            // 3. Şifreli m3u8'i indir
             val encryptedM3u8 = app.get(
                 m3u8Url,
                 headers = mapOf(
-                    "Referer" to dembedOrigin + "/",
+                    "Referer" to "$dembedOrigin/",
                     "Origin" to dembedOrigin,
                     "User-Agent" to ua
                 )
             ).text
 
-            // 3. AES key yoksa m3u8 muhtemelen düz metin
-            if (aesKeyB64 == null) {
-                // Playlist içinde segment URL'leri var mı kontrol et
-                if (isPlainM3u8(encryptedM3u8)) {
-                    callback(buildLink("direct", m3u8Url, dembedOrigin + "/"))
-                } else {
-                    // Şifreli ama key yok, decrypt deneyemeyiz
-                    callback(buildLink("encrypted", m3u8Url, dembedOrigin + "/"))
-                }
-                return true
-            }
-
-            // 4. AES-GCM ile decrypt et
-            val decryptedM3u8 = decryptM3u8(encryptedM3u8, aesKeyB64)
-            if (decryptedM3u8 == null) {
-                // Decrypt başarısız, direkt dene
-                callback(buildLink("fallback", m3u8Url, dembedOrigin + "/"))
-                return true
-            }
+            // 4. AES-GCM decrypt
+            val baseUrl = m3u8Url.substringBefore("?")
+            val decryptedM3u8 = decryptM3u8(encryptedM3u8, aesKeyB64, baseUrl)
+            if (decryptedM3u8 == null) return false
 
             // 5. Decrypted m3u8'i data: URL olarak ver
             val base64Data = Base64.encodeToString(decryptedM3u8.toByteArray(), Base64.NO_WRAP)
@@ -99,9 +85,9 @@ class DaddyLiveProvider : MainAPI() {
                     url = dataUrl,
                     type = ExtractorLinkType.M3U8
                 ) {
-                    this.referer = dembedOrigin + "/"
+                    this.referer = "$dembedOrigin/"
                     this.headers = mapOf(
-                        "Referer" to dembedOrigin + "/",
+                        "Referer" to "$dembedOrigin/",
                         "Origin" to dembedOrigin,
                         "User-Agent" to ua
                     )
@@ -113,64 +99,33 @@ class DaddyLiveProvider : MainAPI() {
         }
     }
 
-    /** m3u8 içinde segment URL'leri (http ile başlayan satırlar) var mı? */
-    private fun isPlainM3u8(content: String): Boolean {
-        return content.lines().any { line ->
-            val l = line.trim()
-            l.startsWith("http") && l.contains(".ts")
-        }
-    }
-
-    /**
-     * Token endpoint'ini dener. Olası endpoint'leri sırayla dener.
-     * Beklenen response: {"t": "1794...", "k": "base64key...", "ttl": 120}
-     */
+    /** Token + AES key fetch */
     private suspend fun fetchToken(channelId: String): Pair<String, String?>? {
-        val candidates = listOf(
-            "https://dembed.st/t?c=$channelId",
-            "https://dembed.st/t?ch=$channelId",
-            "https://dembed.st/token?c=$channelId",
-            "https://dembed.st/token?channel=$channelId",
-            "https://dembed.st/api/token?ch=$channelId",
-            "https://edge.wedd48c.top/t?c=$channelId",
-            "https://edge.wedd48c.top/token?channel=$channelId"
-        )
-
-        for (url in candidates) {
-            try {
-                val response = app.get(
-                    url,
-                    headers = mapOf(
-                        "Referer" to "$mainUrl/stream/stream-$channelId.php",
-                        "Origin" to dembedOrigin,
-                        "User-Agent" to ua
-                    )
-                ).text
-                if (response.contains("\"t\"")) {
-                    val json = JSONObject(response)
-                    val token = json.optString("t", "")
-                    val key = json.optString("k", "").ifBlank { null }
-                    if (token.isNotBlank()) return Pair(token, key)
-                }
-            } catch (_: Exception) { continue }
+        val url = "$edgeHost/api/playlist-token?slug=premium$channelId"
+        return try {
+            val response = app.get(
+                url,
+                headers = mapOf(
+                    "Referer" to "$dembedOrigin/",
+                    "Origin" to dembedOrigin,
+                    "User-Agent" to ua
+                )
+            ).text
+            val json = JSONObject(response)
+            val token = json.optString("token", "")
+            val key = json.optString("k", "").ifBlank { null }
+            if (token.isNotBlank()) Pair(token, key) else null
+        } catch (_: Exception) {
+            null
         }
-        return null
-    }
-
-    private fun generateFakeToken(): String {
-        val now = System.currentTimeMillis() / 1000
-        val hash = java.security.MessageDigest.getInstance("MD5")
-            .digest("$now".toByteArray())
-            .joinToString("") { "%02x".format(it) }
-        return "$now.$hash"
     }
 
     /**
      * AES-GCM decrypt. Her segment satırı ayrı decrypt edilir.
-     * IV = 8 byte sıfır + 8 byte mediaSequence (big endian)
-     * Tag length: 64 bit (JS koduyla uyumlu)
+     * IV = [8 byte 0][mediaSeq üst 32][mediaSeq alt 32] big endian
+     * Tag length: 64 bit
      */
-    private fun decryptM3u8(encrypted: String, aesKeyB64: String): String? {
+    private fun decryptM3u8(encrypted: String, aesKeyB64: String, baseUrl: String): String? {
         return try {
             val keyBytes = base64UrlDecode(aesKeyB64)
             if (keyBytes.size != 16 && keyBytes.size != 32) return null
@@ -193,11 +148,16 @@ class DaddyLiveProvider : MainAPI() {
                 val cipherBytes = base64UrlDecode(trimmed)
                 val iv = createIv(mediaSequence)
 
-                // 64-bit tag (8 byte) AES-GCM
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, keySpec, GCMParameterSpec(64, iv))
                 val plaintext = cipher.doFinal(cipherBytes)
-                output.append(String(plaintext)).append("\n")
+                val plaintextStr = String(plaintext).trim()
+
+                // Relative URL'yi absolute yap
+                val finalUrl = if (plaintextStr.startsWith("http")) plaintextStr
+                    else baseUrl.substringBeforeLast("/") + "/" + plaintextStr
+
+                output.append(finalUrl).append("\n")
                 mediaSequence++
             }
             output.toString()
@@ -220,21 +180,5 @@ class DaddyLiveProvider : MainAPI() {
         var s = input.replace('-', '+').replace('_', '/')
         while (s.length % 4 != 0) s += "="
         return Base64.decode(s, Base64.DEFAULT)
-    }
-
-    private suspend fun buildLink(label: String, url: String, referer: String): ExtractorLink {
-        return newExtractorLink(
-            source = this.name,
-            name = "${this.name} - $label",
-            url = url,
-            type = ExtractorLinkType.M3U8
-        ) {
-            this.referer = referer
-            this.headers = mapOf(
-                "Referer" to referer,
-                "Origin" to dembedOrigin,
-                "User-Agent" to ua
-            )
-        }
     }
 }
