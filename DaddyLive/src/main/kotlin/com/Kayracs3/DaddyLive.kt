@@ -16,8 +16,8 @@ class DaddyLiveProvider : MainAPI() {
         val document = app.get(mainUrl).document
         val channelElements = document.select("a[href*='/stream/stream-']")
         val home = channelElements.mapNotNull { it.toLiveSearchResponse() }
-        // DÜZELTME: HomePageList yerine doğrudan başlık ve liste veriliyor.
-        return newHomePageResponse("Live Channels", home)
+        // DÜZELTME: HomePageList, bir liste içinde verilmeli.
+        return newHomePageResponse(listOf(HomePageList("Live Channels", home)))
     }
 
     private fun Element.toLiveSearchResponse(): LiveSearchResponse? {
@@ -51,7 +51,7 @@ class DaddyLiveProvider : MainAPI() {
                         url = url,
                         name = document.title(),
                         dataUrl = m3u8,
-                        apiName = this.name // eklendi
+                        apiName = this.name
                     )
                 }
             }
@@ -65,7 +65,7 @@ class DaddyLiveProvider : MainAPI() {
             url = url,
             name = document.title(),
             dataUrl = m3u8Url,
-            apiName = this.name // eklendi
+            apiName = this.name
         )
     }
 
