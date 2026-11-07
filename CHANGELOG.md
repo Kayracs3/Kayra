@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:468f2df332caf39544a0ef36ae37bf187bc17bdc -->
+### Fix DramaDizilerim age tag filter and add playback diagnostics
+
+- Etkilenen alanlar: Dramadizilerim
+- Commit: [468f2df](https://github.com/Kayracs3/Kayra/commit/468f2df332caf39544a0ef36ae37bf187bc17bdc)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:72639008ee0356dfa6020ede9443437a5e8314b0 -->
 ### Parse DramaDizilerim episode numbering and filter age-rated titles
 
