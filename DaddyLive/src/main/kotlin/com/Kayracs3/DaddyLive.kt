@@ -1,35 +1,173 @@
 package com.Kayracs3
 
+import android.net.Uri
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.utils.*
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import org.json.JSONObject
+import java.net.URI
 
 class DaddyLiveProvider : MainAPI() {
+
     override var mainUrl = "https://thedaddy.li"
     override var name = "DaddyLive"
     override var lang = "en"
     override val hasMainPage = true
+    override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Live)
 
-    private val ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    private val dembedOrigin = "https://dembed.st"
+    private val userAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get("$mainUrl/24-7-channels.php").document
-        val channels = document.select("a[href*='/watch.php?id=']").mapNotNull { it.toLiveSearchResponse() }
-        return newHomePageResponse(request.name, channels)
+    override suspend fun getMainPage(
+        page: Int,
+        request: MainPageRequest
+    ): HomePageResponse {
+        val channels = getChannels()
+        return newHomePageResponse(request.name, channels, hasNext = false)
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val term = query.trim()
+        if (term.isBlank()) return emptyList()
+
+        return getChannels().filter {
+            it.name.contains(term, ignoreCase = true)
+        }
+    }
+
+    override suspend fun quickSearch(query: String): List<SearchResponse> {
+        return search(query)
+    }
+
+    private suspend fun getChannels(): List<LiveSearchResponse> {
+        val apiKey = DaddyLiveSettings.getApiKey()
+
+        if (!apiKey.isNullOrBlank()) {
+            return getChannelsFromApi(apiKey)
+        }
+
+        // Eski HTML bağlantıları varsa anahtarsız yedek yöntem olarak kullan.
+        val document = app.get(
+            "$mainUrl/24-7-channels.php",
+            headers = requestHeaders(mainUrl)
+        ).document
+
+        val htmlChannels = document
+            .select("a[href*='watch.php?id=']")
+            .mapNotNull { it.toLiveSearchResponse() }
+            .distinctBy { it.url }
+
+        if (htmlChannels.isNotEmpty()) return htmlChannels
+
+        throw ErrorLoadingException(
+            "DaddyLive kanal listesi artık korumalı API üzerinden sunuluyor. " +
+                "Site tarafından verilen API anahtarını eklenti ayarlarından girmen gerekiyor."
+        )
+    }
+
+    private suspend fun getChannelsFromApi(apiKey: String): List<LiveSearchResponse> {
+        val apiUrl = mainUrl +
+            "/daddyapi.php?key=" + Uri.encode(apiKey) +
+            "&endpoint=channels"
+
+        val response = app.get(
+            apiUrl,
+            headers = requestHeaders("$mainUrl/api.php")
+        )
+
+        if (!response.isSuccessful) {
+            throw ErrorLoadingException(
+                "DaddyLive kanal API isteği başarısız oldu. HTTP yanıtı: başarısız."
+            )
+        }
+
+        val root = try {
+            JSONObject(response.text)
+        } catch (_: Exception) {
+            throw ErrorLoadingException(
+                "DaddyLive API geçerli JSON döndürmedi. API anahtarını kontrol et."
+            )
+        }
+
+        if (!root.optBoolean("success")) {
+            val message = root.optString("message")
+                .ifBlank { root.optString("error") }
+                .ifBlank { "API anahtarı geçersiz veya erişim izni yok." }
+
+            throw ErrorLoadingException("DaddyLive API: $message")
+        }
+
+        val entries = root.optJSONArray("data")
+            ?: root.optJSONArray("channels")
+            ?: throw ErrorLoadingException(
+                "DaddyLive API yanıtında kanal listesi bulunamadı."
+            )
+
+        val results = mutableListOf<LiveSearchResponse>()
+
+        for (index in 0 until entries.length()) {
+            val item = entries.optJSONObject(index) ?: continue
+
+            val channelId = item.optString("channel_id")
+                .trim()
+                .ifBlank { item.optString("id").trim() }
+
+            val title = item.optString("channel_name")
+                .trim()
+                .ifBlank { item.optString("name").trim() }
+
+            if (channelId.isBlank() || title.isBlank()) continue
+
+            val logo = item.optString("logo_url")
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { fixUrl(it) }
+
+            val watchUrl = "$mainUrl/watch.php?id=" + Uri.encode(channelId)
+
+            results.add(
+                newLiveSearchResponse(title, watchUrl, TvType.Live) {
+                    this.posterUrl = logo
+                }
+            )
+        }
+
+        if (results.isEmpty()) {
+            throw ErrorLoadingException(
+                "DaddyLive API çalıştı ancak kullanılabilir kanal döndürmedi."
+            )
+        }
+
+        return results.distinctBy { it.url }
     }
 
     private fun Element.toLiveSearchResponse(): LiveSearchResponse? {
-        val title = text().trim(); val href = attr("href")
+        val title = text().trim()
+        val href = attr("href").trim()
+
         if (title.isBlank() || href.isBlank()) return null
-        val fullUrl = if (href.startsWith("http")) href else "$mainUrl$href"
+
+        val fullUrl = fixUrl(href)
         return newLiveSearchResponse(title, fullUrl, TvType.Live)
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val doc = app.get(url, headers = mapOf("Referer" to mainUrl)).document
-        return newLiveStreamLoadResponse(url = url, name = doc.title(), dataUrl = url)
+        val document = app.get(
+            url,
+            headers = requestHeaders(mainUrl)
+        ).document
+
+        val title = document.title().trim().ifBlank { "DaddyLive" }
+
+        return newLiveStreamLoadResponse(
+            url = url,
+            name = title,
+            dataUrl = url
+        )
     }
 
     override suspend fun loadLinks(
@@ -38,137 +176,251 @@ class DaddyLiveProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val watchUrl = data
-        val id = watchUrl.substringAfter("id=", "").substringBefore("&")
-        if (id.isBlank()) return false
+        val id = Uri.parse(data).getQueryParameter("id")
+            ?.takeIf { it.isNotBlank() }
+            ?: return false
 
-        // 7 player yolu dene
-        val playerPaths = listOf("stream", "cast", "watch", "plus", "casting", "player", "hub")
+        // Site API belgesinde yayınlanan altı geçerli player klasörü.
+        val playerPaths = listOf(
+            "stream",
+            "cast",
+            "watch",
+            "plus",
+            "casting",
+            "player"
+        )
+
         for (path in playerPaths) {
-            val streamPageUrl = "$mainUrl/$path/stream-$id.php"
-            if (tryToExtract(streamPageUrl, watchUrl, path, callback)) return true
+            val playerUrl = "$mainUrl/$path/stream-$id.php"
+
+            if (
+                tryToExtract(
+                    playerUrl,
+                    data,
+                    path,
+                    subtitleCallback,
+                    callback
+                )
+            ) {
+                return true
+            }
         }
+
         return false
     }
 
     private suspend fun tryToExtract(
-        streamPageUrl: String,
+        playerUrl: String,
         watchUrl: String,
         label: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val playerResponse = try {
+            app.get(
+                playerUrl,
+                headers = requestHeaders(watchUrl)
+            )
+        } catch (_: Exception) {
+            return false
+        }
+
+        if (!playerResponse.isSuccessful) return false
+
+        var currentUrl = playerUrl
+        var currentHtml = playerResponse.text
+        var currentDocument = Jsoup.parse(currentHtml, currentUrl)
+
+        val directUrl = extractM3u8(currentHtml)
+        if (
+            !directUrl.isNullOrBlank() &&
+            tryEmitM3u8(label, directUrl, currentUrl, callback)
+        ) {
+            return true
+        }
+
+        if (tryLoadExtractor(playerUrl, watchUrl, subtitleCallback, callback)) {
+            return true
+        }
+
+        for (depth in 0 until 3) {
+            val iframeSource = firstIframe(currentDocument) ?: break
+            val iframeUrl = resolveUrl(currentUrl, iframeSource)
+
+            if (
+                tryLoadExtractor(
+                    iframeUrl,
+                    currentUrl,
+                    subtitleCallback,
+                    callback
+                )
+            ) {
+                return true
+            }
+
+            val iframeResponse = try {
+                app.get(
+                    iframeUrl,
+                    headers = requestHeaders(currentUrl)
+                )
+            } catch (_: Exception) {
+                break
+            }
+
+            if (!iframeResponse.isSuccessful) break
+
+            currentHtml = iframeResponse.text
+            currentUrl = iframeUrl
+            currentDocument = Jsoup.parse(currentHtml, currentUrl)
+
+            val iframeM3u8 = extractM3u8(currentHtml)
+            if (
+                !iframeM3u8.isNullOrBlank() &&
+                tryEmitM3u8(label, iframeM3u8, currentUrl, callback)
+            ) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private suspend fun tryLoadExtractor(
+        url: String,
+        referer: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         return try {
-            val pageDoc = app.get(
-                streamPageUrl,
-                headers = mapOf("Referer" to watchUrl, "Origin" to mainUrl, "User-Agent" to ua)
-            ).document
-
-            // 1. Doğrudan token'lı m3u8 (nadiren HTML'de olur)
-            extractM3u8(pageDoc.html())?.let { url ->
-                if (url.contains("?t=")) {
-                    callback(buildLink(label, url, dembedOrigin + "/"))
-                    return true
-                }
+            loadExtractor(
+                url,
+                referer,
+                subtitleCallback
+            ) {
+                callback(it)
             }
-
-            // 2. Iframe zincirini takip et
-            var iframeUrl = pageDoc.selectFirst("iframe[src]")?.attr("src")
-            var referer = streamPageUrl
-            var depth = 0
-
-            while (!iframeUrl.isNullOrBlank() && depth < 3) {
-                val doc = try {
-                    app.get(iframeUrl, headers = mapOf("Referer" to referer, "Origin" to dembedOrigin, "User-Agent" to ua)).document
-                } catch (_: Exception) { return false }
-
-                // Token'lı m3u8 (iframe JS içinde olabilir)
-                extractM3u8(doc.html())?.let { url ->
-                    if (url.contains("?t=")) {
-                        callback(buildLink(label, url, dembedOrigin + "/"))
-                        return true
-                    }
-                }
-
-                // Iframe içindeki m3u8 URL'sini bul (token'sız) ve token'sız dene
-                val m3u8Base = extractM3u8(doc.html())
-                if (!m3u8Base.isNullOrBlank()) {
-                    // Daddy.min.js'in ürettiği token'ı taklit etmeyi dene
-                    val withToken = tryGenerateToken(m3u8Base)
-                    if (withToken != null) {
-                        callback(buildLink(label, withToken, dembedOrigin + "/"))
-                        return true
-                    }
-                }
-
-                val nested = doc.selectFirst("iframe[src]")?.attr("src")
-                if (!nested.isNullOrBlank()) {
-                    referer = iframeUrl!!
-                    iframeUrl = nested
-                    depth++
-                } else break
-            }
-            false
         } catch (_: Exception) {
             false
         }
     }
 
-    /**
-     * daddy.min.js'in token formatını taklit etmeye çalışır.
-     * Format: ?t={unix_timestamp}.{md5_hash}&_={unix_timestamp_ms}
-     * Not: md5_hash'in içeriği bilinmiyor, bu yüzden rastgele deniyoruz.
-     * Bu genelde çalışmaz ama bazen server-side validasyon zayıf olabilir.
-     */
-    private fun tryGenerateToken(m3u8BaseUrl: String): String? {
-        return try {
-            val now = System.currentTimeMillis()
-            val unix = now / 1000
-            // Bilinen formatları dene
-            val formats = listOf(
-                "$m3u8BaseUrl?t=$unix.${md5("$unix")}&_=$now",
-                "$m3u8BaseUrl?t=$unix.${md5("thedaddy")}&_=$now",
-                "$m3u8BaseUrl?t=$unix.${md5("daddylive")}&_=$now",
-                "$m3u8BaseUrl?_=$now"
+    private suspend fun tryEmitM3u8(
+        label: String,
+        rawUrl: String,
+        referer: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val streamUrl = resolveUrl(referer, rawUrl)
+
+        val manifestResponse = try {
+            app.get(
+                streamUrl,
+                headers = requestHeaders(referer)
             )
-            // İlk formatı dene, çalışmazsa diğer player'lar denenir
-            formats.firstOrNull()
         } catch (_: Exception) {
-            null
+            return false
         }
+
+        if (!manifestResponse.isSuccessful) return false
+
+        val manifest = manifestResponse.text.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+        if (!manifest.startsWith("#EXTM3U")) return false
+
+        callback(
+            newExtractorLink(
+                source = name,
+                name = name + " - " + label,
+                url = streamUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = referer
+                this.headers = requestHeaders(referer)
+            }
+        )
+
+        return true
     }
 
-    private fun md5(input: String): String {
-        val md = java.security.MessageDigest.getInstance("MD5")
-        val digest = md.digest(input.toByteArray())
-        return digest.joinToString("") { "%02x".format(it) }
-    }
+    private fun firstIframe(document: org.jsoup.nodes.Document): String? {
+        val iframe = document.selectFirst(
+            "iframe[src], iframe[data-src], iframe[data-lazy-src]"
+        ) ?: return null
 
-    private suspend fun buildLink(label: String, url: String, referer: String): ExtractorLink {
-        return newExtractorLink(
-            source = this.name,
-            name = "${this.name} - $label",
-            url = url,
-            type = ExtractorLinkType.M3U8
-        ) {
-            this.referer = referer
-            this.headers = mapOf(
-                "Referer" to referer,
-                "Origin" to dembedOrigin,
-                "User-Agent" to ua,
-                "Accept" to "*/*"
-            )
-        }
+        return iframe.attr("data-src")
+            .takeIf { it.isNotBlank() }
+            ?: iframe.attr("data-lazy-src")
+                .takeIf { it.isNotBlank() }
+            ?: iframe.attr("src")
+                .takeIf { it.isNotBlank() }
     }
 
     private fun extractM3u8(html: String): String? {
-        Regex("""(https?://[^\s"'<>]+\.m3u8\?t=[^\s"'<>]+&_=[^\s"'<>]+)""")
-            .find(html)?.value?.let { return it }
-        Regex("""(https?://[^\s"'<>]+\.m3u8\?t=[^\s"'<>]+)""")
-            .find(html)?.value?.let { return it }
-        Regex("""["'](https?://[^"']+\.m3u8\?t=[^"']+)["']""")
-            .find(html)?.groupValues?.get(1)?.let { return it }
-        Regex("""(https?://[^\s"'<>]+\.m3u8)""")
-            .find(html)?.value?.let { return it }
-        return null
+        val normalized = html
+            .replace("\\/", "/")
+            .replace("\\u0026", "&")
+            .replace("&amp;", "&")
+
+        val match = Regex(
+            """(?:https?:)?//[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""",
+            RegexOption.IGNORE_CASE
+        ).find(normalized) ?: return null
+
+        return match.value.trimEnd(')', ']', '}', ',', ';')
+    }
+
+    private fun resolveUrl(baseUrl: String, rawUrl: String): String {
+        val cleaned = rawUrl
+            .trim()
+            .removeSurrounding("\"")
+            .removeSurrounding("'")
+            .replace("\\/", "/")
+            .replace("&amp;", "&")
+
+        return try {
+            URI(baseUrl).resolve(cleaned).toString()
+        } catch (_: Exception) {
+            cleaned
+        }
+    }
+
+    private fun requestHeaders(referer: String): Map<String, String> {
+        val origin = try {
+            val uri = URI(referer)
+            val scheme = uri.scheme
+            val authority = uri.rawAuthority
+
+            if (scheme.isNullOrBlank() || authority.isNullOrBlank()) {
+                mainUrl
+            } else {
+                scheme + "://" + authority
+            }
+        } catch (_: Exception) {
+            mainUrl
+        }
+
+        return mapOf(
+            "Referer" to referer,
+            "Origin" to origin,
+            "User-Agent" to userAgent,
+            "Accept" to "*/*"
+        )
+    }
+}
+
+object DaddyLiveSettings {
+    private const val API_KEY_STORAGE = "daddylive_api_key"
+
+    fun getApiKey(): String? {
+        return getKey<String>(API_KEY_STORAGE)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    fun saveApiKey(apiKey: String) {
+        setKey(API_KEY_STORAGE, apiKey.trim())
+    }
+
+    fun clearApiKey() {
+        setKey(API_KEY_STORAGE, null as String?)
     }
 }
