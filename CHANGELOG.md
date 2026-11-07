@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:996629640e4c9de2cbb3503777265922c7adff32 -->
+### Fix DaddyLive Kotlin substringBefore compile error
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [9966296](https://github.com/Kayracs3/Kayra/commit/996629640e4c9de2cbb3503777265922c7adff32)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:f822f7e40892043d67137b3c97cd17adba8a3196 -->
 ### DaddyLive: exclude adult and gambling-related channels
 
