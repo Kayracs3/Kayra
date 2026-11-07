@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:dc4682088000e653ffc08cfdef23aabf36ce7c46 -->
+### Enhance m3u8 extraction and token generation
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [dc46820](https://github.com/Kayracs3/Kayra/commit/dc4682088000e653ffc08cfdef23aabf36ce7c46)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:ed647387a69b42751d1ddf44b10539fc511061b9 -->
 ### Refactor m3u8 extraction and link building logic
 
