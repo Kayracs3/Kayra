@@ -108,6 +108,26 @@
         "name": "ClipBox"
     },
     {
+        "iconUrl": "https://dlhd.pk/favicon.ico",
+        "fileHash": "sha256-6bf8aa53b9370e215469457d1e2e35829eae7db620a9e949e86eb5278cbe82d6",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 8363,
+        "status": 1,
+        "language": "en",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 1,
+        "internalName": "DaddyLive",
+        "description": "Canl\u0131tv eklentisi",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DaddyLive.cs3",
+        "name": "DaddyLive"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=ddizi.tel&sz=%size%",
         "fileHash": "sha256-032ac215caf8255f01620bc008e2fa56344e2bc2e800cc246406193287079cb3",
         "apiVersion": 1,
