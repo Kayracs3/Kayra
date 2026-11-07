@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:bf675825a5911593c7a018258e7a029c97229107 -->
+### Fix DramaDizilerim playback ID parsing
+
+- Etkilenen alanlar: Dramadizilerim
+- Commit: [bf67582](https://github.com/Kayracs3/Kayra/commit/bf675825a5911593c7a018258e7a029c97229107)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:49267cf4ccc83099df5f4f095147b1a5bb7013b8 -->
 ### Add DramaDizilerim playback API and subtitles
 
