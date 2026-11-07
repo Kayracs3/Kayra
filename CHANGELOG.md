@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:c1575c9b635e878de28bfbb9d19109e431ce3cfd -->
+### DiziPal: HTTP ve istek hata günlüklerini ekle
+
+- Etkilenen alanlar: DiziPal
+- Commit: [c1575c9](https://github.com/Kayracs3/Kayra/commit/c1575c9b635e878de28bfbb9d19109e431ce3cfd)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:271a9763c46cc68c5fc7d39e215fce6a3e244350 -->
 ### Scope DramaDizilerim age filter to title metadata
 
