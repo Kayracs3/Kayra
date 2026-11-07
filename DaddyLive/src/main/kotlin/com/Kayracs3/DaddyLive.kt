@@ -157,7 +157,7 @@ class DaddyLiveProvider : MainAPI() {
             return false
         }
         val channelTitle = watchPage.selectFirst("h1, h2")?.text()
-            ?.substringBefore("(ID", ignoreCase = true)
+            ?.substringBefore("(ID")
             ?.trim().orEmpty()
         if (channelTitle.isNotBlank() && !isAllowedChannel(channelTitle)) return false
 
