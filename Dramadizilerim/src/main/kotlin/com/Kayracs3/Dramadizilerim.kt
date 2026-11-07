@@ -585,57 +585,82 @@ class Dramadizilerim : MainAPI() {
      * episodeId / nextEpisodeId değerleri bölüm sayfasının HTML veya JSON
      * state alanlarından çıkarılır. UUID formatı dışında bir değer kabul edilmez.
      */
+    /**
+     * episodeId / nextEpisodeId değerlerini bölüm HTML'i, data-* öznitelikleri
+     * ve sayfaya gömülü JSON/JavaScript state alanlarından çıkarır.
+     */
     private fun extractPlaybackId(
         html: String,
         doc: org.jsoup.nodes.Document,
         key: String
     ): String? {
         val uuid = """([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"""
-        val keyNames = when (key) {
-            "episodeId" -> listOf("episodeId", "episode_id", "episode-id")
-            else -> listOf("nextEpisodeId", "next_episode_id", "next-episode-id")
+        val isNext = key == "nextEpisodeId"
+        val keyNames = if (isNext) {
+            listOf("nextEpisodeId", "next_episode_id", "next-episode-id")
+        } else {
+            listOf("episodeId", "episode_id", "episode-id")
         }
-
-        // Önce açık JSON/JavaScript alanlarını tara.
         val normalizedHtml = html
             .replace("&quot;", "\"")
             .replace("&#34;", "\"")
             .replace("\\/", "/")
+
+        // Önce açık JSON/JavaScript özelliklerini kontrol et.
         for (keyName in keyNames) {
             val escapedKey = Regex.escape(keyName)
-            val patterns = listOf(
-                Regex("""(?is)["']?$escapedKey["']?\s*[:=]\s*["']$uuid["']"""),
-                Regex("""(?is)data-$escapedKey\s*=\s*["']$uuid["']""")
+            val pattern = Regex(
+                """(?is)["']?$escapedKey["']?\s*[:=]\s*["']$uuid["']"""
             )
-            for (pattern in patterns) {
-                val found = pattern.find(normalizedHtml)?.groupValues?.getOrNull(1)
-                if (!found.isNullOrBlank()) return found
-            }
-
-            val attrName = if (keyName.contains('-')) keyName else
-                keyName.replace(Regex("([A-Z])")) { "-${it.value.lowercase()}" }
-            val attrValue = doc.selectFirst("[$attrName]")?.attr(attrName)
-                ?.takeIf { Regex("(?i)^$uuid$").matches(it) }
-            if (!attrValue.isNullOrBlank()) return attrValue
-
-            val inputName = keyName.replace('-', '_')
-            val inputValue = doc.selectFirst("input[name='$inputName']")?.attr("value")
-                ?.takeIf { Regex("(?i)^$uuid$").matches(it) }
-            if (!inputValue.isNullOrBlank()) return inputValue
+            val value = pattern.find(normalizedHtml)?.groupValues?.getOrNull(1)
+            if (!value.isNullOrBlank()) return value
         }
 
-        // Bazı sayfa sürümleri ID'yi episode/currentEpisode nesnesinin id alanında tutuyor.
-        val containers = if (key == "episodeId") {
-            listOf("episode", "currentEpisode", "current_episode")
+        val uuidOnly = Regex("(?i)^$uuid$")
+        // data-episode-id, data-next-episode-id ve benzeri HTML öznitelikleri.
+        val expectedAttrPart = if (isNext) "next" else "episode"
+        for (element in doc.getAllElements()) {
+            for (attribute in element.attributes()) {
+                val attrName = attribute.key.lowercase()
+                val relevant = attrName.contains("episode") &&
+                    (if (isNext) attrName.contains("next") else !attrName.contains("next"))
+                if (relevant && uuidOnly.matches(attribute.value)) {
+                    return attribute.value
+                }
+            }
+        }
+
+        // Bazı temalarda ID, episode/player kapsayıcısının data-id alanındadır.
+        val dataIdSelector = if (isNext) {
+            "[data-next-episode-id], [data-next-episodeid]"
         } else {
+            "[data-episode-id], [data-episodeid], [id*=episode][data-id], [class*=episode][data-id], [id*=player][data-id], [class*=player][data-id]"
+        }
+        val dataIdElement = doc.selectFirst(dataIdSelector)
+        if (dataIdElement != null) {
+            val attrs = if (isNext) {
+                listOf("data-next-episode-id", "data-next-episodeid")
+            } else {
+                listOf("data-episode-id", "data-episodeid", "data-id")
+            }
+            for (attr in attrs) {
+                val value = dataIdElement.attr(attr)
+                if (uuidOnly.matches(value)) return value
+            }
+        }
+
+        val containers = if (isNext) {
             listOf("nextEpisode", "next_episode")
+        } else {
+            listOf("episode", "currentEpisode", "current_episode")
         }
         for (container in containers) {
             val escapedContainer = Regex.escape(container)
-            val nested = Regex(
-                """(?is)["']$escapedContainer["']\s*:\s*\\{[\s\S]{0,1500}?["']id["']\s*:\s*["']$uuid["']"""
-            ).find(normalizedHtml)?.groupValues?.getOrNull(1)
-            if (!nested.isNullOrBlank()) return nested
+            val nestedPattern = Regex(
+                """(?is)["']?$escapedContainer["']?\s*:\s*\{[\s\S]{0,2000}?["']id["']\s*:\s*["']$uuid["']"""
+            )
+            val value = nestedPattern.find(normalizedHtml)?.groupValues?.getOrNull(1)
+            if (!value.isNullOrBlank()) return value
         }
 
         return null
