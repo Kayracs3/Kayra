@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:27b3b055d15fa5e8948f42a392237e50eacd2ee8 -->
+### Refactor getMainPage to return HomePageList
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [27b3b05](https://github.com/Kayracs3/Kayra/commit/27b3b055d15fa5e8948f42a392237e50eacd2ee8)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:8dd7e031c71ddc905c1b87d800ad3c46d388f6eb -->
 ### Refactor DaddyLivePlugin class formatting
 
