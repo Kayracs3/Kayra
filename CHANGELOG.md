@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:99190a2bb69ff9c67eaec34b7a31dfd6b9dfbccf -->
+### Refactor comments and improve m3u8 extraction logic
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [99190a2](https://github.com/Kayracs3/Kayra/commit/99190a2bb69ff9c67eaec34b7a31dfd6b9dfbccf)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:e6517ce4421aa0dc9e660f38d061db2c19e53eab -->
 ### Refactor DaddyLiveProvider for improved functionality
 
