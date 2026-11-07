@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:82079318363282020d0b307021a294a537fba6e8 -->
+### Update DaddyLive provider with new domain and fixes
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [8207931](https://github.com/Kayracs3/Kayra/commit/82079318363282020d0b307021a294a537fba6e8)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:3f75d2904f2a0d3d3b6c9ea90d3ea3ac4d817ac4 -->
 ### DaddyLive derleme uyumsuzluklarını düzelt
 
