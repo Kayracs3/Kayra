@@ -1,5 +1,30 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-08
+
+<!-- kayra-commit:d0578c4b1d2ccb08c993cbae10c2ea41fca91019 -->
+### Bump DaddyLive plugin version
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [d0578c4](https://github.com/Kayracs3/Kayra/commit/d0578c4b1d2ccb08c993cbae10c2ea41fca91019)
+
+## 2026-11-08
+
+<!-- kayra-commit:6a834cee8ebd9cbfe2bb6705b7fdcb13facd1b2b -->
+### Add local DaddyLive API key settings
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [6a834ce](https://github.com/Kayracs3/Kayra/commit/6a834cee8ebd9cbfe2bb6705b7fdcb13facd1b2b)
+
+## 2026-11-08
+
+<!-- kayra-commit:fe70df34866ef33aad7c842a5a892e6ed6a53f3c -->
+### Fix DaddyLive channel API and player extraction
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [fe70df3](https://github.com/Kayracs3/Kayra/commit/fe70df34866ef33aad7c842a5a892e6ed6a53f3c)
+
+
 ## 2026-11-07
 
 <!-- kayra-commit:dc4682088000e653ffc08cfdef23aabf36ce7c46 -->
