@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:8dd7e031c71ddc905c1b87d800ad3c46d388f6eb -->
+### Refactor DaddyLivePlugin class formatting
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [8dd7e03](https://github.com/Kayracs3/Kayra/commit/8dd7e031c71ddc905c1b87d800ad3c46d388f6eb)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:c5750ddc793bf8d9767c20197de58c3dbe3f2be4 -->
 ### Refactor response handling in main page and stream load
 
