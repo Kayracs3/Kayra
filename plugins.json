@@ -109,10 +109,10 @@
     },
     {
         "iconUrl": "https://dlhd.pk/favicon.ico",
-        "fileHash": "sha256-c72e70cc8042d6bdccb7025a5576d78680ff4adf45f4b84728925cfaea8fd832",
+        "fileHash": "sha256-170bfeca2632759f465e0ae416079deeaab9fd41c09de98dd50e888b8515b663",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 13342,
+        "fileSize": 17356,
         "status": 1,
         "language": "en",
         "authors": [
@@ -121,7 +121,7 @@
         "tvTypes": [
             "Live"
         ],
-        "version": 1,
+        "version": 3,
         "internalName": "DaddyLive",
         "description": "Canl\u0131tv eklentisi",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DaddyLive.cs3",
