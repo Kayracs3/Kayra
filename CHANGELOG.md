@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:e99b0ff522a346f3121c24c37747be453c6e8a3f -->
+### Fix DaddyLive suspend extractor link builder
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [e99b0ff](https://github.com/Kayracs3/Kayra/commit/e99b0ff522a346f3121c24c37747be453c6e8a3f)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:46d7f6d13c575194d8895788c1b9022072ef1f18 -->
 ### Update DaddyLive.kt
 
