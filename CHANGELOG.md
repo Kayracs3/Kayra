@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:383f6cb6575ced039d7a7a2fdc8cd1ab7ae9ae77 -->
+### Update version from 3 to 4
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [383f6cb](https://github.com/Kayracs3/Kayra/commit/383f6cb6575ced039d7a7a2fdc8cd1ab7ae9ae77)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:b4012456aaa27873ceaa26cc77d741015b7f269e -->
 ### Enhance DaddyLiveProvider with logging and error handling
 
