@@ -1,143 +1,43 @@
 package com.Kayracs3
 
-import android.net.Uri
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-import java.net.URI
+import org.json.JSONObject
+import android.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class DaddyLiveProvider : MainAPI() {
-
     override var mainUrl = "https://thedaddy.li"
     override var name = "DaddyLive"
     override var lang = "en"
     override val hasMainPage = true
-    override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Live)
 
-    private val userAgent =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    private val ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    private val dembedOrigin = "https://dembed.st"
+    private val edgeHost = "https://edge.wedd48c.top"
 
-    override suspend fun getMainPage(
-        page: Int,
-        request: MainPageRequest
-    ): HomePageResponse {
-        val channels = getChannels()
-        return newHomePageResponse(request.name, channels, hasNext = false)
-    }
-
-    override suspend fun search(query: String): List<SearchResponse> {
-        val term = query.trim()
-        if (term.isBlank()) return emptyList()
-
-        return getChannels().filter {
-            it.name.contains(term, ignoreCase = true)
-        }
-    }
-
-    override suspend fun quickSearch(query: String): List<SearchResponse> {
-        return search(query)
-    }
-
-    private suspend fun getChannels(): List<LiveSearchResponse> {
-        val response = app.get(
-            "$mainUrl/24-7-channels.php",
-            headers = requestHeaders(mainUrl),
-            allowRedirects = true
-        )
-
-        if (!response.isSuccessful) {
-            throw ErrorLoadingException("DaddyLive kanal sayfası açılamadı.")
-        }
-
-        val document = response.document
-        val channels = document
-            .select("a[href*='watch.php?id='], a[href*='watch.php?channel=']")
-            .mapNotNull { it.toLiveSearchResponse() }
-            .filter { isAllowedChannel(it.name) }
-            .distinctBy { it.url }
-
-        if (channels.isNotEmpty()) return channels
-
-        // Bazı sayfa sürümlerinde 24/7 liste yerine ana sayfa üzerinden
-        // kanal bağlantıları yayınlanıyor. Aynı herkese açık HTML yapısını dene.
-        val home = app.get(
-            "$mainUrl/index.php",
-            headers = requestHeaders(mainUrl),
-            allowRedirects = true
-        ).document
-
-        val homeChannels = home
-            .select("a[href*='watch.php?id='], a[href*='watch.php?channel=']")
-            .mapNotNull { it.toLiveSearchResponse() }
-            .filter { isAllowedChannel(it.name) }
-            .distinctBy { it.url }
-
-        if (homeChannels.isNotEmpty()) return homeChannels
-
-        throw ErrorLoadingException(
-            "DaddyLive kanal listesi HTML içinde bulunamadı. " +
-                "Sayfa artık bağlantıları JavaScript ile oluşturuyor olabilir."
-        )
-    }
-
-    private fun isAllowedChannel(rawName: String): Boolean {
-        val normalized = rawName.lowercase()
-            .replace(Regex("[^a-z0-9+ ]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-
-        val adultMarkers = listOf(
-            "18+", "18 plus", "adult", "adults", "xxx", "porn", "porno",
-            "erotic", "erotica", "playboy", "hustler", "sex channel",
-            "adult channel", "live cam", "live cams", "cam feed",
-            "big brother live cam", "big brother live feed",
-            "fanduel", "draftkings", "bet365", "betway", "sportsbook",
-            "1xbet", "pinnacle", "william hill", "betfair", "pointsbet",
-            "bovada", "caesars sportsbook"
-        )
-
-        return adultMarkers.none { marker -> normalized.contains(marker) }
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val document = app.get("$mainUrl/24-7-channels.php").document
+        val channels = document.select("a[href*='/watch.php?id=']").mapNotNull { it.toLiveSearchResponse() }
+        return newHomePageResponse(request.name, channels)
     }
 
     private fun Element.toLiveSearchResponse(): LiveSearchResponse? {
-        val href = attr("href").trim()
-        val title = attr("data-title").trim()
-            .ifBlank { attr("title").trim() }
-            .ifBlank { selectFirst("img")?.attr("alt")?.trim().orEmpty() }
-            .ifBlank { text().trim() }
-
+        val title = text().trim(); val href = attr("href")
         if (title.isBlank() || href.isBlank()) return null
-
-        val fullUrl = fixUrl(href)
-        val logo = selectFirst("img")?.let { image ->
-            image.attr("data-src")
-                .ifBlank { image.attr("data-lazy-src") }
-                .ifBlank { image.attr("src") }
-                .takeIf { it.isNotBlank() }
-                ?.let { fixUrl(it) }
-        }
-
-        return newLiveSearchResponse(title, fullUrl, TvType.Live) {
-            this.posterUrl = logo
-        }
+        val fullUrl = if (href.startsWith("http")) href else "$mainUrl$href"
+        return newLiveSearchResponse(title, fullUrl, TvType.Live)
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(
-            url,
-            headers = requestHeaders(mainUrl)
-        ).document
-
-        val title = document.title().trim().ifBlank { "DaddyLive" }
-        if (!isAllowedChannel(title)) return null
-
-        return newLiveStreamLoadResponse(
-            url = url,
-            name = title,
-            dataUrl = url
-        )
+        val doc = app.get(url, headers = mapOf("Referer" to mainUrl)).document
+        return newLiveStreamLoadResponse(url = url, name = doc.title(), dataUrl = url)
     }
 
     override suspend fun loadLinks(
@@ -146,251 +46,195 @@ class DaddyLiveProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val id = Uri.parse(data).getQueryParameter("id")
-            ?.takeIf { it.isNotBlank() }
-            ?: return false
+        val watchUrl = data
+        val id = watchUrl.substringAfter("id=", "").substringBefore("&")
+        if (id.isBlank()) return false
 
-        // Eski/kaydedilmiş bağlantılardan da 18+ kanalların açılmasını engelle.
-        val watchPage = try {
-            app.get(data, headers = requestHeaders(mainUrl)).document
-        } catch (_: Exception) {
-            return false
-        }
-        val channelTitle = watchPage.selectFirst("h1, h2")?.text()
-            ?.substringBefore("(ID")
-            ?.trim().orEmpty()
-        if (channelTitle.isNotBlank() && !isAllowedChannel(channelTitle)) return false
+        // 1. m3u8 URL'sini oluştur (token olmadan da dene, token varsa daha iyi)
+        val tokenData = fetchToken(id)
+        val token = tokenData?.first ?: generateFakeToken()
+        val aesKeyB64 = tokenData?.second
 
-        // Site API belgesinde yayınlanan altı geçerli player klasörü.
-        val playerPaths = listOf(
-            "stream",
-            "cast",
-            "watch",
-            "plus",
-            "casting",
-            "player"
-        )
+        val m3u8Url = "$edgeHost/premium$id/index.m3u8?t=$token&_=${System.currentTimeMillis()}"
 
-        for (path in playerPaths) {
-            val playerUrl = "$mainUrl/$path/stream-$id.php"
-
-            if (
-                tryToExtract(
-                    playerUrl,
-                    data,
-                    path,
-                    subtitleCallback,
-                    callback
+        try {
+            // 2. m3u8'i indir
+            val encryptedM3u8 = app.get(
+                m3u8Url,
+                headers = mapOf(
+                    "Referer" to dembedOrigin + "/",
+                    "Origin" to dembedOrigin,
+                    "User-Agent" to ua
                 )
-            ) {
+            ).text
+
+            // 3. AES key yoksa m3u8 muhtemelen düz metin
+            if (aesKeyB64 == null) {
+                // Playlist içinde segment URL'leri var mı kontrol et
+                if (isPlainM3u8(encryptedM3u8)) {
+                    callback(buildLink("direct", m3u8Url, dembedOrigin + "/"))
+                } else {
+                    // Şifreli ama key yok, decrypt deneyemeyiz
+                    callback(buildLink("encrypted", m3u8Url, dembedOrigin + "/"))
+                }
                 return true
             }
-        }
 
-        return false
-    }
+            // 4. AES-GCM ile decrypt et
+            val decryptedM3u8 = decryptM3u8(encryptedM3u8, aesKeyB64)
+            if (decryptedM3u8 == null) {
+                // Decrypt başarısız, direkt dene
+                callback(buildLink("fallback", m3u8Url, dembedOrigin + "/"))
+                return true
+            }
 
-    private suspend fun tryToExtract(
-        playerUrl: String,
-        watchUrl: String,
-        label: String,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
-        val playerResponse = try {
-            app.get(
-                playerUrl,
-                headers = requestHeaders(watchUrl)
+            // 5. Decrypted m3u8'i data: URL olarak ver
+            val base64Data = Base64.encodeToString(decryptedM3u8.toByteArray(), Base64.NO_WRAP)
+            val dataUrl = "data:application/vnd.apple.mpegurl;base64,$base64Data"
+
+            callback(
+                newExtractorLink(
+                    source = this.name,
+                    name = "${this.name} - decrypted",
+                    url = dataUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = dembedOrigin + "/"
+                    this.headers = mapOf(
+                        "Referer" to dembedOrigin + "/",
+                        "Origin" to dembedOrigin,
+                        "User-Agent" to ua
+                    )
+                }
             )
-        } catch (_: Exception) {
+            return true
+        } catch (e: Exception) {
             return false
         }
+    }
 
-        if (!playerResponse.isSuccessful) return false
+    /** m3u8 içinde segment URL'leri (http ile başlayan satırlar) var mı? */
+    private fun isPlainM3u8(content: String): Boolean {
+        return content.lines().any { line ->
+            val l = line.trim()
+            l.startsWith("http") && l.contains(".ts")
+        }
+    }
 
-        var currentUrl = playerUrl
-        var currentHtml = playerResponse.text
-        var currentDocument = Jsoup.parse(currentHtml, currentUrl)
+    /**
+     * Token endpoint'ini dener. Olası endpoint'leri sırayla dener.
+     * Beklenen response: {"t": "1794...", "k": "base64key...", "ttl": 120}
+     */
+    private suspend fun fetchToken(channelId: String): Pair<String, String?>? {
+        val candidates = listOf(
+            "https://dembed.st/t?c=$channelId",
+            "https://dembed.st/t?ch=$channelId",
+            "https://dembed.st/token?c=$channelId",
+            "https://dembed.st/token?channel=$channelId",
+            "https://dembed.st/api/token?ch=$channelId",
+            "https://edge.wedd48c.top/t?c=$channelId",
+            "https://edge.wedd48c.top/token?channel=$channelId"
+        )
 
-        val directUrl = extractM3u8(currentHtml)
-        if (
-            !directUrl.isNullOrBlank() &&
-            tryEmitM3u8(label, directUrl, currentUrl, callback)
+        for (url in candidates) {
+            try {
+                val response = app.get(
+                    url,
+                    headers = mapOf(
+                        "Referer" to "$mainUrl/stream/stream-$channelId.php",
+                        "Origin" to dembedOrigin,
+                        "User-Agent" to ua
+                    )
+                ).text
+                if (response.contains("\"t\"")) {
+                    val json = JSONObject(response)
+                    val token = json.optString("t", "")
+                    val key = json.optString("k", "").ifBlank { null }
+                    if (token.isNotBlank()) return Pair(token, key)
+                }
+            } catch (_: Exception) { continue }
+        }
+        return null
+    }
+
+    private fun generateFakeToken(): String {
+        val now = System.currentTimeMillis() / 1000
+        val hash = java.security.MessageDigest.getInstance("MD5")
+            .digest("$now".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return "$now.$hash"
+    }
+
+    /**
+     * AES-GCM decrypt. Her segment satırı ayrı decrypt edilir.
+     * IV = 8 byte sıfır + 8 byte mediaSequence (big endian)
+     * Tag length: 64 bit (JS koduyla uyumlu)
+     */
+    private fun decryptM3u8(encrypted: String, aesKeyB64: String): String? {
+        return try {
+            val keyBytes = base64UrlDecode(aesKeyB64)
+            if (keyBytes.size != 16 && keyBytes.size != 32) return null
+            val keySpec = SecretKeySpec(keyBytes, "AES")
+
+            val output = StringBuilder()
+            var mediaSequence = 0L
+
+            for (line in encrypted.lines()) {
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) { output.append("\n"); continue }
+                if (trimmed.startsWith("#")) {
+                    if (trimmed.startsWith("#EXT-X-MEDIA-SEQUENCE:")) {
+                        mediaSequence = trimmed.substringAfter(":").trim().toLongOrNull() ?: 0L
+                    }
+                    output.append(trimmed).append("\n")
+                    continue
+                }
+                // Şifreli segment satırı
+                val cipherBytes = base64UrlDecode(trimmed)
+                val iv = createIv(mediaSequence)
+
+                // 64-bit tag (8 byte) AES-GCM
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, keySpec, GCMParameterSpec(64, iv))
+                val plaintext = cipher.doFinal(cipherBytes)
+                output.append(String(plaintext)).append("\n")
+                mediaSequence++
+            }
+            output.toString()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** IV: [8 byte 0][mediaSeq üst 32][mediaSeq alt 32] big endian */
+    private fun createIv(mediaSequence: Long): ByteArray {
+        val iv = ByteArray(16)
+        val buf = ByteBuffer.wrap(iv).order(ByteOrder.BIG_ENDIAN)
+        buf.putLong(0L)
+        buf.putInt((mediaSequence ushr 32).toInt())
+        buf.putInt(mediaSequence.toInt())
+        return iv
+    }
+
+    private fun base64UrlDecode(input: String): ByteArray {
+        var s = input.replace('-', '+').replace('_', '/')
+        while (s.length % 4 != 0) s += "="
+        return Base64.decode(s, Base64.DEFAULT)
+    }
+
+    private suspend fun buildLink(label: String, url: String, referer: String): ExtractorLink {
+        return newExtractorLink(
+            source = this.name,
+            name = "${this.name} - $label",
+            url = url,
+            type = ExtractorLinkType.M3U8
         ) {
-            return true
-        }
-
-        if (tryLoadExtractor(playerUrl, watchUrl, subtitleCallback, callback)) {
-            return true
-        }
-
-        for (depth in 0 until 3) {
-            val iframeSource = firstIframe(currentDocument) ?: break
-            val iframeUrl = resolveUrl(currentUrl, iframeSource)
-
-            if (
-                tryLoadExtractor(
-                    iframeUrl,
-                    currentUrl,
-                    subtitleCallback,
-                    callback
-                )
-            ) {
-                return true
-            }
-
-            val iframeResponse = try {
-                app.get(
-                    iframeUrl,
-                    headers = requestHeaders(currentUrl)
-                )
-            } catch (_: Exception) {
-                break
-            }
-
-            if (!iframeResponse.isSuccessful) break
-
-            currentHtml = iframeResponse.text
-            currentUrl = iframeUrl
-            currentDocument = Jsoup.parse(currentHtml, currentUrl)
-
-            val iframeM3u8 = extractM3u8(currentHtml)
-            if (
-                !iframeM3u8.isNullOrBlank() &&
-                tryEmitM3u8(label, iframeM3u8, currentUrl, callback)
-            ) {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private suspend fun tryLoadExtractor(
-        url: String,
-        referer: String,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
-        return try {
-            var linkFound = false
-
-            loadExtractor(
-                url,
-                referer,
-                subtitleCallback
-            ) {
-                linkFound = true
-                callback(it)
-            }
-
-            // loadExtractor true dönebilir ama extractor hiç bağlantı üretmemiş olabilir.
-            // Yalnızca gerçek bir ExtractorLink callback'i geldiyse başarılı say.
-            linkFound
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private suspend fun tryEmitM3u8(
-        label: String,
-        rawUrl: String,
-        referer: String,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
-        val streamUrl = resolveUrl(referer, rawUrl)
-
-        val manifestResponse = try {
-            app.get(
-                streamUrl,
-                headers = requestHeaders(referer)
+            this.referer = referer
+            this.headers = mapOf(
+                "Referer" to referer,
+                "Origin" to dembedOrigin,
+                "User-Agent" to ua
             )
-        } catch (_: Exception) {
-            return false
         }
-
-        if (!manifestResponse.isSuccessful) return false
-
-        val manifest = manifestResponse.text.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
-        if (!manifest.startsWith("#EXTM3U")) return false
-
-        callback(
-            newExtractorLink(
-                source = name,
-                name = name + " - " + label,
-                url = streamUrl,
-                type = ExtractorLinkType.M3U8
-            ) {
-                this.referer = referer
-                this.headers = requestHeaders(referer)
-            }
-        )
-
-        return true
-    }
-
-    private fun firstIframe(document: org.jsoup.nodes.Document): String? {
-        val iframe = document.selectFirst(
-            "iframe[src], iframe[data-src], iframe[data-lazy-src]"
-        ) ?: return null
-
-        return iframe.attr("data-src")
-            .takeIf { it.isNotBlank() }
-            ?: iframe.attr("data-lazy-src")
-                .takeIf { it.isNotBlank() }
-            ?: iframe.attr("src")
-                .takeIf { it.isNotBlank() }
-    }
-
-    private fun extractM3u8(html: String): String? {
-        val normalized = html
-            .replace("\\/", "/")
-            .replace("\\u0026", "&")
-            .replace("&amp;", "&")
-
-        val match = Regex(
-            """(?:https?:)?//[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""",
-            RegexOption.IGNORE_CASE
-        ).find(normalized) ?: return null
-
-        return match.value.trimEnd(')', ']', '}', ',', ';')
-    }
-
-    private fun resolveUrl(baseUrl: String, rawUrl: String): String {
-        val cleaned = rawUrl
-            .trim()
-            .removeSurrounding("\"")
-            .removeSurrounding("'")
-            .replace("\\/", "/")
-            .replace("&amp;", "&")
-
-        return try {
-            URI(baseUrl).resolve(cleaned).toString()
-        } catch (_: Exception) {
-            cleaned
-        }
-    }
-
-    private fun requestHeaders(referer: String): Map<String, String> {
-        val origin = try {
-            val uri = URI(referer)
-            val scheme = uri.scheme
-            val authority = uri.rawAuthority
-
-            if (scheme.isNullOrBlank() || authority.isNullOrBlank()) {
-                mainUrl
-            } else {
-                scheme + "://" + authority
-            }
-        } catch (_: Exception) {
-            mainUrl
-        }
-
-        return mapOf(
-            "Referer" to referer,
-            "Origin" to origin,
-            "User-Agent" to userAgent,
-            "Accept" to "*/*"
-        )
     }
 }
