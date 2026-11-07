@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:72639008ee0356dfa6020ede9443437a5e8314b0 -->
+### Parse DramaDizilerim episode numbering and filter age-rated titles
+
+- Etkilenen alanlar: Dramadizilerim
+- Commit: [7263900](https://github.com/Kayracs3/Kayra/commit/72639008ee0356dfa6020ede9443437a5e8314b0)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:26c3a5e9fe34b1fb5d0b4ad241f71023769c5558 -->
 ### Harden DramaDizilerim episode ID detection
 
