@@ -2,6 +2,23 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:b8083e55e3e4919cbc92d88e4d52374f691fff89 -->
+### Update cloudstream description and language
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [b8083e5](https://github.com/Kayracs3/Kayra/commit/b8083e55e3e4919cbc92d88e4d52374f691fff89)
+
+## 2026-11-07
+
+<!-- kayra-commit:a7a0a79a136a6438fa7ed5e15f3cc297ee3dadf6 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [a7a0a79](https://github.com/Kayracs3/Kayra/commit/a7a0a79a136a6438fa7ed5e15f3cc297ee3dadf6)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:7ba834e5744054a01bc41f1bdd2beb829c3e4985 -->
 ### Add files via upload
 
