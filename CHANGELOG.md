@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:d2b908828743f66e118783f2efe65399773218ff -->
+### DaddyLive: filter adult channels from listings and playback
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [d2b9088](https://github.com/Kayracs3/Kayra/commit/d2b908828743f66e118783f2efe65399773218ff)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:2eabfc7a54a872e65bb9ff9d2f35b2671a56479b -->
 ### Remove obsolete API key storage
 
