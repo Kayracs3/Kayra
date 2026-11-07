@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:a89136dbd2ae452fcde198c74abc29de616b2d59 -->
+### Refactor loadLinks and fetchToken methods
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [a89136d](https://github.com/Kayracs3/Kayra/commit/a89136dbd2ae452fcde198c74abc29de616b2d59)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:383f6cb6575ced039d7a7a2fdc8cd1ab7ae9ae77 -->
 ### Update version from 3 to 4
 
