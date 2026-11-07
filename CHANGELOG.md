@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:cf4042583357190cd8c53fbcb9d589e3fa750f3b -->
+### Rename DaddylivePlugin class to DaddyLivePlugin
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [cf40425](https://github.com/Kayracs3/Kayra/commit/cf4042583357190cd8c53fbcb9d589e3fa750f3b)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:dfa0fc03b784d43f9b58162f110cd8140a177041 -->
 ### Refactor DaddyLiveProvider for improved URL handling
 
