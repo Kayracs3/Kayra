@@ -236,6 +236,10 @@ class Dramadizilerim : MainAPI() {
 
         val episodeId = extractPlaybackId(html, episodeDoc, "episodeId")
         val nextEpisodeId = extractPlaybackId(html, episodeDoc, "nextEpisodeId")
+        android.util.Log.d(
+            "DramaDizilerim",
+            "Playback ID detection: episodeId=${!episodeId.isNullOrBlank()} nextEpisodeId=${!nextEpisodeId.isNullOrBlank()}"
+        )
 
         if (!episodeId.isNullOrBlank()) {
             val playbackParams = buildList {
@@ -498,7 +502,7 @@ class Dramadizilerim : MainAPI() {
                     parent.className().contains("card", ignoreCase = true)
             }
             val cardText = (cardContainer?.text().orEmpty() + " " + a.text()).trim()
-            if (Regex("(?i)(?:^|\\\\s)\\\\+18(?:\\\\s|$)").containsMatchIn(cardText)) {
+            if (Regex("(?i)(?:^|\\s)\\+18(?:\\s|$)").containsMatchIn(cardText)) {
                 return@forEach
             }
 
