@@ -125,7 +125,7 @@ class DaddyLiveProvider : MainAPI() {
     // ============================================================
     // ExtractorLink oluşturma — DOĞRU Origin: dembed.st
     // ============================================================
-    private fun buildLink(label: String, url: String, referer: String): ExtractorLink {
+    private suspend fun buildLink(label: String, url: String, referer: String): ExtractorLink {
         return newExtractorLink(
             source = this.name,
             name = "${this.name} - $label",
