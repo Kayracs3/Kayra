@@ -527,9 +527,32 @@ class Dramadizilerim : MainAPI() {
     }
 
     private fun isAgeRestrictedSeries(doc: org.jsoup.nodes.Document): Boolean {
-        return doc.select("a, span, li, [class*=tag], [class*=badge], [class*=age]").any { element ->
-            element.text().trim().equals("+18", ignoreCase = true)
+        val heading = doc.selectFirst("main h1, article h1, h1") ?: return false
+        val ageLabels = setOf("+18", "18+")
+        val markerSelector = "span, small, strong, b, em, [class*=age], [id*=age], [class*=rating], [id*=rating], [class*=badge], [class*=tag], [itemprop=contentRating], [data-age], [data-rating]"
+
+        // Yalnızca dizi başlığının yakınındaki bilgi alanını tara.
+        // Sayfanın tamamını taramak navbar/footer içindeki +18 yazısını yanlış eşleştiriyordu.
+        var scope: Element? = heading
+        repeat(4) {
+            val currentScope = scope ?: return@repeat
+            val markers = currentScope.select(markerSelector)
+            for (marker in markers) {
+                val values = listOf(
+                    marker.text().trim(),
+                    marker.attr("content").trim(),
+                    marker.attr("data-age").trim(),
+                    marker.attr("data-rating").trim(),
+                    marker.attr("aria-label").trim()
+                )
+                if (values.any { it in ageLabels }) {
+                    return true
+                }
+            }
+            scope = currentScope.parent()
         }
+
+        return false
     }
 
     private fun hasNextPage(doc: org.jsoup.nodes.Document, currentPage: Int): Boolean {
