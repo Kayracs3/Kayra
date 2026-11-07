@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:6991dc485281041d462860d205bb1e443df38c48 -->
+### Refactor DaddyLiveProvider for improved functionality
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [6991dc4](https://github.com/Kayracs3/Kayra/commit/6991dc485281041d462860d205bb1e443df38c48)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:4a03530fddec080d86124a002f2cc7b69c412b47 -->
 ### Fix DaddyLive extractor false-positive success
 
