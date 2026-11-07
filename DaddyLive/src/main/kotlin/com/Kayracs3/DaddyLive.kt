@@ -53,8 +53,9 @@ class DaddyLiveProvider : MainAPI() {
 
         val document = response.document
         val channels = document
-            .select("a[href*='watch.php?id=']")
+            .select("a[href*='watch.php?id='], a[href*='watch.php?channel=']")
             .mapNotNull { it.toLiveSearchResponse() }
+            .filter { isAllowedChannel(it.name) }
             .distinctBy { it.url }
 
         if (channels.isNotEmpty()) return channels
@@ -68,8 +69,9 @@ class DaddyLiveProvider : MainAPI() {
         ).document
 
         val homeChannels = home
-            .select("a[href*='watch.php?id=']")
+            .select("a[href*='watch.php?id='], a[href*='watch.php?channel=']")
             .mapNotNull { it.toLiveSearchResponse() }
+            .filter { isAllowedChannel(it.name) }
             .distinctBy { it.url }
 
         if (homeChannels.isNotEmpty()) return homeChannels
@@ -78,6 +80,22 @@ class DaddyLiveProvider : MainAPI() {
             "DaddyLive kanal listesi HTML içinde bulunamadı. " +
                 "Sayfa artık bağlantıları JavaScript ile oluşturuyor olabilir."
         )
+    }
+
+    private fun isAllowedChannel(rawName: String): Boolean {
+        val normalized = rawName.lowercase()
+            .replace(Regex("[^a-z0-9+ ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val adultMarkers = listOf(
+            "18+", "18 plus", "adult", "adults", "xxx", "porn", "porno",
+            "erotic", "erotica", "playboy", "hustler", "sex channel",
+            "adult channel", "live cam", "live cams", "cam feed",
+            "big brother live cam", "big brother live feed"
+        )
+
+        return adultMarkers.none { marker -> normalized.contains(marker) }
     }
 
     private fun Element.toLiveSearchResponse(): LiveSearchResponse? {
@@ -110,6 +128,7 @@ class DaddyLiveProvider : MainAPI() {
         ).document
 
         val title = document.title().trim().ifBlank { "DaddyLive" }
+        if (!isAllowedChannel(title)) return null
 
         return newLiveStreamLoadResponse(
             url = url,
@@ -127,6 +146,17 @@ class DaddyLiveProvider : MainAPI() {
         val id = Uri.parse(data).getQueryParameter("id")
             ?.takeIf { it.isNotBlank() }
             ?: return false
+
+        // Eski/kaydedilmiş bağlantılardan da 18+ kanalların açılmasını engelle.
+        val watchPage = try {
+            app.get(data, headers = requestHeaders(mainUrl)).document
+        } catch (_: Exception) {
+            return false
+        }
+        val channelTitle = watchPage.selectFirst("h1, h2")?.text()
+            ?.substringBefore("(ID", ignoreCase = true)
+            ?.trim().orEmpty()
+        if (channelTitle.isNotBlank() && !isAllowedChannel(channelTitle)) return false
 
         // Site API belgesinde yayınlanan altı geçerli player klasörü.
         val playerPaths = listOf(
