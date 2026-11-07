@@ -27,10 +27,13 @@ class DaddyLiveProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val pageResponse = app.get(url, headers = mapOf(
-            "Referer" to mainUrl,
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        ))
+        val pageResponse = app.get(
+            url,
+            headers = mapOf(
+                "Referer" to mainUrl,
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
+        )
         val document = pageResponse.document
 
         val iframeUrl = document.selectFirst("iframe[src]")?.attr("src")
@@ -46,8 +49,7 @@ class DaddyLiveProvider : MainAPI() {
                     return newLiveStreamLoadResponse(
                         url = url,
                         name = document.title(),
-                        dataUrl = m3u8,
-                        headers = mapOf("Referer" to url, "User-Agent" to "Mozilla/5.0")
+                        dataUrl = m3u8
                     )
                 }
             }
@@ -60,12 +62,7 @@ class DaddyLiveProvider : MainAPI() {
         return newLiveStreamLoadResponse(
             url = url,
             name = document.title(),
-            dataUrl = m3u8Url,
-            headers = mapOf(
-                "Referer" to iframeUrl,
-                "Origin" to "https://dlhd.pk",
-                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            )
+            dataUrl = m3u8Url
         )
     }
 
