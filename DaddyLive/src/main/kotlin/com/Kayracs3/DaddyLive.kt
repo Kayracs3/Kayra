@@ -354,21 +354,3 @@ class DaddyLiveProvider : MainAPI() {
         )
     }
 }
-
-object DaddyLiveSettings {
-    private const val API_KEY_STORAGE = "daddylive_api_key"
-
-    fun getApiKey(): String? {
-        return getKey<String>(API_KEY_STORAGE)
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-    }
-
-    fun saveApiKey(apiKey: String) {
-        setKey(API_KEY_STORAGE, apiKey.trim())
-    }
-
-    fun clearApiKey() {
-        setKey(API_KEY_STORAGE, null as String?)
-    }
-}
