@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:c3ea9a6616d91922a96d68eda66cdf4337ea65f3 -->
+### Refactor load function to simplify headers usage
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [c3ea9a6](https://github.com/Kayracs3/Kayra/commit/c3ea9a6616d91922a96d68eda66cdf4337ea65f3)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:cf4042583357190cd8c53fbcb9d589e3fa750f3b -->
 ### Rename DaddylivePlugin class to DaddyLivePlugin
 
