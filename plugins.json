@@ -109,10 +109,10 @@
     },
     {
         "iconUrl": "https://dlhd.pk/favicon.ico",
-        "fileHash": "sha256-6bf8aa53b9370e215469457d1e2e35829eae7db620a9e949e86eb5278cbe82d6",
+        "fileHash": "sha256-2dd8496c6c8756fde696bdfa2b0f76b573c2aed88098a9470bb5925f5cd4d3b8",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 8363,
+        "fileSize": 8118,
         "status": 1,
         "language": "en",
         "authors": [
