@@ -127,6 +127,11 @@ class Dramadizilerim : MainAPI() {
         val response = app.get(url, headers = browserHeaders + ("Referer" to "$mainUrl/"))
         val doc = response.document
 
+        if (isAgeRestrictedSeries(doc)) {
+            android.util.Log.w("DramaDizilerim", "Yaş sınırı etiketli dizi listelenmedi")
+            return null
+        }
+
         val title = cleanTitle(
             doc.selectFirst("h1")?.text()
                 ?: doc.selectFirst("meta[property=og:title]")?.attr("content")
@@ -160,6 +165,7 @@ class Dramadizilerim : MainAPI() {
                 val fullUrl = fixUrl(href)
                 val ep = Regex("(?:[?&])e=(\\d+)").find(fullUrl)?.groupValues?.get(1)?.toIntOrNull()
                     ?: Regex("(?i)\\bBölüm\\s*(\\d+)").find(a.text())?.groupValues?.get(1)?.toIntOrNull()
+                    ?: Regex("(?i)\\b(\\d+)\\s*\\.\\s*Bölüm\\b").find(a.text())?.groupValues?.get(1)?.toIntOrNull()
                     ?: return@mapNotNull null
 
                 val season = Regex("(?:[?&])s=(\\d+)").find(fullUrl)?.groupValues?.get(1)?.toIntOrNull() ?: 1
@@ -486,6 +492,16 @@ class Dramadizilerim : MainAPI() {
             if (!raw.contains("/dizi/")) return@forEach
             if (raw.contains("/dizi/\"")) return@forEach
 
+            val cardContainer = a.parents().firstOrNull { parent ->
+                parent.tagName() == "article" ||
+                    parent.tagName() == "li" ||
+                    parent.className().contains("card", ignoreCase = true)
+            }
+            val cardText = (cardContainer?.text().orEmpty() + " " + a.text()).trim()
+            if (Regex("(?i)(?:^|\\\\s)\\\\+18(?:\\\\s|$)").containsMatchIn(cardText)) {
+                return@forEach
+            }
+
             val url = fixUrl(raw)
             val title = cleanTitle(
                 firstNonBlank(
@@ -504,6 +520,12 @@ class Dramadizilerim : MainAPI() {
         }
 
         return out.values.toList()
+    }
+
+    private fun isAgeRestrictedSeries(doc: org.jsoup.nodes.Document): Boolean {
+        return doc.select("a, span, li, [class*=tag], [class*=badge], [class*=age]").any { element ->
+            element.text().trim().equals("+18", ignoreCase = true)
+        }
     }
 
     private fun hasNextPage(doc: org.jsoup.nodes.Document, currentPage: Int): Boolean {
