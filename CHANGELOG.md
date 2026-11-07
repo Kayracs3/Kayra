@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:e6517ce4421aa0dc9e660f38d061db2c19e53eab -->
+### Refactor DaddyLiveProvider for improved functionality
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [e6517ce](https://github.com/Kayracs3/Kayra/commit/e6517ce4421aa0dc9e660f38d061db2c19e53eab)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:82079318363282020d0b307021a294a537fba6e8 -->
 ### Update DaddyLive provider with new domain and fixes
 
