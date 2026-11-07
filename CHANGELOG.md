@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:c5750ddc793bf8d9767c20197de58c3dbe3f2be4 -->
+### Refactor response handling in main page and stream load
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [c5750dd](https://github.com/Kayracs3/Kayra/commit/c5750ddc793bf8d9767c20197de58c3dbe3f2be4)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:c3ea9a6616d91922a96d68eda66cdf4337ea65f3 -->
 ### Refactor load function to simplify headers usage
 
