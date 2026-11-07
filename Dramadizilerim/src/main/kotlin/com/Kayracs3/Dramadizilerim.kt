@@ -382,7 +382,7 @@ class Dramadizilerim : MainAPI() {
                     .mapNotNull { it.attr("src").takeIf(String::isNotBlank) }
                     .map(::fixUrl)
                     .forEach { url ->
-                        emitMediaLink(url, iframeUrl, callback)
+                        emitMediaLink(url, iframeUrl, trackedCallback)
                     }
 
                 // 2b) Embed sorgusundaki subtitle URL'si.
@@ -432,7 +432,7 @@ class Dramadizilerim : MainAPI() {
                     }
 
                     tryDecryptMedia(ct, iv, keys).forEach { url ->
-                        emitMediaLink(url, iframeUrl, callback)
+                        emitMediaLink(url, iframeUrl, trackedCallback)
                     }
                 }
             }
@@ -604,8 +604,8 @@ class Dramadizilerim : MainAPI() {
         for (keyName in keyNames) {
             val escapedKey = Regex.escape(keyName)
             val patterns = listOf(
-                Regex("""(?is)["']?$escapedKey["']?\\s*[:=]\\s*["']$uuid["']"""),
-                Regex("""(?is)data-$escapedKey\\s*=\\s*["']$uuid["']""")
+                Regex("""(?is)["']?$escapedKey["']?\s*[:=]\s*["']$uuid["']"""),
+                Regex("""(?is)data-$escapedKey\s*=\s*["']$uuid["']""")
             )
             for (pattern in patterns) {
                 val found = pattern.find(normalizedHtml)?.groupValues?.getOrNull(1)
@@ -633,7 +633,7 @@ class Dramadizilerim : MainAPI() {
         for (container in containers) {
             val escapedContainer = Regex.escape(container)
             val nested = Regex(
-                """(?is)["']$escapedContainer["']\\s*:\\s*\\{[\\s\\S]{0,1500}?["']id["']\\s*:\\s*["']$uuid["']"""
+                """(?is)["']$escapedContainer["']\s*:\s*\\{[\s\S]{0,1500}?["']id["']\s*:\s*["']$uuid["']"""
             ).find(normalizedHtml)?.groupValues?.getOrNull(1)
             if (!nested.isNullOrBlank()) return nested
         }
