@@ -2,12 +2,9 @@ package com.Kayracs3
 
 import android.net.Uri
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
-import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-import org.json.JSONObject
 import java.net.URI
 
 class DaddyLiveProvider : MainAPI() {
@@ -44,115 +41,66 @@ class DaddyLiveProvider : MainAPI() {
     }
 
     private suspend fun getChannels(): List<LiveSearchResponse> {
-        val apiKey = DaddyLiveSettings.getApiKey()
+        val response = app.get(
+            "$mainUrl/24-7-channels.php",
+            headers = requestHeaders(mainUrl),
+            allowRedirects = true
+        )
 
-        if (!apiKey.isNullOrBlank()) {
-            return getChannelsFromApi(apiKey)
+        if (!response.isSuccessful) {
+            throw ErrorLoadingException("DaddyLive kanal sayfası açılamadı.")
         }
 
-        // Eski HTML bağlantıları varsa anahtarsız yedek yöntem olarak kullan.
-        val document = app.get(
-            "$mainUrl/24-7-channels.php",
-            headers = requestHeaders(mainUrl)
-        ).document
-
-        val htmlChannels = document
+        val document = response.document
+        val channels = document
             .select("a[href*='watch.php?id=']")
             .mapNotNull { it.toLiveSearchResponse() }
             .distinctBy { it.url }
 
-        if (htmlChannels.isNotEmpty()) return htmlChannels
+        if (channels.isNotEmpty()) return channels
+
+        // Bazı sayfa sürümlerinde 24/7 liste yerine ana sayfa üzerinden
+        // kanal bağlantıları yayınlanıyor. Aynı herkese açık HTML yapısını dene.
+        val home = app.get(
+            "$mainUrl/index.php",
+            headers = requestHeaders(mainUrl),
+            allowRedirects = true
+        ).document
+
+        val homeChannels = home
+            .select("a[href*='watch.php?id=']")
+            .mapNotNull { it.toLiveSearchResponse() }
+            .distinctBy { it.url }
+
+        if (homeChannels.isNotEmpty()) return homeChannels
 
         throw ErrorLoadingException(
-            "DaddyLive kanal listesi artık korumalı API üzerinden sunuluyor. " +
-                "Site tarafından verilen API anahtarını eklenti ayarlarından girmen gerekiyor."
+            "DaddyLive kanal listesi HTML içinde bulunamadı. " +
+                "Sayfa artık bağlantıları JavaScript ile oluşturuyor olabilir."
         )
-    }
-
-    private suspend fun getChannelsFromApi(apiKey: String): List<LiveSearchResponse> {
-        val apiUrl = mainUrl +
-            "/daddyapi.php?key=" + Uri.encode(apiKey) +
-            "&endpoint=channels"
-
-        val response = app.get(
-            apiUrl,
-            headers = requestHeaders("$mainUrl/api.php")
-        )
-
-        if (!response.isSuccessful) {
-            throw ErrorLoadingException(
-                "DaddyLive kanal API isteği başarısız oldu. HTTP yanıtı: başarısız."
-            )
-        }
-
-        val root = try {
-            JSONObject(response.text)
-        } catch (_: Exception) {
-            throw ErrorLoadingException(
-                "DaddyLive API geçerli JSON döndürmedi. API anahtarını kontrol et."
-            )
-        }
-
-        if (!root.optBoolean("success")) {
-            val message = root.optString("message")
-                .ifBlank { root.optString("error") }
-                .ifBlank { "API anahtarı geçersiz veya erişim izni yok." }
-
-            throw ErrorLoadingException("DaddyLive API: $message")
-        }
-
-        val entries = root.optJSONArray("data")
-            ?: root.optJSONArray("channels")
-            ?: throw ErrorLoadingException(
-                "DaddyLive API yanıtında kanal listesi bulunamadı."
-            )
-
-        val results = mutableListOf<LiveSearchResponse>()
-
-        for (index in 0 until entries.length()) {
-            val item = entries.optJSONObject(index) ?: continue
-
-            val channelId = item.optString("channel_id")
-                .trim()
-                .ifBlank { item.optString("id").trim() }
-
-            val title = item.optString("channel_name")
-                .trim()
-                .ifBlank { item.optString("name").trim() }
-
-            if (channelId.isBlank() || title.isBlank()) continue
-
-            val logo = item.optString("logo_url")
-                .trim()
-                .takeIf { it.isNotBlank() }
-                ?.let { fixUrl(it) }
-
-            val watchUrl = "$mainUrl/watch.php?id=" + Uri.encode(channelId)
-
-            results.add(
-                newLiveSearchResponse(title, watchUrl, TvType.Live) {
-                    this.posterUrl = logo
-                }
-            )
-        }
-
-        if (results.isEmpty()) {
-            throw ErrorLoadingException(
-                "DaddyLive API çalıştı ancak kullanılabilir kanal döndürmedi."
-            )
-        }
-
-        return results.distinctBy { it.url }
     }
 
     private fun Element.toLiveSearchResponse(): LiveSearchResponse? {
-        val title = text().trim()
         val href = attr("href").trim()
+        val title = attr("data-title").trim()
+            .ifBlank { attr("title").trim() }
+            .ifBlank { selectFirst("img")?.attr("alt")?.trim().orEmpty() }
+            .ifBlank { text().trim() }
 
         if (title.isBlank() || href.isBlank()) return null
 
         val fullUrl = fixUrl(href)
-        return newLiveSearchResponse(title, fullUrl, TvType.Live)
+        val logo = selectFirst("img")?.let { image ->
+            image.attr("data-src")
+                .ifBlank { image.attr("data-lazy-src") }
+                .ifBlank { image.attr("src") }
+                .takeIf { it.isNotBlank() }
+                ?.let { fixUrl(it) }
+        }
+
+        return newLiveSearchResponse(title, fullUrl, TvType.Live) {
+            this.posterUrl = logo
+        }
     }
 
     override suspend fun load(url: String): LoadResponse? {
