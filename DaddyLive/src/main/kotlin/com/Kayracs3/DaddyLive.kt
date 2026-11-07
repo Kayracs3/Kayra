@@ -24,7 +24,7 @@ class DaddyLiveProvider : MainAPI() {
         val title = this.text().trim().ifBlank { this.attr("title").trim() }
         val href = this.attr("href")
         if (title.isBlank() || href.isBlank()) return null
-        return newLiveSearchResponse(title, href, this@DaddyLiveProvider.name)
+        return newLiveSearchResponse(title, href, TvType.Live)
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -50,8 +50,7 @@ class DaddyLiveProvider : MainAPI() {
                     return newLiveStreamLoadResponse(
                         url = url,
                         name = document.title(),
-                        dataUrl = m3u8,
-                        apiName = this.name
+                        dataUrl = m3u8
                     )
                 }
             }
@@ -64,8 +63,7 @@ class DaddyLiveProvider : MainAPI() {
         return newLiveStreamLoadResponse(
             url = url,
             name = document.title(),
-            dataUrl = m3u8Url,
-            apiName = this.name
+            dataUrl = m3u8Url
         )
     }
 
