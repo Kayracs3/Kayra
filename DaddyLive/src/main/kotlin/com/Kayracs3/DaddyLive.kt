@@ -48,35 +48,28 @@ class DaddyLiveProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        Log.e(TAG, "========== loadLinks START ==========")
-        Log.e(TAG, "data = $data")
-        
         val watchUrl = data
         val id = watchUrl.substringAfter("id=", "").substringBefore("&")
-        Log.e(TAG, "extracted id = '$id'")
-        
-        if (id.isBlank()) {
-            Log.e(TAG, "FAIL: id is blank")
-            return false
-        }
+        if (id.isBlank()) return false
 
-        // 1. Token fetch
-        Log.e(TAG, "Calling fetchToken...")
-        val tokenData = fetchToken(id)
-        if (tokenData == null) {
-            Log.e(TAG, "FAIL: fetchToken returned null")
+        Log.e(TAG, "loadLinks id=$id")
+
+        val tokenData = fetchToken(id) ?: run {
+            Log.e(TAG, "FAIL: no token")
             return false
         }
         val token = tokenData.first
         val aesKeyB64 = tokenData.second
-        Log.e(TAG, "SUCCESS: token=${token.take(20)}..., key=${aesKeyB64?.take(10)}")
 
-        // 2. m3u8 URL
+        if (aesKeyB64 == null) {
+            Log.e(TAG, "FAIL: no AES key")
+            return false
+        }
+
         val m3u8Url = "$edgeHost/premium$id/index.m3u8?t=$token&_=${System.currentTimeMillis()}"
         Log.e(TAG, "m3u8 URL: $m3u8Url")
 
         try {
-            Log.e(TAG, "Downloading encrypted m3u8...")
             val encryptedM3u8 = app.get(
                 m3u8Url,
                 headers = mapOf(
@@ -86,29 +79,17 @@ class DaddyLiveProvider : MainAPI() {
                 )
             ).text
             Log.e(TAG, "Downloaded m3u8 length=${encryptedM3u8.length}")
-            Log.e(TAG, "First 200 chars: ${encryptedM3u8.take(200)}")
 
-            // 3. Decrypt
             val baseUrl = m3u8Url.substringBefore("?")
-            Log.e(TAG, "Starting decrypt with key=$aesKeyB64")
-            val decryptedM3u8 = if (aesKeyB64 != null) {
-                decryptM3u8(encryptedM3u8, aesKeyB64, baseUrl)
-            } else {
-                Log.e(TAG, "No AES key, using raw")
-                encryptedM3u8
-            }
-            
+            val decryptedM3u8 = decryptM3u8(encryptedM3u8, aesKeyB64, baseUrl)
             if (decryptedM3u8 == null) {
-                Log.e(TAG, "FAIL: decryptM3u8 returned null")
+                Log.e(TAG, "FAIL: decrypt")
                 return false
             }
-            Log.e(TAG, "Decrypted length=${decryptedM3u8.length}")
-            Log.e(TAG, "Decrypted first 300: ${decryptedM3u8.take(300)}")
+            Log.e(TAG, "Decrypted length=${decryptedM3u8.length}, first 100: ${decryptedM3u8.take(100)}")
 
-            // 4. data: URL
             val base64Data = Base64.encodeToString(decryptedM3u8.toByteArray(), Base64.NO_WRAP)
             val dataUrl = "data:application/vnd.apple.mpegurl;base64,$base64Data"
-            Log.e(TAG, "data: URL length=${dataUrl.length}")
 
             callback(
                 newExtractorLink(
@@ -125,39 +106,17 @@ class DaddyLiveProvider : MainAPI() {
                     )
                 }
             )
-            Log.e(TAG, "========== SUCCESS ==========")
+            Log.e(TAG, "SUCCESS - callback called")
             return true
         } catch (e: Exception) {
-            Log.e(TAG, "EXCEPTION in loadLinks: ${e.javaClass.simpleName}: ${e.message}", e)
+            Log.e(TAG, "EXCEPTION: ${e.message}", e)
             return false
         }
     }
 
     private suspend fun fetchToken(channelId: String): Pair<String, String?>? {
-        // Deneme 1: Headers ile
         val url = "$edgeHost/api/playlist-token?slug=premium$channelId"
-        Log.e(TAG, "fetchToken URL: $url")
-        
-        // Önce headers'sız dene
-        try {
-            Log.e(TAG, "Attempt 1: no headers")
-            val response = app.get(url).text
-            Log.e(TAG, "Attempt 1 response (${response.length} chars): ${response.take(200)}")
-            val json = JSONObject(response)
-            val token = json.optString("token", "")
-            val key = json.optString("k", "").ifBlank { null }
-            if (token.isNotBlank()) {
-                Log.e(TAG, "Attempt 1 SUCCESS")
-                return Pair(token, key)
-            }
-            Log.e(TAG, "Attempt 1: token empty")
-        } catch (e: Exception) {
-            Log.e(TAG, "Attempt 1 EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
-        }
-
-        // Deneme 2: Headers ile
-        try {
-            Log.e(TAG, "Attempt 2: with headers")
+        return try {
             val response = app.get(
                 url,
                 headers = mapOf(
@@ -166,45 +125,28 @@ class DaddyLiveProvider : MainAPI() {
                     "User-Agent" to ua
                 )
             ).text
-            Log.e(TAG, "Attempt 2 response: ${response.take(200)}")
             val json = JSONObject(response)
             val token = json.optString("token", "")
             val key = json.optString("k", "").ifBlank { null }
-            if (token.isNotBlank()) {
-                Log.e(TAG, "Attempt 2 SUCCESS")
-                return Pair(token, key)
-            }
+            if (token.isNotBlank()) Pair(token, key) else null
         } catch (e: Exception) {
-            Log.e(TAG, "Attempt 2 EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
+            Log.e(TAG, "fetchToken exception: ${e.message}")
+            null
         }
-
-        // Deneme 3: Farklı slug formatı
-        try {
-            val url2 = "$edgeHost/api/playlist-token?slug=$channelId"
-            Log.e(TAG, "Attempt 3: $url2")
-            val response = app.get(url2).text
-            Log.e(TAG, "Attempt 3 response: ${response.take(200)}")
-            val json = JSONObject(response)
-            val token = json.optString("token", "")
-            val key = json.optString("k", "").ifBlank { null }
-            if (token.isNotBlank()) return Pair(token, key)
-        } catch (e: Exception) {
-            Log.e(TAG, "Attempt 3 EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
-        }
-
-        return null
     }
 
+    /**
+     * AES-GCM decrypt. Tag length ve IV byte order için fallback'li.
+     */
     private fun decryptM3u8(encrypted: String, aesKeyB64: String, baseUrl: String): String? {
         return try {
             val keyBytes = base64UrlDecode(aesKeyB64)
-            Log.e(TAG, "Key decoded: ${keyBytes.size} bytes")
             if (keyBytes.size != 16 && keyBytes.size != 32) {
-                Log.e(TAG, "FAIL: Invalid key size ${keyBytes.size}")
+                Log.e(TAG, "Invalid key size: ${keyBytes.size}")
                 return null
             }
-
             val keySpec = SecretKeySpec(keyBytes, "AES")
+
             val output = StringBuilder()
             var mediaSequence = 0L
             var decryptedCount = 0
@@ -215,34 +157,74 @@ class DaddyLiveProvider : MainAPI() {
                 if (trimmed.startsWith("#")) {
                     if (trimmed.startsWith("#EXT-X-MEDIA-SEQUENCE:")) {
                         mediaSequence = trimmed.substringAfter(":").trim().toLongOrNull() ?: 0L
-                        Log.e(TAG, "mediaSeq=$mediaSequence")
                     }
                     output.append(trimmed).append("\n")
                     continue
                 }
-                try {
-                    val cipherBytes = base64UrlDecode(trimmed)
-                    val iv = createIv(mediaSequence)
-                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                    cipher.init(Cipher.DECRYPT_MODE, keySpec, GCMParameterSpec(64, iv))
-                    val plaintext = cipher.doFinal(cipherBytes)
-                    val plaintextStr = String(plaintext).trim()
-                    val finalUrl = if (plaintextStr.startsWith("http")) plaintextStr
-                        else baseUrl.substringBeforeLast("/") + "/" + plaintextStr
-                    output.append(finalUrl).append("\n")
-                    mediaSequence++
-                    decryptedCount++
-                } catch (e: Exception) {
-                    Log.e(TAG, "Segment decrypt error #$mediaSequence: ${e.javaClass.simpleName}: ${e.message}")
+
+                val cipherBytes = base64UrlDecode(trimmed)
+                Log.e(TAG, "Segment #$mediaSequence: ${cipherBytes.size} bytes")
+
+                val iv = createIv(mediaSequence)
+                val plaintext = tryDecrypt(cipherBytes, keySpec, iv)
+
+                if (plaintext == null) {
+                    Log.e(TAG, "FAIL: segment #$mediaSequence could not be decrypted")
                     return null
                 }
+
+                val plaintextStr = String(plaintext).trim()
+                val finalUrl = if (plaintextStr.startsWith("http")) plaintextStr
+                    else baseUrl.substringBeforeLast("/") + "/" + plaintextStr
+
+                output.append(finalUrl).append("\n")
+                mediaSequence++
+                decryptedCount++
             }
-            Log.e(TAG, "Decrypted $decryptedCount segments total")
+            Log.e(TAG, "Decrypted $decryptedCount segments OK")
             output.toString()
         } catch (e: Exception) {
             Log.e(TAG, "Decrypt FATAL: ${e.javaClass.simpleName}: ${e.message}", e)
             null
         }
+    }
+
+    /**
+     * AES-GCM decrypt denemesi. Sırayla dener:
+     * 1. 128-bit tag (Web Crypto varsayılanı) — EN OLASI
+     * 2. 64-bit tag (JS kodu)
+     * 3. 128-bit tag + Big Endian IV
+     * 4. 64-bit tag + Big Endian IV
+     */
+    private fun tryDecrypt(cipherBytes: ByteArray, keySpec: SecretKeySpec, iv: ByteArray): ByteArray? {
+        val tagBitsOptions = listOf(128, 64, 120, 112, 104, 96)
+        
+        for (tagBits in tagBitsOptions) {
+            try {
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, keySpec, GCMParameterSpec(tagBits, iv))
+                val plaintext = cipher.doFinal(cipherBytes)
+                Log.e(TAG, "Decrypt OK with tagBits=$tagBits")
+                return plaintext
+            } catch (_: Exception) {
+                // sıradakini dene
+            }
+        }
+        
+        // Son çare: son 8 byte'ı tag olarak ayır, kalanı ciphertext
+        try {
+            val tagLen = 8
+            if (cipherBytes.size > tagLen) {
+                val ciphertext = cipherBytes.copyOfRange(0, cipherBytes.size - tagLen)
+                val tag = cipherBytes.copyOfRange(cipherBytes.size - tagLen, cipherBytes.size)
+                val combined = ciphertext + tag
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, keySpec, GCMParameterSpec(64, iv))
+                return cipher.doFinal(combined)
+            }
+        } catch (_: Exception) { }
+
+        return null
     }
 
     private fun createIv(mediaSequence: Long): ByteArray {
