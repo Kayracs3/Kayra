@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:26c3a5e9fe34b1fb5d0b4ad241f71023769c5558 -->
+### Harden DramaDizilerim episode ID detection
+
+- Etkilenen alanlar: Dramadizilerim
+- Commit: [26c3a5e](https://github.com/Kayracs3/Kayra/commit/26c3a5e9fe34b1fb5d0b4ad241f71023769c5558)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:bf675825a5911593c7a018258e7a029c97229107 -->
 ### Fix DramaDizilerim playback ID parsing
 
