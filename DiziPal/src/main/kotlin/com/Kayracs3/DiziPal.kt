@@ -41,7 +41,19 @@ class DiziPal : MainAPI() {
 
     // ================= ANA SAYFA =================
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get("$mainUrl/", headers = headers).document
+        Log.d("DiziPal", "Ana sayfa isteği: $mainUrl/")
+        val homeResponse = try {
+            app.get("$mainUrl/", headers = headers, timeout = 15000, allowRedirects = true)
+        } catch (e: Exception) {
+            Log.e("DiziPal", "Ana sayfa isteği başarısız: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
+        }
+        Log.d("DiziPal", "Ana sayfa HTTP: ${homeResponse.code}, içerik uzunluğu: ${homeResponse.text.length}")
+        if (!homeResponse.isSuccessful) {
+            Log.e("DiziPal", "Ana sayfa HTTP hatası: ${homeResponse.code}")
+            throw ErrorLoadingException("DiziPal ana sayfa HTTP ${homeResponse.code}")
+        }
+        val document = homeResponse.document
         val home = mutableListOf<HomePageList>()
 
         val popular = document.select("div.movie-box, div.detail, article.item, .result-item, .ml-item")
@@ -69,14 +81,38 @@ class DiziPal : MainAPI() {
     // ================= ARAMA =================
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/?s=" + URLEncoder.encode(query, "UTF-8")
-        val document = app.get(url, headers = headers).document
+        Log.d("DiziPal", "Arama isteği: $url")
+        val response = try {
+            app.get(url, headers = headers, timeout = 15000, allowRedirects = true)
+        } catch (e: Exception) {
+            Log.e("DiziPal", "Arama isteği başarısız: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
+        }
+        Log.d("DiziPal", "Arama HTTP: ${response.code}, içerik uzunluğu: ${response.text.length}")
+        if (!response.isSuccessful) {
+            Log.e("DiziPal", "Arama HTTP hatası: ${response.code}")
+            return emptyList()
+        }
+        val document = response.document
         return document.select("div.movie-box, div.detail, article.item, .result-item, .ml-item")
             .mapNotNull { it.toSearchResult() }
     }
 
     // ================= DETAY =================
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, headers = headers).document
+        Log.d("DiziPal", "Detay isteği: $url")
+        val detailResponse = try {
+            app.get(url, headers = headers, timeout = 15000, allowRedirects = true)
+        } catch (e: Exception) {
+            Log.e("DiziPal", "Detay isteği başarısız: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
+        }
+        Log.d("DiziPal", "Detay HTTP: ${detailResponse.code}, içerik uzunluğu: ${detailResponse.text.length}")
+        if (!detailResponse.isSuccessful) {
+            Log.e("DiziPal", "Detay HTTP hatası: ${detailResponse.code}")
+            throw ErrorLoadingException("DiziPal detay HTTP ${detailResponse.code}")
+        }
+        val document = detailResponse.document
         val title = document.selectFirst("h1, .title, .entry-title")?.text()?.trim() ?: "Bilinmeyen"
         val poster = document.selectFirst("div.poster img, .movie-poster img, meta[property=og:image]")?.let {
             it.attr("data-src").ifBlank { it.attr("src") }.ifBlank { it.attr("content") }
@@ -132,10 +168,17 @@ class DiziPal : MainAPI() {
         val sourceUrl = normalizeUrl(data, mainUrl)
         if (sourceUrl.isBlank()) return false
 
+        Log.d("DiziPal", "loadLinks başladı: $sourceUrl")
         val response = runCatching {
             app.get(sourceUrl, headers = headers, referer = "$mainUrl/", timeout = 15000, allowRedirects = true)
+        }.onFailure {
+            Log.e("DiziPal", "Video sayfası isteği başarısız: ${it.javaClass.simpleName}: ${it.message}")
         }.getOrNull() ?: return false
-        if (!response.isSuccessful) return false
+        Log.d("DiziPal", "Video sayfası HTTP: ${response.code}, içerik uzunluğu: ${response.text.length}")
+        if (!response.isSuccessful) {
+            Log.e("DiziPal", "Video sayfası HTTP hatası: ${response.code}")
+            return false
+        }
 
         val document = response.document
         val raw = buildString {
