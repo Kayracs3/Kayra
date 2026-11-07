@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:3f75d2904f2a0d3d3b6c9ea90d3ea3ac4d817ac4 -->
+### DaddyLive derleme uyumsuzluklarını düzelt
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [3f75d29](https://github.com/Kayracs3/Kayra/commit/3f75d2904f2a0d3d3b6c9ea90d3ea3ac4d817ac4)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:27b3b055d15fa5e8948f42a392237e50eacd2ee8 -->
 ### Refactor getMainPage to return HomePageList
 
