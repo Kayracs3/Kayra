@@ -2,6 +2,15 @@
 
 ## 2026-11-07
 
+<!-- kayra-commit:816658ffedfe5cfa8255ca43efe40768332c412c -->
+### Fix DaddyLive unsupported requiresReferer property
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [816658f](https://github.com/Kayracs3/Kayra/commit/816658ffedfe5cfa8255ca43efe40768332c412c)
+
+
+## 2026-11-07
+
 <!-- kayra-commit:99190a2bb69ff9c67eaec34b7a31dfd6b9dfbccf -->
 ### Refactor comments and improve m3u8 extraction logic
 
