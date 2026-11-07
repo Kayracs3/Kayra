@@ -11,38 +11,30 @@ class DaddyLiveProvider : MainAPI() {
     override val hasMainPage = true
     override val supportedTypes = setOf(TvType.Live)
 
-    // ============================================================
-    // 1. ANA SAYFA: 24-7-channels.php sayfasından kanalları çeker
-    // ============================================================
+    private val ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    // CDN'in izin verdiği origin (response header'dan)
+    private val dembedOrigin = "https://dembed.st"
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = app.get("$mainUrl/24-7-channels.php").document
-        val channelElements = document.select("a[href*='/watch.php?id=']")
-        val home = channelElements.mapNotNull { it.toLiveSearchResponse() }
-        return newHomePageResponse(request.name, home)
+        val channels = document.select("a[href*='/watch.php?id=']").mapNotNull { it.toLiveSearchResponse() }
+        return newHomePageResponse(request.name, channels)
     }
 
     private fun Element.toLiveSearchResponse(): LiveSearchResponse? {
-        val title = this.text().trim()
-        val href = this.attr("href")
+        val title = text().trim(); val href = attr("href")
         if (title.isBlank() || href.isBlank()) return null
         val fullUrl = if (href.startsWith("http")) href else "$mainUrl$href"
         return newLiveSearchResponse(title, fullUrl, TvType.Live)
     }
 
-    // ============================================================
-    // 2. KANAL DETAYI: load() sadece kanal bilgisini döndürür
-    // ============================================================
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url, headers = mapOf("Referer" to mainUrl)).document
-        return newLiveStreamLoadResponse(
-            url = url,
-            name = document.title(),
-            dataUrl = url
-        )
+        val doc = app.get(url, headers = mapOf("Referer" to mainUrl)).document
+        return newLiveStreamLoadResponse(url = url, name = doc.title(), dataUrl = url)
     }
 
     // ============================================================
-    // 3. YAYIN LİNKİ ÇIKARMA VE OYNATMA: loadLinks()
+    // ANA MANTIK: 7 player yolu × çoklu iframe derinliği
     // ============================================================
     override suspend fun loadLinks(
         data: String,
@@ -51,113 +43,115 @@ class DaddyLiveProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val watchUrl = data
-        var masterM3u8Url: String? = null
+        val id = watchUrl.substringAfter("id=", "").substringBefore("&")
+        if (id.isBlank()) return false
 
-        // --- 1. AŞAMA: watch.php sayfasından master m3u8 linkini bul ---
-        val watchDoc = app.get(watchUrl, headers = mapOf("Referer" to mainUrl)).document
-        val iframeSrc = watchDoc.selectFirst("iframe[src]")?.attr("src")
+        // 7 farklı player yolu
+        val playerPaths = listOf("stream", "cast", "watch", "plus", "casting", "player", "hub")
 
-        if (!iframeSrc.isNullOrBlank()) {
-            val iframeDoc = app.get(iframeSrc, headers = mapOf("Referer" to watchUrl)).document
-            masterM3u8Url = extractM3u8(iframeDoc.html())
-            if (masterM3u8Url.isNullOrBlank()) {
-                val nestedIframe = iframeDoc.selectFirst("iframe[src]")?.attr("src")
-                if (!nestedIframe.isNullOrBlank()) {
-                    val nestedDoc = app.get(nestedIframe, headers = mapOf("Referer" to iframeSrc)).document
-                    masterM3u8Url = extractM3u8(nestedDoc.html())
-                }
-            }
+        for (path in playerPaths) {
+            val streamPageUrl = "$mainUrl/$path/stream-$id.php"
+            val found = tryToExtract(streamPageUrl, watchUrl, path, callback)
+            if (found) return true
         }
+        return false
+    }
 
-        if (masterM3u8Url.isNullOrBlank()) {
-            masterM3u8Url = extractM3u8(watchDoc.html())
-        }
-
-        if (masterM3u8Url.isNullOrBlank()) {
-            val id = watchUrl.substringAfter("id=", "").substringBefore("&")
-            if (id.isNotBlank()) {
-                val streamUrl = "$mainUrl/stream/stream-$id.php"
-                try {
-                    val streamDoc = app.get(streamUrl, headers = mapOf("Referer" to watchUrl)).document
-                    val streamIframe = streamDoc.selectFirst("iframe[src]")?.attr("src")
-                    if (!streamIframe.isNullOrBlank()) {
-                        val streamIframeDoc = app.get(streamIframe, headers = mapOf("Referer" to streamUrl)).document
-                        masterM3u8Url = extractM3u8(streamIframeDoc.html())
-                    }
-                    if (masterM3u8Url.isNullOrBlank()) {
-                        masterM3u8Url = extractM3u8(streamDoc.html())
-                    }
-                } catch (_: Exception) { /* yoksay */ }
-            }
-        }
-
-        if (masterM3u8Url.isNullOrBlank()) return false
-
-        // --- 2. AŞAMA: Ana liste (master) ise içindeki ALT liste (media) URL'sini bul ---
-        var finalM3u8Url = masterM3u8Url
-        try {
-            // Ana listeyi indirirken de doğru başlıkları gönder
-            val masterContent = app.get(
-                masterM3u8Url!!,
+    /**
+     * Bir player sayfasını açar, iframe'lerin içine iner, token'lı m3u8 arar.
+     */
+    private suspend fun tryToExtract(
+        streamPageUrl: String,
+        watchUrl: String,
+        label: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        return try {
+            // 1. Player sayfasını çek
+            val pageDoc = app.get(
+                streamPageUrl,
                 headers = mapOf(
                     "Referer" to watchUrl,
                     "Origin" to mainUrl,
-                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    "User-Agent" to ua
                 )
-            ).text
+            ).document
 
-            // Eğer içerikte "#EXT-X-STREAM-INF" varsa, bu bir ana listedir.
-            if (masterContent.contains("#EXT-X-STREAM-INF")) {
-                val lines = masterContent.lines()
-                for (i in lines.indices) {
-                    if (lines[i].contains("#EXT-X-STREAM-INF")) {
-                        // Genellikle URL bir sonraki satırdadır
-                        for (j in i + 1 until lines.size) {
-                            val potentialUrl = lines[j].trim()
-                            if (potentialUrl.isNotBlank() && !potentialUrl.startsWith("#")) {
-                                finalM3u8Url = if (potentialUrl.startsWith("http")) {
-                                    potentialUrl
-                                } else {
-                                    // Göreceli URL'yi ana URL'nin temelini alarak birleştir
-                                    masterM3u8Url!!.substringBeforeLast("/") + "/" + potentialUrl
-                                }
-                                break
-                            }
-                        }
-                        if (finalM3u8Url != masterM3u8Url) break
-                    }
+            // 2. Sayfa kaynağında token'lı/token'sız m3u8 var mı?
+            extractM3u8(pageDoc.html())?.let { url ->
+                callback(buildLink(label, url, dembedOrigin + "/"))
+                return true
+            }
+
+            // 3. Iframe varsa içine gir (derinlik 3'e kadar)
+            var iframeUrl = pageDoc.selectFirst("iframe[src]")?.attr("src")
+            var referer = streamPageUrl
+            var depth = 0
+
+            while (!iframeUrl.isNullOrBlank() && depth < 3) {
+                val doc = try {
+                    app.get(
+                        iframeUrl,
+                        headers = mapOf(
+                            "Referer" to referer,
+                            "Origin" to dembedOrigin,
+                            "User-Agent" to ua
+                        )
+                    ).document
+                } catch (_: Exception) { return false }
+
+                // Iframe içinde m3u8
+                extractM3u8(doc.html())?.let { url ->
+                    callback(buildLink(label, url, dembedOrigin + "/"))
+                    return true
+                }
+
+                // Alt iframe'e in
+                val nested = doc.selectFirst("iframe[src]")?.attr("src")
+                if (!nested.isNullOrBlank()) {
+                    referer = iframeUrl!!
+                    iframeUrl = nested
+                    depth++
+                } else {
+                    break
                 }
             }
+            false
         } catch (_: Exception) {
-            // Ana liste indirilemezse, doğrudan master URL'sini denemeye devam et
+            false
         }
-
-        // --- 3. AŞAMA: Oynatıcıya sunulacak ExtractorLink'i oluştur ---
-        if (!finalM3u8Url.isNullOrBlank()) {
-            callback(
-                newExtractorLink(
-                    source = this.name,
-                    name = this.name,
-                    url = finalM3u8Url,
-                    type = ExtractorLinkType.M3U8
-                ) {
-                    this.referer = watchUrl
-                    this.headers = mapOf(
-                        "Referer" to watchUrl,
-                        "Origin" to mainUrl,
-                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    )
-                }
-            )
-        }
-        return true
     }
 
     // ============================================================
-    // YARDIMCI FONKSİYON
+    // ExtractorLink oluşturma — DOĞRU Origin: dembed.st
     // ============================================================
+    private fun buildLink(label: String, url: String, referer: String): ExtractorLink {
+        return newExtractorLink(
+            source = this.name,
+            name = "${this.name} - $label",
+            url = url,
+            type = ExtractorLinkType.M3U8
+        ) {
+            this.referer = referer
+            this.headers = mapOf(
+                "Referer" to referer,
+                "Origin" to dembedOrigin,      // ✅ CDN'in izin verdiği origin
+                "User-Agent" to ua,
+                "Accept" to "*/*"
+            )
+        }
+    }
+
+    /**
+     * HTML içinde m3u8 arar. Önce token'lı (?t=...), sonra token'sız.
+     */
     private fun extractM3u8(html: String): String? {
-        val regex = Regex("""(https?://[^\s"']+\.m3u8[^\s"']*)""")
-        return regex.find(html)?.value
+        // 1. Token'lı: .m3u8?t=...&_=...
+        Regex("""(https?://[^\s"'<>]+\.m3u8\?[^\s"'<>]*t=[^\s"'<>]*)""")
+            .find(html)?.value?.let { return it }
+        // 2. Token'sız: .m3u8
+        Regex("""(https?://[^\s"'<>]+\.m3u8[^\s"'<>]*)""")
+            .find(html)?.value?.let { return it }
+        return null
     }
 }
