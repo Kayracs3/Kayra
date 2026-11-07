@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:f822f7e40892043d67137b3c97cd17adba8a3196 -->
+### DaddyLive: exclude adult and gambling-related channels
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [f822f7e](https://github.com/Kayracs3/Kayra/commit/f822f7e40892043d67137b3c97cd17adba8a3196)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:d2b908828743f66e118783f2efe65399773218ff -->
 ### DaddyLive: filter adult channels from listings and playback
 
