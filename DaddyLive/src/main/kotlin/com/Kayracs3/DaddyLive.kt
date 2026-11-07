@@ -42,7 +42,7 @@ class DaddyLiveProvider : MainAPI() {
     }
 
     // ============================================================
-    // 3. YAYIN LİNKİ ÇIKARMA: loadLinks() fonksiyonu
+    // 3. YAYIN LİNKİ ÇIKARMA VE OYNATMA: loadLinks()
     // ============================================================
     override suspend fun loadLinks(
         data: String,
@@ -60,8 +60,6 @@ class DaddyLiveProvider : MainAPI() {
         if (!iframeSrc.isNullOrBlank()) {
             val iframeDoc = app.get(iframeSrc, headers = mapOf("Referer" to watchUrl)).document
             masterM3u8Url = extractM3u8(iframeDoc.html())
-
-            // İç içe iframe kontrolü
             if (masterM3u8Url.isNullOrBlank()) {
                 val nestedIframe = iframeDoc.selectFirst("iframe[src]")?.attr("src")
                 if (!nestedIframe.isNullOrBlank()) {
@@ -71,12 +69,10 @@ class DaddyLiveProvider : MainAPI() {
             }
         }
 
-        // Doğrudan watch.php sayfasında m3u8 ara
         if (masterM3u8Url.isNullOrBlank()) {
             masterM3u8Url = extractM3u8(watchDoc.html())
         }
 
-        // stream-{id}.php formatını dene
         if (masterM3u8Url.isNullOrBlank()) {
             val id = watchUrl.substringAfter("id=", "").substringBefore("&")
             if (id.isNotBlank()) {
@@ -97,24 +93,32 @@ class DaddyLiveProvider : MainAPI() {
 
         if (masterM3u8Url.isNullOrBlank()) return false
 
-        // --- 2. AŞAMA: Ana liste ise içindeki ALT liste URL'sini bul ---
+        // --- 2. AŞAMA: Ana liste (master) ise içindeki ALT liste (media) URL'sini bul ---
         var finalM3u8Url = masterM3u8Url
         try {
+            // Ana listeyi indirirken de doğru başlıkları gönder
             val masterContent = app.get(
                 masterM3u8Url!!,
-                headers = mapOf("Referer" to watchUrl, "Origin" to mainUrl)
+                headers = mapOf(
+                    "Referer" to watchUrl,
+                    "Origin" to mainUrl,
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
             ).text
 
+            // Eğer içerikte "#EXT-X-STREAM-INF" varsa, bu bir ana listedir.
             if (masterContent.contains("#EXT-X-STREAM-INF")) {
                 val lines = masterContent.lines()
                 for (i in lines.indices) {
                     if (lines[i].contains("#EXT-X-STREAM-INF")) {
+                        // Genellikle URL bir sonraki satırdadır
                         for (j in i + 1 until lines.size) {
                             val potentialUrl = lines[j].trim()
                             if (potentialUrl.isNotBlank() && !potentialUrl.startsWith("#")) {
                                 finalM3u8Url = if (potentialUrl.startsWith("http")) {
                                     potentialUrl
                                 } else {
+                                    // Göreceli URL'yi ana URL'nin temelini alarak birleştir
                                     masterM3u8Url!!.substringBeforeLast("/") + "/" + potentialUrl
                                 }
                                 break
@@ -125,10 +129,10 @@ class DaddyLiveProvider : MainAPI() {
                 }
             }
         } catch (_: Exception) {
-            // Ana liste indirilemezse master URL'sini dene
+            // Ana liste indirilemezse, doğrudan master URL'sini denemeye devam et
         }
 
-        // --- 3. AŞAMA: Oynatıcıya ExtractorLink sun ---
+        // --- 3. AŞAMA: Oynatıcıya sunulacak ExtractorLink'i oluştur ---
         if (!finalM3u8Url.isNullOrBlank()) {
             callback(
                 newExtractorLink(
