@@ -1,11 +1,11 @@
 version = 1
 
 cloudstream {
-    description = "Türkiye katalog ve bölüm sağlayıcısı"
+    description = "Canlıtv eklentisi"
     authors = listOf("Kayracs3")
     status = 1
     tvTypes = listOf("Live")
-    language = "tr"
+    language = "en"
     iconUrl = "https://dlhd.pk/favicon.ico"
 }
 
