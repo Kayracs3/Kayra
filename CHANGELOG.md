@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:7a9e14b8f12e41be8fa400ae4533fa0949e9f07b -->
+### Reduce HDFilmCehennemi Android TV resource usage
+
+- Etkilenen alanlar: HDFilmCehennemi
+- Commit: [7a9e14b](https://github.com/Kayracs3/Kayra/commit/7a9e14b8f12e41be8fa400ae4533fa0949e9f07b)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:a5312af73fd88dccbae57bb2cc78b238cfe2a6bc -->
 ### Use supported Requests API in FilmKutusu
 
