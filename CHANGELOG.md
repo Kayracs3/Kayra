@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:a4e6b740ec6406c37325a981032c3b9747526a0b -->
+### Fix Kotlin dependency mirror repository placement
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [a4e6b74](https://github.com/Kayracs3/Kayra/commit/a4e6b740ec6406c37325a981032c3b9747526a0b)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:86836d58b3ec9bf58caeb327570c83f61bd7082d -->
 ### Use independent Maven mirrors for Kotlin compiler
 
