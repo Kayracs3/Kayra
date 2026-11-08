@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:cfb1ffce228bc99a9ae84ba5c0815731cef80fd7 -->
+### Add DiziBox provider
+
+- Etkilenen alanlar: DiziBox
+- Commit: [cfb1ffc](https://github.com/Kayracs3/Kayra/commit/cfb1ffce228bc99a9ae84ba5c0815731cef80fd7)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:91f0bc66047668c6418c5cdb60cbca43c9045dbf -->
 ### DiziPal: preserve genre labels and resolve actor portraits
 
