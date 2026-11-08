@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:6ccfc615c16a4f7e332b8c48abf2d49c6b12fee0 -->
+### DiziPal: fix posters titles IMDb and season episode parsing
+
+- Etkilenen alanlar: DiziPal
+- Commit: [6ccfc61](https://github.com/Kayracs3/Kayra/commit/6ccfc615c16a4f7e332b8c48abf2d49c6b12fee0)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:3d25ac3ca53bfbc972f215822084c4765c411787 -->
 ### DiziPal: yalnızca platform bölümleri kategorilerini göster
 
