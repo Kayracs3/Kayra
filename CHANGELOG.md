@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:a0e142b5b0ab56c9f70dd0257c89114e7558be0d -->
+### Mark MolyStream Sheila endpoint as HLS
+
+- Etkilenen alanlar: DiziBox
+- Commit: [a0e142b](https://github.com/Kayracs3/Kayra/commit/a0e142b5b0ab56c9f70dd0257c89114e7558be0d)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:27cb064effb71a315823912b892af0a2bcd439ed -->
 ### Add DiziBox King player support
 
