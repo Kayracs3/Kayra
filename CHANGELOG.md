@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:13066174b24de0e8968ae6f4cda370fcfc787447 -->
+### Update mainUrl to new DiziLife URL
+
+- Etkilenen alanlar: DiziLife
+- Commit: [1306617](https://github.com/Kayracs3/Kayra/commit/13066174b24de0e8968ae6f4cda370fcfc787447)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:7c3647c7806f5c6e6974cf700d15c89a67fd4955 -->
 ### Retry transient Gradle distribution download
 
