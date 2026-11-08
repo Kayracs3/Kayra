@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:fc48120280fe0a8c8e9de56369f75f90702e343d -->
+### Resolve MolyStream embeds through extractors
+
+- Etkilenen alanlar: DiziBox
+- Commit: [fc48120](https://github.com/Kayracs3/Kayra/commit/fc48120280fe0a8c8e9de56369f75f90702e343d)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:a0e142b5b0ab56c9f70dd0257c89114e7558be0d -->
 ### Mark MolyStream Sheila endpoint as HLS
 
