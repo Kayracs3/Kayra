@@ -583,29 +583,11 @@ class DiziBox : MainAPI() {
             return false
         }
 
-        // King'in çözdüğü hedef MolyStream /embed sayfasıysa bu bir medya dosyası değil,
-        // oynatıcı HTML'idir. CloudStream extractor'ı gerçek M3U8 adresine kadar çözmelidir.
-        if (mediaUrl.contains("/embed/", true) || !isMediaUrl(mediaUrl)) {
-            var extracted = false
-            runCatching {
-                loadExtractor(mediaUrl, iframeUrl, subtitleCallback) { link ->
-                    callback(link)
-                    extracted = true
-                }
-            }.onFailure {
-                Log.e("DiziBox", "MolyStream extractor hatası: " + it.javaClass.simpleName)
-            }
-
-            if (!extracted) {
-                Log.e("DiziBox", "MolyStream embed sayfasından gerçek medya bağlantısı çıkarılamadı.")
-            } else {
-                Log.d("DiziBox", "MolyStream embed sayfası CloudStream extractor ile çözüldü.")
-            }
-            return extracted
-        }
-
+        // MolyStream /embed/sheila endpoint'i HTML değil, JWPlayer'da
+        // application/vnd.apple.mpegurl olarak kullanılan doğrudan HLS kaynağıdır.
         val type = when {
-            mediaUrl.contains(".m3u8", true) -> ExtractorLinkType.M3U8
+            mediaUrl.contains("/embed/sheila/", true) || mediaUrl.contains(".m3u8", true) ->
+                ExtractorLinkType.M3U8
             mediaUrl.contains(".mpd", true) -> ExtractorLinkType.DASH
             else -> ExtractorLinkType.VIDEO
         }
@@ -618,7 +600,7 @@ class DiziBox : MainAPI() {
                 "Referer" to iframeUrl
             )
         })
-        Log.d("DiziBox", "King doğrudan medya bağlantısı çıkarıldı: " + type)
+        Log.d("DiziBox", "King medya bağlantısı çıkarıldı: " + type)
         return true
     }
 
