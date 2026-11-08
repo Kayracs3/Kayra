@@ -1,6 +1,7 @@
 package com.Kayracs3
 
 import android.util.Log
+import android.util.Base64
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.newSubtitleFile
@@ -13,6 +14,10 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Document
 import java.net.URI
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import java.net.URLEncoder
 
 class DiziBox : MainAPI() {
@@ -462,6 +467,139 @@ class DiziBox : MainAPI() {
         return lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".mpd")
     }
 
+
+
+    // DiziBox King oynatıcısı, AES-CBC ile şifrelenmiş bir medya adresi döndürüyor.
+    private fun decryptKingPayload(password: String, encryptedText: String): String? =
+        runCatching {
+            val bytes = Base64.decode(encryptedText, Base64.DEFAULT)
+            require(bytes.size > 16)
+            require(String(bytes, 0, 8, Charsets.US_ASCII) == "Salted__")
+
+            val salt = bytes.copyOfRange(8, 16)
+            val ciphertext = bytes.copyOfRange(16, bytes.size)
+            val passwordBytes = password.toByteArray(Charsets.UTF_8)
+            val derived = ByteArray(48)
+            var previous = ByteArray(0)
+            var offset = 0
+
+            while (offset < derived.size) {
+                val md5 = MessageDigest.getInstance("MD5")
+                md5.update(previous)
+                md5.update(passwordBytes)
+                md5.update(salt)
+                previous = md5.digest()
+
+                val copyLength = minOf(previous.size, derived.size - offset)
+                System.arraycopy(previous, 0, derived, offset, copyLength)
+                offset += copyLength
+            }
+
+            val key = derived.copyOfRange(0, 32)
+            val iv = derived.copyOfRange(32, 48)
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                SecretKeySpec(key, "AES"),
+                IvParameterSpec(iv)
+            )
+            String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+        }.onFailure {
+            Log.e("DiziBox", "King verisi çözümlenemedi: " + it.javaClass.simpleName)
+        }.getOrNull()
+
+    private suspend fun handleKingPlayer(
+        playerUrl: String,
+        episodeUrl: String,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val kingUrl = if (playerUrl.contains("king.php?", true) &&
+            !playerUrl.contains("wmode=", true)
+        ) {
+            playerUrl.replace("king.php?", "king.php?wmode=opaque&")
+        } else {
+            playerUrl
+        }
+
+        val kingDocument = getDocument(kingUrl, episodeUrl) ?: return false
+        val iframeElement = kingDocument.selectFirst(
+            "div#Player iframe[src], div#Player iframe[data-src], #Player iframe[src], #Player iframe[data-src]"
+        )
+        val iframeRaw = iframeElement?.attr("src").orEmpty()
+            .ifBlank { iframeElement?.attr("data-src").orEmpty() }
+        val iframeUrl = normalizeUrl(iframeRaw, kingUrl)
+        if (iframeUrl.isNullOrBlank()) {
+            Log.e("DiziBox", "King oynatıcı sayfasında iç iframe bulunamadı.")
+            return false
+        }
+
+        val iframeResponse = runCatching {
+            app.get(
+                iframeUrl,
+                headers = requestHeaders,
+                referer = "$mainUrl/",
+                timeout = 20000,
+                allowRedirects = true
+            )
+        }.onFailure {
+            Log.e("DiziBox", "King iframe isteği başarısız: " + it.javaClass.simpleName)
+        }.getOrNull() ?: return false
+
+        if (!iframeResponse.isSuccessful) {
+            Log.e("DiziBox", "King iframe HTTP " + iframeResponse.code)
+            return false
+        }
+
+        val iframeHtml = iframeResponse.text
+        val encryptedCall = Regex(
+            """(?is)CryptoJS\s*\.\s*AES\s*\.\s*decrypt\s*\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)"""
+        ).find(iframeHtml)
+
+        if (encryptedCall == null) {
+            Log.e("DiziBox", "King iframe içinde AES medya verisi bulunamadı.")
+            return false
+        }
+
+        val decrypted = decryptKingPayload(
+            encryptedCall.groupValues[2],
+            encryptedCall.groupValues[1]
+        ) ?: return false
+
+        val mediaRaw = Regex("""(?is)\bfile\s*:\s*["']([^"']+)["']""")
+            .find(decrypted)?.groupValues?.get(1)
+            ?.replace("\\/", "/")
+            ?.replace("&amp;", "&")
+            ?: run {
+                val mediaDocument = org.jsoup.Jsoup.parse(decrypted)
+                mediaDocument.selectFirst("video source[src], video[src]")?.let {
+                    it.attr("src")
+                }
+            }
+
+        val mediaUrl = normalizeUrl(mediaRaw, iframeUrl)
+        if (mediaUrl.isNullOrBlank()) {
+            Log.e("DiziBox", "King oynatıcı çözüldü ancak medya adresi bulunamadı.")
+            return false
+        }
+
+        val type = when {
+            mediaUrl.contains(".m3u8", true) -> ExtractorLinkType.M3U8
+            mediaUrl.contains(".mpd", true) -> ExtractorLinkType.DASH
+            else -> ExtractorLinkType.VIDEO
+        }
+
+        callback(newExtractorLink(name, "DiziBox King", mediaUrl, type) {
+            referer = iframeUrl
+            quality = Qualities.Unknown.value
+            headers = mapOf(
+                "User-Agent" to requestHeaders["User-Agent"].orEmpty(),
+                "Referer" to iframeUrl
+            )
+        })
+        Log.d("DiziBox", "King oynatıcı bağlantısı çıkarıldı: " + type)
+        return true
+    }
+
     private suspend fun handleNestedPlayerDocument(
         document: Document,
         pageUrl: String,
@@ -484,7 +622,9 @@ class DiziBox : MainAPI() {
         }.distinct()
 
         for (target in targets) {
-            if (isMediaUrl(target)) {
+            if (target.contains("/player/king/king.php", true)) {
+                if (handleKingPlayer(target, pageUrl, callback)) found = true
+            } else if (isMediaUrl(target)) {
                 val type = when {
                     target.contains(".mpd", true) -> ExtractorLinkType.DASH
                     target.contains(".m3u8", true) -> ExtractorLinkType.M3U8
@@ -552,6 +692,8 @@ class DiziBox : MainAPI() {
                     quality = Qualities.Unknown.value
                 })
                 found = true
+            } else if (target.contains("/player/king/king.php", true)) {
+                if (handleKingPlayer(target, pageUrl, callback)) found = true
             } else if (!isSiteUrl(target)) {
                 runCatching {
                     loadExtractor(target, pageUrl, subtitleCallback) { link ->
