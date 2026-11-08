@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:86836d58b3ec9bf58caeb327570c83f61bd7082d -->
+### Use independent Maven mirrors for Kotlin compiler
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [86836d5](https://github.com/Kayracs3/Kayra/commit/86836d58b3ec9bf58caeb327570c83f61bd7082d)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:38085c7683e3c8195d0a09cc73e10cfa4fefaa20 -->
 ### Resolve Kotlin Gradle plugin from Maven Central
 
