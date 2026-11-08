@@ -8,7 +8,6 @@ import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.nicehttp.Requests
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -40,9 +39,6 @@ class FilmKutusu : MainAPI() {
 
     // >>> WebViewResolver entegrasyonu: "Verifying" ekranını aşar
     private val requests = Requests()
-    private val webViewResolver = WebViewResolver(
-        Regex("https://filmkoridoru\\.com/.*")
-    )
 
     // -----------------------------------------------------------------
     // URL YARDIMCILARI
@@ -149,8 +145,7 @@ class FilmKutusu : MainAPI() {
                 url,
                 headers = pageHeaders,
                 referer = "$mainUrl/",
-                allowRedirects = true,
-                interceptor = webViewResolver
+                allowRedirects = true
             ).document
         }.getOrNull() ?: return newHomePageResponse(request.name, emptyList(), false)
 
@@ -170,8 +165,7 @@ class FilmKutusu : MainAPI() {
                 searchUrl,
                 headers = pageHeaders,
                 referer = "$mainUrl/",
-                allowRedirects = true,
-                interceptor = webViewResolver
+                allowRedirects = true
             ).document
         }.getOrNull() ?: return emptyList()
 
@@ -192,8 +186,7 @@ class FilmKutusu : MainAPI() {
                 pageUrl,
                 headers = pageHeaders,
                 referer = "$mainUrl/",
-                allowRedirects = true,
-                interceptor = webViewResolver
+                allowRedirects = true
             ).document
         }.getOrNull() ?: return null
 
@@ -301,8 +294,7 @@ class FilmKutusu : MainAPI() {
                 data,
                 headers = pageHeaders,
                 referer = "$mainUrl/",
-                allowRedirects = true,
-                interceptor = webViewResolver
+                allowRedirects = true
             ).document
         }.getOrNull() ?: return false
 
