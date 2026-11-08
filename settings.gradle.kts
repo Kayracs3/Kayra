@@ -19,7 +19,8 @@ dependencyResolutionManagement {
 rootProject.name = "CloudstreamPlugins"
 
 val disabled = setOf(
-    "__Temel"
+    "__Temel",
+    "DaddyLive"
 )
 
 rootDir
