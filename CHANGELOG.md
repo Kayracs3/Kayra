@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:3d25ac3ca53bfbc972f215822084c4765c411787 -->
+### DiziPal: yalnızca platform bölümleri kategorilerini göster
+
+- Etkilenen alanlar: DiziPal
+- Commit: [3d25ac3](https://github.com/Kayracs3/Kayra/commit/3d25ac3ca53bfbc972f215822084c4765c411787)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:114b6bdceda1d9a04cf384e85225e9cfaf22a07b -->
 ### Fix HDFilmCehennemi Score import
 
