@@ -107,7 +107,21 @@ jobs:
           echo ""
           echo "Gradle:"
           chmod +x gradlew
-          ./gradlew --version
+
+          # Gradle dagitim sunucusundaki gecici 5xx/504 hatalarina karsi tekrar dene.
+          for attempt in 1 2 3; do
+            echo "Gradle dagitimi kontrol denemesi: $attempt/3"
+            if ./gradlew --version; then
+              break
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "HATA: Gradle 8.9 uc denemede indirilemedi."
+              exit 1
+            fi
+
+            sleep 10
+          done
 
           echo ""
           echo "Plugin local Maven'a kuruluyor..."
