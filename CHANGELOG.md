@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:59cc3c142cdb5a6578248ea0e3cfc47e4bef3c73 -->
+### Fix DiziBox metadata null handling and trailer
+
+- Etkilenen alanlar: DiziBox
+- Commit: [59cc3c1](https://github.com/Kayracs3/Kayra/commit/59cc3c142cdb5a6578248ea0e3cfc47e4bef3c73)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:cfb1ffce228bc99a9ae84ba5c0815731cef80fd7 -->
 ### Add DiziBox provider
 
