@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:f23f7b3f5c5362be7f165fe62882426641a780a3 -->
+### DiziPal: restore genres cast portraits and similar titles
+
+- Etkilenen alanlar: DiziPal
+- Commit: [f23f7b3](https://github.com/Kayracs3/Kayra/commit/f23f7b3f5c5362be7f165fe62882426641a780a3)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:7349e3ad50f01fea052a53da29895316cd24720f -->
 ### DiziPal: correct log interpolation in parser
 
