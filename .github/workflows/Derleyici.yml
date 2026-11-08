@@ -99,6 +99,20 @@ jobs:
 
           git checkout 81b1d424d236a447d9f2e95a229faef79002f761
 
+          # GitHub release yönlendirmesindeki 504 hatalarını azaltmak için
+          # Gradle'ın doğrudan dağıtım sunucusunu kullan ve indirme zaman aşımını artır.
+          sed -i 's#services.gradle.org/distributions/#downloads.gradle.org/distributions/#' gradle/wrapper/gradle-wrapper.properties
+          if ! grep -q '^networkTimeout=' gradle/wrapper/gradle-wrapper.properties; then
+            echo 'networkTimeout=120000' >> gradle/wrapper/gradle-wrapper.properties
+          else
+            sed -i 's/^networkTimeout=.*/networkTimeout=120000/' gradle/wrapper/gradle-wrapper.properties
+          fi
+
+          echo "Gradle dağıtım adresi:"
+          grep '^distributionUrl=' gradle/wrapper/gradle-wrapper.properties
+          echo "Gradle indirme zaman aşımı:"
+          grep '^networkTimeout=' gradle/wrapper/gradle-wrapper.properties
+
           echo ""
           echo "CloudStream Gradle commit:"
           git rev-parse HEAD
