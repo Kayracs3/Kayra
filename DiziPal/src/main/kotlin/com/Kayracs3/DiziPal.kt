@@ -24,6 +24,16 @@ class DiziPal : MainAPI() {
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Movie)
     override val vpnStatus = VPNStatus.None
 
+    // Yalnızca /platform-bolumler sayfasındaki "Tümü" bağlantılarının hedefleri.
+    override val mainPage = mainPageOf(
+        "$mainUrl/kategori/dram" to "Dram",
+        "$mainUrl/kategori/suc" to "Suç",
+        "$mainUrl/kategori/komedi" to "Komedi",
+        "$mainUrl/kategori/gizem" to "Gizem",
+        "$mainUrl/kategori/aksiyon-macera" to "Aksiyon ve Macera",
+        "$mainUrl/kategori/bilim-kurgu-fantazi" to "Bilim Kurgu ve Fantastik",
+    )
+
     companion object {
         private const val USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
@@ -39,36 +49,34 @@ class DiziPal : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en;q=0.8",
     )
 
-    // ================= ANA SAYFA =================
+    // ================= KATEGORİ SAYFALARI =================
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        Log.d("DiziPal", "Ana sayfa isteği: $mainUrl/")
-        val homeResponse = try {
-            app.get("$mainUrl/", headers = headers, timeout = 15000, allowRedirects = true)
-        } catch (e: Exception) {
-            Log.e("DiziPal", "Ana sayfa isteği başarısız: ${e.javaClass.simpleName}: ${e.message}")
-            throw e
-        }
-        Log.d("DiziPal", "Ana sayfa HTTP: ${homeResponse.code}, içerik uzunluğu: ${homeResponse.text.length}")
-        if (!homeResponse.isSuccessful) {
-            Log.e("DiziPal", "Ana sayfa HTTP hatası: ${homeResponse.code}")
-            throw ErrorLoadingException("DiziPal ana sayfa HTTP ${homeResponse.code}")
+        val baseUrl = request.data.trimEnd('/')
+        val pageUrl = if (page <= 1) request.data else "$baseUrl?page=$page"
+
+        Log.d("DiziPal", "Kategori isteği: ${request.name} -> $pageUrl")
+        val response = runCatching {
+            app.get(pageUrl, headers = headers, timeout = 15000, allowRedirects = true)
+        }.onFailure {
+            Log.e("DiziPal", "Kategori isteği başarısız: ${it.javaClass.simpleName}: ${it.message}")
+        }.getOrNull() ?: return newHomePageResponse(request.name, emptyList(), hasNext = false)
+
+        Log.d("DiziPal", "Kategori HTTP: ${response.code}, içerik uzunluğu: ${response.text.length}")
+        if (!response.isSuccessful) {
+            Log.e("DiziPal", "Kategori HTTP hatası: ${response.code}")
+            return newHomePageResponse(request.name, emptyList(), hasNext = false)
         }
 
-        val document = homeResponse.document
+        val document = response.document
         val results = document.select("a[href]")
+            .filter { link -> link.selectFirst("img") != null || link.parent()?.selectFirst("img") != null }
             .mapNotNull { it.toSearchResult() }
             .distinctBy { it.url }
             .take(40)
 
-        Log.d("DiziPal", "Ana sayfa bağlantı sayısı: ${document.select("a[href]").size}, bulunan içerik: ${results.size}")
-        if (results.isEmpty()) {
-            Log.e("DiziPal", "Ana sayfada içerik kartı bulunamadı. Başlıklar: ${document.select("h1,h2,h3,h4").eachText().take(12)}")
-            throw ErrorLoadingException("DiziPal ana sayfa içeriği çözümlenemedi")
-        }
-
-        val home = mutableListOf<HomePageList>()
-        home.add(HomePageList("DiziPal'de Öne Çıkanlar", results))
-        return newHomePageResponse(home)
+        Log.d("DiziPal", "${request.name}: ${results.size} içerik bulundu (sayfa $page)")
+        val hasNext = results.size >= 10 && page < 50
+        return newHomePageResponse(request.name, results, hasNext = hasNext)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
