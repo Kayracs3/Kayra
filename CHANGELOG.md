@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:a5312af73fd88dccbae57bb2cc78b238cfe2a6bc -->
+### Use supported Requests API in FilmKutusu
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [a5312af](https://github.com/Kayracs3/Kayra/commit/a5312af73fd88dccbae57bb2cc78b238cfe2a6bc)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:f7d7f4ad8e22f0a7d6d14511fe85b80873f1915f -->
 ### Fix FilmKutusu Requests and score compilation errors
 
