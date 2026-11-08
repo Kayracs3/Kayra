@@ -271,14 +271,20 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/src"
 
-          chmod +x gradlew
+          GRADLE_BIN="/tmp/gradle-8.9/bin/gradle"
+
+          if [ ! -x "$GRADLE_BIN" ]; then
+            echo "HATA: Önceki adımda indirilen Gradle 8.9 bulunamadı: $GRADLE_BIN"
+            exit 1
+          fi
 
           echo ""
+
           echo "=========================================="
           echo "CLOUDSTREAM PLUGIN BUILD"
           echo "=========================================="
 
-          ./gradlew \
+          "$GRADLE_BIN" \
             clean \
             make \
             makePluginsJson \
