@@ -284,6 +284,35 @@ jobs:
           echo "CLOUDSTREAM PLUGIN BUILD"
           echo "=========================================="
 
+          # CloudStream Gradle plugin's built-in downloader requests this JAR
+          # only once and fails immediately on GitHub 504 responses. Fetch it
+          # here with bounded retries so project configuration uses the cache.
+          CLOUDSTREAM_CACHE="$HOME/.gradle/caches/cloudstream/cloudstream"
+          CLOUDSTREAM_JAR="$CLOUDSTREAM_CACHE/cloudstream.jar"
+          CLOUDSTREAM_JAR_TMP="$CLOUDSTREAM_JAR.part"
+          mkdir -p "$CLOUDSTREAM_CACHE"
+
+          if [ ! -s "$CLOUDSTREAM_JAR" ]; then
+            echo "CloudStream classes.jar güvenilir tekrar denemeleriyle indiriliyor..."
+            rm -f "$CLOUDSTREAM_JAR_TMP"
+            curl --fail --location --show-error \
+              --retry 10 \
+              --retry-all-errors \
+              --retry-delay 10 \
+              --retry-max-time 1200 \
+              --connect-timeout 30 \
+              --max-time 300 \
+              "https://github.com/recloudstream/cloudstream/releases/download/pre-release/classes.jar" \
+              --output "$CLOUDSTREAM_JAR_TMP"
+
+            test -s "$CLOUDSTREAM_JAR_TMP"
+            unzip -tq "$CLOUDSTREAM_JAR_TMP"
+            mv "$CLOUDSTREAM_JAR_TMP" "$CLOUDSTREAM_JAR"
+            echo "CloudStream classes.jar indirildi ve ZIP doğrulaması geçti."
+          else
+            echo "CloudStream classes.jar önbellekte mevcut."
+          fi
+
           "$GRADLE_BIN" \
             clean \
             make \
