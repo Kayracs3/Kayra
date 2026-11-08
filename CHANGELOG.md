@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:570719579cdeb41c09c9b8f01d272385091e809d -->
+### Show IMDb scores and runtimes in HDFilmCehennemi
+
+- Etkilenen alanlar: HDFilmCehennemi
+- Commit: [5707195](https://github.com/Kayracs3/Kayra/commit/570719579cdeb41c09c9b8f01d272385091e809d)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:7a9e14b8f12e41be8fa400ae4533fa0949e9f07b -->
 ### Reduce HDFilmCehennemi Android TV resource usage
 
