@@ -511,6 +511,7 @@ class DiziBox : MainAPI() {
     private suspend fun handleKingPlayer(
         playerUrl: String,
         episodeUrl: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val kingUrl = if (playerUrl.contains("king.php?", true) &&
@@ -582,11 +583,29 @@ class DiziBox : MainAPI() {
             return false
         }
 
-        // MolyStream'in /embed/sheila/ uç noktası uzantısız görünse de HLS playlist döndürür.
-        // HLS olarak işaretlenmezse ExoPlayer bunu MP4/progressive video sanıp 3003 hatası verir.
+        // King'in çözdüğü hedef MolyStream /embed sayfasıysa bu bir medya dosyası değil,
+        // oynatıcı HTML'idir. CloudStream extractor'ı gerçek M3U8 adresine kadar çözmelidir.
+        if (mediaUrl.contains("/embed/", true) || !isMediaUrl(mediaUrl)) {
+            var extracted = false
+            runCatching {
+                loadExtractor(mediaUrl, iframeUrl, subtitleCallback) { link ->
+                    callback(link)
+                    extracted = true
+                }
+            }.onFailure {
+                Log.e("DiziBox", "MolyStream extractor hatası: " + it.javaClass.simpleName)
+            }
+
+            if (!extracted) {
+                Log.e("DiziBox", "MolyStream embed sayfasından gerçek medya bağlantısı çıkarılamadı.")
+            } else {
+                Log.d("DiziBox", "MolyStream embed sayfası CloudStream extractor ile çözüldü.")
+            }
+            return extracted
+        }
+
         val type = when {
-            mediaUrl.contains("/embed/sheila/", true) || mediaUrl.contains(".m3u8", true) ->
-                ExtractorLinkType.M3U8
+            mediaUrl.contains(".m3u8", true) -> ExtractorLinkType.M3U8
             mediaUrl.contains(".mpd", true) -> ExtractorLinkType.DASH
             else -> ExtractorLinkType.VIDEO
         }
@@ -599,7 +618,7 @@ class DiziBox : MainAPI() {
                 "Referer" to iframeUrl
             )
         })
-        Log.d("DiziBox", "King oynatıcı bağlantısı çıkarıldı: " + type)
+        Log.d("DiziBox", "King doğrudan medya bağlantısı çıkarıldı: " + type)
         return true
     }
 
@@ -626,7 +645,7 @@ class DiziBox : MainAPI() {
 
         for (target in targets) {
             if (target.contains("/player/king/king.php", true)) {
-                if (handleKingPlayer(target, pageUrl, callback)) found = true
+                if (handleKingPlayer(target, pageUrl, subtitleCallback, callback)) found = true
             } else if (isMediaUrl(target)) {
                 val type = when {
                     target.contains(".mpd", true) -> ExtractorLinkType.DASH
@@ -696,7 +715,7 @@ class DiziBox : MainAPI() {
                 })
                 found = true
             } else if (target.contains("/player/king/king.php", true)) {
-                if (handleKingPlayer(target, pageUrl, callback)) found = true
+                if (handleKingPlayer(target, pageUrl, subtitleCallback, callback)) found = true
             } else if (!isSiteUrl(target)) {
                 runCatching {
                     loadExtractor(target, pageUrl, subtitleCallback) { link ->
