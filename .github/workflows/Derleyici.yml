@@ -99,6 +99,24 @@ jobs:
 
           git checkout 81b1d424d236a447d9f2e95a229faef79002f761
 
+          # Kotlin Gradle plugin'i Plugin Portal yönlendirmesinden değil,
+          # Maven Central'daki resmi org.jetbrains.kotlin modülünden çöz.
+          cat > settings.gradle.kts <<'SETTINGS'
+          pluginManagement {
+              repositories {
+                  mavenCentral()
+              }
+              resolutionStrategy {
+                  eachPlugin {
+                      if (requested.id.id == "org.jetbrains.kotlin.jvm") {
+                          useModule("org.jetbrains.kotlin:kotlin-gradle-plugin:${requested.version}")
+                      }
+                  }
+              }
+          }
+          rootProject.name = "gradle"
+          SETTINGS
+
           echo ""
           echo "CloudStream Gradle commit:"
           git rev-parse HEAD
@@ -141,11 +159,6 @@ jobs:
           echo "Plugin local Maven'a kuruluyor..."
 
           "${GRADLE_BIN}" \
-            publishToMavenLocal \
-            --no-daemon \
-            --stacktrace
-
-          ./gradlew \
             publishToMavenLocal \
             --no-daemon \
             --stacktrace
