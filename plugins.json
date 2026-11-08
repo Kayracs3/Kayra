@@ -151,10 +151,10 @@
     },
     {
         "iconUrl": "https://www.dizibox.live/favicon.ico",
-        "fileHash": "sha256-41ad267d01039cf03ec7c36ba289ebfc79df37c75693e4a9b6672d8aa644bc66",
+        "fileHash": "sha256-f69c268ba0a1c055eb855d3586e9c9e724804ab1bdcd92020cb786ead06cba8d",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 40660,
+        "fileSize": 41698,
         "status": 3,
         "language": "tr",
         "authors": [
@@ -163,7 +163,7 @@
         "tvTypes": [
             "TvSeries"
         ],
-        "version": 4,
+        "version": 6,
         "internalName": "DiziBox",
         "description": "DiziBox dizi katalo\u011fu ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziBox.cs3",
