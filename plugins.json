@@ -213,10 +213,10 @@
     },
     {
         "iconUrl": "https://dizi82.life/favicon.ico",
-        "fileHash": "sha256-8c815a1261c4f88b75780e326c4aa8533259e6eefd479e9b94d8378a846d2f9c",
+        "fileHash": "sha256-5f4591399135b93f8be32492244233cc62448dae9303c9214b51e0565a0478a7",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 50110,
+        "fileSize": 50107,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -419,10 +419,10 @@
     },
     {
         "iconUrl": "https://filmkutusu.com/favicon.ico",
-        "fileHash": "sha256-f8af57dc95232b317c4f4902cdfda1c37d1bda6b569a431ced318b14e401641d",
+        "fileHash": "sha256-b2d1168772af2aa703f2520163d1ac368926e736278ec33ae80cb7732f21994f",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 22257,
+        "fileSize": 22466,
         "status": 1,
         "language": "tr",
         "authors": [
