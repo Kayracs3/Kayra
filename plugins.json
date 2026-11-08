@@ -150,11 +150,11 @@
         "name": "DiziAsya"
     },
     {
-        "iconUrl": "https://www.dizibox.live/favicon.ico",
-        "fileHash": "sha256-512ae2f152f4ee323d8c6ba10e79d29bf7a2e6546904443d70e5906b2fb5c921",
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.dizibox.live&sz=%size%",
+        "fileHash": "sha256-6e360203d2ad66d93f29c69f81c83b1bb2910994c2d28cc59b4c3a840db15d10",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 40848,
+        "fileSize": 43401,
         "status": 3,
         "language": "tr",
         "authors": [
@@ -163,7 +163,7 @@
         "tvTypes": [
             "TvSeries"
         ],
-        "version": 7,
+        "version": 8,
         "internalName": "DiziBox",
         "description": "DiziBox dizi katalo\u011fu ve b\u00f6l\u00fcm sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziBox.cs3",
