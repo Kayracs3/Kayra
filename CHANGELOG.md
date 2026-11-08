@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:38c8333153378c39a2ab5ceddeb051086e40557f -->
+### Update iconUrl to use Google favicon service
+
+- Etkilenen alanlar: DiziBox
+- Commit: [38c8333](https://github.com/Kayracs3/Kayra/commit/38c8333153378c39a2ab5ceddeb051086e40557f)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:03e7179832f8f6999201ca1090aa1e8070c002a8 -->
 ### Treat MolyStream Sheila endpoint as HLS
 
