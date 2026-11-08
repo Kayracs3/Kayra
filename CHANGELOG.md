@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:27cb064effb71a315823912b892af0a2bcd439ed -->
+### Add DiziBox King player support
+
+- Etkilenen alanlar: DiziBox
+- Commit: [27cb064](https://github.com/Kayracs3/Kayra/commit/27cb064effb71a315823912b892af0a2bcd439ed)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:d8becc549bf00a44539a5f7a120e4d8655f32780 -->
 ### Fix DiziBox poster referer headers
 
