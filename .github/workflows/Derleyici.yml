@@ -99,45 +99,51 @@ jobs:
 
           git checkout 81b1d424d236a447d9f2e95a229faef79002f761
 
-          # GitHub release yönlendirmesindeki 504 hatalarını azaltmak için
-          # Gradle'ın doğrudan dağıtım sunucusunu kullan ve indirme zaman aşımını artır.
-          sed -i 's#services.gradle.org/distributions/#downloads.gradle.org/distributions/#' gradle/wrapper/gradle-wrapper.properties
-          if ! grep -q '^networkTimeout=' gradle/wrapper/gradle-wrapper.properties; then
-            echo 'networkTimeout=120000' >> gradle/wrapper/gradle-wrapper.properties
-          else
-            sed -i 's/^networkTimeout=.*/networkTimeout=120000/' gradle/wrapper/gradle-wrapper.properties
-          fi
-
-          echo "Gradle dağıtım adresi:"
-          grep '^distributionUrl=' gradle/wrapper/gradle-wrapper.properties
-          echo "Gradle indirme zaman aşımı:"
-          grep '^networkTimeout=' gradle/wrapper/gradle-wrapper.properties
-
           echo ""
           echo "CloudStream Gradle commit:"
           git rev-parse HEAD
 
           echo ""
-          echo "Gradle:"
+          echo "Gradle 8.9 güvenli ayna üzerinden indiriliyor..."
+
           chmod +x gradlew
 
-          # Gradle dagitim sunucusundaki gecici 5xx/504 hatalarina karsi tekrar dene.
-          for attempt in 1 2 3; do
-            echo "Gradle dagitimi kontrol denemesi: $attempt/3"
-            if ./gradlew --version; then
-              break
-            fi
+          # Gradle 8.9'u GitHub yönlendirmesi yerine Huawei Cloud aynasından indir.
+          # Arşiv, Gradle'ın yayımladığı resmi SHA-256 değeriyle doğrulanır.
+          GRADLE_VERSION="8.9"
+          GRADLE_ZIP="/tmp/gradle-${GRADLE_VERSION}-bin.zip"
+          GRADLE_DIR="/tmp/gradle-${GRADLE_VERSION}"
+          GRADLE_URL="https://mirrors.huaweicloud.com/gradle/gradle-${GRADLE_VERSION}-bin.zip"
+          GRADLE_SHA256="d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab"
 
-            if [ "$attempt" -eq 3 ]; then
-              echo "HATA: Gradle 8.9 uc denemede indirilemedi."
-              exit 1
-            fi
+          curl --fail --location --show-error \
+            --retry 5 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            --connect-timeout 30 \
+            --max-time 900 \
+            "${GRADLE_URL}" \
+            --output "${GRADLE_ZIP}"
 
-            sleep 10
-          done
+          echo "${GRADLE_SHA256}  ${GRADLE_ZIP}" | sha256sum --check
+
+          rm -rf "${GRADLE_DIR}"
+          unzip -q "${GRADLE_ZIP}" -d /tmp
+
+          GRADLE_BIN="${GRADLE_DIR}/bin/gradle"
+          chmod +x "${GRADLE_BIN}"
+
+          echo ""
+          echo "Doğrulanmış Gradle sürümü:"
+          "${GRADLE_BIN}" --version
 
           echo ""
           echo "Plugin local Maven'a kuruluyor..."
+
+          "${GRADLE_BIN}" \
+            publishToMavenLocal \
+            --no-daemon \
+            --stacktrace
 
           ./gradlew \
             publishToMavenLocal \
