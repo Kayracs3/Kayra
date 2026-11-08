@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:bde5c80cf8e6c76e692d204adec285967163f25d -->
+### Download checksum-verified Gradle from mirror
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [bde5c80](https://github.com/Kayracs3/Kayra/commit/bde5c80cf8e6c76e692d204adec285967163f25d)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:ffbee1bd894219cceda586d1f30fcd9f9b152a37 -->
 ### Fix Gradle distribution download timeout
 
