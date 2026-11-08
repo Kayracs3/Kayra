@@ -56,16 +56,16 @@ class DiziPal : MainAPI() {
         val response = runCatching {
             app.get(pageUrl, headers = headers, timeout = 20000, allowRedirects = true)
         }.onFailure {
-            Log.e("DiziPal", "Kategori isteği başarısız: \${it.javaClass.simpleName}: \${it.message}")
+            Log.e("DiziPal", "Kategori isteği başarısız: ${it.javaClass.simpleName}: ${it.message}")
         }.getOrNull() ?: return newHomePageResponse(request.name, emptyList(), false)
 
         if (!response.isSuccessful) {
-            Log.e("DiziPal", "Kategori HTTP hatası: \${response.code} - $pageUrl")
+            Log.e("DiziPal", "Kategori HTTP hatası: ${response.code} - $pageUrl")
             return newHomePageResponse(request.name, emptyList(), false)
         }
 
         val results = parseCatalogItems(response.document)
-        Log.d("DiziPal", "\${request.name}: \${results.size} gerçek içerik kartı bulundu (sayfa $page)")
+        Log.d("DiziPal", "${request.name}: ${results.size} gerçek içerik kartı bulundu (sayfa $page)")
         return newHomePageResponse(request.name, results, results.isNotEmpty() && page < 50)
     }
 
@@ -257,10 +257,10 @@ class DiziPal : MainAPI() {
         val response = runCatching {
             app.get(url, headers = headers, timeout = 20000, allowRedirects = true)
         }.onFailure {
-            Log.e("DiziPal", "Arama isteği başarısız: \${it.javaClass.simpleName}: \${it.message}")
+            Log.e("DiziPal", "Arama isteği başarısız: ${it.javaClass.simpleName}: ${it.message}")
         }.getOrNull() ?: return emptyList()
         if (!response.isSuccessful) {
-            Log.e("DiziPal", "Arama HTTP hatası: \${response.code}")
+            Log.e("DiziPal", "Arama HTTP hatası: ${response.code}")
             return emptyList()
         }
         return parseCatalogItems(response.document)
@@ -364,10 +364,10 @@ class DiziPal : MainAPI() {
         val response = runCatching {
             app.get(url, headers = headers, referer = referer, timeout = 20000, allowRedirects = true)
         }.onFailure {
-            Log.e("DiziPal", "Sayfa isteği başarısız: $url / \${it.javaClass.simpleName}")
+            Log.e("DiziPal", "Sayfa isteği başarısız: $url / ${it.javaClass.simpleName}")
         }.getOrNull() ?: return null
         if (!response.isSuccessful) {
-            Log.e("DiziPal", "Sayfa HTTP \${response.code}: $url")
+            Log.e("DiziPal", "Sayfa HTTP ${response.code}: $url")
             return null
         }
         return response.document
@@ -456,7 +456,7 @@ class DiziPal : MainAPI() {
         val episodes = allEpisodes.values.sortedWith(
             compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 }
         )
-        Log.d("DiziPal", "Dizi detay: $title, sezon sayfası=\${visitedSeasons.size}, bölüm=\${episodes.size}")
+        Log.d("DiziPal", "Dizi detay: $title, sezon sayfası=${visitedSeasons.size}, bölüm=${episodes.size}")
 
         return newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
             posterUrl = poster
