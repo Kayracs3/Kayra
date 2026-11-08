@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:7349e3ad50f01fea052a53da29895316cd24720f -->
+### DiziPal: correct log interpolation in parser
+
+- Etkilenen alanlar: DiziPal
+- Commit: [7349e3a](https://github.com/Kayracs3/Kayra/commit/7349e3ad50f01fea052a53da29895316cd24720f)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:6ccfc615c16a4f7e332b8c48abf2d49c6b12fee0 -->
 ### DiziPal: fix posters titles IMDb and season episode parsing
 
