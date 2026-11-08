@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:114b6bdceda1d9a04cf384e85225e9cfaf22a07b -->
+### Fix HDFilmCehennemi Score import
+
+- Etkilenen alanlar: HDFilmCehennemi
+- Commit: [114b6bd](https://github.com/Kayracs3/Kayra/commit/114b6bdceda1d9a04cf384e85225e9cfaf22a07b)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:570719579cdeb41c09c9b8f01d272385091e809d -->
 ### Show IMDb scores and runtimes in HDFilmCehennemi
 
