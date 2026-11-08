@@ -39,10 +39,9 @@ class FilmKutusu : MainAPI() {
     )
 
     // >>> WebViewResolver entegrasyonu: "Verifying" ekranını aşar
-    private val requests = Requests(
-        interceptor = WebViewResolver(
-            Regex("https://filmkoridoru\\.com/.*")
-        )
+    private val requests = Requests()
+    private val webViewResolver = WebViewResolver(
+        Regex("https://filmkoridoru\\.com/.*")
     )
 
     // -----------------------------------------------------------------
@@ -150,7 +149,8 @@ class FilmKutusu : MainAPI() {
                 url,
                 headers = pageHeaders,
                 referer = "$mainUrl/",
-                allowRedirects = true
+                allowRedirects = true,
+                interceptor = webViewResolver
             ).document
         }.getOrNull() ?: return newHomePageResponse(request.name, emptyList(), false)
 
@@ -170,7 +170,8 @@ class FilmKutusu : MainAPI() {
                 searchUrl,
                 headers = pageHeaders,
                 referer = "$mainUrl/",
-                allowRedirects = true
+                allowRedirects = true,
+                interceptor = webViewResolver
             ).document
         }.getOrNull() ?: return emptyList()
 
@@ -191,7 +192,8 @@ class FilmKutusu : MainAPI() {
                 pageUrl,
                 headers = pageHeaders,
                 referer = "$mainUrl/",
-                allowRedirects = true
+                allowRedirects = true,
+                interceptor = webViewResolver
             ).document
         }.getOrNull() ?: return null
 
@@ -271,7 +273,7 @@ class FilmKutusu : MainAPI() {
                 this.year = year
                 this.plot = description
                 this.tags = tags
-                this.score = score
+                this.score = Score.from100(score)
             }
         } else {
             newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
@@ -279,7 +281,7 @@ class FilmKutusu : MainAPI() {
                 this.year = year
                 this.plot = description
                 this.tags = tags
-                this.score = score
+                this.score = Score.from100(score)
             }
         }
     }
@@ -299,7 +301,8 @@ class FilmKutusu : MainAPI() {
                 data,
                 headers = pageHeaders,
                 referer = "$mainUrl/",
-                allowRedirects = true
+                allowRedirects = true,
+                interceptor = webViewResolver
             ).document
         }.getOrNull() ?: return false
 
