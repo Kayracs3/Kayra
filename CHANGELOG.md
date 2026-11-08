@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:f7d7f4ad8e22f0a7d6d14511fe85b80873f1915f -->
+### Fix FilmKutusu Requests and score compilation errors
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [f7d7f4a](https://github.com/Kayracs3/Kayra/commit/f7d7f4ad8e22f0a7d6d14511fe85b80873f1915f)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:1b50667fd32fd2d30ecae0b763154e839d74b909 -->
 ### Retry CloudStream SDK JAR download before build
 
