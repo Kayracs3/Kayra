@@ -266,6 +266,199 @@ class DiziPal : MainAPI() {
         return parseCatalogItems(response.document)
     }
 
+    private fun normalizeMetadataLabel(value: String?): String =
+        value.orEmpty().lowercase()
+            .replace('ı', 'i').replace('ş', 's').replace('ğ', 'g')
+            .replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')
+            .replace(Regex("""\s+"""), " ").trim().trim(':', '：')
+
+    private fun linksNearHeading(
+        document: org.jsoup.nodes.Document,
+        labels: Set<String>,
+        accept: (Element) -> Boolean
+    ): List<Element> {
+        val possibleHeadings = document.select("h1,h2,h3,h4,h5,strong,b,dt,label,p,div,span")
+        for (heading in possibleHeadings) {
+            val own = normalizeMetadataLabel(heading.ownText())
+            val full = normalizeMetadataLabel(heading.text())
+            if (own !in labels && full !in labels) continue
+
+            var parent: Element? = heading.parent()
+            repeat(5) {
+                val current = parent ?: return@repeat
+                val matches = current.select("a[href]").filter(accept)
+                if (matches.isNotEmpty() && matches.size <= 40) return matches
+                parent = current.parent()
+            }
+        }
+        return emptyList()
+    }
+
+    private fun extractGenres(
+        document: org.jsoup.nodes.Document,
+        pageText: String
+    ): List<String> {
+        val genres = LinkedHashMap<String, String>()
+        fun add(raw: String?) {
+            val value = cleanCardTitle(raw)
+            val key = normalizeMetadataLabel(value)
+            if (key.length < 2 || key in setOf("tumu", "turler", "tur")) return
+            if (value.length <= 40) genres.putIfAbsent(key, value)
+        }
+
+        val genreLinks = linksNearHeading(
+            document,
+            setOf("turler", "tur", "genres", "genre")
+        ) { link ->
+            val href = link.attr("href").lowercase()
+            href.contains("/kategori/") || href.contains("/tur/") ||
+                href.contains("/turler/") || href.contains("/genre/")
+        }
+
+        genreLinks.forEach { add(it.text()) }
+        if (genres.isEmpty()) {
+            document.select(
+                "a[href*='/kategori/'],a[href*='/tur/'],a[href*='/turler/'],a[href*='/genre/']"
+            ).forEach { link ->
+                val href = link.attr("href").lowercase()
+                if (href.contains("benzer") || href.contains("filtre")) return@forEach
+                add(link.text())
+            }
+        }
+
+        if (genres.isEmpty()) {
+            val raw = Regex(
+                """(?is)(?:Türler|Tür|Genres?)\s*:?\s*(.{1,180}?)(?=\s+(?:Platform|Oyuncular|Sezon|Dil|Tarih|Ülke|Ekip|Bölümler)\b|$)"""
+            ).find(pageText)?.groupValues?.getOrNull(1)
+            raw?.split(',', '•', '|')?.forEach(::add)
+        }
+        return genres.values.take(20)
+    }
+
+    private fun actorPhoto(element: Element?, baseUrl: String): String? {
+        if (element == null) return null
+        for (attribute in listOf(
+            "data-profile-image", "data-profile", "data-avatar", "data-portrait",
+            "data-photo", "data-image", "data-original", "data-lazy-src",
+            "data-src", "src", "srcset"
+        )) {
+            val raw = element.attr(attribute).trim()
+            if (raw.isBlank() || raw.startsWith("data:", true)) continue
+            val candidate = if (attribute == "srcset") {
+                raw.substringBefore(',').trim().substringBefore(' ').trim()
+            } else raw
+            val url = normalizeUrl(candidate, baseUrl)
+            if (url.isBlank()) continue
+            if (Regex("""(?i)(logo|favicon|placeholder|no[-_]?image|blank|spacer|pixel|\.svg(?:$|\?))""")
+                    .containsMatchIn(url)) continue
+            return url
+        }
+
+        val background = Regex("""(?i)url\(\s*['"]?([^)'"]+)""")
+            .find(element.attr("style"))?.groupValues?.getOrNull(1)
+        return background?.let { normalizeUrl(it, baseUrl) }
+    }
+
+    private fun extractActors(document: org.jsoup.nodes.Document): List<ActorData> {
+        val actors = LinkedHashMap<String, ActorData>()
+        val actorLinks = document.select(
+            "a[href*='/oyuncu/'],a[href*='/oyuncular/'],a[href*='/actor/'],a[href*='/actors/'],a[href*='/person/']"
+        )
+
+        actorLinks.forEach { link ->
+            val image = link.selectFirst("img")
+                ?: link.parent()?.selectFirst("img")
+                ?: link.parent()?.parent()?.selectFirst("img")
+            val name = sequenceOf(
+                link.selectFirst("[class*=name],h3,h4")?.text(),
+                link.attr("title"),
+                link.attr("aria-label"),
+                link.text(),
+                image?.attr("alt"),
+                image?.attr("title")
+            ).mapNotNull { it?.trim() }
+                .map(::cleanCardTitle)
+                .firstOrNull { it.length in 2..80 && !it.equals("dizipal", true) }
+                ?: return@forEach
+
+            val photo = actorPhoto(image, image?.baseUri()?.ifBlank { document.location() } ?: document.location())
+                ?: image?.let { actorPhoto(it, mainUrl) }
+            val key = normalizeMetadataLabel(name)
+            actors.putIfAbsent(key, ActorData(Actor(name, photo)))
+        }
+
+        // Fallback for cast cards whose profile anchor is not /oyuncu/.
+        if (actors.isEmpty()) {
+            val castHeadingLinks = linksNearHeading(
+                document,
+                setOf("oyuncular", "oyuncu kadrosu", "cast")
+            ) { it.selectFirst("img") != null }
+            castHeadingLinks.forEach { card ->
+                val image = card.selectFirst("img")
+                val name = sequenceOf(
+                    card.selectFirst("h3,h4,[class*=name]")?.text(),
+                    image?.attr("alt"),
+                    card.attr("title"),
+                    card.text()
+                ).mapNotNull { it?.trim() }
+                    .map(::cleanCardTitle)
+                    .firstOrNull { it.length in 2..80 && !it.equals("dizipal", true) }
+                    ?: return@forEach
+                val photo = actorPhoto(image, image?.baseUri()?.ifBlank { mainUrl } ?: mainUrl)
+                actors.putIfAbsent(normalizeMetadataLabel(name), ActorData(Actor(name, photo)))
+            }
+        }
+
+        return actors.values.take(50)
+    }
+
+    private fun extractSimilarItems(
+        document: org.jsoup.nodes.Document,
+        currentUrl: String
+    ): List<SearchResponse> {
+        val current = normalizeUrl(currentUrl, mainUrl).trimEnd('/')
+        val containers = LinkedHashSet<Element>()
+
+        document.select(
+            "section[class*=similar],div[class*=similar],section[id*=similar],div[id*=similar]," +
+                "section[class*=related],div[class*=related],section[id*=related],div[id*=related]," +
+                "section[class*=recommend],div[class*=recommend],section[id*=recommend],div[id*=recommend]"
+        ).forEach { containers.add(it) }
+
+        val similarHeadings = document.select("h2,h3,h4,h5,strong,b")
+            .filter {
+                val label = normalizeMetadataLabel(it.text())
+                label.contains("benzer") || label.contains("similar") ||
+                    label.contains("ilgili") || label.contains("onerilen")
+            }
+        similarHeadings.forEach { heading ->
+            var parent: Element? = heading.parent()
+            repeat(5) {
+                val currentParent = parent ?: return@repeat
+                val candidates = currentParent.select("a[href]").filter { anchor ->
+                    val url = normalizeUrl(anchor.attr("href"), currentUrl)
+                    isDiziPalSiteUrl(url) && isDiziPalContentUrl(url)
+                }
+                if (candidates.isNotEmpty() && candidates.size <= 40) {
+                    containers.add(currentParent)
+                    return@forEach
+                }
+                parent = currentParent.parent()
+            }
+        }
+
+        val results = LinkedHashMap<String, SearchResponse>()
+        containers.forEach { container ->
+            container.select("a[href]").forEach { anchor ->
+                val item = anchor.toSearchResult() ?: return@forEach
+                if (item.url.trimEnd('/').equals(current, true)) return@forEach
+                results.putIfAbsent(item.url.trimEnd('/'), item)
+            }
+        }
+
+        return results.values.take(30)
+    }
+
     // ================= DETAY / SEZON / BÖLÜM =================
     private fun seasonNumberFromUrl(url: String): Int? {
         val path = runCatching { java.net.URI(url).path.orEmpty() }.getOrDefault(url)
@@ -400,21 +593,33 @@ class DiziPal : MainAPI() {
         ) ?: imageUrl(document.selectFirst("img"), pageUrl)
 
         val pageText = document.text()
-        val description = document.selectFirst("meta[name=description]")?.attr("content")
+        val description = document.selectFirst("meta[property=og:description]")?.attr("content")
             ?.takeIf { it.isNotBlank() }
-            ?: document.selectFirst("meta[property=og:description]")?.attr("content")
+            ?: document.selectFirst("meta[name=description]")?.attr("content")
                 ?.takeIf { it.isNotBlank() }
-            ?: document.selectFirst("[class*=description], [class*=overview], [class*=synopsis]")?.text()
+            ?: document.selectFirst("[class*=description], [class*=overview], [class*=synopsis], [itemprop=description]")?.text()
                 ?.takeIf { it.isNotBlank() }
+            ?: document.selectFirst("main p, article p")?.text()?.takeIf { it.length > 40 }
         val year = Regex("""(?<!\d)(?:18|19|20|21)\d{2}(?!\d)""")
             .find(pageText)?.value?.toIntOrNull()
         val rating = scoreFrom(pageText)
+        val genres = extractGenres(document, pageText)
+        val actors = extractActors(document)
+        val recommendations = extractSimilarItems(document, pageUrl)
+
+        Log.d(
+            "DiziPal",
+            "Detay metadata: tür=${genres.size}, oyuncu=${actors.size}, benzer=${recommendations.size}, IMDb=${rating ?: "yok"}"
+        )
 
         if (!isDiziPalSeriesUrl(pageUrl)) {
             return newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
                 posterUrl = poster
                 plot = description
                 this.year = year
+                this.tags = genres
+                this.actors = actors
+                this.recommendations = recommendations
                 rating?.let { this.score = Score.from10(it) }
             }
         }
@@ -462,6 +667,9 @@ class DiziPal : MainAPI() {
             posterUrl = poster
             plot = description
             this.year = year
+            this.tags = genres
+            this.actors = actors
+            this.recommendations = recommendations
             rating?.let { this.score = Score.from10(it) }
         }
     }
