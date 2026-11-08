@@ -104,6 +104,14 @@ jobs:
           cat > settings.gradle.kts <<'SETTINGS'
           pluginManagement {
               repositories {
+                  // Bu aynalarda Kotlin 2.0.0 JAR dosyası doğrudan mevcut;
+                  // Maven Central'ın GitHub Release'e yaptığı 504 veren yönlendirmeyi kullanmaz.
+                  maven {
+                      url = uri("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
+                  }
+                  maven {
+                      url = uri("https://maven.wso2.org/nexus/content/repositories/central/")
+                  }
                   mavenCentral()
               }
               resolutionStrategy {
