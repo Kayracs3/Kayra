@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Document
 import java.net.URI
@@ -374,7 +375,7 @@ class DiziBox : MainAPI() {
         val document = getDocument(pageUrl) ?: return null
 
         val title = cleanText(
-            document.selectFirst("div.tv-overview h1 a, div.tv-overview h1, h1.entry-title, h1")?.text()
+            document.selectFirst("div.tv-overview h1 a, div.tv-overview h1, h1.entry-title, h1")?.text().orEmpty()
                 .ifBlank { document.selectFirst("meta[property=og:title]")?.attr("content").orEmpty() }
         ).replace(Regex("""(?i)\s*[-|]\s*dizibox.*$"""), "")
             .ifBlank { slugTitle(pageUrl) }
@@ -384,7 +385,7 @@ class DiziBox : MainAPI() {
             pageUrl
         )
         val description = cleanText(
-            document.selectFirst("div.tv-story p, .tv-story, .tv-description, .entry-content p")?.text()
+            document.selectFirst("div.tv-story p, .tv-story, .tv-description, .entry-content p")?.text().orEmpty()
                 .ifBlank { document.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content").orEmpty() }
         ).takeIf { it.isNotBlank() }
 
