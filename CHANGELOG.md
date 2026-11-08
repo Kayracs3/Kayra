@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:9408bed064ca2b081e6f7abb6ac214a572f68061 -->
+### Fix DiziBox nullable strings and extractor import
+
+- Etkilenen alanlar: DiziBox
+- Commit: [9408bed](https://github.com/Kayracs3/Kayra/commit/9408bed064ca2b081e6f7abb6ac214a572f68061)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:59cc3c142cdb5a6578248ea0e3cfc47e4bef3c73 -->
 ### Fix DiziBox metadata null handling and trailer
 
