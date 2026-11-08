@@ -2,6 +2,47 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:917ceb673d3a283a3cf511c9909d80a431d6f5d4 -->
+### Remove DaddyLive plugin: DaddyLive/src/main/kotlin/com/Kayracs3/DaddyLivePlugin.kt
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [917ceb6](https://github.com/Kayracs3/Kayra/commit/917ceb673d3a283a3cf511c9909d80a431d6f5d4)
+
+## 2026-11-08
+
+<!-- kayra-commit:8a40811e7c86717a46227fb331ffb82790ac40a2 -->
+### Remove DaddyLive plugin: DaddyLive/src/main/kotlin/com/Kayracs3/DaddyLive.kt
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [8a40811](https://github.com/Kayracs3/Kayra/commit/8a40811e7c86717a46227fb331ffb82790ac40a2)
+
+## 2026-11-08
+
+<!-- kayra-commit:5dcdbafb97b42f262f5510d3d1c152017619fd28 -->
+### Remove DaddyLive plugin: DaddyLive/src/main/AndroidManifest.xml
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [5dcdbaf](https://github.com/Kayracs3/Kayra/commit/5dcdbafb97b42f262f5510d3d1c152017619fd28)
+
+## 2026-11-08
+
+<!-- kayra-commit:7d56ccff3ba24fc878df435a851bc47c5a6df9ea -->
+### Remove DaddyLive plugin: DaddyLive/build.gradle.kts
+
+- Etkilenen alanlar: DaddyLive
+- Commit: [7d56ccf](https://github.com/Kayracs3/Kayra/commit/7d56ccff3ba24fc878df435a851bc47c5a6df9ea)
+
+## 2026-11-08
+
+<!-- kayra-commit:8fd8f032047fd8a0988db5675ee8e1a320cced9a -->
+### Disable DaddyLive plugin module
+
+- Etkilenen alanlar: settings.gradle.kts
+- Commit: [8fd8f03](https://github.com/Kayracs3/Kayra/commit/8fd8f032047fd8a0988db5675ee8e1a320cced9a)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:a89136dbd2ae452fcde198c74abc29de616b2d59 -->
 ### Refactor loadLinks and fetchToken methods
 
