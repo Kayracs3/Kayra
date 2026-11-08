@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:d87dc8b612d77a208be73639d614c6df536bd983 -->
+### DiziPal: clarify similar item parser loop labels
+
+- Etkilenen alanlar: DiziPal
+- Commit: [d87dc8b](https://github.com/Kayracs3/Kayra/commit/d87dc8b612d77a208be73639d614c6df536bd983)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:f23f7b3f5c5362be7f165fe62882426641a780a3 -->
 ### DiziPal: restore genres cast portraits and similar titles
 
