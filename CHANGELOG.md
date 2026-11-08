@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:d8becc549bf00a44539a5f7a120e4d8655f32780 -->
+### Fix DiziBox poster referer headers
+
+- Etkilenen alanlar: DiziBox
+- Commit: [d8becc5](https://github.com/Kayracs3/Kayra/commit/d8becc549bf00a44539a5f7a120e4d8655f32780)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:9408bed064ca2b081e6f7abb6ac214a572f68061 -->
 ### Fix DiziBox nullable strings and extractor import
 
