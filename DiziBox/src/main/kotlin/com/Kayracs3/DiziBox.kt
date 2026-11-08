@@ -25,6 +25,7 @@ class DiziBox : MainAPI() {
     override var name = "DiziBox"
     override var lang = "tr"
     override val hasMainPage = true
+    override val hasQuickSearch = true
     override val hasDownloadSupport = false
     override val supportedTypes = setOf(TvType.TvSeries)
 
@@ -247,15 +248,110 @@ class DiziBox : MainAPI() {
         return results.values.toList()
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        val term = query.trim()
-        if (term.length < 2) return emptyList()
-        val url = "$mainUrl/?s=" + URLEncoder.encode(term, "UTF-8")
-        val document = getDocument(url) ?: return emptyList()
-        return document.select("article.detailed-article").mapNotNull { it.toSeriesResult(url) }
-            .distinctBy { it.url }
-            .take(60)
+    private fun parseSearchDocument(document: Document, baseUrl: String): List<SearchResponse> {
+        val results = LinkedHashMap<String, SearchResponse>()
+
+        // Önce sitenin normal arşiv kartlarını ve olası arama kartlarını dene.
+        document.select(
+            "article.detailed-article, article.search-result, article[class*=search], " +
+                ".search-results article, .search-result, article[class*=post]"
+        ).forEach { card ->
+            val item = card.toSeriesResult(baseUrl) ?: return@forEach
+            results.putIfAbsent(item.url, item)
+        }
+
+        // Tema article yerine yalnızca başlık bağlantısı döndürürse:
+        if (results.isEmpty()) {
+            document.select(
+                "h2 a[href], h3 a[href], h4 a[href], a.archive-title[href], " +
+                    ".post-title a[href], .entry-title a[href]"
+            ).forEach { anchor ->
+                val item = anchor.toSeriesResult(baseUrl) ?: return@forEach
+                results.putIfAbsent(item.url, item)
+            }
+        }
+
+        return results.values.take(60)
     }
+
+    private suspend fun searchFromWordPressApi(term: String): List<SearchResponse> {
+        val encoded = URLEncoder.encode(term, "UTF-8")
+        val apiUrl = mainUrl + "/wp-json/wp/v2/posts?search=" + encoded + "&per_page=40&_embed=1"
+        val response = runCatching {
+            app.get(
+                apiUrl,
+                headers = requestHeaders,
+                referer = mainUrl + "/",
+                timeout = 15000,
+                allowRedirects = true
+            )
+        }.onFailure {
+            Log.w("DiziBox", "REST arama isteği başarısız: " + it.javaClass.simpleName)
+        }.getOrNull() ?: return emptyList()
+
+        if (!response.isSuccessful) {
+            Log.w("DiziBox", "REST arama HTTP " + response.code)
+            return emptyList()
+        }
+
+        val items = runCatching { org.json.JSONArray(response.text) }.getOrNull()
+            ?: return emptyList()
+        val results = LinkedHashMap<String, SearchResponse>()
+
+        for (index in 0 until items.length()) {
+            val item = items.optJSONObject(index) ?: continue
+            val itemUrl = normalizeUrl(item.optString("link"), mainUrl) ?: continue
+            if (!isSiteUrl(itemUrl) || isListingOrUtilityPath(itemUrl)) continue
+
+            val rawTitle = item.optJSONObject("title")?.optString("rendered").orEmpty()
+            val title = org.jsoup.Jsoup.parse(rawTitle).text().ifBlank { slugTitle(itemUrl) }
+            if (title.length < 2 || title.equals("DiziBOX", true)) continue
+
+            val featured = item.optJSONObject("_embedded")
+                ?.optJSONArray("wp:featuredmedia")
+                ?.optJSONObject(0)
+            val poster = normalizeUrl(featured?.optString("source_url"), itemUrl)
+
+            results.putIfAbsent(
+                itemUrl,
+                newTvSeriesSearchResponse(title, itemUrl, TvType.TvSeries) {
+                    posterUrl = poster
+                    posterHeaders = posterRequestHeaders
+                }
+            )
+        }
+
+        return results.values.take(60)
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val term = cleanText(query)
+        if (term.length < 2) return emptyList()
+
+        val encoded = URLEncoder.encode(term, "UTF-8")
+        val searchUrls = listOf(
+            mainUrl + "/?s=" + encoded,
+            mainUrl + "/search/" + encoded.replace("+", "%20") + "/"
+        )
+
+        for (searchUrl in searchUrls) {
+            val document = getDocument(searchUrl) ?: continue
+            val results = parseSearchDocument(document, searchUrl)
+            Log.d(
+                "DiziBox",
+                "Arama: " + term + " | sayfa=" + document.title() +
+                    " | kart=" + document.select("article").size +
+                    " | sonuç=" + results.size
+            )
+            if (results.isNotEmpty()) return results
+        }
+
+        val apiResults = searchFromWordPressApi(term)
+        Log.d("DiziBox", "REST arama: " + term + " | sonuç=" + apiResults.size)
+        return apiResults
+    }
+
+    override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     private fun extractActors(document: Document, baseUrl: String): List<ActorData> {
         val actors = LinkedHashMap<String, ActorData>()
