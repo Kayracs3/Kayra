@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:896504e8cff7cfcbd0313174a86a761e551fe72a -->
+### Improve DiziBox search
+
+- Etkilenen alanlar: DiziBox
+- Commit: [896504e](https://github.com/Kayracs3/Kayra/commit/896504e8cff7cfcbd0313174a86a761e551fe72a)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:38c8333153378c39a2ab5ceddeb051086e40557f -->
 ### Update iconUrl to use Google favicon service
 
