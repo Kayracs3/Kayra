@@ -300,7 +300,8 @@ class DiziPal : MainAPI() {
     ): List<String> {
         val genres = LinkedHashMap<String, String>()
         fun add(raw: String?) {
-            val value = cleanCardTitle(raw)
+            val value = raw.orEmpty().replace('\u00a0', ' ')
+                .replace(Regex("""\s+"""), " ").trim()
             val key = normalizeMetadataLabel(value)
             if (key.length < 2 || key in setOf("tumu", "turler", "tur")) return
             if (value.length <= 40) genres.putIfAbsent(key, value)
@@ -359,7 +360,7 @@ class DiziPal : MainAPI() {
         return background?.let { normalizeUrl(it, baseUrl) }
     }
 
-    private fun extractActors(document: org.jsoup.nodes.Document): List<ActorData> {
+    private fun extractActors(document: org.jsoup.nodes.Document, baseUrl: String): List<ActorData> {
         val actors = LinkedHashMap<String, ActorData>()
         val actorLinks = document.select(
             "a[href*='/oyuncu/'],a[href*='/oyuncular/'],a[href*='/actor/'],a[href*='/actors/'],a[href*='/person/']"
@@ -381,8 +382,8 @@ class DiziPal : MainAPI() {
                 .firstOrNull { it.length in 2..80 && !it.equals("dizipal", true) }
                 ?: return@forEach
 
-            val photo = actorPhoto(image, image?.baseUri()?.ifBlank { document.location() } ?: document.location())
-                ?: image?.let { actorPhoto(it, mainUrl) }
+            val photo = actorPhoto(image, image?.baseUri()?.ifBlank { baseUrl } ?: baseUrl)
+                ?: image?.let { actorPhoto(it, baseUrl) }
             val key = normalizeMetadataLabel(name)
             actors.putIfAbsent(key, ActorData(Actor(name, photo)))
         }
@@ -604,7 +605,7 @@ class DiziPal : MainAPI() {
             .find(pageText)?.value?.toIntOrNull()
         val rating = scoreFrom(pageText)
         val genres = extractGenres(document, pageText)
-        val actors = extractActors(document)
+        val actors = extractActors(document, pageUrl)
         val recommendations = extractSimilarItems(document, pageUrl)
 
         Log.d(
