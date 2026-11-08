@@ -50,8 +50,8 @@ class HDFilmCehennemi : MainAPI() {
     override var lang = "tr"
     override val hasQuickSearch = true
     override var sequentialMainPage = true
-    override var sequentialMainPageDelay = 150L
-    override var sequentialMainPageScrollDelay = 150L
+    override var sequentialMainPageDelay = 350L
+    override var sequentialMainPageScrollDelay = 450L
 
     override val supportedTypes = setOf(
         TvType.Movie,
@@ -74,11 +74,16 @@ class HDFilmCehennemi : MainAPI() {
 
     companion object {
         private const val TAG = "HDFilmCehennemi"
-        private const val MAX_EXTERNAL_SCRIPTS = 10
-        private const val MAX_DYNAMIC_ENDPOINTS = 12
-        private const val MAX_DYNAMIC_RESPONSES = 12
+        private const val MAX_EXTERNAL_SCRIPTS = 5
+        private const val MAX_DYNAMIC_ENDPOINTS = 4
+        private const val MAX_DYNAMIC_RESPONSES = 4
         private const val MAX_JS_DEPTH = 8
         private const val MAX_JW_CONTEXT = 30000
+        private const val MAX_SCRIPT_CHARS = 1_000_000
+        private const val MAX_DYNAMIC_RESPONSE_CHARS = 512_000
+        private const val MAX_VIDEO_ID_ATTEMPTS = 4
+        private const val MAX_PLAYER_PAGE_ATTEMPTS = 4
+        private const val MAX_PLAYER_CANDIDATES = 3
     }
 
     class CloudflareInterceptor(
@@ -87,7 +92,7 @@ class HDFilmCehennemi : MainAPI() {
         override fun intercept(chain: Interceptor.Chain): Response {
             val request = chain.request()
             val response = chain.proceed(request)
-            val body = response.peekBody(1024 * 1024).string()
+            val body = response.peekBody(32L * 1024L).string()
             if (body.contains("Just a moment", ignoreCase = true)) {
                 response.close()
                 return cloudflareKiller.intercept(chain)
@@ -336,8 +341,8 @@ class HDFilmCehennemi : MainAPI() {
     }
 
     private fun logChunks(label: String, value: String) {
-        value.chunked(1400).forEachIndexed { index, chunk ->
-            Log.d(TAG, "$label[$index]=$chunk")
+        if (value.isNotBlank()) {
+            Log.d(TAG, label + " length=" + value.length + " preview=" + value.take(500))
         }
     }
 
@@ -1628,6 +1633,9 @@ class HDFilmCehennemi : MainAPI() {
             .distinct()
             .take(MAX_EXTERNAL_SCRIPTS)
 
+        // Her harici betiği yalnızca bir kez indir. Aynı içerik hem medya
+        // kaynakları hem de dinamik API adresleri için yeniden kullanılır.
+        val scriptBodies = linkedMapOf<String, String>()
         scripts.forEach { scriptUrl ->
             Log.d(TAG, "PLAYER SCRIPT=$scriptUrl")
             val body = runCatching {
@@ -1639,23 +1647,25 @@ class HDFilmCehennemi : MainAPI() {
                     interceptor = interceptor
                 ).text
             }.getOrNull().orEmpty()
-            if (body.isBlank()) return@forEach
+            if (body.isBlank() || body.length > MAX_SCRIPT_CHARS) {
+                Log.d(TAG, "PLAYER SCRIPT SKIPPED length=" + body.length)
+                return@forEach
+            }
+
+            scriptBodies[scriptUrl] = body
             result.addAll(extractJavascriptMediaSources(body, scriptUrl))
+
+            // Bir medya adresi bulunduysa gereksiz API taramasına devam etme.
+            if (result.isNotEmpty()) {
+                Log.d(TAG, "PLAYER SCRIPT SOURCES=" + result.size)
+                return result.toList()
+            }
         }
 
         val endpoints = linkedSetOf<String>()
         endpoints.addAll(extractScriptEndpoints(html, playerUrl))
-        scripts.forEach { scriptUrl ->
-            val body = runCatching {
-                app.get(
-                    scriptUrl,
-                    headers = browserHeaders,
-                    referer = playerUrl,
-                    allowRedirects = true,
-                    interceptor = interceptor
-                ).text
-            }.getOrNull().orEmpty()
-            if (body.isNotBlank()) endpoints.addAll(extractScriptEndpoints(body, scriptUrl))
+        scriptBodies.forEach { (scriptUrl, body) ->
+            endpoints.addAll(extractScriptEndpoints(body, scriptUrl))
         }
 
         Log.d(TAG, "SCRIPT ENDPOINTS=$endpoints")
@@ -1681,6 +1691,10 @@ class HDFilmCehennemi : MainAPI() {
             }.getOrNull().orEmpty()
 
             if (body.isBlank()) continue
+            if (body.length > MAX_DYNAMIC_RESPONSE_CHARS) {
+                Log.d(TAG, "DYNAMIC RESPONSE SKIPPED length=" + body.length)
+                continue
+            }
             result.addAll(extractDirectVideoUrlsFromText(body, endpoint))
             result.addAll(extractStructuredVideoUrls(body, endpoint))
             result.addAll(extractJavascriptMediaSources(body, endpoint))
@@ -1798,8 +1812,10 @@ class HDFilmCehennemi : MainAPI() {
             subtitleCallback(newSubtitleFile(normalizedLabel, absolute))
         }
 
+        val document = Jsoup.parse(html, playerUrl)
+
         // 1) HTML <track> elemanları.
-        for (track in Jsoup.parse(html, playerUrl).select("track")) {
+        for (track in document.select("track")) {
             val raw = track.attr("src")
                 .ifBlank { track.attr("data-src") }
                 .ifBlank { track.attr("data-url") }
@@ -1840,7 +1856,7 @@ class HDFilmCehennemi : MainAPI() {
         }
 
         // 5) data-src / data-file gibi HTML attribute biçimleri.
-        for (element in Jsoup.parse(html, playerUrl).select("[data-src], [data-file], [data-url]")) {
+        for (element in document.select("[data-src], [data-file], [data-url]")) {
             val raw = sequenceOf(
                 element.attr("data-src"),
                 element.attr("data-file"),
@@ -2010,6 +2026,8 @@ class HDFilmCehennemi : MainAPI() {
         }.getOrNull() ?: return false
 
         var found = false
+        var attemptedVideoIds = 0
+        var attemptedPlayerPages = 0
         val alternativeBlocks = pageDocument.select("div.alternative-links")
         Log.d(TAG, "ALTERNATIVE BLOCKS=${alternativeBlocks.size}")
 
@@ -2023,6 +2041,8 @@ class HDFilmCehennemi : MainAPI() {
                 val source = "${button.text().replace("(HDrip Xbet)", "").trim()} $langCode".trim()
                 val videoId = button.attr("data-video").trim()
                 if (videoId.isBlank()) return@forEach
+                if (attemptedVideoIds >= MAX_VIDEO_ID_ATTEMPTS) return@forEach
+                attemptedVideoIds++
 
                 Log.d(TAG, "SOURCE=$source VIDEO_ID=$videoId")
 
@@ -2081,8 +2101,9 @@ class HDFilmCehennemi : MainAPI() {
 
                 Log.d(TAG, "PLAYER CANDIDATES=$playerCandidates")
 
-                playerCandidates.forEach { playerUrl ->
-                    if (found) return@forEach
+                playerCandidates.take(MAX_PLAYER_CANDIDATES).forEach { playerUrl ->
+                    if (found || attemptedPlayerPages >= MAX_PLAYER_PAGE_ATTEMPTS) return@forEach
+                    attemptedPlayerPages++
                     Log.d(TAG, "TRY PLAYER=$playerUrl")
                     if (extractFromPlayer(source, playerUrl, data, subtitleCallback, callback)) {
                         found = true
@@ -2091,7 +2112,12 @@ class HDFilmCehennemi : MainAPI() {
             }
         }
 
-        Log.d(TAG, "LOAD LINKS RESULT=$found")
+        Log.d(
+            TAG,
+            "LOAD LINKS RESULT=" + found +
+                " videoIds=" + attemptedVideoIds +
+                " playerPages=" + attemptedPlayerPages
+        )
         return found
     }
 
