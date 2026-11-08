@@ -582,8 +582,11 @@ class DiziBox : MainAPI() {
             return false
         }
 
+        // MolyStream'in /embed/sheila/ uç noktası uzantısız görünse de HLS playlist döndürür.
+        // HLS olarak işaretlenmezse ExoPlayer bunu MP4/progressive video sanıp 3003 hatası verir.
         val type = when {
-            mediaUrl.contains(".m3u8", true) -> ExtractorLinkType.M3U8
+            mediaUrl.contains("/embed/sheila/", true) || mediaUrl.contains(".m3u8", true) ->
+                ExtractorLinkType.M3U8
             mediaUrl.contains(".mpd", true) -> ExtractorLinkType.DASH
             else -> ExtractorLinkType.VIDEO
         }
