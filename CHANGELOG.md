@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:1b50667fd32fd2d30ecae0b763154e839d74b909 -->
+### Retry CloudStream SDK JAR download before build
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [1b50667](https://github.com/Kayracs3/Kayra/commit/1b50667fd32fd2d30ecae0b763154e839d74b909)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:884e3ddc1a546d45d3802e0479c02360e02b5a88 -->
 ### Reuse verified Gradle 8.9 for plugin build
 
