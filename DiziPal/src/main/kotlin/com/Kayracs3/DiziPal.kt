@@ -431,7 +431,7 @@ class DiziPal : MainAPI() {
                 label.contains("benzer") || label.contains("similar") ||
                     label.contains("ilgili") || label.contains("onerilen")
             }
-        similarHeadings.forEach { heading ->
+        similarHeadings.forEach headingLoop@ { heading ->
             var parent: Element? = heading.parent()
             repeat(5) {
                 val currentParent = parent ?: return@repeat
@@ -441,17 +441,17 @@ class DiziPal : MainAPI() {
                 }
                 if (candidates.isNotEmpty() && candidates.size <= 40) {
                     containers.add(currentParent)
-                    return@forEach
+                    return@headingLoop
                 }
                 parent = currentParent.parent()
             }
         }
 
         val results = LinkedHashMap<String, SearchResponse>()
-        containers.forEach { container ->
-            container.select("a[href]").forEach { anchor ->
-                val item = anchor.toSearchResult() ?: return@forEach
-                if (item.url.trimEnd('/').equals(current, true)) return@forEach
+        containers.forEach containerLoop@ { container ->
+            container.select("a[href]").forEach anchorLoop@ { anchor ->
+                val item = anchor.toSearchResult() ?: return@anchorLoop
+                if (item.url.trimEnd('/').equals(current, true)) return@anchorLoop
                 results.putIfAbsent(item.url.trimEnd('/'), item)
             }
         }
