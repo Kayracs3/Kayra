@@ -31,6 +31,7 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.Score
 import com.lagradost.cloudstream3.utils.getAndUnpack
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import okhttp3.Interceptor
@@ -152,6 +153,77 @@ class HDFilmCehennemi : MainAPI() {
         )
     }
 
+
+    /**
+     * IMDb değerini yalnızca açık IMDb alanlarından veya açıkça puan
+     * belirten kart alanlarından alır. Yıl/oy sayısı gibi sayılar puan olmaz.
+     */
+    private fun parseImdbScore(element: Element?): Float? {
+        if (element == null) return null
+
+        val ratingNodes = element.select(
+            "[class*=imdb], [class*=rating], [class*=score], [data-imdb], [data-rating]"
+        ).take(12)
+
+        val searchableText = buildString {
+            append(element.text())
+            ratingNodes.forEach { node ->
+                append(' ')
+                append(node.text())
+                append(' ')
+                append(node.attr("data-imdb"))
+                append(' ')
+                append(node.attr("data-rating"))
+                append(' ')
+                append(node.attr("data-score"))
+                append(' ')
+                append(node.attr("aria-label"))
+                append(' ')
+                append(node.attr("title"))
+            }
+        }
+
+        val explicitImdb = Regex(
+            """(?i)\b(?:IMDb|IMDB)\s*(?:puan[ıi]?)?\s*[:：\-]?\s*(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)"""
+        ).find(searchableText)?.groupValues?.getOrNull(1)
+
+        val ratingText = explicitImdb ?: ratingNodes.firstOrNull()?.let { node ->
+            sequenceOf(
+                node.attr("data-imdb"),
+                node.attr("data-rating"),
+                node.attr("data-score"),
+                node.attr("aria-label"),
+                node.attr("title"),
+                node.text()
+            ).firstOrNull { value ->
+                Regex("""(?<!\d)(?:10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\d)""")
+                    .containsMatchIn(value)
+            }?.let { value ->
+                Regex("""(?<!\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\d)""")
+                    .find(value)?.groupValues?.getOrNull(1)
+            }
+        }
+
+        return ratingText
+            ?.replace(',', '.')
+            ?.toFloatOrNull()
+            ?.takeIf { it in 0.0f..10.0f }
+    }
+
+    /**
+     * Site ayrıntı metnindeki "Süre 89 dakika" bilgisini CloudStream'in
+     * dakika cinsinden duration alanına dönüştürür.
+     */
+    private fun parseDurationMinutes(element: Element?): Int? {
+        if (element == null) return null
+        val text = element.text().replace('\u00A0', ' ')
+        val value = Regex(
+            """(?i)\bS[uü]re\s*[:\-]?\s*(\d{1,3})\s*(?:dakika|dk|min(?:ute)?s?)?"""
+        ).find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()
+
+        return value?.takeIf { it in 1..600 }
+    }
+
     private fun Element.toSearchResult(): SearchResponse? {
         val title = attr("title").trim()
         if (title.isBlank()) return null
@@ -159,8 +231,10 @@ class HDFilmCehennemi : MainAPI() {
         val poster = fixUrlNull(selectFirst("img")?.attr("data-src"))
             ?: fixUrlNull(selectFirst("img")?.attr("src"))
 
+        val imdbScore = parseImdbScore(this)
         return newMovieSearchResponse(title, href, TvType.Movie) {
             posterUrl = poster
+            imdbScore?.let { score = Score.from10(it) }
         }
     }
 
@@ -237,13 +311,16 @@ class HDFilmCehennemi : MainAPI() {
                     ?: fixUrlNull(document.selectFirst("img")?.attr("src"))
                 val isSeries = href.contains("/dizi", true) || href.contains("dizi-izle", true)
 
+                val imdbScore = parseImdbScore(document)
                 if (isSeries) {
                     newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
                         posterUrl = poster?.replace("/thumb/", "/list/")
+                        imdbScore?.let { score = Score.from10(it) }
                     }
                 } else {
                     newMovieSearchResponse(title, href, TvType.Movie) {
                         posterUrl = poster?.replace("/thumb/", "/list/")
+                        imdbScore?.let { score = Score.from10(it) }
                     }
                 }
             }.distinctBy { it.url }.filter { matchesSearchQuery(q, it.name) }
@@ -272,6 +349,8 @@ class HDFilmCehennemi : MainAPI() {
         val year = document.selectFirst("div.post-info-year-country a")?.text()?.trim()?.toIntOrNull()
         val isSeries = document.select("div.seasons").isNotEmpty()
         val description = document.selectFirst("article.post-info-content > p")?.text()?.trim()
+        val imdbScore = parseImdbScore(document)
+        val durationMinutes = parseDurationMinutes(document)
 
         val actors = document.select("div.post-info-cast a").mapNotNull {
             val actorName = it.selectFirst("strong")?.text()?.trim() ?: return@mapNotNull null
@@ -288,8 +367,10 @@ class HDFilmCehennemi : MainAPI() {
             val recPoster = fixUrlNull(it.selectFirst("img")?.attr("data-src"))
                 ?: fixUrlNull(it.selectFirst("img")?.attr("src"))
 
+            val recommendationScore = parseImdbScore(it)
             newTvSeriesSearchResponse(recName, recHref, TvType.TvSeries) {
                 posterUrl = recPoster
+                recommendationScore?.let { score = Score.from10(it) }
             }
         }
 
@@ -321,6 +402,8 @@ class HDFilmCehennemi : MainAPI() {
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 posterUrl = poster
                 this.year = year
+                this.score = imdbScore?.let { Score.from10(it) }
+                this.duration = durationMinutes
                 plot = description
                 this.tags = tags
                 this.recommendations = recommendations
@@ -332,6 +415,8 @@ class HDFilmCehennemi : MainAPI() {
         return newMovieLoadResponse(title, url, TvType.Movie, url) {
             posterUrl = poster
             this.year = year
+            this.score = imdbScore?.let { Score.from10(it) }
+            this.duration = durationMinutes
             plot = description
             this.tags = tags
             this.recommendations = recommendations
