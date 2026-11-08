@@ -29,6 +29,13 @@ class DiziBox : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
     )
 
+    // CloudStream'in poster isteği de tarayıcıdaki gibi site referer'ı göndermeli.
+    // Site görselleri referer olmadan 403 döndürdüğü için SearchResponse ve LoadResponse'a eklenir.
+    private val posterRequestHeaders = mapOf(
+        "Referer" to "$mainUrl/",
+        "User-Agent" to requestHeaders["User-Agent"].orEmpty()
+    )
+
     override val mainPage = mainPageOf(
         "$mainUrl/tum-bolumler/page/1/?tip=populer" to "Popüler Dizilerden Son Bölümler",
         "$mainUrl/tum-bolumler/page/1/" to "Yeni Eklenen Bölümler",
@@ -157,6 +164,7 @@ class DiziBox : MainAPI() {
         )
         return newTvSeriesSearchResponse(title, url, TvType.TvSeries) {
             posterUrl = poster
+            posterHeaders = posterRequestHeaders
             rating?.let { score = Score.from10(it) }
         }
     }
@@ -227,6 +235,7 @@ class DiziBox : MainAPI() {
                 seriesUrl,
                 newTvSeriesSearchResponse(title, seriesUrl, TvType.TvSeries) {
                     posterUrl = poster
+                    posterHeaders = posterRequestHeaders
                 }
             )
         }
@@ -437,6 +446,7 @@ class DiziBox : MainAPI() {
 
         return newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
             posterUrl = poster
+            posterHeaders = posterRequestHeaders
             plot = description
             this.year = year
             this.tags = genres
