@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:38085c7683e3c8195d0a09cc73e10cfa4fefaa20 -->
+### Resolve Kotlin Gradle plugin from Maven Central
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [38085c7](https://github.com/Kayracs3/Kayra/commit/38085c7683e3c8195d0a09cc73e10cfa4fefaa20)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:bde5c80cf8e6c76e692d204adec285967163f25d -->
 ### Download checksum-verified Gradle from mirror
 
