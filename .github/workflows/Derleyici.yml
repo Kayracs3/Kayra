@@ -99,6 +99,30 @@ jobs:
 
           git checkout 81b1d424d236a447d9f2e95a229faef79002f761
 
+          # Kotlin compiler dependency repositories are declared in build.gradle.kts,
+          # not only in pluginManagement. Put direct Maven mirrors first there.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("build.gradle.kts")
+          content = path.read_text()
+          old = """repositories {
+              mavenCentral()
+              google()
+              maven("https://jitpack.io")
+          }"""
+          new = """repositories {
+              maven("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
+              maven("https://maven.wso2.org/nexus/content/repositories/central/")
+              mavenCentral()
+              google()
+              maven("https://jitpack.io")
+          }"""
+          if old not in content:
+              raise SystemExit("HATA: CloudStream Gradle build.gradle.kts repositories bloğu beklenen biçimde değil.")
+          path.write_text(content.replace(old, new, 1))
+          PY
+
           # Kotlin Gradle plugin'i Plugin Portal yönlendirmesinden değil,
           # Maven Central'daki resmi org.jetbrains.kotlin modülünden çöz.
           cat > settings.gradle.kts <<'SETTINGS'
