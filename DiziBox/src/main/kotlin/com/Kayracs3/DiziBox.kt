@@ -4,6 +4,7 @@ import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.newSubtitleFile
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
@@ -141,10 +142,9 @@ class DiziBox : MainAPI() {
 
         val image = card.selectFirst("img") ?: anchor.selectFirst("img")
         val title = cleanText(
-            card.selectFirst("h3 a, h2 a, .post-title a, .entry-title a")?.text()
-                ?.ifBlank { null }
-                ?: anchor.attr("title").ifBlank { null }
-                ?: image?.attr("alt")?.ifBlank { null }
+            card.selectFirst("h3 a, h2 a, .post-title a, .entry-title a")?.text()?.takeIf { it.isNotBlank() }
+                ?: anchor.attr("title").takeIf { it.isNotBlank() }
+                ?: image?.attr("alt")?.takeIf { it.isNotBlank() }
                 ?: anchor.text()
         ).replace(Regex("""(?i)\s*[-|]\s*dizibox.*$"""), "").trim()
             .ifBlank { slugTitle(url) }
@@ -386,7 +386,7 @@ class DiziBox : MainAPI() {
         val description = cleanText(
             document.selectFirst("div.tv-story p, .tv-story, .tv-description, .entry-content p")?.text()
                 .ifBlank { document.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content").orEmpty() }
-        ).ifBlank { null }
+        ).takeIf { it.isNotBlank() }
 
         val pageText = document.text()
         val year = document.selectFirst("a[href*='/yil/']")?.text()?.let {
@@ -399,6 +399,8 @@ class DiziBox : MainAPI() {
         val genres = extractGenres(document)
         val actors = extractActors(document, pageUrl)
         val recommendations = extractRecommendations(document, pageUrl)
+        val trailer = document.selectFirst("div.tv-overview iframe[src]")?.attr("src")
+            ?.let { normalizeUrl(it, pageUrl) }
         val seasonLinks = LinkedHashSet<String>()
 
         document.select("#seasons-list a[href], div#seasons-list a[href], a[href*='/sezon/']")
@@ -439,6 +441,7 @@ class DiziBox : MainAPI() {
             this.tags = genres
             this.actors = actors
             this.recommendations = recommendations
+            addTrailer(trailer)
             rating?.let { score = Score.from10(it) }
         }
     }
