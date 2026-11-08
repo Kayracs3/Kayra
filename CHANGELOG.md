@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:91f0bc66047668c6418c5cdb60cbca43c9045dbf -->
+### DiziPal: preserve genre labels and resolve actor portraits
+
+- Etkilenen alanlar: DiziPal
+- Commit: [91f0bc6](https://github.com/Kayracs3/Kayra/commit/91f0bc66047668c6418c5cdb60cbca43c9045dbf)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:d87dc8b612d77a208be73639d614c6df536bd983 -->
 ### DiziPal: clarify similar item parser loop labels
 
