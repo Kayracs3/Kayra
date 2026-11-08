@@ -8,6 +8,8 @@ import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import com.lagradost.cloudstream3.network.WebViewResolver
+import com.lagradost.nicehttp.Requests
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
@@ -20,6 +22,7 @@ class FilmKutusu : MainAPI() {
     override val hasMainPage = true
     override val hasQuickSearch = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
+
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Ana Sayfa",
         "$mainUrl/kategori/macera-filmleri" to "Macera Filmleri",
@@ -35,14 +38,21 @@ class FilmKutusu : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
+    // >>> WebViewResolver entegrasyonu: "Verifying" ekranını aşar
+    private val requests = Requests(
+        interceptor = WebViewResolver(
+            Regex("https://filmkoridoru\\.com/.*")
+        )
+    )
+
     // -----------------------------------------------------------------
-    //  URL YARDIMCILARI
+    // URL YARDIMCILARI
     // -----------------------------------------------------------------
     private fun fixUrl(raw: String?, base: String = mainUrl): String? {
-        val value = raw?.trim()?.replace("\\/", "/")?.replace("&amp;", "&")?.trim('"', '\'')
-            ?: return null
-        if (value.isBlank() || value == "#" || value.startsWith("javascript:", true) ||
-            value.startsWith("data:", true) || value.startsWith("mailto:", true)
+        val value = raw?.trim()?.replace("\\/", "/")?.replace("&amp;", "&")
+            ?.trim('"', '\'') ?: return null
+        if (value.isBlank() || value == "#" || value.startsWith("javascript:", true)
+            || value.startsWith("data:", true) || value.startsWith("mailto:", true)
         ) return null
         return runCatching {
             when {
@@ -60,7 +70,7 @@ class FilmKutusu : MainAPI() {
     }.getOrDefault(false)
 
     // -----------------------------------------------------------------
-    //  KART AYRIŞTIRMA (li.movie-card)
+    // KART AYRIŞTIRMA (li.movie-card)
     // -----------------------------------------------------------------
     private fun Element.toSearchResult(): SearchResponse? {
         val link = selectFirst("a[href]") ?: return null
@@ -72,14 +82,12 @@ class FilmKutusu : MainAPI() {
             link.attr("title"),
             selectFirst("img")?.attr("alt")
         ).mapNotNull { it?.trim() }
-            .firstOrNull { it.length >= 2 }
-            ?: return null
+            .firstOrNull { it.length >= 2 } ?: return null
 
         val title = rawTitle
             .replace(Regex("(?i)\\s+izle$"), "")
             .replace(Regex("(?i)\\s+film bilgileri$"), "")
             .trim()
-
         if (title.length < 2) return null
 
         // Afiş: poster-wrap içindeki img src (doğrudan tam URL)
@@ -124,7 +132,7 @@ class FilmKutusu : MainAPI() {
     }
 
     // -----------------------------------------------------------------
-    //  ANA SAYFA / ARAMA
+    // ANA SAYFA / ARAMA
     // -----------------------------------------------------------------
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val baseUrl = request.data.trimEnd('/')
@@ -135,9 +143,17 @@ class FilmKutusu : MainAPI() {
         } else {
             "$baseUrl/sayfa/$page"
         }
+
+        // >>> app.get yerine requests.get (WebViewResolver)
         val document = runCatching {
-            app.get(url, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
+            requests.get(
+                url,
+                headers = pageHeaders,
+                referer = "$mainUrl/",
+                allowRedirects = true
+            ).document
         }.getOrNull() ?: return newHomePageResponse(request.name, emptyList(), false)
+
         val items = parseResults(document)
         return newHomePageResponse(request.name, items, items.isNotEmpty() && page < 50)
     }
@@ -147,32 +163,46 @@ class FilmKutusu : MainAPI() {
         if (q.isBlank()) return emptyList()
         val enc = URLEncoder.encode(q, "UTF-8")
         val searchUrl = "$mainUrl/arama?q=$enc"
+
+        // >>> app.get yerine requests.get (WebViewResolver)
         val document = runCatching {
-            app.get(searchUrl, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
+            requests.get(
+                searchUrl,
+                headers = pageHeaders,
+                referer = "$mainUrl/",
+                allowRedirects = true
+            ).document
         }.getOrNull() ?: return emptyList()
+
         return parseResults(document, q)
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     // -----------------------------------------------------------------
-    //  DETAY SAYFASI
+    // DETAY SAYFASI
     // -----------------------------------------------------------------
     override suspend fun load(url: String): LoadResponse? {
         val pageUrl = fixUrl(url) ?: return null
+
+        // >>> app.get yerine requests.get (WebViewResolver)
         val document = runCatching {
-            app.get(pageUrl, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
+            requests.get(
+                pageUrl,
+                headers = pageHeaders,
+                referer = "$mainUrl/",
+                allowRedirects = true
+            ).document
         }.getOrNull() ?: return null
 
         val title = sequenceOf(
-            document.selectFirst("meta[property=og:title]")?.attr("content"),
             document.selectFirst("h1")?.text(),
+            document.selectFirst("meta[property=og:title]")?.attr("content"),
             document.title()
         ).mapNotNull { it?.trim() }
             .firstOrNull { it.length > 1 }
             ?.substringBefore(" | ")
-            ?.trim()
-            ?: return null
+            ?.trim() ?: return null
 
         val poster = sequenceOf(
             document.selectFirst("meta[property=og:image]")?.attr("content"),
@@ -191,41 +221,49 @@ class FilmKutusu : MainAPI() {
         val pageText = document.text()
         val year = Regex("\\b(?:19|20)\\d{2}\\b").find(pageText)?.value?.toIntOrNull()
 
-        val ratingText = document.selectFirst(".imdb, .rating, .score, [class*=rating], [class*=imdb]")?.text().orEmpty()
-        val rating = Regex("(?<!\\d)(10(?:[.,]0)?|[0-9](?:[.,][0-9])?)(?!\\d)")
-            .find(ratingText)?.groupValues?.getOrNull(1)?.replace(',', '.')
-        val score = rating?.let { runCatching { Score.from10(it) }.getOrNull() }
+        val ratingText = document.selectFirst(".imdb, .rating, .score, [class*=rating], [class*=imdb]")
+            ?.text().orEmpty()
+        val rating = Regex("(?i)(\\d+[.,]\\d+|\\d+)").find(ratingText)?.value
+            ?.replace(",", ".")?.toDoubleOrNull()
+        val score = rating?.let { (it * 10).toInt() }
 
-        val tags = document.select("a[rel=tag], a[href*=kategori], a[href*=tur/]")
+        val tags = document.select("a[href*=kategori], .genres a, .category a")
             .map { it.text().trim() }
             .filter { it.isNotBlank() }
             .distinct()
-            .take(30)
 
-        val episodes = document.select("a[href]").mapNotNull { anchor ->
-            val epUrl = fixUrl(anchor.attr("href"), pageUrl) ?: return@mapNotNull null
-            if (!sameSite(epUrl) || epUrl.trimEnd('/') == pageUrl.trimEnd('/')) return@mapNotNull null
-            val epName = sequenceOf(anchor.text().trim(), anchor.attr("title").trim())
-                .firstOrNull { it.isNotBlank() }.orEmpty()
-            val descriptor = "$epUrl $epName"
-            if (!Regex("(?i)(bölüm|bolum|episode|/episodes?/|/bolum/|s\\d+\\s*e\\d+)")
-                    .containsMatchIn(descriptor)
-            ) return@mapNotNull null
-            val numbers = Regex("(?i)\\bs(\\d+)\\s*e(\\d+)\\b").find(descriptor)?.let {
-                it.groupValues[1].toIntOrNull()?.let { s ->
-                    it.groupValues[2].toIntOrNull()?.let { e -> s to e }
+        val episodes = document.select("a[href]")
+            .mapNotNull { anchor ->
+                val epUrl = fixUrl(anchor.attr("href"), pageUrl) ?: return@mapNotNull null
+                if (!sameSite(epUrl) || epUrl.trimEnd('/') == pageUrl.trimEnd('/'))
+                    return@mapNotNull null
+
+                val epName = sequenceOf(
+                    anchor.text().trim(),
+                    anchor.attr("title").trim()
+                ).firstOrNull { it.isNotBlank() }.orEmpty()
+
+                val descriptor = "$epUrl $epName"
+                if (!Regex("(?i)(bölüm|bolum|episode|/episodes?/|/bolum/|s\\d+\\s*e\\d+)")
+                        .containsMatchIn(descriptor)
+                ) return@mapNotNull null
+
+                val numbers = Regex("(?i)\\bs(\\d+)\\s*e(\\d+)\\b").find(descriptor)?.let {
+                    it.groupValues[1].toIntOrNull()?.let { s ->
+                        it.groupValues[2].toIntOrNull()?.let { e -> s to e }
+                    }
                 }
-            }
-            newEpisode(epUrl) {
-                name = epName.ifBlank { "Bölüm" }
-                season = numbers?.first
-                episode = numbers?.second
-                posterUrl = poster
-            }
-        }.distinctBy { "${it.name}|${it.season}|${it.episode}" }
+
+                newEpisode(epUrl) {
+                    name = epName.ifBlank { "Bölüm" }
+                    season = numbers?.first
+                    episode = numbers?.second
+                    posterUrl = poster
+                }
+            }.distinctBy { "${it.name}|${it.season}|${it.episode}" }
 
         val isSeries = episodes.isNotEmpty() ||
-            Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl)
+                Regex("(?i)(/dizi/|/series/|/tv/|season|sezon)").containsMatchIn(pageUrl)
 
         return if (isSeries) {
             newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
@@ -247,7 +285,7 @@ class FilmKutusu : MainAPI() {
     }
 
     // -----------------------------------------------------------------
-    //  LİNK ÇIKARMA (VOE destekli)
+    // LİNK ÇIKARMA (VOE destekli)
     // -----------------------------------------------------------------
     override suspend fun loadLinks(
         data: String,
@@ -255,8 +293,14 @@ class FilmKutusu : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        // >>> app.get yerine requests.get (WebViewResolver)
         val document = runCatching {
-            app.get(data, headers = pageHeaders, referer = "$mainUrl/", allowRedirects = true).document
+            requests.get(
+                data,
+                headers = pageHeaders,
+                referer = "$mainUrl/",
+                allowRedirects = true
+            ).document
         }.getOrNull() ?: return false
 
         var found = false
@@ -265,10 +309,8 @@ class FilmKutusu : MainAPI() {
         for (track in document.select("track[src], track[data-src]")) {
             val raw = track.attr("src").ifBlank { track.attr("data-src") }
             val subtitleUrl = fixUrl(raw, data) ?: continue
-            if (Regex("(?i)\\.(vtt|srt|ass)(\\?|$)").containsMatchIn(subtitleUrl)) {
-                val language = track.attr("srclang").ifBlank { track.attr("label") }.ifBlank { "Unknown" }
-                subtitleCallback(SubtitleFile(language, subtitleUrl))
-            }
+            val language = track.attr("srclang").ifBlank { track.attr("label") }.ifBlank { "Unknown" }
+            subtitleCallback(SubtitleFile(language, subtitleUrl))
         }
 
         // 2. Aday URL'leri topla
@@ -300,7 +342,6 @@ class FilmKutusu : MainAPI() {
         // 3. Adayları işle
         for (candidate in candidates) {
             val lower = candidate.lowercase()
-
             if (lower.contains(".m3u8") || lower.contains(".mp4")) {
                 callback(
                     newExtractorLink(
@@ -316,22 +357,18 @@ class FilmKutusu : MainAPI() {
                 found = true
                 continue
             }
-
             if (lower.contains("voe.sx") || lower.contains("voe-unblock") || lower.contains("voeunblock")) {
                 runCatching {
                     loadExtractor(candidate, data, subtitleCallback) { link ->
-                        callback(link)
-                        found = true
+                        callback(link); found = true
                     }
                 }
                 continue
             }
-
             if (!lower.contains("youtube.com") && !lower.contains("youtu.be")) {
                 runCatching {
                     loadExtractor(candidate, data, subtitleCallback) { link ->
-                        callback(link)
-                        found = true
+                        callback(link); found = true
                     }
                 }
             }
