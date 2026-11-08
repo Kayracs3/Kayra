@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:71054ae851ff4fa241b0661ed66466dacf1e5484 -->
+### Integrate WebViewResolver for network requests
+
+- Etkilenen alanlar: FilmKutusu
+- Commit: [71054ae](https://github.com/Kayracs3/Kayra/commit/71054ae851ff4fa241b0661ed66466dacf1e5484)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:917ceb673d3a283a3cf511c9909d80a431d6f5d4 -->
 ### Remove DaddyLive plugin: DaddyLive/src/main/kotlin/com/Kayracs3/DaddyLivePlugin.kt
 
