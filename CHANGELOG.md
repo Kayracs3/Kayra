@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:884e3ddc1a546d45d3802e0479c02360e02b5a88 -->
+### Reuse verified Gradle 8.9 for plugin build
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [884e3dd](https://github.com/Kayracs3/Kayra/commit/884e3ddc1a546d45d3802e0479c02360e02b5a88)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:a4e6b740ec6406c37325a981032c3b9747526a0b -->
 ### Fix Kotlin dependency mirror repository placement
 
