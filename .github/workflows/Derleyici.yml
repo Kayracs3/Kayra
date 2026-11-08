@@ -14,7 +14,6 @@ on:
       - "**/*.jpg"
       - "**/*.png"
       - "**/*.py"
-      - ".github/workflows/Derleyici.yml"
       - ".github/workflows/KayraDoctor.yml"
       - ".github/workflows/DiziSolPosterProbe.yml"
       - ".github/workflows/TrDiziIzleDerleme.yml"
