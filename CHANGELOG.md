@@ -2,6 +2,15 @@
 
 ## 2026-11-08
 
+<!-- kayra-commit:ffbee1bd894219cceda586d1f30fcd9f9b152a37 -->
+### Fix Gradle distribution download timeout
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [ffbee1b](https://github.com/Kayracs3/Kayra/commit/ffbee1bd894219cceda586d1f30fcd9f9b152a37)
+
+
+## 2026-11-08
+
 <!-- kayra-commit:13066174b24de0e8968ae6f4cda370fcfc787447 -->
 ### Update mainUrl to new DiziLife URL
 
