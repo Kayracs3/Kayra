@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:3e6b39cf96dd0042d19dd0ab258a5e2196cc1a2c -->
+### Restore AsyaWatch eps episode board fallback
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [3e6b39c](https://github.com/Kayracs3/Kayra/commit/3e6b39cf96dd0042d19dd0ab258a5e2196cc1a2c)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:c199a6b27680cdb6d3a59ad18ef17a691c670e9f -->
 ### Restore AsyaWatch detail metadata priorities
 
