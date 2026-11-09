@@ -1611,70 +1611,18 @@ class AsyaWatch : MainAPI() {
                 .take(10)
                 .joinToString(" | ") { it.substringBefore("?") }
 
-            // NP_CONFIG alanlarının adlarını yaz; geçici oynatma tokenlarını/değerlerini loglama.
+            // NP_CONFIG alan adlarını bul; geçici oynatma tokenlarını/değerlerini loglama.
             val configIndex = inspected.indexOf("NP_CONFIG", ignoreCase = true)
-            val configStart = if (configIndex >= 0) inspected.indexOf('{', configIndex) else -1
-            var configShape = "nesne bulunamadı"
-            if (configStart >= 0) {
-                var depth = 0
-                var inString = false
-                var escaped = false
-                var configEnd = -1
-                for (index in configStart until minOf(inspected.length, configStart + 12000)) {
-                    val ch = inspected[index]
-                    if (inString) {
-                        if (escaped) escaped = false
-                        else if (ch == '\\\\') escaped = true
-                        else if (ch == '"' || ch == '\\'') inString = false
-                    } else {
-                        when (ch) {
-                            '"' , '\\'' -> inString = true
-                            '{' -> depth++
-                            '}' -> {
-                                depth--
-                                if (depth == 0) {
-                                    configEnd = index + 1
-                                    break
-                                }
-                            }
-                        }
-                    }
-                }
-                if (configEnd > configStart) {
-                    val configText = inspected.substring(configStart, configEnd)
-                    val configJson = runCatching { JSONObject(configText) }.getOrNull()
-                    if (configJson != null) {
-                        val fields = configJson.keys().asSequence().sorted().map { key ->
-                            val value = configJson.opt(key)
-                            val shape = when (value) {
-                                is JSONObject -> "object"
-                                is JSONArray -> "array(${value.length()})"
-                                JSONObject.NULL, null -> "null"
-                                else -> value.javaClass.simpleName
-                            }
-                            "$key:$shape"
-                        }.toList()
-                        val nested = configJson.keys().asSequence().mapNotNull { key ->
-                            val value = configJson.opt(key)
-                            when (value) {
-                                is JSONObject -> "$key{" + value.keys().asSequence().sorted().joinToString(",") + "}"
-                                is JSONArray -> {
-                                    val first = value.optJSONObject(0)
-                                    if (first != null) "$key[0]{" + first.keys().asSequence().sorted().joinToString(",") + "}" else null
-                                }
-                                else -> null
-                            }
-                        }.toList()
-                        configShape = (fields + nested).joinToString("; ").take(1800)
-                    } else {
-                        configShape = "JSON dışı; alan adayları=" +
-                            Regex("""(?m)(?:["']([A-Za-z_$][\\w$-]*)["']|([A-Za-z_$][\\w$-]*))\\s*:""")
-                                .findAll(configText.take(6000))
-                                .map { it.groupValues[1].ifBlank { it.groupValues[2] } }
-                                .distinct().take(35).joinToString(",")
-                    }
-                }
-            }
+            val configText = if (configIndex >= 0) {
+                inspected.substring(configIndex, minOf(inspected.length, configIndex + 7000))
+            } else ""
+            val configKeys = Regex("""["']?([A-Za-z_$][\\w$-]*)["']?\\s*:""")
+                .findAll(configText)
+                .map { it.groupValues[1] }
+                .distinct()
+                .take(50)
+                .joinToString(",")
+            val configShape = if (configKeys.isBlank()) "alan adı çıkarılamadı" else configKeys
 
             // np.js içindeki olası oynatıcı/API işaretlerini al; kaynak token değerlerini alma.
             val npScript = scripts.split(" | ").firstOrNull { it.contains("/np.js", true) }
