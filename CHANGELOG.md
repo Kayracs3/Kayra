@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:c199a6b27680cdb6d3a59ad18ef17a691c670e9f -->
+### Restore AsyaWatch detail metadata priorities
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [c199a6b](https://github.com/Kayracs3/Kayra/commit/c199a6b27680cdb6d3a59ad18ef17a691c670e9f)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:14ace268981b9327d6149488ce449360b88d7ded -->
 ### Restore sequential AsyaWatch episode fallback
 
