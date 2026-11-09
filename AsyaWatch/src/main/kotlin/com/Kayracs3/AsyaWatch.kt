@@ -1594,6 +1594,7 @@ class AsyaWatch : MainAPI() {
         }.getOrNull() ?: return false
 
         val html = response.text
+        var configObject: JSONObject? = null
         if (isFourPichive) {
             val document = Jsoup.parse(html, pageUrl)
             val inlineScripts = document.select("script:not([src])")
@@ -1653,7 +1654,7 @@ class AsyaWatch : MainAPI() {
                     }
                 }
             }
-            val configObject = if (cfgEnd > cfgStart && cfgStart >= 0) {
+            configObject = if (cfgEnd > cfgStart && cfgStart >= 0) {
                 runCatching { JSONObject(configText.substring(cfgStart, cfgEnd)) }.getOrNull()
             } else null
 
@@ -1790,7 +1791,11 @@ class AsyaWatch : MainAPI() {
                     )
                     Log.d(
                         "AsyaWatch",
-                        "FourPichive HLS kaynağı bulundu: $label; ${safeUrlShape(masterUrl)}"
+                        "FourPichive HLS kaynağı bulundu: $label; " +
+                            runCatching {
+                                val uri = URI(masterUrl)
+                                "${uri.host}${uri.path.orEmpty()}"
+                            }.getOrDefault("adres")
                     )
                     emittedMaster = true
                 }
