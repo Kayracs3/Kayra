@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:dd9b723600df65787c783cd50bc21b1eebb970b4 -->
+### Fix AsyaWatch detail metadata and episode parsing
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [dd9b723](https://github.com/Kayracs3/Kayra/commit/dd9b723600df65787c783cd50bc21b1eebb970b4)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:83d298bb7178d10fbf1fdd85574f0ce6eaff4c9e -->
 ### Parse AsyaWatch Next.js drama episodes and metadata
 
