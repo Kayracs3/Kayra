@@ -863,8 +863,11 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun detailActors(related: JSONObject?): List<Actor> {
+        // The current detail payload's cast array is authoritative.
+        // Older getMovieCastsById data remains a compatibility fallback.
         val cast = objectField(related, "getMovieCastsById", "getContentCastsById")
-        val rows = arrayField(cast, "result") ?: arrayField(related, "cast", "casts")
+        val rows = arrayField(related, "cast", "casts")
+            ?: arrayField(cast, "result")
             ?: return emptyList()
         val actors = ArrayList<Actor>()
         val seen = HashSet<String>()
@@ -931,9 +934,10 @@ class AsyaWatch : MainAPI() {
             val isOn = field(item, "on")
             if (isOn != null && (isOn.equals("false", true) || isOn == "0")) return
 
-            val episodeNumber = field(item, "n", "episode_no", "episodeNo", "episode")
-                ?.toIntOrNull()
-                ?: Regex("""(?i)/bolum-(\d+)""").find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            // Episode identity comes from the real episode URL; JSON n is only a fallback.
+            val episodeNumber = Regex("""(?i)/bolum-(\d+)""")
+                .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: field(item, "n", "episode_no", "episodeNo", "episode")?.toIntOrNull()
                 ?: return
             val seasonFromUrl = Regex("""(?i)/sezon-(\d+)""")
                 .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
@@ -958,9 +962,8 @@ class AsyaWatch : MainAPI() {
                 is JSONObject -> {
                     val currentSeason = field(value, "season_no", "seasonNo", "season")
                         ?.toIntOrNull() ?: inheritedSeason
-                    if (field(value, "n", "episode_no", "episodeNo", "episode") != null &&
-                        field(value, "url", "used_slug", "slug", "episode_url", "href") != null
-                    ) {
+                    // Some schedule records omit n; their URL still identifies the episode.
+                    if (field(value, "url", "used_slug", "slug", "episode_url", "href") != null) {
                         addEpisode(value, currentSeason)
                     }
 
@@ -1070,7 +1073,8 @@ class AsyaWatch : MainAPI() {
         val related = objectField(root, "RelatedResults", "relatedResults") ?: content
         val title = detailTitle(content, page.document, url)
         val poster = detailPoster(content, page.document)
-        val description = field(content, "description", "plot", "overview", "syn", "d", "desc")
+        val description = field(flightDrama, "syn")
+            ?: field(content, "syn", "description", "plot", "overview", "d", "desc")
             ?: page.document.selectFirst("meta[name=description]")?.attr("content")
             ?: page.document.selectFirst("meta[property=og:description]")?.attr("content")
         val year = detailYear(content, page.document)
@@ -1087,8 +1091,8 @@ class AsyaWatch : MainAPI() {
         val trailer = detailTrailer(related)
         val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
         val episodes = parseEpisodes(content, poster)
-            .ifEmpty { parseEpisodes(related, poster) }
             .ifEmpty { parseEpisodesFromDocument(page.document, poster, url) }
+            .ifEmpty { parseEpisodes(related, poster) }
         val isSeries = url.contains("/dizi/", true) ||
             field(content, "used_slug", "usedSlug", "url")?.contains("/dizi/", true) == true ||
             objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
