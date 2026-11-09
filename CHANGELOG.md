@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:d6a4b60676af315a9aaecd4737c0c2e871ad80ae -->
+### Correct ContentX parser regex escaping
+
+- Etkilenen alanlar: Dizilla
+- Commit: [d6a4b60](https://github.com/Kayracs3/Kayra/commit/d6a4b60676af315a9aaecd4737c0c2e871ad80ae)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:96df33c707bc5c4d3f405c9ce9ddb83eca1de677 -->
 ### Improve ContentX player source parsing
 
