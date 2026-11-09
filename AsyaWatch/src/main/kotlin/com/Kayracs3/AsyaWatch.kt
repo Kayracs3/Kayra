@@ -433,6 +433,57 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
+    /**
+     * AsyaWatch App Router detail pages keep the card/catalogue record in data.cat.entries,
+     * while data.drama/data.film contains supplementary detail metadata.
+     */
+    private fun detailCatalogEntry(document: Document, pageUrl: String): JSONObject? {
+        val catalog = nextFlightObject(document, "cat") ?: return null
+        val entries = arrayField(catalog, "entries") ?: return null
+        val targetPath = runCatching { URI(pageUrl).path.orEmpty() }
+            .getOrDefault(pageUrl.substringBefore('?'))
+            .trimEnd('/')
+            .lowercase()
+            .replace(Regex("""(?i)/sezon-\d+(?:/bolum-\d+)?$"""), "")
+
+        for (index in 0 until entries.length()) {
+            val item = entries.optJSONObject(index) ?: continue
+            val rawPath = field(item, "url", "u", "href") ?: continue
+            val itemPath = runCatching { URI(rawPath).path.orEmpty() }
+                .getOrDefault(rawPath.substringBefore('?'))
+                .trimEnd('/')
+                .lowercase()
+            if (itemPath == targetPath) return item
+        }
+
+        return entries.optJSONObject(0)?.takeIf { entries.length() == 1 }
+    }
+
+    /**
+     * Keep the catalogue record as the primary source (img, g, sc, cast, sch),
+     * then fill absent fields from the drama/film detail object and legacy data.
+     */
+    private fun mergeDetailObjects(vararg sources: JSONObject?): JSONObject {
+        val merged = JSONObject()
+        for (source in sources) {
+            if (source == null) continue
+            val keys = source.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = source.opt(key) ?: continue
+                val current = merged.opt(key)
+                val shouldFill = !merged.has(key) ||
+                    current == null ||
+                    current == JSONObject.NULL ||
+                    (current is String && current.isBlank()) ||
+                    (current is JSONArray && current.length() == 0 &&
+                        value is JSONArray && value.length() > 0)
+                if (shouldFill) merged.put(key, value)
+            }
+        }
+        return merged
+    }
+
     private suspend fun getPageData(url: String): PageData {
         if (isCoolingDown()) return PageData(Jsoup.parse("", url), null, isRateLimited = true)
 
@@ -922,13 +973,13 @@ class AsyaWatch : MainAPI() {
         val root = page.secureData
         val flightDrama = nextFlightObject(page.document, "drama")
         val flightFilm = nextFlightObject(page.document, "film")
-        val content = flightDrama ?: flightFilm
-            ?: objectField(root, "contentItem", "content_item")
-            ?: JSONObject()
+        val catalogEntry = detailCatalogEntry(page.document, url)
+        val legacyContent = objectField(root, "contentItem", "content_item")
+        val content = mergeDetailObjects(catalogEntry, flightDrama, flightFilm, legacyContent)
         val related = objectField(root, "RelatedResults", "relatedResults") ?: content
         val title = detailTitle(content, page.document, url)
         val poster = detailPoster(content, page.document)
-        val description = field(content, "description", "plot", "overview", "d", "desc")
+        val description = field(content, "description", "plot", "overview", "syn", "d", "desc")
             ?: page.document.selectFirst("meta[name=description]")?.attr("content")
             ?: page.document.selectFirst("meta[property=og:description]")?.attr("content")
         val year = detailYear(content, page.document)
@@ -939,8 +990,10 @@ class AsyaWatch : MainAPI() {
         val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
         val episodes = parseEpisodes(content, poster).ifEmpty { parseEpisodes(related, poster) }
         val isSeries = url.contains("/dizi/", true) ||
-            field(content, "used_slug", "usedSlug")?.contains("/dizi/", true) == true ||
+            field(content, "used_slug", "usedSlug", "url")?.contains("/dizi/", true) == true ||
             objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
+
+        Log.d("AsyaWatch", "Detay: ${title}; katalog=${catalogEntry != null}; tür=${tags?.size ?: 0}; kadro=${actors.size}; bölüm=${episodes.size}; yıl=$year")
 
         return if (isSeries) {
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
