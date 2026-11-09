@@ -1570,9 +1570,10 @@ class AsyaWatch : MainAPI() {
         seen: MutableSet<String>,
         seenPages: MutableSet<String>,
         seenManifests: MutableSet<String>,
-        callback: (SubtitleFile) -> Unit
-    ) {
-        if (!seenPages.add(pageUrl) || isDirectMedia(pageUrl)) return
+        callback: (SubtitleFile) -> Unit,
+        linkCallback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (!seenPages.add(pageUrl) || isDirectMedia(pageUrl)) return false
         val isFourPichive = runCatching {
             URI(pageUrl).host.equals("four.pichive.online", true)
         }.getOrDefault(false)
@@ -1590,7 +1591,7 @@ class AsyaWatch : MainAPI() {
                     "FourPichive isteği başarısız: ${it.javaClass.simpleName}: ${it.message}"
                 )
             }
-        }.getOrNull() ?: return
+        }.getOrNull() ?: return false
 
         val html = response.text
         if (isFourPichive) {
@@ -1753,9 +1754,51 @@ class AsyaWatch : MainAPI() {
             Log.w("AsyaWatch", "FourPichive np.js analizi: $npScriptInfo")
             Log.d("AsyaWatch", "FourPichive scriptleri: $scripts")
         }
-        if (!response.isSuccessful) return
+        if (!response.isSuccessful) return false
 
         publishSubtitlesFromText(html, pageUrl, seen, callback, pageUrl)
+
+        if (isFourPichive) {
+            val sourceRows = configObject?.optJSONArray("sources")
+            var emittedMaster = false
+            if (sourceRows != null) {
+                for (index in 0 until sourceRows.length()) {
+                    val sourceItem = sourceRows.optJSONObject(index) ?: continue
+                    val rawMaster = field(sourceItem, "master", "url", "file", "src")
+                        ?: continue
+                    val masterUrl = absoluteUrl(rawMaster, pageUrl) ?: continue
+                    val label = field(sourceItem, "title", "name", "kind")
+                        ?.takeIf { it.isNotBlank() } ?: "HLS"
+                    val origin = runCatching {
+                        URI(pageUrl).let { "${it.scheme}://${it.authority}" }
+                    }.getOrDefault("https://four.pichive.online")
+
+                    linkCallback(
+                        newExtractorLink(
+                            source = name,
+                            name = "$name $label",
+                            url = masterUrl,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            this.referer = pageUrl
+                            this.headers = siteHeaders + mapOf(
+                                "Referer" to pageUrl,
+                                "Origin" to origin
+                            )
+                            this.quality = qualityValue(label, masterUrl)
+                        }
+                    )
+                    Log.d(
+                        "AsyaWatch",
+                        "FourPichive HLS kaynağı bulundu: $label; ${safeUrlShape(masterUrl)}"
+                    )
+                    emittedMaster = true
+                }
+            }
+
+            if (emittedMaster) return true
+            Log.w("AsyaWatch", "FourPichive NP_CONFIG içinde kullanılabilir master adresi bulunamadı")
+        }
 
         val manifests = LinkedHashSet<String>()
         Regex("""(?i)(?:https?:)?//[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""")
@@ -1772,6 +1815,7 @@ class AsyaWatch : MainAPI() {
                     manifest, pageUrl, seen, seenManifests, callback
                 )
             }
+        return false
     }
 
     private fun isDirectMedia(url: String): Boolean =
@@ -1895,10 +1939,14 @@ class AsyaWatch : MainAPI() {
             }
 
             // Player pages commonly contain their subtitle tracks outside secureData.
-            extractSubtitlesFromPlayerPage(
+            val providerSourceFound = extractSubtitlesFromPlayerPage(
                 candidate, referer, seenSubtitleUrls, seenSubtitlePages,
                 seenSubtitleManifests, emitSubtitle
-            )
+            ) { link ->
+                if (emittedUrls.add(link.url)) callback(link)
+                found = true
+            }
+            if (providerSourceFound) return
 
             try {
                 loadExtractor(candidate, referer, emitSubtitle) { link ->
