@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:14ace268981b9327d6149488ce449360b88d7ded -->
+### Restore sequential AsyaWatch episode fallback
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [14ace26](https://github.com/Kayracs3/Kayra/commit/14ace268981b9327d6149488ce449360b88d7ded)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:c990aa16a1fefd398f6a90db0ec56a99ad0df373 -->
 ### Parse AsyaWatch cast cards from detail HTML
 
