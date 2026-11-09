@@ -1616,7 +1616,7 @@ class AsyaWatch : MainAPI() {
             val configText = if (configIndex >= 0) {
                 inspected.substring(configIndex, minOf(inspected.length, configIndex + 7000))
             } else ""
-            val configKeys = Regex("""["']?([A-Za-z_$][\\w$-]*)["']?\\s*:""")
+            val configKeys = Regex("""["']?([A-Za-z_$][\w$-]*)["']?\s*:""")
                 .findAll(configText)
                 .map { it.groupValues[1] }
                 .distinct()
@@ -1639,7 +1639,7 @@ class AsyaWatch : MainAPI() {
                     ).joinToString("; ") { marker ->
                         "$marker=${scriptBody.contains(marker, true)}"
                     }
-                    val endpointHints = Regex("""["']([^"'\\s]{1,180})["']""")
+                    val endpointHints = Regex("""["']([^"'\s]{1,180})["']""")
                         .findAll(scriptBody)
                         .map { it.groupValues[1] }
                         .filter { hint ->
