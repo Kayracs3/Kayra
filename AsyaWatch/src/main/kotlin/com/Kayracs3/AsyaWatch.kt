@@ -1086,13 +1086,9 @@ class AsyaWatch : MainAPI() {
             .ifEmpty { detailActorsFromDocument(page.document) }
         val trailer = detailTrailer(related)
         val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
-        val episodes = (
-            parseEpisodes(content, poster) +
-                parseEpisodes(related, poster) +
-                parseEpisodesFromDocument(page.document, poster, url)
-            )
-            .distinctBy { it.data }
-            .sortedWith(compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 })
+        val episodes = parseEpisodes(content, poster)
+            .ifEmpty { parseEpisodes(related, poster) }
+            .ifEmpty { parseEpisodesFromDocument(page.document, poster, url) }
         val isSeries = url.contains("/dizi/", true) ||
             field(content, "used_slug", "usedSlug", "url")?.contains("/dizi/", true) == true ||
             objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
