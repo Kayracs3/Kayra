@@ -226,18 +226,9 @@ class AsyaWatch : MainAPI() {
             value = "https://file.macellan.online/${value.trimStart('/')}"
         }
 
-        // Some cards return an AMP image proxy rather than the original image URL.
-        val marker = "images-macellan-online.cdn.ampproject.org/i/s/"
-        val markerIndex = value.indexOf(marker, ignoreCase = true)
-        if (markerIndex >= 0) {
-            val tail = value.substring(markerIndex + marker.length).trimStart('/')
-            value = when {
-                tail.startsWith("http://", true) || tail.startsWith("https://", true) -> tail
-                tail.startsWith("http%3A%2F%2F", true) -> tail.replaceFirst("http%3A%2F%2F", "http://", true)
-                tail.startsWith("https%3A%2F%2F", true) -> tail.replaceFirst("https%3A%2F%2F", "https://", true)
-                else -> "https://$tail"
-            }
-        }
+        // AsyaWatch kartları AMP görsel proxy URL'sini doğrudan kullanıyor.
+        // Proxy alan adını kaynak CDN'ye çevirmek bazı istemcilerde görseli bozuyor;
+        // bu yüzden gelen AMP URL'sini aynen koruyoruz.
 
         // The API occasionally percent-encodes the scheme and slashes.
         if (value.startsWith("https%3A%2F%2F", true)) {
