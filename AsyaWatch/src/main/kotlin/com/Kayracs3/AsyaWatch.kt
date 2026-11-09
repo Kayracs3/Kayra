@@ -244,7 +244,7 @@ class AsyaWatch : MainAPI() {
         val imageKeys = listOf(
             "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
             "object_poster", "objectPoster", "poster_image", "posterImage",
-            "poster", "p", "poster_path", "posterPath", "image_url", "imageUrl",
+            "poster", "img", "p", "sq", "wide", "poster_path", "posterPath", "image_url", "imageUrl",
             "image_path", "imagePath", "thumbnail_url", "thumbnailUrl",
             "thumbnail_path", "thumbnailPath", "thumbnail", "cover_url", "coverUrl",
             "cover_image", "coverImage", "cover", "image", "thumb", "picture", "photo", "src"
@@ -389,9 +389,9 @@ class AsyaWatch : MainAPI() {
             ?: imageUrl(field(
                 item,
                 "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
-                "poster", "p", "image_url", "imageUrl", "thumbnail", "thumbnail_url", "cover"
+                "poster", "img", "p", "sq", "wide", "image_url", "imageUrl", "thumbnail", "thumbnail_url", "cover"
             ))
-        val score = scoreFrom(field(item, "imdb_point", "imdbPoint", "score", "rating", "im"))
+        val score = scoreFrom(field(item, "imdb_point", "imdbPoint", "score", "rating", "im", "sc"))
         val type = field(item, "used_type", "type", "content_type", "kind").orEmpty()
         val isSeries = when {
             type.contains("movie", true) || type.contains("film", true) -> false
