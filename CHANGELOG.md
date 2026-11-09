@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:eee1a8380cc4409b6ad7c37eb35869b14648a5f1 -->
+### Fix AsyaWatch diagnostic escaping
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [eee1a83](https://github.com/Kayracs3/Kayra/commit/eee1a8380cc4409b6ad7c37eb35869b14648a5f1)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:1249ae9e6b1d1b823a9a8668ea80428a1b52309f -->
 ### Inspect AsyaWatch player source configuration
 
