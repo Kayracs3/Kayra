@@ -1773,6 +1773,29 @@ class AsyaWatch : MainAPI() {
                     val origin = runCatching {
                         URI(pageUrl).let { "${it.scheme}://${it.authority}" }
                     }.getOrDefault("https://four.pichive.online")
+                    // Cronet/ExoPlayer does not share NiceHttp's cookie jar. Forward
+                    // cookies issued by the iframe response to the media request.
+                    val iframeCookies = response.headers.values("Set-Cookie")
+                        .mapNotNull { cookie ->
+                            cookie.substringBefore(';').trim().takeIf {
+                                it.contains('=') && it.substringBefore('=').isNotBlank()
+                            }
+                        }
+                        .distinct()
+                        .joinToString("; ")
+                    val mediaHeaders = siteHeaders + mapOf(
+                        "Referer" to pageUrl,
+                        "Origin" to origin,
+                        "Accept" to "*/*"
+                    ) + if (iframeCookies.isBlank()) {
+                        emptyMap()
+                    } else {
+                        mapOf("Cookie" to iframeCookies)
+                    }
+                    Log.d(
+                        "AsyaWatch",
+                        "FourPichive HLS istek başlıkları: iframe çerezi=${!iframeCookies.isBlank()}"
+                    )
 
                     linkCallback(
                         newExtractorLink(
@@ -1782,10 +1805,7 @@ class AsyaWatch : MainAPI() {
                             type = ExtractorLinkType.M3U8
                         ) {
                             this.referer = pageUrl
-                            this.headers = siteHeaders + mapOf(
-                                "Referer" to pageUrl,
-                                "Origin" to origin
-                            )
+                            this.headers = mediaHeaders
                             this.quality = qualityValue(label, masterUrl)
                         }
                     )
