@@ -34,6 +34,7 @@ import org.jsoup.nodes.Document
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -161,6 +162,43 @@ class AsyaWatch : MainAPI() {
         val encodedResponse = field(envelope, "response") ?: return envelope
         val decoded = decodeBase64Text(encodedResponse)
         return parseObject(decoded) ?: envelope
+    }
+
+    /**
+     * FourPichive appends a proof-of-work parameter to media and subtitle URLs.
+     * This mirrors np.js: SHA-256("$challenge:$nonce") must start with the
+     * configured number of zero bits.
+     */
+    private fun fourPichiveGateProof(config: JSONObject?): String? {
+        val gate = config?.optJSONObject("gate") ?: return null
+        val challenge = field(gate, "n") ?: return null
+        val configuredBits = gate.optInt("b", 12)
+        val difficulty = if (configuredBits == 0) 12 else configuredBits.coerceIn(1, 32)
+        val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
+            ?: return null
+
+        for (nonce in 0L until 100_000_000L) {
+            val hash = digest.digest("$challenge:$nonce".toByteArray(Charsets.UTF_8))
+            val firstWord =
+                ((hash[0].toInt() and 0xff) shl 24) or
+                ((hash[1].toInt() and 0xff) shl 16) or
+                ((hash[2].toInt() and 0xff) shl 8) or
+                (hash[3].toInt() and 0xff)
+            if ((firstWord ushr (32 - difficulty)) == 0) {
+                return nonce.toString()
+            }
+        }
+        return null
+    }
+
+    private fun appendQueryParameter(url: String, name: String, value: String): String {
+        if (Regex("""(?i)(?:[?&])$name=""").containsMatchIn(url)) return url
+        val separator = when {
+            url.endsWith("?") || url.endsWith("&") -> ""
+            url.contains("?") -> "&"
+            else -> "?"
+        }
+        return "$url$separator$name=$value"
     }
 
     private fun absoluteUrl(raw: String?, base: String = mainUrl): String? {
@@ -1447,12 +1485,14 @@ class AsyaWatch : MainAPI() {
         baseUrl: String,
         seen: MutableSet<String>,
         callback: (SubtitleFile) -> Unit,
-        referer: String = baseUrl
+        referer: String = baseUrl,
+        urlTransform: (String) -> String = { it }
     ) {
         fun emit(url: String, label: String) {
+            val transformedUrl = urlTransform(url)
             val subtitle = SubtitleFile(
-                lang = subtitleLanguage(label, url),
-                url = url
+                lang = subtitleLanguage(label, transformedUrl),
+                url = transformedUrl
             )
             // Altyazı sunucuları çoğu zaman oynatıcıdaki UA/Referer olmadan isteği reddeder.
             // SubtitleFile başlıklarını doldurmak, doğrudan VTT/SRT ve HLS altyazı URL'lerinde
@@ -1757,7 +1797,31 @@ class AsyaWatch : MainAPI() {
         }
         if (!response.isSuccessful) return false
 
-        publishSubtitlesFromText(html, pageUrl, seen, callback, pageUrl)
+        val gateProof = if (isFourPichive) fourPichiveGateProof(configObject) else null
+        val hasGate = configObject?.optJSONObject("gate")?.let { field(it, "n") != null } == true
+        if (isFourPichive && hasGate && gateProof == null) {
+            Log.e("AsyaWatch", "FourPichive gate doğrulaması hesaplanamadı")
+            return false
+        }
+        val gatedSubtitleUrl: (String) -> String = { subtitleUrl ->
+            val host = runCatching { URI(subtitleUrl).host }.getOrNull()
+            if (gateProof != null && host.equals("four.pichive.online", true)) {
+                appendQueryParameter(subtitleUrl, "p", gateProof)
+            } else {
+                subtitleUrl
+            }
+        }
+        publishSubtitlesFromText(
+            html, pageUrl, seen, callback, pageUrl,
+            urlTransform = gatedSubtitleUrl
+        )
+        if (isFourPichive && hasGate) {
+            val bits = configObject?.optJSONObject("gate")?.optInt("b", 12) ?: 12
+            Log.d(
+                "AsyaWatch",
+                "FourPichive gate doğrulandı: bits=$bits; kaynak ve altyazı URL'lerine p parametresi eklendi"
+            )
+        }
 
         if (isFourPichive) {
             val sourceRows = configObject?.optJSONArray("sources")
@@ -1767,7 +1831,12 @@ class AsyaWatch : MainAPI() {
                     val sourceItem = sourceRows.optJSONObject(index) ?: continue
                     val rawMaster = field(sourceItem, "master", "url", "file", "src")
                         ?: continue
-                    val masterUrl = absoluteUrl(rawMaster, pageUrl) ?: continue
+                    val rawMasterUrl = absoluteUrl(rawMaster, pageUrl) ?: continue
+                    val masterUrl = if (gateProof != null) {
+                        appendQueryParameter(rawMasterUrl, "p", gateProof)
+                    } else {
+                        rawMasterUrl
+                    }
                     val label = field(sourceItem, "title", "name", "kind")
                         ?.takeIf { it.isNotBlank() } ?: "HLS"
                     val origin = runCatching {
