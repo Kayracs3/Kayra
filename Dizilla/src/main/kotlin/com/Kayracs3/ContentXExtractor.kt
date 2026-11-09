@@ -89,7 +89,7 @@ open class ContentX : ExtractorApi() {
 
         // openPlayer may use single or double quotes and may contain spaces around tokens.
         val tokens = LinkedHashMap<String, String>()
-        Regex("""(?is)(?:window\\s*\\.\\s*)?openPlayer\\s*\\(\\s*['"]([^'"]+)['"]""")
+        Regex("""(?is)(?:window\s*\.\s*)?openPlayer\s*\(\s*['"]([^'"]+)['"]""")
             .findAll(iframeHtml)
             .forEach { match ->
                 val token = match.groupValues[1].trim()
@@ -97,7 +97,7 @@ open class ContentX : ExtractorApi() {
             }
 
         // Optional Turkish dub token used by older ContentX player pages.
-        Regex("""(?is),\\s*['"]([^'"]{8,})['"]\\s*,\\s*['"]Türkçe(?:\\s+Dublaj)?['"]""")
+        Regex("""(?is),\s*['"]([^'"]{8,})['"]\s*,\s*['"]Türkçe(?:\s+Dublaj)?['"]""")
             .findAll(iframeHtml)
             .forEach { match ->
                 val token = match.groupValues[1].trim()
@@ -162,7 +162,7 @@ open class ContentX : ExtractorApi() {
     }
 
     private fun containsOpenPlayer(source: String): Boolean =
-        Regex("""(?is)(?:window\\s*\\.\\s*)?openPlayer\\s*\\(""").containsMatchIn(source)
+        Regex("""(?is)(?:window\s*\.\s*)?openPlayer\s*\(""").containsMatchIn(source)
 
     private fun normalizeEscapes(raw: String): String =
         raw.replace("\\/", "/")
@@ -304,8 +304,8 @@ open class ContentX : ExtractorApi() {
         if (json != null) collectMedia(json, base, "Orijinal", output)
 
         val patterns = listOf(
-            Regex("""(?is)["'](?:file|master|hls|m3u8|src|url)["']\\s*:\\s*["']([^"']+)["']"""),
-            Regex("""(?is)\\bfile\\s*:\\s*["']([^"']+)["']""")
+            Regex("""(?is)["'](?:file|master|hls|m3u8|src|url)["']\s*:\s*\s*["']([^"']+)["']"""),
+            Regex("""(?is)\bfile\s*:\s*["']([^"']+)["']""")
         )
         for (pattern in patterns) {
             pattern.findAll(source).forEach { match ->
@@ -328,7 +328,7 @@ open class ContentX : ExtractorApi() {
         callback: (SubtitleFile) -> Unit
     ) {
         val pattern = Regex(
-            """(?is)["']file["']\\s*:\\s*["']([^"']+)["']\\s*,\\s*["']label["']\\s*:\\s*["']([^"']+)["']"""
+            """(?is)["']file["']\s*:\s*["']([^"']+)["']\s*,\s*["']label["']\s*:\s*["']([^"']+)["']"""
         )
         pattern.findAll(source).forEach { match ->
             emitSubtitle(
@@ -368,7 +368,7 @@ open class ContentX : ExtractorApi() {
     }
 
     private fun decodeLabel(value: String): String =
-        Regex("""\\\\u([0-9a-fA-F]{4})""").replace(value) { match ->
+        Regex("""\\u([0-9a-fA-F]{4})""").replace(value) { match ->
             match.groupValues[1].toInt(16).toChar().toString()
         }.replace("\\", "")
 
