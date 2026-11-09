@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:0d3c6d509ab3dbd9aa1bf86c763df40fe42f16f4 -->
+### Forward FourPichive iframe cookies to HLS playback
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [0d3c6d5](https://github.com/Kayracs3/Kayra/commit/0d3c6d509ab3dbd9aa1bf86c763df40fe42f16f4)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:1648dd773e4add678a3da92a744ea9c6434b89b4 -->
 ### Fix AsyaWatch FourPichive config scope
 
