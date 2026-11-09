@@ -1616,7 +1616,7 @@ class AsyaWatch : MainAPI() {
             val configText = if (configIndex >= 0) {
                 inspected.substring(configIndex, minOf(inspected.length, configIndex + 7000))
             } else ""
-            val configKeys = Regex("""["']?([A-Za-z_$][\w$-]*)["']?\s*:""")
+            val configKeys = Regex("""["']?([A-Za-z_$][\\w$-]*)["']?\\s*:""")
                 .findAll(configText)
                 .map { it.groupValues[1] }
                 .distinct()
@@ -1624,7 +1624,86 @@ class AsyaWatch : MainAPI() {
                 .joinToString(",")
             val configShape = if (configKeys.isBlank()) "alan adı çıkarılamadı" else configKeys
 
-            // np.js içindeki olası oynatıcı/API işaretlerini al; kaynak token değerlerini alma.
+            // Parse NP_CONFIG as JSON and report source shape without query tokens.
+            val cfgStart = configText.indexOf('{')
+            var cfgEnd = -1
+            if (cfgStart >= 0) {
+                var depth = 0
+                var quoted = false
+                var escaped = false
+                for (index in cfgStart until configText.length) {
+                    val ch = configText[index]
+                    if (quoted) {
+                        if (escaped) escaped = false
+                        else if (ch == '\\\\') escaped = true
+                        else if (ch == '"') quoted = false
+                    } else {
+                        when (ch) {
+                            '"' -> quoted = true
+                            '{' -> depth++
+                            '}' -> {
+                                depth--
+                                if (depth == 0) {
+                                    cfgEnd = index + 1
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            val configObject = if (cfgEnd > cfgStart && cfgStart >= 0) {
+                runCatching { JSONObject(configText.substring(cfgStart, cfgEnd)) }.getOrNull()
+            } else null
+
+            fun safeUrlShape(raw: String): String {
+                val uri = runCatching { URI(raw) }.getOrNull()
+                return if (uri?.host != null) {
+                    "${uri.scheme}://${uri.host}${uri.path.orEmpty()}".take(180)
+                } else {
+                    "metin(${raw.length})"
+                }
+            }
+
+            fun sourceObjectShape(item: JSONObject): String {
+                val keys = item.keys().asSequence().sorted().joinToString(",")
+                val urls = listOf("file", "url", "src", "source", "master", "hls", "m3u8")
+                    .mapNotNull { key ->
+                        val value = item.opt(key) as? String
+                        if (value.isNullOrBlank()) null else "$key=${safeUrlShape(value)}"
+                    }
+                return "alanlar={$keys}" +
+                    if (urls.isEmpty()) "" else "; adresler={${urls.joinToString("|")}}"
+            }
+
+            fun configValueShape(value: Any?): String = when (value) {
+                is JSONObject -> sourceObjectShape(value)
+                is JSONArray -> {
+                    (0 until minOf(value.length(), 5)).mapNotNull { index ->
+                        when (val item = value.opt(index)) {
+                            is JSONObject -> "[$index]${sourceObjectShape(item)}"
+                            is String -> "[$index]=${safeUrlShape(item)}"
+                            else -> null
+                        }
+                    }.joinToString("; ").ifBlank { "array(${value.length()})" }
+                }
+                is String -> safeUrlShape(value)
+                null, JSONObject.NULL -> "null"
+                else -> value.javaClass.simpleName
+            }
+
+            val configValues = if (configObject == null) {
+                "NP_CONFIG JSON ayrıştırılamadı"
+            } else {
+                listOf("sources", "master", "url", "tok", "gate", "embed", "srv", "ident")
+                    .mapNotNull { key ->
+                        if (!configObject.has(key)) null
+                        else "$key=${configValueShape(configObject.opt(key))}"
+                    }
+                    .joinToString("; ")
+            }
+
+            // np.js içindeki istek kodlarının çevresini göster; query/token değerlerini maskele.
             val npScript = scripts.split(" | ").firstOrNull { it.contains("/np.js", true) }
             var npScriptInfo = "np.js bulunamadı"
             if (!npScript.isNullOrBlank()) {
@@ -1639,17 +1718,23 @@ class AsyaWatch : MainAPI() {
                     ).joinToString("; ") { marker ->
                         "$marker=${scriptBody.contains(marker, true)}"
                     }
-                    val endpointHints = Regex("""["']([^"'\s]{1,180})["']""")
-                        .findAll(scriptBody)
-                        .map { it.groupValues[1] }
-                        .filter { hint ->
-                            val lower = hint.lowercase()
-                            lower.contains("/api/") || lower.contains("token") ||
-                                lower.endsWith(".php") || lower.contains("source")
+                    val contexts = listOf("fetch(", "XMLHttpRequest", "loadSource(", "NP_CONFIG.sources")
+                        .mapNotNull { marker ->
+                            val index = scriptBody.indexOf(marker, ignoreCase = true)
+                            if (index < 0) null else {
+                                val from = maxOf(0, index - 180)
+                                val to = minOf(scriptBody.length, index + 360)
+                                scriptBody.substring(from, to)
+                                    .replace(Regex("""(?i)(token|tok|key|sig|auth)(\\s*[:=]\\s*["']?)[^"'&\\s,)}]+"""), "$1$2[redacted]")
+                                    .replace(Regex("""([?&][^=&#\\s]+)=([^&#"'\\s]+)"""), "$1=[redacted]")
+                                    .replace(Regex("""\\s+"""), " ")
+                            }
                         }
-                        .distinct().take(25).joinToString(" | ")
+                        .distinct()
+                        .take(4)
+                        .joinToString(" || ")
                     npScriptInfo = "HTTP=${scriptResponse.code}; chars=${scriptBody.length}; " +
-                        "$scriptMarkers; uçlar=$endpointHints"
+                        "$scriptMarkers; kod parçaları=$contexts"
                 } else {
                     npScriptInfo = "np.js isteği başarısız"
                 }
@@ -1664,6 +1749,7 @@ class AsyaWatch : MainAPI() {
             )
             Log.w("AsyaWatch", "FourPichive işaretleri: $markers")
             Log.w("AsyaWatch", "FourPichive NP_CONFIG yapısı: $configShape")
+            Log.w("AsyaWatch", "FourPichive NP_CONFIG kaynakları: $configValues")
             Log.w("AsyaWatch", "FourPichive np.js analizi: $npScriptInfo")
             Log.d("AsyaWatch", "FourPichive scriptleri: $scripts")
         }
