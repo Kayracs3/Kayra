@@ -974,12 +974,12 @@ class AsyaWatch : MainAPI() {
      */
     private fun parseEpisodesFromDocument(document: Document, poster: String?): List<Episode> {
         val result = LinkedHashMap<String, Episode>()
-        for (element in document.select("a[href*=/bolum-]")) {
+        for (element in document.select(".eps a[href*='/bolum-']")) {
             val rawUrl = element.attr("href").trim()
             val url = absoluteUrl(rawUrl) ?: continue
-            val episodeNumber = Regex("""(?i)/bolum-(\\d+)""")
+            val episodeNumber = Regex("""(?i)/bolum-(\d+)""")
                 .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-            val seasonNumber = Regex("""(?i)/sezon-(\\d+)""")
+            val seasonNumber = Regex("""(?i)/sezon-(\d+)""")
                 .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
             val episodeName = element.selectFirst(".tx b")?.text()?.trim()
                 ?.takeIf { it.isNotBlank() }
