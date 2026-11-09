@@ -883,6 +883,28 @@ class AsyaWatch : MainAPI() {
         return actors
     }
 
+    /**
+     * New AsyaWatch detail pages render the full cast as .cast > .cc cards.
+     * Read names and roles from the visible markup, and ignore SVG placeholder portraits.
+     */
+    private fun detailActorsFromDocument(document: Document): List<Actor> {
+        val actors = ArrayList<Actor>()
+        val seen = HashSet<String>()
+        for (card in document.select(".cast .cc")) {
+            val name = card.selectFirst("a.mj-cl")?.text()?.trim()
+                ?.takeIf { it.isNotBlank() } ?: continue
+            if (!seen.add(name)) continue
+            val role = card.selectFirst("div > span")?.text()?.trim()
+            val rawImage = card.selectFirst("img")?.let { image ->
+                image.attr("src").ifBlank {
+                    image.attr("data-src").ifBlank { image.attr("data-original") }
+                }
+            }?.takeIf { it.isNotBlank() && !it.startsWith("data:image/", true) }
+            actors.add(Actor(name, imageUrl(rawImage)))
+        }
+        return actors
+    }
+
     private fun detailTrailer(related: JSONObject?): String? {
         val trailers = objectField(related, "getContentTrailers", "getTrailers") ?: return null
         val rows = arrayField(trailers, "result") ?: return null
@@ -1059,7 +1081,9 @@ class AsyaWatch : MainAPI() {
             .filter { it.isNotBlank() }
             .distinct()
             .takeIf { it.isNotEmpty() }
-        val actors = detailActors(content).ifEmpty { detailActors(related) }
+        val actors = detailActors(content)
+            .ifEmpty { detailActors(related) }
+            .ifEmpty { detailActorsFromDocument(page.document) }
         val trailer = detailTrailer(related)
         val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
         val episodes = (
