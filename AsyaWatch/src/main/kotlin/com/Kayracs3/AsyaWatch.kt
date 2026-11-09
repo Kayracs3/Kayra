@@ -920,30 +920,29 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun parseEpisodes(related: JSONObject?, poster: String?): List<Episode> {
-        if (related == null) return emptyList()
-
+        // The current AsyaWatch detail payload stores published episodes directly in sch.
+        // Do not walk the whole object: unrelated nested data can contain other n/url fields.
+        val schedule = arrayField(related, "sch") ?: return emptyList()
         val result = LinkedHashMap<String, Episode>()
 
-        fun addEpisode(item: JSONObject, inheritedSeason: Int?) {
+        for (index in 0 until schedule.length()) {
+            val item = schedule.optJSONObject(index) ?: continue
             val rawUrl = field(item, "url", "used_slug", "slug", "episode_url", "href")
-                ?: return
-            val url = absoluteUrl(rawUrl) ?: return
+                ?: continue
+            val url = absoluteUrl(rawUrl) ?: continue
 
-            // The site marks not-yet-published episodes with on=false and omits their URL.
-            // Keep only published entries when the flag is explicitly present.
+            // Future schedule rows are not playable; keep only published entries.
             val isOn = field(item, "on")
-            if (isOn != null && (isOn.equals("false", true) || isOn == "0")) return
+            if (isOn != null && (isOn.equals("false", true) || isOn == "0")) continue
 
-            // Episode identity comes from the real episode URL; JSON n is only a fallback.
-            val episodeNumber = Regex("""(?i)/bolum-(\d+)""")
+            // The canonical episode number and season are encoded in the actual URL.
+            val episodeNumber = Regex("""(?i)/bolum-(\\d+)""")
                 .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 ?: field(item, "n", "episode_no", "episodeNo", "episode")?.toIntOrNull()
-                ?: return
-            val seasonFromUrl = Regex("""(?i)/sezon-(\d+)""")
+                ?: continue
+            val seasonNumber = Regex("""(?i)/sezon-(\\d+)""")
                 .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
-            val seasonNumber = seasonFromUrl
                 ?: field(item, "season_no", "seasonNo", "season")?.toIntOrNull()
-                ?: inheritedSeason
                 ?: 1
             val episodeName = field(item, "episode_text", "epText", "title", "name")
                 ?: "Bölüm $episodeNumber"
@@ -956,43 +955,11 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        fun walk(value: Any?, inheritedSeason: Int?, depth: Int = 0) {
-            if (value == null || depth > 12) return
-            when (value) {
-                is JSONObject -> {
-                    val currentSeason = field(value, "season_no", "seasonNo", "season")
-                        ?.toIntOrNull() ?: inheritedSeason
-                    // Some schedule records omit n; their URL still identifies the episode.
-                    if (field(value, "url", "used_slug", "slug", "episode_url", "href") != null) {
-                        addEpisode(value, currentSeason)
-                    }
-
-                    val keys = value.keys()
-                    while (keys.hasNext()) {
-                        val child = value.opt(keys.next()) ?: continue
-                        if (child is JSONObject || child is JSONArray) {
-                            walk(child, currentSeason, depth + 1)
-                        }
-                    }
-                }
-                is JSONArray -> {
-                    for (index in 0 until value.length()) {
-                        val child = value.opt(index) ?: continue
-                        if (child is JSONObject || child is JSONArray) {
-                            walk(child, inheritedSeason, depth + 1)
-                        }
-                    }
-                }
-            }
-        }
-
-        // New AsyaWatch detail data contains episode arrays with n/on/url fields.
-        // The recursive walk also supports the legacy season/episodes structure.
-        walk(related, null)
         return result.values.sortedWith(
             compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 }
         )
     }
+
     /**
      * The server-rendered detail HTML already contains links for published episodes.
      * Use these links as a fallback when a client receives a partial Flight payload.
@@ -1007,10 +974,10 @@ class AsyaWatch : MainAPI() {
             .getOrDefault(pageUrl.substringBefore('?'))
             .trimEnd('/')
         val seriesPath = pagePath.replace(
-            Regex("""(?i)/sezon-\d+(?:/bolum-\d+)?$"""),
+            Regex("""(?i)/sezon-\\d+(?:/bolum-\\d+)?$"""),
             ""
         ).trimEnd('/')
-        val pageSeason = Regex("""(?i)/sezon-(\d+)""")
+        val pageSeason = Regex("""(?i)/sezon-(\\d+)""")
             .find(pagePath)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
 
         fun addEpisode(rawUrl: String, number: Int, season: Int, label: String?) {
@@ -1024,32 +991,51 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // Published episodes have real href attributes inside .elist.
-        for (element in document.select(".elist a.er[href*='/bolum-']")) {
-            if (element.attr("aria-disabled").equals("true", true)) continue
+        // Original AsyaWatch episode board: .eps links, title inside .tx b.
+        val epsLinks = document.select(".eps a[href*='/bolum-']")
+        for (element in epsLinks) {
+            if (element.attr("aria-disabled").equals("true", true) ||
+                element.hasClass("fut")
+            ) continue
             val rawUrl = element.attr("href").trim()
-            val number = Regex("""(?i)/bolum-(\d+)""")
+            val number = Regex("""(?i)/bolum-(\\d+)""")
                 .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-            val season = Regex("""(?i)/sezon-(\d+)""")
+            val season = Regex("""(?i)/sezon-(\\d+)""")
+                .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: pageSeason
+            val label = element.selectFirst(".tx b")?.text()?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: element.selectFirst(".tx")?.text()?.trim()
+            addEpisode(rawUrl, number, season, label)
+        }
+
+        // Newer pages may also render the same board as .elist.
+        val elistLinks = document.select(".elist a.er[href*='/bolum-']")
+        for (element in elistLinks) {
+            if (element.attr("aria-disabled").equals("true", true) ||
+                element.hasClass("fut")
+            ) continue
+            val rawUrl = element.attr("href").trim()
+            val number = Regex("""(?i)/bolum-(\\d+)""")
+                .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
+            val season = Regex("""(?i)/sezon-(\\d+)""")
                 .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: pageSeason
             val label = element.selectFirst(".t1")?.text()?.trim()
+                ?.takeIf { it.isNotBlank() }
                 ?: element.attr("aria-label")
             addEpisode(rawUrl, number, season, label)
         }
 
-        // The currently playing episode is marked .cur and deliberately has no href.
-        // Reconstruct its normal episode URL from the visible number and series slug.
+        // A currently playing .elist episode has no href; reconstruct it from its label.
         val current = document.selectFirst(".elist a.er.cur[aria-current=true]")
         if (current != null && seriesPath.startsWith("/dizi/", true)) {
             val label = current.selectFirst(".t1")?.text()
                 ?.ifBlank { current.attr("aria-label") }
                 .orEmpty()
-            val number = Regex("""(?i)(\d+)\s*\.?\s*bölüm""")
+            val number = Regex("""(?i)(\\d+)\\s*\\.?\\s*bölüm""")
                 .find(label)?.groupValues?.getOrNull(1)?.toIntOrNull()
             if (number != null) {
-                val currentUrl = "$seriesPath/sezon-$pageSeason/bolum-$number"
                 addEpisode(
-                    currentUrl,
+                    "$seriesPath/sezon-$pageSeason/bolum-$number",
                     number,
                     pageSeason,
                     current.selectFirst(".t1")?.text() ?: "Bölüm $number"
@@ -1057,6 +1043,10 @@ class AsyaWatch : MainAPI() {
             }
         }
 
+        Log.d(
+            "AsyaWatch",
+            "HTML bölüm panosu: eps=${epsLinks.size}; elist=${elistLinks.size}; çıkan=${result.size}"
+        )
         return result.values.sortedWith(
             compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 }
         )
@@ -1090,6 +1080,7 @@ class AsyaWatch : MainAPI() {
             .ifEmpty { detailActorsFromDocument(page.document) }
         val trailer = detailTrailer(related)
         val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
+        // Prefer the new sch array; if it cannot yield episodes, use the original .eps HTML board.
         val episodes = parseEpisodes(content, poster)
             .ifEmpty { parseEpisodesFromDocument(page.document, poster, url) }
             .ifEmpty { parseEpisodes(related, poster) }
