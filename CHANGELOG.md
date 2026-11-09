@@ -2,6 +2,23 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:150b425608d99433321052b9ad32492c02e1fc76 -->
+### Correct AsyaWatch diagnostic regex escaping
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [150b425](https://github.com/Kayracs3/Kayra/commit/150b425608d99433321052b9ad32492c02e1fc76)
+
+## 2026-11-09
+
+<!-- kayra-commit:62a6d89cc19f05118f5bca44464fe67efd2f7df4 -->
+### Fix AsyaWatch player diagnostic regexes
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [62a6d89](https://github.com/Kayracs3/Kayra/commit/62a6d89cc19f05118f5bca44464fe67efd2f7df4)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:ebcda97cd83af88a6211ddb7c4207cfc183997ba -->
 ### Simplify AsyaWatch player diagnostics
 
