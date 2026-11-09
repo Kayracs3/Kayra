@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:1249ae9e6b1d1b823a9a8668ea80428a1b52309f -->
+### Inspect AsyaWatch player source configuration
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [1249ae9](https://github.com/Kayracs3/Kayra/commit/1249ae9e6b1d1b823a9a8668ea80428a1b52309f)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:150b425608d99433321052b9ad32492c02e1fc76 -->
 ### Correct AsyaWatch diagnostic regex escaping
 
