@@ -968,6 +968,35 @@ class AsyaWatch : MainAPI() {
             compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 }
         )
     }
+    /**
+     * The server-rendered detail HTML already contains links for published episodes.
+     * Use these links as a fallback when a client receives a partial Flight payload.
+     */
+    private fun parseEpisodesFromDocument(document: Document, poster: String?): List<Episode> {
+        val result = LinkedHashMap<String, Episode>()
+        for (element in document.select("a[href*=/bolum-]")) {
+            val rawUrl = element.attr("href").trim()
+            val url = absoluteUrl(rawUrl) ?: continue
+            val episodeNumber = Regex("""(?i)/bolum-(\\d+)""")
+                .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
+            val seasonNumber = Regex("""(?i)/sezon-(\\d+)""")
+                .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+            val episodeName = element.selectFirst(".tx b")?.text()?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: "Bölüm $episodeNumber"
+
+            result[url] = newEpisode(url) {
+                name = episodeName
+                season = seasonNumber
+                episode = episodeNumber
+                posterUrl = poster
+            }
+        }
+        return result.values.sortedWith(
+            compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 }
+        )
+    }
+
     override suspend fun load(url: String): LoadResponse {
         val page = getPageData(url)
         val root = page.secureData
@@ -985,15 +1014,18 @@ class AsyaWatch : MainAPI() {
         val year = detailYear(content, page.document)
         val score = scoreFrom(field(content, "imdb_point", "imdbPoint", "score", "rating", "sc"))
         val tags = detailTags(content)
-        val actors = detailActors(related)
+        val actors = detailActors(content).ifEmpty { detailActors(related) }
         val trailer = detailTrailer(related)
         val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
-        val episodes = parseEpisodes(content, poster).ifEmpty { parseEpisodes(related, poster) }
+        val episodes = parseEpisodes(content, poster)
+            .ifEmpty { parseEpisodes(related, poster) }
+            .ifEmpty { parseEpisodesFromDocument(page.document, poster) }
         val isSeries = url.contains("/dizi/", true) ||
             field(content, "used_slug", "usedSlug", "url")?.contains("/dizi/", true) == true ||
             objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
 
-        Log.d("AsyaWatch", "Detay: ${title}; katalog=${catalogEntry != null}; tür=${tags?.size ?: 0}; kadro=${actors.size}; bölüm=${episodes.size}; yıl=$year")
+        val scheduleCount = arrayField(content, "sch")?.length() ?: 0
+        Log.d("AsyaWatch", "Detay: $title; katalog=${catalogEntry != null}; sch=$scheduleCount; tür=${tags?.size ?: 0}; kadro=${actors.size}; bölüm=${episodes.size}; yıl=$year")
 
         return if (isSeries) {
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
