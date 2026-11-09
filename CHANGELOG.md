@@ -1,5 +1,30 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-09
+
+<!-- kayra-commit:54dfd8ad7184455e99a7aa12942de19aa10a037d -->
+### Bump AsyaWatch version to 24
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [54dfd8a](https://github.com/Kayracs3/Kayra/commit/54dfd8ad7184455e99a7aa12942de19aa10a037d)
+
+## 2026-11-09
+
+<!-- kayra-commit:de5eb1d79428a9582f8981dd661eae66f199cab7 -->
+### Add AsyaWatch API response diagnostics
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [de5eb1d](https://github.com/Kayracs3/Kayra/commit/de5eb1d79428a9582f8981dd661eae66f199cab7)
+
+## 2026-11-08
+
+<!-- kayra-commit:6c7e795dcd54498a186fc4303cc38711cbf09436 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [6c7e795](https://github.com/Kayracs3/Kayra/commit/6c7e795dcd54498a186fc4303cc38711cbf09436)
+
+
 ## 2026-11-08
 
 <!-- kayra-commit:896504e8cff7cfcbd0313174a86a761e551fe72a -->
