@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:df39d8fc99b1612cbd67afe71fd50ffff5cb06bf -->
+### Read AsyaWatch image fields from keşfet results
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [df39d8f](https://github.com/Kayracs3/Kayra/commit/df39d8fc99b1612cbd67afe71fd50ffff5cb06bf)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:adcd50c7d1df8087ba265d20b70e383bcd07b62e -->
 ### Preserve AsyaWatch AMP poster URLs
 
