@@ -320,6 +320,119 @@ class AsyaWatch : MainAPI() {
         return parseObject(decodeBase64Text(raw)) ?: parseObject(raw)
     }
 
+    /**
+     * Next.js App Router payloads are streamed in self.__next_f.push([1, "..."]).
+     * Decode those string chunks so structured page data can be read without relying
+     * on the removed __NEXT_DATA__/secureData format.
+     */
+    private fun nextFlightPayloads(document: Document): List<String> {
+        val result = ArrayList<String>()
+        val marker = "self.__next_f.push([1,"
+        for (script in document.select("script")) {
+            val source = script.data().ifBlank { script.html() }
+            var position = 0
+            while (position < source.length) {
+                val markerIndex = source.indexOf(marker, position)
+                if (markerIndex < 0) break
+
+                var quoteStart = markerIndex + marker.length
+                while (quoteStart < source.length && source[quoteStart].isWhitespace()) quoteStart++
+                if (quoteStart >= source.length || source[quoteStart] != '"') {
+                    position = quoteStart + 1
+                    continue
+                }
+
+                var quoteEnd = quoteStart + 1
+                var escaped = false
+                while (quoteEnd < source.length) {
+                    val char = source[quoteEnd]
+                    if (escaped) {
+                        escaped = false
+                    } else if (char == '\\') {
+                        escaped = true
+                    } else if (char == '"') {
+                        break
+                    }
+                    quoteEnd++
+                }
+
+                if (quoteEnd < source.length) {
+                    val literal = source.substring(quoteStart, quoteEnd + 1)
+                    val decoded = runCatching {
+                        JSONArray("[$literal]").optString(0)
+                    }.getOrNull()
+                    if (!decoded.isNullOrBlank()) result.add(decoded)
+                    position = quoteEnd + 1
+                } else {
+                    break
+                }
+            }
+        }
+        return result
+    }
+
+    /**
+     * Extract a balanced JSON object after a quoted property name inside a
+     * decoded React Server Components payload.
+     */
+    private fun jsonObjectAfterKey(source: String, key: String): JSONObject? {
+        val token = "\"$key\""
+        var searchFrom = 0
+        while (searchFrom < source.length) {
+            val keyIndex = source.indexOf(token, searchFrom)
+            if (keyIndex < 0) return null
+
+            val colon = source.indexOf(':', keyIndex + token.length)
+            if (colon < 0) return null
+            var start = colon + 1
+            while (start < source.length && source[start].isWhitespace()) start++
+            if (start >= source.length || source[start] != '{') {
+                searchFrom = keyIndex + token.length
+                continue
+            }
+
+            var depth = 0
+            var inString = false
+            var escaped = false
+            var end = start
+            while (end < source.length) {
+                val char = source[end]
+                if (inString) {
+                    if (escaped) {
+                        escaped = false
+                    } else if (char == '\\') {
+                        escaped = true
+                    } else if (char == '"') {
+                        inString = false
+                    }
+                } else {
+                    when (char) {
+                        '"' -> inString = true
+                        '{' -> depth++
+                        '}' -> {
+                            depth--
+                            if (depth == 0) {
+                                return runCatching {
+                                    JSONObject(source.substring(start, end + 1))
+                                }.getOrNull()
+                            }
+                        }
+                    }
+                }
+                end++
+            }
+            return null
+        }
+        return null
+    }
+
+    private fun nextFlightObject(document: Document, key: String): JSONObject? {
+        for (payload in nextFlightPayloads(document)) {
+            jsonObjectAfterKey(payload, key)?.let { return it }
+        }
+        return null
+    }
+
     private suspend fun getPageData(url: String): PageData {
         if (isCoolingDown()) return PageData(Jsoup.parse("", url), null, isRateLimited = true)
 
@@ -517,7 +630,7 @@ class AsyaWatch : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     private fun detailTitle(content: JSONObject?, document: Document, pageUrl: String): String {
-        val original = field(content, "original_title", "originalTitle", "title")
+        val original = field(content, "original_title", "originalTitle", "title", "t", "name")
         val culture = field(content, "culture_title", "cultureTitle")
         if (!original.isNullOrBlank() && !original.contains("Error 1015", true)) {
             return if (!culture.isNullOrBlank() && !culture.equals(original, true)) {
@@ -567,7 +680,7 @@ class AsyaWatch : MainAPI() {
         // Match the page's actual title first so a logo, avatar, or unrelated image is
         // not accidentally returned as this film's poster.
         val expectedTitles = listOfNotNull(
-            field(content, "original_title", "originalTitle", "title", "object_name", "name"),
+            field(content, "original_title", "originalTitle", "title", "object_name", "name", "t"),
             field(content, "culture_title", "cultureTitle"),
             document.selectFirst("h1")?.text(),
             document.selectFirst("meta[property=og:title]")?.attr("content"),
@@ -675,13 +788,21 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun detailYear(content: JSONObject?, document: Document): Int? {
-        field(content, "release_year", "releaseYear", "year")?.toIntOrNull()?.let { return it }
+        field(content, "release_year", "releaseYear", "year", "y")?.toIntOrNull()?.let { return it }
         return Regex("""\b(?:19|20)\d{2}\b""")
             .find(document.selectFirst("body")?.text().orEmpty())?.value?.toIntOrNull()
     }
 
     private fun detailTags(content: JSONObject?): List<String>? {
-        val raw = field(content, "categories", "tags", "genres") ?: return null
+        val genreArray = arrayField(content, "g", "genres", "categories")
+        if (genreArray != null) {
+            val values = (0 until genreArray.length())
+                .mapNotNull { genreArray.optString(it).trim().takeIf(String::isNotBlank) }
+                .distinct()
+            if (values.isNotEmpty()) return values
+        }
+
+        val raw = field(content, "categories", "tags", "genres", "g") ?: return null
         val tags = raw.removePrefix("[").removeSuffix("]")
             .split(',', '|')
             .map { it.trim().trim('"', '\'') }
@@ -691,15 +812,21 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun detailActors(related: JSONObject?): List<Actor> {
-        val cast = objectField(related, "getMovieCastsById", "getContentCastsById") ?: return emptyList()
-        val rows = arrayField(cast, "result") ?: return emptyList()
+        val cast = objectField(related, "getMovieCastsById", "getContentCastsById")
+        val rows = arrayField(cast, "result") ?: arrayField(related, "cast", "casts")
+            ?: return emptyList()
         val actors = ArrayList<Actor>()
         val seen = HashSet<String>()
         for (index in 0 until rows.length()) {
             val item = rows.optJSONObject(index) ?: continue
             val actorName = field(item, "name", "actor_name", "title") ?: continue
             if (seen.add(actorName)) {
-                actors.add(Actor(actorName, imageUrl(field(item, "cast_image", "castImage", "image", "poster"))))
+                actors.add(
+                    Actor(
+                        actorName,
+                        imageUrl(field(item, "cast_image", "castImage", "image", "poster", "ph"))
+                    )
+                )
             }
         }
         return actors
@@ -717,54 +844,100 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun parseEpisodes(related: JSONObject?, poster: String?): List<Episode> {
-        val seasonData = objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons")
-            ?: return emptyList()
-        val seasons = arrayField(seasonData, "result", "seasons") ?: return emptyList()
-        val result = ArrayList<Episode>()
-        val seen = HashSet<String>()
+        if (related == null) return emptyList()
 
-        for (seasonIndex in 0 until seasons.length()) {
-            val seasonObject = seasons.optJSONObject(seasonIndex) ?: continue
-            val seasonNumber = field(seasonObject, "season_no", "seasonNo", "season")?.toIntOrNull()
-                ?: (seasonIndex + 1)
-            val episodes = arrayField(seasonObject, "episodes", "episodeList") ?: continue
-            for (episodeIndex in 0 until episodes.length()) {
-                val episodeObject = episodes.optJSONObject(episodeIndex) ?: continue
-                val rawUrl = field(episodeObject, "used_slug", "slug", "url", "episode_url") ?: continue
-                val url = absoluteUrl(rawUrl) ?: continue
-                if (!seen.add(url)) continue
-                val episodeText = field(episodeObject, "episode_text", "epText", "title", "name").orEmpty()
-                val episodeNumber = field(episodeObject, "episode_no", "episodeNo", "episode")?.toIntOrNull()
-                    ?: Regex("""\d+""").find(episodeText)?.value?.toIntOrNull()
-                    ?: (episodeIndex + 1)
-                result.add(newEpisode(url) {
-                    name = episodeText.ifBlank { "Bölüm $episodeNumber" }
-                    season = seasonNumber
-                    episode = episodeNumber
-                    posterUrl = poster
-                })
+        val result = LinkedHashMap<String, Episode>()
+
+        fun addEpisode(item: JSONObject, inheritedSeason: Int?) {
+            val rawUrl = field(item, "url", "used_slug", "slug", "episode_url", "href")
+                ?: return
+            val url = absoluteUrl(rawUrl) ?: return
+
+            // The site marks not-yet-published episodes with on=false and omits their URL.
+            // Keep only published entries when the flag is explicitly present.
+            val isOn = field(item, "on")
+            if (isOn != null && (isOn.equals("false", true) || isOn == "0")) return
+
+            val episodeNumber = field(item, "n", "episode_no", "episodeNo", "episode")
+                ?.toIntOrNull()
+                ?: Regex("""(?i)/bolum-(\d+)""").find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: return
+            val seasonFromUrl = Regex("""(?i)/sezon-(\d+)""")
+                .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val seasonNumber = seasonFromUrl
+                ?: field(item, "season_no", "seasonNo", "season")?.toIntOrNull()
+                ?: inheritedSeason
+                ?: 1
+            val episodeName = field(item, "episode_text", "epText", "title", "name")
+                ?: "Bölüm $episodeNumber"
+
+            result[url] = newEpisode(url) {
+                name = episodeName
+                season = seasonNumber
+                episode = episodeNumber
+                posterUrl = poster
             }
         }
-        return result.sortedWith(compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 })
-    }
 
+        fun walk(value: Any?, inheritedSeason: Int?, depth: Int = 0) {
+            if (value == null || depth > 12) return
+            when (value) {
+                is JSONObject -> {
+                    val currentSeason = field(value, "season_no", "seasonNo", "season")
+                        ?.toIntOrNull() ?: inheritedSeason
+                    if (field(value, "n", "episode_no", "episodeNo", "episode") != null &&
+                        field(value, "url", "used_slug", "slug", "episode_url", "href") != null
+                    ) {
+                        addEpisode(value, currentSeason)
+                    }
+
+                    val keys = value.keys()
+                    while (keys.hasNext()) {
+                        val child = value.opt(keys.next()) ?: continue
+                        if (child is JSONObject || child is JSONArray) {
+                            walk(child, currentSeason, depth + 1)
+                        }
+                    }
+                }
+                is JSONArray -> {
+                    for (index in 0 until value.length()) {
+                        val child = value.opt(index) ?: continue
+                        if (child is JSONObject || child is JSONArray) {
+                            walk(child, inheritedSeason, depth + 1)
+                        }
+                    }
+                }
+            }
+        }
+
+        // New AsyaWatch detail data contains episode arrays with n/on/url fields.
+        // The recursive walk also supports the legacy season/episodes structure.
+        walk(related, null)
+        return result.values.sortedWith(
+            compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 }
+        )
+    }
     override suspend fun load(url: String): LoadResponse {
         val page = getPageData(url)
         val root = page.secureData
-        val content = objectField(root, "contentItem", "content_item") ?: JSONObject()
-        val related = objectField(root, "RelatedResults", "relatedResults")
+        val flightDrama = nextFlightObject(page.document, "drama")
+        val flightFilm = nextFlightObject(page.document, "film")
+        val content = flightDrama ?: flightFilm
+            ?: objectField(root, "contentItem", "content_item")
+            ?: JSONObject()
+        val related = objectField(root, "RelatedResults", "relatedResults") ?: content
         val title = detailTitle(content, page.document, url)
         val poster = detailPoster(content, page.document)
-        val description = field(content, "description", "plot", "overview")
+        val description = field(content, "description", "plot", "overview", "d", "desc")
             ?: page.document.selectFirst("meta[name=description]")?.attr("content")
             ?: page.document.selectFirst("meta[property=og:description]")?.attr("content")
         val year = detailYear(content, page.document)
-        val score = scoreFrom(field(content, "imdb_point", "imdbPoint", "score", "rating"))
+        val score = scoreFrom(field(content, "imdb_point", "imdbPoint", "score", "rating", "sc"))
         val tags = detailTags(content)
         val actors = detailActors(related)
         val trailer = detailTrailer(related)
-        val duration = field(content, "total_minutes", "totalMinutes", "duration")?.toIntOrNull()
-        val episodes = parseEpisodes(related, poster)
+        val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
+        val episodes = parseEpisodes(content, poster).ifEmpty { parseEpisodes(related, poster) }
         val isSeries = url.contains("/dizi/", true) ||
             field(content, "used_slug", "usedSlug")?.contains("/dizi/", true) == true ||
             objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
