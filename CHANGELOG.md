@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:714d25471be8c7d3e7ff5a655b880ff47909f3de -->
+### Update mainPage to reflect new categories
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [714d254](https://github.com/Kayracs3/Kayra/commit/714d25471be8c7d3e7ff5a655b880ff47909f3de)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:d9d703990d8ddc1259ac2873433323c067ab2069 -->
 ### Fix AsyaWatch episode URL regexes
 
