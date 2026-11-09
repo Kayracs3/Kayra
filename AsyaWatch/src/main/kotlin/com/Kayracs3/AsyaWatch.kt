@@ -1,5 +1,6 @@
 package com.Kayracs3
 
+import android.util.Log
 import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageResponse
@@ -349,17 +350,41 @@ class AsyaWatch : MainAPI() {
     }
 
     private suspend fun postJson(url: String): JSONObject? {
-        if (isCoolingDown()) return null
+        val endpoint = url.substringBefore('?').removePrefix(mainUrl)
+        if (isCoolingDown()) {
+            Log.w("AsyaWatch", "API isteği soğuma süresi nedeniyle atlandı: " + endpoint)
+            return null
+        }
         val response = runCatching {
             app.post(url, headers = apiHeaders, referer = "$mainUrl/")
+        }.onFailure {
+            Log.e("AsyaWatch", "API bağlantı hatası: " + endpoint + " (" + it.javaClass.simpleName + ": " + it.message + ")")
         }.getOrNull() ?: return null
         val body = response.text
         if (isRateLimitResponse(response.code, body)) {
+            Log.w("AsyaWatch", "API hız sınırı yanıtı: HTTP " + response.code + " - " + endpoint)
             noteRateLimit()
             return null
         }
-        if (!response.isSuccessful) return null
-        return decodeApiResponse(body)
+        if (!response.isSuccessful) {
+            val isHtml = body.trimStart().startsWith("<") ||
+                body.contains("<html", true) ||
+                body.contains("Attention Required", true)
+            Log.e("AsyaWatch", "API HTTP " + response.code + " - " + endpoint + "; bodyLength=" + body.length + "; htmlOrChallenge=" + isHtml)
+            return null
+        }
+        val decoded = decodeApiResponse(body)
+        if (decoded == null) {
+            val isHtml = body.trimStart().startsWith("<") ||
+                body.contains("<html", true) ||
+                body.contains("Attention Required", true)
+            Log.e("AsyaWatch", "API yanıtı çözülemedi - " + endpoint + "; HTTP " + response.code + "; bodyLength=" + body.length + "; htmlOrChallenge=" + isHtml)
+        } else if (decoded.optJSONArray("result") == null) {
+            Log.e("AsyaWatch", "API yanıtında result dizisi yok - " + endpoint)
+        } else {
+            Log.d("AsyaWatch", "API yanıtı alındı - " + endpoint + "; kayıt=" + decoded.optJSONArray("result")!!.length())
+        }
+        return decoded
     }
 
     private fun searchResponseFrom(item: JSONObject, forceSeries: Boolean = false): SearchResponse? {
