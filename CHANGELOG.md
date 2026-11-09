@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:96df33c707bc5c4d3f405c9ce9ddb83eca1de677 -->
+### Improve ContentX player source parsing
+
+- Etkilenen alanlar: Dizilla
+- Commit: [96df33c](https://github.com/Kayracs3/Kayra/commit/96df33c707bc5c4d3f405c9ce9ddb83eca1de677)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:714d25471be8c7d3e7ff5a655b880ff47909f3de -->
 ### Update mainPage to reflect new categories
 
