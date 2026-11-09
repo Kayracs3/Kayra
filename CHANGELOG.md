@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:d9d703990d8ddc1259ac2873433323c067ab2069 -->
+### Fix AsyaWatch episode URL regexes
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [d9d7039](https://github.com/Kayracs3/Kayra/commit/d9d703990d8ddc1259ac2873433323c067ab2069)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:3e6b39cf96dd0042d19dd0ab258a5e2196cc1a2c -->
 ### Restore AsyaWatch eps episode board fallback
 
