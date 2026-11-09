@@ -56,16 +56,7 @@ class AsyaWatch : MainAPI() {
     override var sequentialMainPageDelay = 350L
     override var sequentialMainPageScrollDelay = 250L
 
-    override val mainPage = mainPageOf(
-        "" to "Yeni Eklenen Filmler",
-        "aksiyon" to "Aksiyon Film",
-        "bilim-kurgu" to "Bilim Kurgu Film",
-        "fantastik" to "Fantastik Film",
-        "gerilim" to "Gerilim Film",
-        "gizem" to "Gizem Film",
-        "korku" to "Korku Film",
-        "komedi" to "Komedi Film",
-        "romantik" to "Romantik Film",
+    override val mainPage = mainPageOf(       
         "" to "Yeni Eklenen Diziler",
         "aksiyon" to "Aksiyon Dizi",
         "bilim-kurgu" to "Bilim Kurgu Dizi",
