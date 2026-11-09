@@ -936,11 +936,11 @@ class AsyaWatch : MainAPI() {
             if (isOn != null && (isOn.equals("false", true) || isOn == "0")) continue
 
             // The canonical episode number and season are encoded in the actual URL.
-            val episodeNumber = Regex("""(?i)/bolum-(\\d+)""")
+            val episodeNumber = Regex("""(?i)/bolum-(\d+)""")
                 .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 ?: field(item, "n", "episode_no", "episodeNo", "episode")?.toIntOrNull()
                 ?: continue
-            val seasonNumber = Regex("""(?i)/sezon-(\\d+)""")
+            val seasonNumber = Regex("""(?i)/sezon-(\d+)""")
                 .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 ?: field(item, "season_no", "seasonNo", "season")?.toIntOrNull()
                 ?: 1
@@ -974,10 +974,10 @@ class AsyaWatch : MainAPI() {
             .getOrDefault(pageUrl.substringBefore('?'))
             .trimEnd('/')
         val seriesPath = pagePath.replace(
-            Regex("""(?i)/sezon-\\d+(?:/bolum-\\d+)?$"""),
+            Regex("""(?i)/sezon-\d+(?:/bolum-\d+)?$"""),
             ""
         ).trimEnd('/')
-        val pageSeason = Regex("""(?i)/sezon-(\\d+)""")
+        val pageSeason = Regex("""(?i)/sezon-(\d+)""")
             .find(pagePath)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
 
         fun addEpisode(rawUrl: String, number: Int, season: Int, label: String?) {
@@ -998,9 +998,9 @@ class AsyaWatch : MainAPI() {
                 element.hasClass("fut")
             ) continue
             val rawUrl = element.attr("href").trim()
-            val number = Regex("""(?i)/bolum-(\\d+)""")
+            val number = Regex("""(?i)/bolum-(\d+)""")
                 .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-            val season = Regex("""(?i)/sezon-(\\d+)""")
+            val season = Regex("""(?i)/sezon-(\d+)""")
                 .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: pageSeason
             val label = element.selectFirst(".tx b")?.text()?.trim()
                 ?.takeIf { it.isNotBlank() }
@@ -1015,9 +1015,9 @@ class AsyaWatch : MainAPI() {
                 element.hasClass("fut")
             ) continue
             val rawUrl = element.attr("href").trim()
-            val number = Regex("""(?i)/bolum-(\\d+)""")
+            val number = Regex("""(?i)/bolum-(\d+)""")
                 .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-            val season = Regex("""(?i)/sezon-(\\d+)""")
+            val season = Regex("""(?i)/sezon-(\d+)""")
                 .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: pageSeason
             val label = element.selectFirst(".t1")?.text()?.trim()
                 ?.takeIf { it.isNotBlank() }
@@ -1031,7 +1031,7 @@ class AsyaWatch : MainAPI() {
             val label = current.selectFirst(".t1")?.text()
                 ?.ifBlank { current.attr("aria-label") }
                 .orEmpty()
-            val number = Regex("""(?i)(\\d+)\\s*\\.?\\s*bölüm""")
+            val number = Regex("""(?i)(\d+)\s*\.?\s*bölüm""")
                 .find(label)?.groupValues?.getOrNull(1)?.toIntOrNull()
             if (number != null) {
                 addEpisode(
