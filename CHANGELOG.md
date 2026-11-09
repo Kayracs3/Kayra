@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:adcd50c7d1df8087ba265d20b70e383bcd07b62e -->
+### Preserve AsyaWatch AMP poster URLs
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [adcd50c](https://github.com/Kayracs3/Kayra/commit/adcd50c7d1df8087ba265d20b70e383bcd07b62e)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:b478438eb53db225a4d7824e9d71d21a714d3318 -->
 ### Fix AsyaWatch home catalog using keşfet GET API
 
