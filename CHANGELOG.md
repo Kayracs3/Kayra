@@ -2,6 +2,23 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:13464d5dbdc7df1e4a1fb351a33f4404807a44f2 -->
+### Restore original Dizilla ContentX extractor
+
+- Etkilenen alanlar: Dizilla
+- Commit: [13464d5](https://github.com/Kayracs3/Kayra/commit/13464d5dbdc7df1e4a1fb351a33f4404807a44f2)
+
+## 2026-11-09
+
+<!-- kayra-commit:90e5751c54346fdb5abaf07e99778e1753af9eb8 -->
+### Revert assistant changes to Dizilla ContentX extractor
+
+- Etkilenen alanlar: Dizilla
+- Commit: [90e5751](https://github.com/Kayracs3/Kayra/commit/90e5751c54346fdb5abaf07e99778e1753af9eb8)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:d6a4b60676af315a9aaecd4737c0c2e871ad80ae -->
 ### Correct ContentX parser regex escaping
 
