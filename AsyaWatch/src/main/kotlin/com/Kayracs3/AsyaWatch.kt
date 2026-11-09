@@ -165,26 +165,25 @@ class AsyaWatch : MainAPI() {
     }
 
     /**
-     * FourPichive appends a proof-of-work parameter to media and subtitle URLs.
-     * This mirrors np.js: SHA-256("$challenge:$nonce") must start with the
-     * configured number of zero bits.
+     * FourPichive's NP_GATE in np.js searches for the first nonce where
+     * SHA-256("$nonce|q0Q7APE1FI|$challenge")[2] >>> 20 equals zero.
+     * The third 32-bit SHA-256 word is used, not the first word.
      */
     private fun fourPichiveGateProof(config: JSONObject?): String? {
         val gate = config?.optJSONObject("gate") ?: return null
         val challenge = field(gate, "n") ?: return null
-        val configuredBits = gate.optInt("b", 12)
-        val difficulty = if (configuredBits == 0) 12 else configuredBits.coerceIn(1, 32)
         val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
             ?: return null
 
         for (nonce in 0L until 100_000_000L) {
-            val hash = digest.digest("$challenge:$nonce".toByteArray(Charsets.UTF_8))
-            val firstWord =
-                ((hash[0].toInt() and 0xff) shl 24) or
-                ((hash[1].toInt() and 0xff) shl 16) or
-                ((hash[2].toInt() and 0xff) shl 8) or
-                (hash[3].toInt() and 0xff)
-            if ((firstWord ushr (32 - difficulty)) == 0) {
+            val input = "$nonce|q0Q7APE1FI|$challenge"
+            val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
+            val thirdWord =
+                ((hash[8].toInt() and 0xff) shl 24) or
+                ((hash[9].toInt() and 0xff) shl 16) or
+                ((hash[10].toInt() and 0xff) shl 8) or
+                (hash[11].toInt() and 0xff)
+            if ((thirdWord ushr 20) == 0) {
                 return nonce.toString()
             }
         }
