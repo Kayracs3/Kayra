@@ -1573,6 +1573,9 @@ class AsyaWatch : MainAPI() {
         callback: (SubtitleFile) -> Unit
     ) {
         if (!seenPages.add(pageUrl) || isDirectMedia(pageUrl)) return
+        val isFourPichive = runCatching {
+            URI(pageUrl).host.equals("four.pichive.online", true)
+        }.getOrDefault(false)
         val response = runCatching {
             app.get(
                 pageUrl,
@@ -1580,10 +1583,45 @@ class AsyaWatch : MainAPI() {
                 referer = referer,
                 allowRedirects = true
             )
+        }.onFailure {
+            if (isFourPichive) {
+                Log.e(
+                    "AsyaWatch",
+                    "FourPichive isteği başarısız: ${it.javaClass.simpleName}: ${it.message}"
+                )
+            }
         }.getOrNull() ?: return
-        if (!response.isSuccessful) return
 
         val html = response.text
+        if (isFourPichive) {
+            val document = Jsoup.parse(html, pageUrl)
+            val inlineScripts = document.select("script:not([src])")
+                .joinToString("\n") { it.data() }
+            val inspected = html + "\n" + inlineScripts
+            val markers = listOf(
+                "openPlayer", "NP_CONFIG", "source2.php", "m3u8", "mp4",
+                "jwplayer", "videojs", "playlist", "token", "fetch(", "XMLHttpRequest"
+            ).joinToString("; ") { marker ->
+                "$marker=${inspected.contains(marker, true)}"
+            }
+            val scripts = document.select("script[src]")
+                .map { it.absUrl("src").ifBlank { it.attr("src") } }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .take(10)
+                .joinToString(" | ") { it.substringBefore("?") }
+            Log.w(
+                "AsyaWatch",
+                "FourPichive yanıtı: HTTP ${response.code}; başarılı=${response.isSuccessful}; " +
+                    "karakter=${html.length}; başlık=${document.title()}; " +
+                    "video=${document.select("video").size}; source=${document.select("video source, source").size}; " +
+                    "iframe=${document.select("iframe").size}; track=${document.select("track").size}"
+            )
+            Log.w("AsyaWatch", "FourPichive işaretleri: $markers")
+            Log.d("AsyaWatch", "FourPichive scriptleri: $scripts")
+        }
+        if (!response.isSuccessful) return
+
         publishSubtitlesFromText(html, pageUrl, seen, callback, pageUrl)
 
         val manifests = LinkedHashSet<String>()
