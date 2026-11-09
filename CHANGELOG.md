@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:633c7684332aca7579422da98f881ed51e841f64 -->
+### Add HTML fallback for AsyaWatch episodes and cast
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [633c768](https://github.com/Kayracs3/Kayra/commit/633c7684332aca7579422da98f881ed51e841f64)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:dd9b723600df65787c783cd50bc21b1eebb970b4 -->
 ### Fix AsyaWatch detail metadata and episode parsing
 
