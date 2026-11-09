@@ -119,7 +119,7 @@ open class ContentX : ExtractorApi() {
         // ---------------------------------------------------------
 
         val iDublaj = Regex(
-            ""","([^']+)","Türkçe""""
+            ""","([^']+)","Türkçe"""
         ).find(iSource)?.groupValues?.getOrNull(1)
 
         if (!iDublaj.isNullOrBlank()) {
