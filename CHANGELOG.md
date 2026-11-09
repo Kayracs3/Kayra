@@ -2,6 +2,23 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:1648dd773e4add678a3da92a744ea9c6434b89b4 -->
+### Fix AsyaWatch FourPichive config scope
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [1648dd7](https://github.com/Kayracs3/Kayra/commit/1648dd773e4add678a3da92a744ea9c6434b89b4)
+
+## 2026-11-09
+
+<!-- kayra-commit:7e0094b7c930ce316a92e3c4f8e384801ec2809e -->
+### Resolve FourPichive HLS in AsyaWatch
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [7e0094b](https://github.com/Kayracs3/Kayra/commit/7e0094b7c930ce316a92e3c4f8e384801ec2809e)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:eee1a8380cc4409b6ad7c37eb35869b14648a5f1 -->
 ### Fix AsyaWatch diagnostic escaping
 
