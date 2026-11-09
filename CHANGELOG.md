@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:b478438eb53db225a4d7824e9d71d21a714d3318 -->
+### Fix AsyaWatch home catalog using keşfet GET API
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [b478438](https://github.com/Kayracs3/Kayra/commit/b478438eb53db225a4d7824e9d71d21a714d3318)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:54dfd8ad7184455e99a7aa12942de19aa10a037d -->
 ### Bump AsyaWatch version to 24
 
