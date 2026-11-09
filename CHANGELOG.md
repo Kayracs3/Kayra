@@ -2,6 +2,15 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:4695b3c7966fcf752cf2c204946f93645f023cb7 -->
+### Apply FourPichive player gate proof to media URLs
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [4695b3c](https://github.com/Kayracs3/Kayra/commit/4695b3c7966fcf752cf2c204946f93645f023cb7)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:0d3c6d509ab3dbd9aa1bf86c763df40fe42f16f4 -->
 ### Forward FourPichive iframe cookies to HLS playback
 
