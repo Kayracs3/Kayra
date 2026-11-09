@@ -1635,7 +1635,7 @@ class AsyaWatch : MainAPI() {
                     val ch = configText[index]
                     if (quoted) {
                         if (escaped) escaped = false
-                        else if (ch == '\\\\') escaped = true
+                        else if (ch == '\\') escaped = true
                         else if (ch == '"') quoted = false
                     } else {
                         when (ch) {
@@ -1725,9 +1725,9 @@ class AsyaWatch : MainAPI() {
                                 val from = maxOf(0, index - 180)
                                 val to = minOf(scriptBody.length, index + 360)
                                 scriptBody.substring(from, to)
-                                    .replace(Regex("""(?i)(token|tok|key|sig|auth)(\\s*[:=]\\s*["']?)[^"'&\\s,)}]+"""), "$1$2[redacted]")
-                                    .replace(Regex("""([?&][^=&#\\s]+)=([^&#"'\\s]+)"""), "$1=[redacted]")
-                                    .replace(Regex("""\\s+"""), " ")
+                                    .replace(Regex("""(?i)(token|tok|key|sig|auth)(\s*[:=]\s*["']?)[^"'&\s,)}]+"""), "$1$2[redacted]")
+                                    .replace(Regex("""([?&][^=&#\s]+)=([^&#"'\s]+)"""), "$1=[redacted]")
+                                    .replace(Regex("""\s+"""), " ")
                             }
                         }
                         .distinct()
