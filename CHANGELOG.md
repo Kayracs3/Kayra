@@ -2,6 +2,23 @@
 
 ## 2026-11-09
 
+<!-- kayra-commit:c990aa16a1fefd398f6a90db0ec56a99ad0df373 -->
+### Parse AsyaWatch cast cards from detail HTML
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [c990aa1](https://github.com/Kayracs3/Kayra/commit/c990aa16a1fefd398f6a90db0ec56a99ad0df373)
+
+## 2026-11-09
+
+<!-- kayra-commit:3bacb94936262a22b83c1fb8337d16dd02332b67 -->
+### Merge AsyaWatch episode sources and genre fallback
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [3bacb94](https://github.com/Kayracs3/Kayra/commit/3bacb94936262a22b83c1fb8337d16dd02332b67)
+
+
+## 2026-11-09
+
 <!-- kayra-commit:65aa98db029d5341c30cced69a702dc326a31d5c -->
 ### Parse AsyaWatch elist episode board
 
