@@ -34,7 +34,6 @@ import org.jsoup.nodes.Document
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
-import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -58,24 +57,24 @@ class AsyaWatch : MainAPI() {
     override var sequentialMainPageScrollDelay = 250L
 
     override val mainPage = mainPageOf(
-        "" to "Yeni Eklenen Filmler",        
-        "59" to "Aksiyon Film",
-        "66" to "Bilim Kurgu Film",        
-        "61" to "Fantastik Film",
-        "68" to "Gerilim Film",
-        "51" to "Gizem Film",
-        "63" to "Korku Film",
-        "45" to "Komedi Film",
-        "65" to "Romantik Film",       
-        "" to "Yeni Eklenen Diziler",        
-        "9" to "Aksiyon Dizi",
-        "5" to "Bilim Kurgu Dizi",        
-        "12" to "Fantastik Dizi",
-        "18" to "Gerilim Dizi",
-        "3" to "Gizem Dizi",
-        "8" to "Korku Dizi",
-        "4" to "Komedi Dizi",
-        "7" to "Romantik Dizi"        
+        "" to "Yeni Eklenen Filmler",
+        "aksiyon" to "Aksiyon Film",
+        "bilim-kurgu" to "Bilim Kurgu Film",
+        "fantastik" to "Fantastik Film",
+        "gerilim" to "Gerilim Film",
+        "gizem" to "Gizem Film",
+        "korku" to "Korku Film",
+        "komedi" to "Komedi Film",
+        "romantik" to "Romantik Film",
+        "" to "Yeni Eklenen Diziler",
+        "aksiyon" to "Aksiyon Dizi",
+        "bilim-kurgu" to "Bilim Kurgu Dizi",
+        "fantastik" to "Fantastik Dizi",
+        "gerilim" to "Gerilim Dizi",
+        "gizem" to "Gizem Dizi",
+        "korku" to "Korku Dizi",
+        "komedi" to "Komedi Dizi",
+        "romantik" to "Romantik Dizi"
     )
 
     private val siteHeaders = mapOf(
@@ -254,7 +253,7 @@ class AsyaWatch : MainAPI() {
         val imageKeys = listOf(
             "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
             "object_poster", "objectPoster", "poster_image", "posterImage",
-            "poster", "poster_path", "posterPath", "image_url", "imageUrl",
+            "poster", "p", "poster_path", "posterPath", "image_url", "imageUrl",
             "image_path", "imagePath", "thumbnail_url", "thumbnailUrl",
             "thumbnail_path", "thumbnailPath", "thumbnail", "cover_url", "coverUrl",
             "cover_image", "coverImage", "cover", "image", "thumb", "picture", "photo", "src"
@@ -388,9 +387,9 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun searchResponseFrom(item: JSONObject, forceSeries: Boolean = false): SearchResponse? {
-        val rawUrl = field(item, "used_slug", "slug", "url") ?: return null
+        val rawUrl = field(item, "used_slug", "slug", "url", "u", "href", "path") ?: return null
         val url = absoluteUrl(rawUrl) ?: return null
-        val originalTitle = field(item, "original_title", "object_name", "title", "name") ?: return null
+        val originalTitle = field(item, "original_title", "object_name", "title", "name", "t") ?: return null
         val cultureTitle = field(item, "culture_title", "cultureTitle")
         val title = if (!cultureTitle.isNullOrBlank() && !cultureTitle.equals(originalTitle, true)) {
             "$originalTitle - $cultureTitle"
@@ -399,10 +398,10 @@ class AsyaWatch : MainAPI() {
             ?: imageUrl(field(
                 item,
                 "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
-                "poster", "image_url", "imageUrl", "thumbnail", "thumbnail_url", "cover"
+                "poster", "p", "image_url", "imageUrl", "thumbnail", "thumbnail_url", "cover"
             ))
-        val score = scoreFrom(field(item, "imdb_point", "imdbPoint", "score", "rating"))
-        val type = field(item, "used_type", "type", "content_type").orEmpty()
+        val score = scoreFrom(field(item, "imdb_point", "imdbPoint", "score", "rating", "im"))
+        val type = field(item, "used_type", "type", "content_type", "kind").orEmpty()
         val isSeries = when {
             type.contains("movie", true) || type.contains("film", true) -> false
             type.contains("series", true) || type.contains("dizi", true) || type.contains("tv", true) -> true
@@ -422,24 +421,71 @@ class AsyaWatch : MainAPI() {
         }
     }
 
+    private suspend fun getExploreJson(url: String): JSONObject? {
+        val endpoint = url.substringBefore('?').removePrefix(mainUrl)
+        if (isCoolingDown()) {
+            Log.w("AsyaWatch", "Keşfet isteği soğuma süresi nedeniyle atlandı: " + endpoint)
+            return null
+        }
+
+        val response = runCatching {
+            app.get(url, headers = apiHeaders, referer = "$mainUrl/", allowRedirects = true)
+        }.onFailure {
+            Log.e("AsyaWatch", "Keşfet bağlantı hatası: " + endpoint + " (" + it.javaClass.simpleName + ": " + it.message + ")")
+        }.getOrNull() ?: return null
+
+        val body = response.text
+        if (isRateLimitResponse(response.code, body)) {
+            Log.w("AsyaWatch", "Keşfet hız sınırı yanıtı: HTTP " + response.code + " - " + endpoint)
+            noteRateLimit()
+            return null
+        }
+        if (!response.isSuccessful) {
+            val isHtml = body.trimStart().startsWith("<") ||
+                body.contains("<html", true) ||
+                body.contains("Attention Required", true)
+            Log.e("AsyaWatch", "Keşfet HTTP " + response.code + " - " + endpoint +
+                "; bodyLength=" + body.length + "; htmlOrChallenge=" + isHtml)
+            return null
+        }
+
+        val root = parseObject(body)
+        if (root == null) {
+            Log.e("AsyaWatch", "Keşfet JSON yanıtı çözülemedi - " + endpoint +
+                "; bodyLength=" + body.length)
+            return null
+        }
+        if (!root.optBoolean("ok", true)) {
+            Log.e("AsyaWatch", "Keşfet API ok=false döndürdü - " + endpoint)
+            return null
+        }
+
+        val result = root.optJSONObject("result")
+        val items = result?.optJSONArray("items")
+        if (items == null) {
+            Log.e("AsyaWatch", "Keşfet yanıtında result.items yok - " + endpoint)
+        } else {
+            Log.d("AsyaWatch", "Keşfet yanıtı alındı - " + endpoint +
+                "; kayıt=" + items.length() +
+                "; sayfa=" + result.optInt("page", 1) +
+                "/" + result.optInt("pages", 1))
+        }
+        return root
+    }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
         val isSeries = request.name.contains("Dizi", true)
-        val endpoint = if (isSeries) "findSeries" else "findMovies"
-        val year = Calendar.getInstance().get(Calendar.YEAR)
-        val category = URLEncoder.encode(request.data, "UTF-8")
-        val endpointUrl = "$mainUrl/api/bg/$endpoint" +
-            "?releaseYearStart=1900&releaseYearEnd=$year" +
-            "&imdbPointMin=1&imdbPointMax=10" +
-            "&categoryIdsComma=$category&countryIdsComma=" +
-            "&orderType=date_desc&languageId=-1" +
-            "&currentPage=$page&currentPageCount=12" +
-            "&queryStr=&categorySlugsComma=&countryCodesComma="
+        val kind = if (isSeries) "dizi" else "film"
+        val category = URLEncoder.encode(request.data.trim(), "UTF-8")
+        val endpointUrl = "$mainUrl/api/asya/kesfet?kind=$kind&ulke=&tur=$category&sirala=yeni&page=$page"
 
-        val root = postJson(endpointUrl)
+        val root = getExploreJson(endpointUrl)
             ?: return newHomePageResponse(request, emptyList(), hasNext = false)
-        val items = arrayField(root, "result")
+        val resultNode = root.optJSONObject("result")
+        val items = resultNode?.optJSONArray("items")
         val results = ArrayList<SearchResponse>()
         val seen = HashSet<String>()
+
         if (items != null) {
             for (index in 0 until items.length()) {
                 val item = items.optJSONObject(index) ?: continue
@@ -447,8 +493,19 @@ class AsyaWatch : MainAPI() {
                 if (seen.add(response.url)) results.add(response)
             }
         }
+
         val completedResults = fillMissingPosters(results)
-        return newHomePageResponse(request, completedResults, hasNext = completedResults.isNotEmpty())
+        val totalPages = resultNode?.optInt("pages", -1) ?: -1
+        val hasNext = if (totalPages >= 0) {
+            page < totalPages
+        } else {
+            completedResults.size >= (resultNode?.optInt("pageSize", 42) ?: 42)
+        }
+
+        Log.d("AsyaWatch", "Ana sayfa: " + request.name + "; tür=" + kind +
+            "; kategori=" + request.data + "; bulunan=" + completedResults.size +
+            "; sonraki=" + hasNext)
+        return newHomePageResponse(request, completedResults, hasNext = hasNext)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
