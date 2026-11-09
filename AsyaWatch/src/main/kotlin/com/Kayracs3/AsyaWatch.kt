@@ -972,26 +972,66 @@ class AsyaWatch : MainAPI() {
      * The server-rendered detail HTML already contains links for published episodes.
      * Use these links as a fallback when a client receives a partial Flight payload.
      */
-    private fun parseEpisodesFromDocument(document: Document, poster: String?): List<Episode> {
+    private fun parseEpisodesFromDocument(
+        document: Document,
+        poster: String?,
+        pageUrl: String
+    ): List<Episode> {
         val result = LinkedHashMap<String, Episode>()
-        for (element in document.select(".eps a[href*='/bolum-']")) {
-            val rawUrl = element.attr("href").trim()
-            val url = absoluteUrl(rawUrl) ?: continue
-            val episodeNumber = Regex("""(?i)/bolum-(\d+)""")
-                .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-            val seasonNumber = Regex("""(?i)/sezon-(\d+)""")
-                .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
-            val episodeName = element.selectFirst(".tx b")?.text()?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?: "Bölüm $episodeNumber"
+        val pagePath = runCatching { URI(pageUrl).path.orEmpty() }
+            .getOrDefault(pageUrl.substringBefore('?'))
+            .trimEnd('/')
+        val seriesPath = pagePath.replace(
+            Regex("""(?i)/sezon-\d+(?:/bolum-\d+)?$"""),
+            ""
+        ).trimEnd('/')
+        val pageSeason = Regex("""(?i)/sezon-(\d+)""")
+            .find(pagePath)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
 
-            result[url] = newEpisode(url) {
-                name = episodeName
-                season = seasonNumber
-                episode = episodeNumber
+        fun addEpisode(rawUrl: String, number: Int, season: Int, label: String?) {
+            val absolute = absoluteUrl(rawUrl) ?: return
+            if (result.containsKey(absolute)) return
+            result[absolute] = newEpisode(absolute) {
+                name = label?.takeIf { it.isNotBlank() } ?: "Bölüm $number"
+                this.season = season
+                episode = number
                 posterUrl = poster
             }
         }
+
+        // Published episodes have real href attributes inside .elist.
+        for (element in document.select(".elist a.er[href*='/bolum-']")) {
+            if (element.attr("aria-disabled").equals("true", true)) continue
+            val rawUrl = element.attr("href").trim()
+            val number = Regex("""(?i)/bolum-(\d+)""")
+                .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
+            val season = Regex("""(?i)/sezon-(\d+)""")
+                .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: pageSeason
+            val label = element.selectFirst(".t1")?.text()?.trim()
+                ?: element.attr("aria-label")
+            addEpisode(rawUrl, number, season, label)
+        }
+
+        // The currently playing episode is marked .cur and deliberately has no href.
+        // Reconstruct its normal episode URL from the visible number and series slug.
+        val current = document.selectFirst(".elist a.er.cur[aria-current=true]")
+        if (current != null && seriesPath.startsWith("/dizi/", true)) {
+            val label = current.selectFirst(".t1")?.text()
+                ?.ifBlank { current.attr("aria-label") }
+                .orEmpty()
+            val number = Regex("""(?i)(\d+)\s*\.?\s*bölüm""")
+                .find(label)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            if (number != null) {
+                val currentUrl = "$seriesPath/sezon-$pageSeason/bolum-$number"
+                addEpisode(
+                    currentUrl,
+                    number,
+                    pageSeason,
+                    current.selectFirst(".t1")?.text() ?: "Bölüm $number"
+                )
+            }
+        }
+
         return result.values.sortedWith(
             compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 }
         )
@@ -1019,7 +1059,7 @@ class AsyaWatch : MainAPI() {
         val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
         val episodes = parseEpisodes(content, poster)
             .ifEmpty { parseEpisodes(related, poster) }
-            .ifEmpty { parseEpisodesFromDocument(page.document, poster) }
+            .ifEmpty { parseEpisodesFromDocument(page.document, poster, url) }
         val isSeries = url.contains("/dizi/", true) ||
             field(content, "used_slug", "usedSlug", "url")?.contains("/dizi/", true) == true ||
             objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
