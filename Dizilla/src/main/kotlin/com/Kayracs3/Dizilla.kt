@@ -3470,6 +3470,40 @@ class Dizilla : MainAPI() {
         return null
     }
 
+    /**
+     * Mirrors FourPichive's NP_GATE from np.js:
+     * SHA-256("$nonce|q0Q7APE1FI|$challenge")[2] >>> 20 must equal zero.
+     */
+    private fun fourPichiveGateProof(config: JSONObject?): String? {
+        val gate = config?.optJSONObject("gate") ?: return null
+        val challenge = gate.optString("n").trim().takeIf { it.isNotBlank() }
+            ?: return null
+        val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
+            ?: return null
+
+        for (nonce in 0L until 100_000_000L) {
+            val input = "$nonce|q0Q7APE1FI|$challenge"
+            val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
+            val thirdWord =
+                ((hash[8].toInt() and 0xff) shl 24) or
+                    ((hash[9].toInt() and 0xff) shl 16) or
+                    ((hash[10].toInt() and 0xff) shl 8) or
+                    (hash[11].toInt() and 0xff)
+            if ((thirdWord ushr 20) == 0) return nonce.toString()
+        }
+        return null
+    }
+
+    private fun appendFourPichiveGateParameter(url: String, proof: String): String {
+        if (Regex("""(?i)(?:[?&])p=""").containsMatchIn(url)) return url
+        val separator = when {
+            url.endsWith("?") || url.endsWith("&") -> ""
+            url.contains("?") -> "&"
+            else -> "?"
+        }
+        return "$url${separator}p=$proof"
+    }
+
     private suspend fun loadRscPlayer(
         player: DizillaRscPlayer,
         mediaTitle: String,
@@ -3480,6 +3514,7 @@ class Dizilla : MainAPI() {
         var playerHtml = ""
         var config: JSONObject? = null
         var responseCode = -1
+        var iframeCookies = ""
 
         // Pichive serves different page variants depending on the browser identity.
         // Try the desktop UA used by the working reference provider first, then the
@@ -3499,6 +3534,14 @@ class Dizilla : MainAPI() {
                 )
                 responseCode = response.code
                 playerHtml = response.text
+                iframeCookies = response.headers.values("Set-Cookie")
+                    .mapNotNull { cookie ->
+                        cookie.substringBefore(';').trim().takeIf {
+                            it.contains('=') && it.substringBefore('=').isNotBlank()
+                        }
+                    }
+                    .distinct()
+                    .joinToString("; ")
                 config = extractPlayerConfig(playerHtml)
                 val uaLabel = if (playerUa == PLAYER_USER_AGENT) "desktop" else "mobile"
                 Log.d(
@@ -3544,8 +3587,25 @@ class Dizilla : MainAPI() {
             return legacyDelivered
         }
 
+        val isFourPichive = runCatching {
+            URI(player.url).host.equals("four.pichive.online", true)
+        }.getOrDefault(false)
+        val gate = config.optJSONObject("gate")
+        val hasGate = !gate?.optString("n").isNullOrBlank()
+        val gateProof = if (isFourPichive && hasGate) fourPichiveGateProof(config) else null
+        if (isFourPichive && hasGate && gateProof == null) {
+            Log.e("Dizilla", "FourPichive gate doğrulaması hesaplanamadı; geçersiz kaynak verilmeyecek")
+            return false
+        }
+        if (isFourPichive && hasGate) {
+            Log.d(
+                "Dizilla",
+                "FourPichive gate doğrulandı: bits=${gate?.optInt("b", 12) ?: 12}; p parametresi hazırlanıyor"
+            )
+        }
+
         val masters = config.optJSONArray("sources") ?: return false
-        val quality = Regex("""\d{3,4}""")
+        val quality = Regex("""\\d{3,4}""")
             .find(player.quality)
             ?.value
             ?.toIntOrNull()
@@ -3567,43 +3627,83 @@ class Dizilla : MainAPI() {
             }
         }
 
+        val origin = runCatching {
+            URI(player.url).let { "${it.scheme}://${it.authority}" }
+        }.getOrDefault("https://four.pichive.online")
+        val fourPichiveHeaders = buildMap {
+            put("User-Agent", USER_AGENT)
+            put("Referer", player.url)
+            put("Origin", origin)
+            put("Accept", "*/*")
+            if (iframeCookies.isNotBlank()) put("Cookie", iframeCookies)
+        }
+
         var delivered = false
 
         for (index in 0 until masters.length()) {
             val source = masters.optJSONObject(index) ?: continue
-            val master = firstString(source, "master", "src", "file", "url").orEmpty().trim()
+            val rawMaster = firstString(source, "master", "src", "file", "url").orEmpty().trim()
             if (
-                (!master.startsWith("http://", true) && !master.startsWith("https://", true)) ||
-                (!master.contains(".m3u8", true) && !master.contains("m.php", true))
+                (!rawMaster.startsWith("http://", true) && !rawMaster.startsWith("https://", true)) ||
+                (!rawMaster.contains(".m3u8", true) && !rawMaster.contains("m.php", true) && !rawMaster.contains("nm.php", true))
             ) {
                 continue
             }
 
-            val generated = try {
-                M3u8Helper.generateM3u8(linkName, master, player.url)
-            } catch (e: Exception) {
-                Log.d("Dizilla", "Pichive M3U8 variants failed: ${e.message}")
-                emptyList()
+            val masterHost = runCatching { URI(rawMaster).host }.getOrNull()
+            val isFourPichiveMaster = masterHost.equals("four.pichive.online", true)
+            val masterUrl = if (isFourPichiveMaster && gateProof != null) {
+                appendFourPichiveGateParameter(rawMaster, gateProof)
+            } else {
+                rawMaster
             }
 
-            if (generated.isNotEmpty()) {
-                generated.forEach(callback)
-            } else {
+            if (isFourPichiveMaster) {
+                // nm.php is an HLS endpoint behind NP_GATE. Do not probe it with
+                // generateM3u8: emit the signed URL directly, as the web player does.
                 callback(
                     newExtractorLink(
                         source = mediaTitle,
                         name = linkName,
-                        url = master,
+                        url = masterUrl,
                         type = ExtractorLinkType.M3U8
                     ) {
                         this.referer = player.url
-                        this.headers = mapOf(
-                            "User-Agent" to USER_AGENT,
-                            "Referer" to player.url
-                        )
+                        this.headers = fourPichiveHeaders
                         this.quality = quality
                     }
                 )
+                Log.d(
+                    "Dizilla",
+                    "FourPichive HLS kaynağı verildi: gate=${gateProof != null}; iframe cookie=${iframeCookies.isNotBlank()}"
+                )
+            } else {
+                val generated = try {
+                    M3u8Helper.generateM3u8(linkName, masterUrl, player.url)
+                } catch (e: Exception) {
+                    Log.d("Dizilla", "Pichive M3U8 variants failed: ${e.message}")
+                    emptyList()
+                }
+
+                if (generated.isNotEmpty()) {
+                    generated.forEach(callback)
+                } else {
+                    callback(
+                        newExtractorLink(
+                            source = mediaTitle,
+                            name = linkName,
+                            url = masterUrl,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            this.referer = player.url
+                            this.headers = mapOf(
+                                "User-Agent" to USER_AGENT,
+                                "Referer" to player.url
+                            )
+                            this.quality = quality
+                        }
+                    )
+                }
             }
 
             delivered = true
@@ -3613,19 +3713,29 @@ class Dizilla : MainAPI() {
         if (subtitles != null) {
             for (index in 0 until subtitles.length()) {
                 val item = subtitles.optJSONObject(index) ?: continue
-                val subtitleUrl = item.optString("url").trim()
+                val rawSubtitleUrl = item.optString("url").trim()
                 if (
-                    (!subtitleUrl.startsWith("http://", true) &&
-                        !subtitleUrl.startsWith("https://", true)) ||
-                    !seenSubtitles.add(subtitleUrl)
+                    (!rawSubtitleUrl.startsWith("http://", true) &&
+                        !rawSubtitleUrl.startsWith("https://", true))
                 ) {
                     continue
                 }
+                val subtitleHost = runCatching { URI(rawSubtitleUrl).host }.getOrNull()
+                val subtitleUrl = if (
+                    gateProof != null && subtitleHost.equals("four.pichive.online", true)
+                ) {
+                    appendFourPichiveGateParameter(rawSubtitleUrl, gateProof)
+                } else {
+                    rawSubtitleUrl
+                }
+                if (!seenSubtitles.add(subtitleUrl)) continue
 
                 val language = item.optString("label").trim().ifBlank { "Türkçe" }
                 subtitleCallback(
                     newSubtitleFile(language, subtitleUrl) {
-                        this.headers = mapOf(
+                        this.headers = if (
+                            subtitleHost.equals("four.pichive.online", true)
+                        ) fourPichiveHeaders else mapOf(
                             "User-Agent" to USER_AGENT,
                             "Referer" to player.url
                         )
