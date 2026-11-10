@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-10
+
+<!-- kayra-commit:324d6433fc9aae6256b8c03fc46a1e8e6c6dfc3b -->
+### Update mainUrl from dizi84.life to dizi85.life
+
+- Etkilenen alanlar: DiziLife
+- Commit: [324d643](https://github.com/Kayracs3/Kayra/commit/324d6433fc9aae6256b8c03fc46a1e8e6c6dfc3b)
+
+
 ## 2026-11-09
 
 <!-- kayra-commit:826ef2e89dd94b2df2c805301934548121c89a4f -->
