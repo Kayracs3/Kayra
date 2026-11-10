@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:fa21a632df8f65a7cad986caa1027f412f29b296 -->
+### Fix FourPichive NP_GATE proof generation
+
+- Etkilenen alanlar: Dizilla
+- Commit: [fa21a63](https://github.com/Kayracs3/Kayra/commit/fa21a632df8f65a7cad986caa1027f412f29b296)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:2209370a98c7328e57183de7a9f808cf9f3a29e1 -->
 ### Fix FourPichive gate proof calculation
 
