@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:e07c50a64414fc4db85dead8736fe86ce0126f2a -->
+### Remove failing WSO2 Maven mirror from compiler workflow
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [e07c50a](https://github.com/Kayracs3/Kayra/commit/e07c50a64414fc4db85dead8736fe86ce0126f2a)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:fa21a632df8f65a7cad986caa1027f412f29b296 -->
 ### Fix FourPichive NP_GATE proof generation
 
