@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:ca6feca74678b3467ce4a00568c43948f8aca44e -->
+### Fix Dizilla posters, cast extraction and Pichive request headers
+
+- Etkilenen alanlar: Dizilla
+- Commit: [ca6feca](https://github.com/Kayracs3/Kayra/commit/ca6feca74678b3467ce4a00568c43948f8aca44e)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:7860806b68c977f5d79adb4667e5bc7ddcee5c0c -->
 ### Update mainUrl to new DiziPalOrjinal domain
 
