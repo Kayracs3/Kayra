@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:0f14ba0026f3741ee245a9e243b974c69ba2c473 -->
+### Update mainUrl to new DiziPal domain
+
+- Etkilenen alanlar: DiziPal
+- Commit: [0f14ba0](https://github.com/Kayracs3/Kayra/commit/0f14ba0026f3741ee245a9e243b974c69ba2c473)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:bcb988d6fae806867f61181419764a181719c7fd -->
 ### Add missing URI import for Dizilla Pichive fix
 
