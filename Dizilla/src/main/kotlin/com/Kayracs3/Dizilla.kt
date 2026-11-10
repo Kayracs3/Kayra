@@ -2350,9 +2350,9 @@ class Dizilla : MainAPI() {
                 imageElement.parent()?.parent()?.attr("data-actor")
             )
             val actorName = candidateNames.firstNotNullOfOrNull { candidate ->
-                candidate.trim()
-                    .replace(Regex("""\s+"""), " ")
-                    .takeIf { it.isNotBlank() && actors.containsKey(it.lowercase(java.util.Locale.ROOT)) }
+                candidate?.trim()
+                    ?.replace(Regex("""\s+"""), " ")
+                    ?.takeIf { it.isNotBlank() && actors.containsKey(it.lowercase(java.util.Locale.ROOT)) }
             } ?: return@forEach
 
             val image = extractPoster(imageElement) ?: return@forEach
