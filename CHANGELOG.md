@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:ef53dba8996ddecd9edca9fd87157a2e727aac82 -->
+### Fix Dizilla FourPichive NP_GATE playback
+
+- Etkilenen alanlar: Dizilla
+- Commit: [ef53dba](https://github.com/Kayracs3/Kayra/commit/ef53dba8996ddecd9edca9fd87157a2e727aac82)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:324d6433fc9aae6256b8c03fc46a1e8e6c6dfc3b -->
 ### Update mainUrl from dizi84.life to dizi85.life
 
