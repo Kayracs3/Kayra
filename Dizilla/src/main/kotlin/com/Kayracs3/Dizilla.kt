@@ -3605,7 +3605,7 @@ class Dizilla : MainAPI() {
         }
 
         val masters = config.optJSONArray("sources") ?: return false
-        val quality = Regex("""\\d{3,4}""")
+        val quality = Regex("""\d{3,4}""")
             .find(player.quality)
             ?.value
             ?.toIntOrNull()
