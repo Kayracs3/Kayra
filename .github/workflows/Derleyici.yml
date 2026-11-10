@@ -113,7 +113,6 @@ jobs:
           }"""
           new = """repositories {
               maven("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
-              maven("https://maven.wso2.org/nexus/content/repositories/central/")
               mavenCentral()
               google()
               maven("https://jitpack.io")
@@ -132,9 +131,6 @@ jobs:
                   // Maven Central'ın GitHub Release'e yaptığı 504 veren yönlendirmeyi kullanmaz.
                   maven {
                       url = uri("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
-                  }
-                  maven {
-                      url = uri("https://maven.wso2.org/nexus/content/repositories/central/")
                   }
                   mavenCentral()
               }
