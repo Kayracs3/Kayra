@@ -893,18 +893,26 @@ class Dizilla : MainAPI() {
         // .new-added-list > a[href^="/dizi/"]
         // =====================================================
         if (isNewAddedArchive(requestData)) {
-            collectHtmlSeries(document, ".new-added-list")
-                .forEach { item ->
-                    results[item.url] = item
-                }
+            // Prefer the dedicated list, but the live archive now renders its
+            // series cards outside .new-added-list. Preserve their visible order.
+            var addedCards = collectHtmlSeries(document, ".new-added-list")
+            if (addedCards.isEmpty()) {
+                addedCards = collectHtmlSeries(document)
+                Log.d(
+                    "Dizilla",
+                    "Yeni eklenen listesi genel arşiv kartlarına geri düştü=" + addedCards.size
+                )
+            }
+
+            addedCards.forEach { item ->
+                results[item.url] = item
+            }
 
             Log.d(
                 "Dizilla",
-                "Yeni Eklenen Diziler HTML kart sayısı = ${results.size}"
+                "Yeni Eklenen Diziler HTML kart sayısı = " + results.size
             )
 
-            // Eski kart kapsayıcısı değişmişse genel HTML/JSON
-            // yedeklerine geç; boş listeyi burada döndürme.
             if (results.isNotEmpty()) {
                 return results.values.take(24).toList()
             }
@@ -1481,7 +1489,14 @@ class Dizilla : MainAPI() {
             return null
         }
 
-        val fixed = canonicalizeDizillaUrl(candidate) ?: return null
+        // Dizilla may publish poster URLs through an AMP image-cache proxy.
+        // The proxy URLs in the current pages return 404; restore the original
+        // HTTPS image URL embedded after /i/s/.
+        val ampImagePath = Regex(
+            """(?i)^https?://[^/]+\.cdn\.ampproject\.org/i/s/(.+)$"""
+        ).matchEntire(candidate)?.groupValues?.getOrNull(1)
+        val sourceCandidate = ampImagePath?.let { "https://$it" } ?: candidate
+        val fixed = canonicalizeDizillaUrl(sourceCandidate) ?: return null
         val lower = fixed.lowercase()
 
         if (
@@ -2258,7 +2273,10 @@ class Dizilla : MainAPI() {
         // li.ccard > span.cav > img[src], followed by the actor-name span
         // and then the character-name span. Do not use card.text(), because it
         // also includes the BAŞROL badge and character name.
-        val actorCards = document.select("li.ccard")
+        val actorCards = document.select(
+            "li.ccard, [class*='cast-card'], [class*='actor-card'], " +
+                "[class*='person-card'], [data-actor-id], [data-person-id]"
+        )
         actorCards.forEach { card ->
             val avatar = card.selectFirst("span.cav")
             val avatarImage = avatar?.selectFirst("img")
@@ -2299,7 +2317,10 @@ class Dizilla : MainAPI() {
         }
 
         // Legacy layouts may link directly to actor pages.
-        document.select("a[href*='oyuncu'], [class*='actor'] a[href]").forEach { anchor ->
+        document.select(
+            "a[href*='oyuncu'], a[href*='actor'], a[href*='cast'], " +
+                "[class*='actor'] a[href], [class*='cast'] a[href], [class*='person'] a[href]"
+        ).forEach { anchor ->
             val image = extractPoster(anchor)
                 ?: anchor.parent()?.let { extractPoster(it) }
             val actorName = listOf(
@@ -2310,6 +2331,31 @@ class Dizilla : MainAPI() {
             ).firstNotNullOfOrNull { candidate ->
                 candidate?.trim()?.takeIf { it.isNotBlank() }
             }
+            addActor(actorName, image)
+        }
+
+        // Some templates keep cast images in generic image elements instead
+        // of actor cards. Match their alt/title text to names already extracted
+        // from JSON-LD so unrelated page images cannot become actors.
+        document.select(
+            "img[src], img[data-src], img[data-original], img[data-lazy-src], img[srcset], img[data-srcset]"
+        ).forEach { imageElement ->
+            val candidateNames = listOf(
+                imageElement.attr("alt"),
+                imageElement.attr("title"),
+                imageElement.parent()?.attr("data-name"),
+                imageElement.parent()?.attr("data-actor"),
+                imageElement.parent()?.attr("title"),
+                imageElement.parent()?.parent()?.attr("data-name"),
+                imageElement.parent()?.parent()?.attr("data-actor")
+            )
+            val actorName = candidateNames.firstNotNullOfOrNull { candidate ->
+                candidate.trim()
+                    .replace(Regex("""\s+"""), " ")
+                    .takeIf { it.isNotBlank() && actors.containsKey(it.lowercase(java.util.Locale.ROOT)) }
+            } ?: return@forEach
+
+            val image = extractPoster(imageElement) ?: return@forEach
             addActor(actorName, image)
         }
 
@@ -3516,6 +3562,7 @@ class Dizilla : MainAPI() {
         var config: JSONObject? = null
         var responseCode = -1
         var iframeCookies = ""
+        var activePlayerUserAgent = PLAYER_USER_AGENT
 
         // Pichive serves different page variants depending on the browser identity.
         // Try the desktop UA used by the working reference provider first, then the
@@ -3535,6 +3582,7 @@ class Dizilla : MainAPI() {
                 )
                 responseCode = response.code
                 playerHtml = response.text
+                activePlayerUserAgent = playerUa
                 iframeCookies = response.headers.values("Set-Cookie")
                     .mapNotNull { cookie ->
                         cookie.substringBefore(';').trim().takeIf {
@@ -3631,8 +3679,10 @@ class Dizilla : MainAPI() {
         val origin = runCatching {
             URI(player.url).let { "${it.scheme}://${it.authority}" }
         }.getOrDefault("https://four.pichive.online")
+        // Keep the same browser identity used to obtain NP_CONFIG. Pichive
+        // can reject the signed HLS URL when the media request changes UA.
         val fourPichiveHeaders = buildMap {
-            put("User-Agent", USER_AGENT)
+            put("User-Agent", activePlayerUserAgent)
             put("Referer", player.url)
             put("Origin", origin)
             put("Accept", "*/*")
@@ -3698,7 +3748,7 @@ class Dizilla : MainAPI() {
                         ) {
                             this.referer = player.url
                             this.headers = mapOf(
-                                "User-Agent" to USER_AGENT,
+                                "User-Agent" to activePlayerUserAgent,
                                 "Referer" to player.url
                             )
                             this.quality = quality
