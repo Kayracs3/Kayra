@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:290cec384b9b2c06b21e53ad89f1a5f0b4f5a3ac -->
+### Correct Dizilla quality regex after gate fix
+
+- Etkilenen alanlar: Dizilla
+- Commit: [290cec3](https://github.com/Kayracs3/Kayra/commit/290cec384b9b2c06b21e53ad89f1a5f0b4f5a3ac)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:ef53dba8996ddecd9edca9fd87157a2e727aac82 -->
 ### Fix Dizilla FourPichive NP_GATE playback
 
