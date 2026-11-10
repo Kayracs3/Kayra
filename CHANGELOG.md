@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:7860806b68c977f5d79adb4667e5bc7ddcee5c0c -->
+### Update mainUrl to new DiziPalOrjinal domain
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [7860806](https://github.com/Kayracs3/Kayra/commit/7860806b68c977f5d79adb4667e5bc7ddcee5c0c)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:0f14ba0026f3741ee245a9e243b974c69ba2c473 -->
 ### Update mainUrl to new DiziPal domain
 
