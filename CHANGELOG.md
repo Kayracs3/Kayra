@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:57fb771b22745fcd77170baa9185b09065e8b2b1 -->
+### Fix nullable actor name handling in Dizilla
+
+- Etkilenen alanlar: Dizilla
+- Commit: [57fb771](https://github.com/Kayracs3/Kayra/commit/57fb771b22745fcd77170baa9185b09065e8b2b1)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:ca6feca74678b3467ce4a00568c43948f8aca44e -->
 ### Fix Dizilla posters, cast extraction and Pichive request headers
 
