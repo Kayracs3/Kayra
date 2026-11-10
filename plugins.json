@@ -254,10 +254,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=dizilla.la&sz=%size%",
-        "fileHash": "sha256-858002e0b8834eeb7d7ef30ce830c5b8f7cc0aa2e7aa8d29e20679a6cebc80cb",
+        "fileHash": "sha256-b73fb43c130acb3300617384cfb2f4b1e95cf974f47dfa6c5cefcfbc08597af3",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 105911,
+        "fileSize": 111974,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -296,7 +296,7 @@
     },
     {
         "iconUrl": "https://dizipal1592.com/favicon.ico",
-        "fileHash": "sha256-28164f8e4673c44fe2d028b21b7155cf1f63c7b7bebb6358f4bf4901cde56738",
+        "fileHash": "sha256-6639914b349d7205b88bc1f11a99f73c356addf1c471589b5221d7e577b4d7e6",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 51392,
@@ -317,10 +317,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=dizipalorjinal18.com&sz=%size%",
-        "fileHash": "sha256-ba94b3f450dc3db3da7a6356b20395951a0b2ec3ba86a37c5a05735085425221",
+        "fileHash": "sha256-7b21948807894e6e2ad2bd3f4ace87e14230b6abdce0019b554d5082c65f236d",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 46678,
+        "fileSize": 46675,
         "status": 1,
         "language": "tr",
         "authors": [
