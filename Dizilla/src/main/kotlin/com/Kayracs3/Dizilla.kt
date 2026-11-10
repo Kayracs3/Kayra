@@ -3518,8 +3518,8 @@ class Dizilla : MainAPI() {
     }
 
     /**
-     * Mirrors the Pichive NP_GATE fallback:
-     * SHA-256("$challenge:$nonce")[0] >>> (32 - bits) must equal zero.
+     * Mirrors the Pichive NP_GATE JavaScript:
+     * SHA-256(challenge + salt + base36(nonce) + salt)[3] >>> (32 - bits) == 0.
      */
     private fun fourPichiveGateProof(config: JSONObject?): String? {
         val gate = config?.optJSONObject("gate") ?: return null
@@ -3528,16 +3528,18 @@ class Dizilla : MainAPI() {
         val bits = gate.optInt("b", 12).takeIf { it in 1..32 } ?: 12
         val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
             ?: return null
+        val salt = "nEhC31vsdq"
 
         for (nonce in 0L until 100_000_000L) {
-            val input = "$challenge:$nonce"
+            val nonceText = nonce.toString(36)
+            val input = challenge + salt + nonceText + salt
             val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
-            val firstWord =
-                ((hash[0].toInt() and 0xff) shl 24) or
-                    ((hash[1].toInt() and 0xff) shl 16) or
-                    ((hash[2].toInt() and 0xff) shl 8) or
-                    (hash[3].toInt() and 0xff)
-            if ((firstWord ushr (32 - bits)) == 0) return nonce.toString()
+            val fourthWord =
+                ((hash[12].toInt() and 0xff) shl 24) or
+                    ((hash[13].toInt() and 0xff) shl 16) or
+                    ((hash[14].toInt() and 0xff) shl 8) or
+                    (hash[15].toInt() and 0xff)
+            if ((fourthWord ushr (32 - bits)) == 0) return nonceText
         }
         return null
     }
