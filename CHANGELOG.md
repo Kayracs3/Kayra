@@ -2,6 +2,15 @@
 
 ## 2026-11-10
 
+<!-- kayra-commit:bcb988d6fae806867f61181419764a181719c7fd -->
+### Add missing URI import for Dizilla Pichive fix
+
+- Etkilenen alanlar: Dizilla
+- Commit: [bcb988d](https://github.com/Kayracs3/Kayra/commit/bcb988d6fae806867f61181419764a181719c7fd)
+
+
+## 2026-11-10
+
 <!-- kayra-commit:290cec384b9b2c06b21e53ad89f1a5f0b4f5a3ac -->
 ### Correct Dizilla quality regex after gate fix
 
