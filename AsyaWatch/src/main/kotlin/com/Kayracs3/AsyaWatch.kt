@@ -165,27 +165,28 @@ class AsyaWatch : MainAPI() {
     }
 
     /**
-     * FourPichive's NP_GATE in np.js searches for the first nonce where
-     * SHA-256("$nonce|q0Q7APE1FI|$challenge")[2] >>> 20 equals zero.
-     * The third 32-bit SHA-256 word is used, not the first word.
+     * Mirrors the current FourPichive NP_GATE:
+     * SHA-256(challenge + salt + base36(nonce) + salt)[3] >>> (32 - bits) == 0.
      */
     private fun fourPichiveGateProof(config: JSONObject?): String? {
         val gate = config?.optJSONObject("gate") ?: return null
-        val challenge = field(gate, "n") ?: return null
+        val challenge = field(gate, "n")?.trim()?.takeIf { it.isNotBlank() }
+            ?: return null
+        val bits = gate.optInt("b", 12).takeIf { it in 1..32 } ?: 12
         val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
             ?: return null
+        val salt = "nEhC31vsdq"
 
         for (nonce in 0L until 100_000_000L) {
-            val input = "$nonce|q0Q7APE1FI|$challenge"
+            val nonceText = nonce.toString(36)
+            val input = challenge + salt + nonceText + salt
             val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
-            val thirdWord =
-                ((hash[8].toInt() and 0xff) shl 24) or
-                ((hash[9].toInt() and 0xff) shl 16) or
-                ((hash[10].toInt() and 0xff) shl 8) or
-                (hash[11].toInt() and 0xff)
-            if ((thirdWord ushr 20) == 0) {
-                return nonce.toString()
-            }
+            val fourthWord =
+                ((hash[12].toInt() and 0xff) shl 24) or
+                    ((hash[13].toInt() and 0xff) shl 16) or
+                    ((hash[14].toInt() and 0xff) shl 8) or
+                    (hash[15].toInt() and 0xff)
+            if ((fourthWord ushr (32 - bits)) == 0) return nonceText
         }
         return null
     }
