@@ -1763,13 +1763,33 @@ class AsyaWatch : MainAPI() {
             publishSubtitlesFromText(root?.toString().orEmpty(), data, seenSubtitleUrls, emitSubtitle)
             publishSubtitlesFromText(page.document.html(), data, seenSubtitleUrls, emitSubtitle)
 
-            for (source in sourceItems(root, isSeries)) {
+            val sources = sourceItems(root, isSeries)
+            Log.d("AsyaWatch", "Kaynak analizi: kayıt=${sources.size}; dizi=$isSeries")
+
+            for ((sourceIndex, source) in sources.withIndex()) {
                 publishSubtitlesFromText(source.raw, data, seenSubtitleUrls, emitSubtitle)
-                for (candidate in extractCandidates(source.raw, data)) {
+                val candidates = extractCandidates(source.raw, data)
+                val hosts = candidates.mapNotNull { candidate ->
+                    runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+                }.distinct()
+                Log.d(
+                    "AsyaWatch",
+                    "Kaynak ${sourceIndex + 1}: kalite=${source.quality.ifBlank { "bilinmiyor" }}; aday=${candidates.size}; alanadları=${hosts.joinToString().ifBlank { "yok" }}"
+                )
+                for (candidate in candidates) {
                     processCandidate(candidate, data, source.quality)
                 }
             }
-            for (candidate in extractCandidates(page.document.html(), data)) {
+
+            val pageCandidates = extractCandidates(page.document.html(), data)
+            val pageHosts = pageCandidates.mapNotNull { candidate ->
+                runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+            }.distinct()
+            Log.d(
+                "AsyaWatch",
+                "Sayfa adayları: adet=${pageCandidates.size}; alanadları=${pageHosts.joinToString().ifBlank { "yok" }}"
+            )
+            for (candidate in pageCandidates) {
                 processCandidate(candidate, data, "")
             }
             if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
