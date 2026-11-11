@@ -2,6 +2,15 @@
 
 ## 2026-11-11
 
+<!-- kayra-commit:d7809b023e67236bbc843219198d89677eb688be -->
+### Restore AsyaWatch original player extraction flow
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [d7809b0](https://github.com/Kayracs3/Kayra/commit/d7809b023e67236bbc843219198d89677eb688be)
+
+
+## 2026-11-11
+
 <!-- kayra-commit:790fa9388928880e255bf2ee60286456eb0ec6be -->
 ### Use Dizilla's working Pichive browser identity in AsyaWatch
 
