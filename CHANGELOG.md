@@ -2,6 +2,15 @@
 
 ## 2026-11-11
 
+<!-- kayra-commit:469c24fcfe262304f9b9ef79cae15fcfbfcd0357 -->
+### AsyaWatch: FourPichive eski extractor çağrısını atla
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [469c24f](https://github.com/Kayracs3/Kayra/commit/469c24fcfe262304f9b9ef79cae15fcfbfcd0357)
+
+
+## 2026-11-11
+
 <!-- kayra-commit:d7809b023e67236bbc843219198d89677eb688be -->
 ### Restore AsyaWatch original player extraction flow
 
