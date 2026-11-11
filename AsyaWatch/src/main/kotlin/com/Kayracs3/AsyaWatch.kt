@@ -34,7 +34,6 @@ import org.jsoup.nodes.Document
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
-import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -74,12 +73,6 @@ class AsyaWatch : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
     )
-
-    // FourPichive's signed media URL must keep the same desktop browser identity
-    // used by the working Dizilla resolver.
-    private val fourPichiveUserAgent =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
     private val apiHeaders = mapOf(
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
@@ -168,43 +161,6 @@ class AsyaWatch : MainAPI() {
         val encodedResponse = field(envelope, "response") ?: return envelope
         val decoded = decodeBase64Text(encodedResponse)
         return parseObject(decoded) ?: envelope
-    }
-
-    /**
-     * Mirrors the current FourPichive NP_GATE:
-     * SHA-256(challenge + salt + base36(nonce) + salt)[3] >>> (32 - bits) == 0.
-     */
-    private fun fourPichiveGateProof(config: JSONObject?): String? {
-        val gate = config?.optJSONObject("gate") ?: return null
-        val challenge = field(gate, "n")?.trim()?.takeIf { it.isNotBlank() }
-            ?: return null
-        val bits = gate.optInt("b", 12).takeIf { it in 1..32 } ?: 12
-        val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
-            ?: return null
-        val salt = "nEhC31vsdq"
-
-        for (nonce in 0L until 100_000_000L) {
-            val nonceText = nonce.toString(36)
-            val input = challenge + salt + nonceText + salt
-            val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
-            val fourthWord =
-                ((hash[12].toInt() and 0xff) shl 24) or
-                    ((hash[13].toInt() and 0xff) shl 16) or
-                    ((hash[14].toInt() and 0xff) shl 8) or
-                    (hash[15].toInt() and 0xff)
-            if ((fourthWord ushr (32 - bits)) == 0) return nonceText
-        }
-        return null
-    }
-
-    private fun appendQueryParameter(url: String, name: String, value: String): String {
-        if (Regex("""(?i)(?:[?&])$name=""").containsMatchIn(url)) return url
-        val separator = when {
-            url.endsWith("?") || url.endsWith("&") -> ""
-            url.contains("?") -> "&"
-            else -> "?"
-        }
-        return "$url$separator$name=$value"
     }
 
     private fun absoluteUrl(raw: String?, base: String = mainUrl): String? {
@@ -1491,14 +1447,12 @@ class AsyaWatch : MainAPI() {
         baseUrl: String,
         seen: MutableSet<String>,
         callback: (SubtitleFile) -> Unit,
-        referer: String = baseUrl,
-        urlTransform: (String) -> String = { it }
+        referer: String = baseUrl
     ) {
         fun emit(url: String, label: String) {
-            val transformedUrl = urlTransform(url)
             val subtitle = SubtitleFile(
-                lang = subtitleLanguage(label, transformedUrl),
-                url = transformedUrl
+                lang = subtitleLanguage(label, url),
+                url = url
             )
             // Altyazı sunucuları çoğu zaman oynatıcıdaki UA/Referer olmadan isteği reddeder.
             // SubtitleFile başlıklarını doldurmak, doğrudan VTT/SRT ve HLS altyazı URL'lerinde
@@ -1616,294 +1570,21 @@ class AsyaWatch : MainAPI() {
         seen: MutableSet<String>,
         seenPages: MutableSet<String>,
         seenManifests: MutableSet<String>,
-        callback: (SubtitleFile) -> Unit,
-        linkCallback: (ExtractorLink) -> Unit
-    ): Boolean {
-        if (!seenPages.add(pageUrl) || isDirectMedia(pageUrl)) return false
-        val isFourPichive = runCatching {
-            URI(pageUrl).host.equals("four.pichive.online", true)
-        }.getOrDefault(false)
-        val playerHeaders = if (isFourPichive) {
-            siteHeaders + ("User-Agent" to fourPichiveUserAgent)
-        } else {
-            siteHeaders
-        }
+        callback: (SubtitleFile) -> Unit
+    ) {
+        if (!seenPages.add(pageUrl) || isDirectMedia(pageUrl)) return
         val response = runCatching {
             app.get(
                 pageUrl,
-                headers = playerHeaders,
+                headers = siteHeaders,
                 referer = referer,
                 allowRedirects = true
             )
-        }.onFailure {
-            if (isFourPichive) {
-                Log.e(
-                    "AsyaWatch",
-                    "FourPichive isteği başarısız: ${it.javaClass.simpleName}: ${it.message}"
-                )
-            }
-        }.getOrNull() ?: return false
+        }.getOrNull() ?: return
+        if (!response.isSuccessful) return
 
         val html = response.text
-        var configObject: JSONObject? = null
-        if (isFourPichive) {
-            val document = Jsoup.parse(html, pageUrl)
-            val inlineScripts = document.select("script:not([src])")
-                .joinToString("\n") { it.data() }
-            val inspected = html + "\n" + inlineScripts
-            val markers = listOf(
-                "openPlayer", "NP_CONFIG", "source2.php", "m3u8", "mp4",
-                "jwplayer", "videojs", "playlist", "token", "fetch(", "XMLHttpRequest"
-            ).joinToString("; ") { marker ->
-                "$marker=${inspected.contains(marker, true)}"
-            }
-            val scripts = document.select("script[src]")
-                .map { it.absUrl("src").ifBlank { it.attr("src") } }
-                .filter { it.isNotBlank() }
-                .distinct()
-                .take(10)
-                .joinToString(" | ") { it.substringBefore("?") }
-
-            // NP_CONFIG alan adlarını bul; geçici oynatma tokenlarını/değerlerini loglama.
-            val configIndex = inspected.indexOf("NP_CONFIG", ignoreCase = true)
-            val configText = if (configIndex >= 0) {
-                inspected.substring(configIndex, minOf(inspected.length, configIndex + 7000))
-            } else ""
-            val configKeys = Regex("""["']?([A-Za-z_$][\\w$-]*)["']?\\s*:""")
-                .findAll(configText)
-                .map { it.groupValues[1] }
-                .distinct()
-                .take(50)
-                .joinToString(",")
-            val configShape = if (configKeys.isBlank()) "alan adı çıkarılamadı" else configKeys
-
-            // Parse NP_CONFIG as JSON and report source shape without query tokens.
-            val cfgStart = configText.indexOf('{')
-            var cfgEnd = -1
-            if (cfgStart >= 0) {
-                var depth = 0
-                var quoted = false
-                var escaped = false
-                for (index in cfgStart until configText.length) {
-                    val ch = configText[index]
-                    if (quoted) {
-                        if (escaped) escaped = false
-                        else if (ch == '\\') escaped = true
-                        else if (ch == '"') quoted = false
-                    } else {
-                        when (ch) {
-                            '"' -> quoted = true
-                            '{' -> depth++
-                            '}' -> {
-                                depth--
-                                if (depth == 0) {
-                                    cfgEnd = index + 1
-                                    break
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            configObject = if (cfgEnd > cfgStart && cfgStart >= 0) {
-                runCatching { JSONObject(configText.substring(cfgStart, cfgEnd)) }.getOrNull()
-            } else null
-
-            fun safeUrlShape(raw: String): String {
-                val uri = runCatching { URI(raw) }.getOrNull()
-                return if (uri?.host != null) {
-                    "${uri.scheme}://${uri.host}${uri.path.orEmpty()}".take(180)
-                } else {
-                    "metin(${raw.length})"
-                }
-            }
-
-            fun sourceObjectShape(item: JSONObject): String {
-                val keys = item.keys().asSequence().sorted().joinToString(",")
-                val urls = listOf("file", "url", "src", "source", "master", "hls", "m3u8")
-                    .mapNotNull { key ->
-                        val value = item.opt(key) as? String
-                        if (value.isNullOrBlank()) null else "$key=${safeUrlShape(value)}"
-                    }
-                return "alanlar={$keys}" +
-                    if (urls.isEmpty()) "" else "; adresler={${urls.joinToString("|")}}"
-            }
-
-            fun configValueShape(value: Any?): String = when (value) {
-                is JSONObject -> sourceObjectShape(value)
-                is JSONArray -> {
-                    (0 until minOf(value.length(), 5)).mapNotNull { index ->
-                        when (val item = value.opt(index)) {
-                            is JSONObject -> "[$index]${sourceObjectShape(item)}"
-                            is String -> "[$index]=${safeUrlShape(item)}"
-                            else -> null
-                        }
-                    }.joinToString("; ").ifBlank { "array(${value.length()})" }
-                }
-                is String -> safeUrlShape(value)
-                null, JSONObject.NULL -> "null"
-                else -> value.javaClass.simpleName
-            }
-
-            val configValues = if (configObject == null) {
-                "NP_CONFIG JSON ayrıştırılamadı"
-            } else {
-                listOf("sources", "master", "url", "tok", "gate", "embed", "srv", "ident")
-                    .mapNotNull { key ->
-                        if (!configObject.has(key)) null
-                        else "$key=${configValueShape(configObject.opt(key))}"
-                    }
-                    .joinToString("; ")
-            }
-
-            // np.js içindeki istek kodlarının çevresini göster; query/token değerlerini maskele.
-            val npScript = scripts.split(" | ").firstOrNull { it.contains("/np.js", true) }
-            var npScriptInfo = "np.js bulunamadı"
-            if (!npScript.isNullOrBlank()) {
-                val scriptResponse = runCatching {
-                    app.get(npScript, headers = playerHeaders, referer = pageUrl, allowRedirects = true)
-                }.getOrNull()
-                if (scriptResponse != null) {
-                    val scriptBody = scriptResponse.text
-                    val scriptMarkers = listOf(
-                        "NP_CONFIG", "Hls", "loadSource", "attachMedia", "fetch(",
-                        "XMLHttpRequest", "playlist", "source", "token", "decrypt"
-                    ).joinToString("; ") { marker ->
-                        "$marker=${scriptBody.contains(marker, true)}"
-                    }
-                    val contexts = listOf("fetch(", "XMLHttpRequest", "loadSource(", "NP_CONFIG.sources")
-                        .mapNotNull { marker ->
-                            val index = scriptBody.indexOf(marker, ignoreCase = true)
-                            if (index < 0) null else {
-                                val from = maxOf(0, index - 180)
-                                val to = minOf(scriptBody.length, index + 360)
-                                scriptBody.substring(from, to)
-                                    .replace(Regex("""(?i)(token|tok|key|sig|auth)(\s*[:=]\s*["']?)[^"'&\s,)}]+"""), "$1$2[redacted]")
-                                    .replace(Regex("""([?&][^=&#\s]+)=([^&#"'\s]+)"""), "$1=[redacted]")
-                                    .replace(Regex("""\s+"""), " ")
-                            }
-                        }
-                        .distinct()
-                        .take(4)
-                        .joinToString(" || ")
-                    npScriptInfo = "HTTP=${scriptResponse.code}; chars=${scriptBody.length}; " +
-                        "$scriptMarkers; kod parçaları=$contexts"
-                } else {
-                    npScriptInfo = "np.js isteği başarısız"
-                }
-            }
-
-            Log.w(
-                "AsyaWatch",
-                "FourPichive yanıtı: HTTP ${response.code}; başarılı=${response.isSuccessful}; " +
-                    "karakter=${html.length}; başlık=${document.title()}; " +
-                    "video=${document.select("video").size}; source=${document.select("video source, source").size}; " +
-                    "iframe=${document.select("iframe").size}; track=${document.select("track").size}"
-            )
-            Log.w("AsyaWatch", "FourPichive işaretleri: $markers")
-            Log.w("AsyaWatch", "FourPichive NP_CONFIG yapısı: $configShape")
-            Log.w("AsyaWatch", "FourPichive NP_CONFIG kaynakları: $configValues")
-            Log.w("AsyaWatch", "FourPichive np.js analizi: $npScriptInfo")
-            Log.d("AsyaWatch", "FourPichive scriptleri: $scripts")
-        }
-        if (!response.isSuccessful) return false
-
-        val gateProof = if (isFourPichive) fourPichiveGateProof(configObject) else null
-        val hasGate = configObject?.optJSONObject("gate")?.let { field(it, "n") != null } == true
-        if (isFourPichive && hasGate && gateProof == null) {
-            Log.e("AsyaWatch", "FourPichive gate doğrulaması hesaplanamadı")
-            return false
-        }
-        val gatedSubtitleUrl: (String) -> String = { subtitleUrl ->
-            val host = runCatching { URI(subtitleUrl).host }.getOrNull()
-            if (gateProof != null && host.equals("four.pichive.online", true)) {
-                appendQueryParameter(subtitleUrl, "p", gateProof)
-            } else {
-                subtitleUrl
-            }
-        }
-        publishSubtitlesFromText(
-            html, pageUrl, seen, callback, pageUrl,
-            urlTransform = gatedSubtitleUrl
-        )
-        if (isFourPichive && hasGate) {
-            val bits = configObject?.optJSONObject("gate")?.optInt("b", 12) ?: 12
-            Log.d(
-                "AsyaWatch",
-                "FourPichive gate doğrulandı: bits=$bits; kaynak ve altyazı URL'lerine p parametresi eklendi"
-            )
-        }
-
-        if (isFourPichive) {
-            val sourceRows = configObject?.optJSONArray("sources")
-            var emittedMaster = false
-            if (sourceRows != null) {
-                for (index in 0 until sourceRows.length()) {
-                    val sourceItem = sourceRows.optJSONObject(index) ?: continue
-                    val rawMaster = field(sourceItem, "master", "url", "file", "src")
-                        ?: continue
-                    val rawMasterUrl = absoluteUrl(rawMaster, pageUrl) ?: continue
-                    val masterUrl = if (gateProof != null) {
-                        appendQueryParameter(rawMasterUrl, "p", gateProof)
-                    } else {
-                        rawMasterUrl
-                    }
-                    val label = field(sourceItem, "title", "name", "kind")
-                        ?.takeIf { it.isNotBlank() } ?: "HLS"
-                    val origin = runCatching {
-                        URI(pageUrl).let { "${it.scheme}://${it.authority}" }
-                    }.getOrDefault("https://four.pichive.online")
-                    // Cronet/ExoPlayer does not share NiceHttp's cookie jar. Forward
-                    // cookies issued by the iframe response to the media request.
-                    val iframeCookies = response.headers.values("Set-Cookie")
-                        .mapNotNull { cookie ->
-                            cookie.substringBefore(';').trim().takeIf {
-                                it.contains('=') && it.substringBefore('=').isNotBlank()
-                            }
-                        }
-                        .distinct()
-                        .joinToString("; ")
-                    val mediaHeaders = playerHeaders + mapOf(
-                        "Referer" to pageUrl,
-                        "Origin" to origin,
-                        "Accept" to "*/*"
-                    ) + if (iframeCookies.isBlank()) {
-                        emptyMap()
-                    } else {
-                        mapOf("Cookie" to iframeCookies)
-                    }
-                    Log.d(
-                        "AsyaWatch",
-                        "FourPichive HLS istek başlıkları: iframe çerezi=${!iframeCookies.isBlank()}"
-                    )
-
-                    linkCallback(
-                        newExtractorLink(
-                            source = name,
-                            name = "$name $label",
-                            url = masterUrl,
-                            type = ExtractorLinkType.M3U8
-                        ) {
-                            this.referer = pageUrl
-                            this.headers = mediaHeaders
-                            this.quality = qualityValue(label, masterUrl)
-                        }
-                    )
-                    Log.d(
-                        "AsyaWatch",
-                        "FourPichive HLS kaynağı bulundu: $label; " +
-                            runCatching {
-                                val uri = URI(masterUrl)
-                                "${uri.host}${uri.path.orEmpty()}"
-                            }.getOrDefault("adres")
-                    )
-                    emittedMaster = true
-                }
-            }
-
-            if (emittedMaster) return true
-            Log.w("AsyaWatch", "FourPichive NP_CONFIG içinde kullanılabilir master adresi bulunamadı")
-        }
+        publishSubtitlesFromText(html, pageUrl, seen, callback, pageUrl)
 
         val manifests = LinkedHashSet<String>()
         Regex("""(?i)(?:https?:)?//[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?""")
@@ -1920,7 +1601,6 @@ class AsyaWatch : MainAPI() {
                     manifest, pageUrl, seen, seenManifests, callback
                 )
             }
-        return false
     }
 
     private fun isDirectMedia(url: String): Boolean =
@@ -2044,14 +1724,10 @@ class AsyaWatch : MainAPI() {
             }
 
             // Player pages commonly contain their subtitle tracks outside secureData.
-            val providerSourceFound = extractSubtitlesFromPlayerPage(
+            extractSubtitlesFromPlayerPage(
                 candidate, referer, seenSubtitleUrls, seenSubtitlePages,
                 seenSubtitleManifests, emitSubtitle
-            ) { link ->
-                if (emittedUrls.add(link.url)) callback(link)
-                found = true
-            }
-            if (providerSourceFound) return
+            )
 
             try {
                 loadExtractor(candidate, referer, emitSubtitle) { link ->
