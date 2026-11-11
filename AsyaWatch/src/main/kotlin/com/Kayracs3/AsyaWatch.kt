@@ -1729,6 +1729,17 @@ class AsyaWatch : MainAPI() {
                 seenSubtitleManifests, emitSubtitle
             )
 
+            // FourPichive'ın güncel iframe'i eski ContentX openPlayer biçimini kullanmıyor.
+            // Belgelenmiş bir harici kaynak arayüzü olmadığı için bu iframe'i genel
+            // extractor'a göndermiyoruz; yukarıdaki sayfa/altyazı taraması korunur.
+            val candidateHost = runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+            if (candidateHost == "four.pichive.online" ||
+                candidateHost?.endsWith(".four.pichive.online") == true
+            ) {
+                Log.w("AsyaWatch", "FourPichive iframe için desteklenen doğrudan kaynak bulunamadı; genel extractor atlandı.")
+                return
+            }
+
             try {
                 loadExtractor(candidate, referer, emitSubtitle) { link ->
                     if (emittedUrls.add(link.url)) callback(link)
