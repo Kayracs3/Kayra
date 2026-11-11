@@ -1764,6 +1764,30 @@ class AsyaWatch : MainAPI() {
             publishSubtitlesFromText(page.document.html(), data, seenSubtitleUrls, emitSubtitle)
 
             val sources = sourceItems(root, isSeries)
+            val relatedForSources = objectField(root, "RelatedResults", "relatedResults")
+            val episodeSourceHolder = objectField(relatedForSources, "getEpisodeSources", "getEpisodeSource")
+            val episodeSourceRows = arrayField(episodeSourceHolder, "result", "sources")
+
+            fun jsonKeys(value: JSONObject?): String {
+                if (value == null) return "yok"
+                val names = ArrayList<String>()
+                val iterator = value.keys()
+                while (iterator.hasNext() && names.size < 20) names.add(iterator.next())
+                return names.joinToString().ifBlank { "boş" }
+            }
+
+            val flightPayloads = nextFlightPayloads(page.document)
+            val flightHasEpisodeSources = flightPayloads.any {
+                it.contains("getEpisodeSources", true) || it.contains("getEpisodeSource", true)
+            }
+            val flightHasSourceContent = flightPayloads.any {
+                it.contains("source_content", true) || it.contains("sourceContent", true)
+            }
+
+            Log.d(
+                "AsyaWatch",
+                "Kaynak veri yapısı: secureData=${root != null}; rootKeys=${jsonKeys(root)}; relatedKeys=${jsonKeys(relatedForSources)}; episodeHolder=${episodeSourceHolder != null}; satır=${episodeSourceRows?.length() ?: 0}; flightPaket=${flightPayloads.size}; flightEpisodeSources=$flightHasEpisodeSources; flightSourceContent=$flightHasSourceContent"
+            )
             Log.d("AsyaWatch", "Kaynak analizi: kayıt=${sources.size}; dizi=$isSeries")
 
             for ((sourceIndex, source) in sources.withIndex()) {
@@ -1785,9 +1809,23 @@ class AsyaWatch : MainAPI() {
             val pageHosts = pageCandidates.mapNotNull { candidate ->
                 runCatching { URI(candidate).host?.lowercase() }.getOrNull()
             }.distinct()
+            val candidatePaths = pageCandidates.mapNotNull { candidate ->
+                runCatching {
+                    val uri = URI(candidate)
+                    val host = uri.host?.lowercase() ?: return@runCatching null
+                    val pathOnly = uri.path.orEmpty()
+                        .split("/")
+                        .filter { it.isNotBlank() }
+                        .takeLast(2)
+                        .joinToString("/")
+                    val safePath = Regex("""[A-Za-z0-9_-]{32,}""").replace(pathOnly, "[redacted]")
+                    "$host/$safePath"
+                }.getOrNull()
+            }.distinct().take(12)
+
             Log.d(
                 "AsyaWatch",
-                "Sayfa adayları: adet=${pageCandidates.size}; alanadları=${pageHosts.joinToString().ifBlank { "yok" }}"
+                "Sayfa adayları: adet=${pageCandidates.size}; alanadları=${pageHosts.joinToString().ifBlank { "yok" }}; yollar=${candidatePaths.joinToString().ifBlank { "yok" }}"
             )
             for (candidate in pageCandidates) {
                 processCandidate(candidate, data, "")
