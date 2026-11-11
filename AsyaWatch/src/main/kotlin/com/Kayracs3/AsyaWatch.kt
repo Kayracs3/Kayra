@@ -75,6 +75,12 @@ class AsyaWatch : MainAPI() {
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
     )
 
+    // FourPichive's signed media URL must keep the same desktop browser identity
+    // used by the working Dizilla resolver.
+    private val fourPichiveUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
     private val apiHeaders = mapOf(
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
         "Accept" to "application/json, text/plain, */*",
@@ -1617,10 +1623,15 @@ class AsyaWatch : MainAPI() {
         val isFourPichive = runCatching {
             URI(pageUrl).host.equals("four.pichive.online", true)
         }.getOrDefault(false)
+        val playerHeaders = if (isFourPichive) {
+            siteHeaders + ("User-Agent" to fourPichiveUserAgent)
+        } else {
+            siteHeaders
+        }
         val response = runCatching {
             app.get(
                 pageUrl,
-                headers = siteHeaders,
+                headers = playerHeaders,
                 referer = referer,
                 allowRedirects = true
             )
@@ -1750,7 +1761,7 @@ class AsyaWatch : MainAPI() {
             var npScriptInfo = "np.js bulunamadı"
             if (!npScript.isNullOrBlank()) {
                 val scriptResponse = runCatching {
-                    app.get(npScript, headers = siteHeaders, referer = pageUrl, allowRedirects = true)
+                    app.get(npScript, headers = playerHeaders, referer = pageUrl, allowRedirects = true)
                 }.getOrNull()
                 if (scriptResponse != null) {
                     val scriptBody = scriptResponse.text
@@ -1852,7 +1863,7 @@ class AsyaWatch : MainAPI() {
                         }
                         .distinct()
                         .joinToString("; ")
-                    val mediaHeaders = siteHeaders + mapOf(
+                    val mediaHeaders = playerHeaders + mapOf(
                         "Referer" to pageUrl,
                         "Origin" to origin,
                         "Accept" to "*/*"
