@@ -36,11 +36,6 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 
-/**
- * AsyaWatch sağlayıcısı. API yanıtları, detay metadatası, bölüm listeleri ve
- * oynatıcı kaynakları ayrı ele alınır. Kaynak yoksa sahte bir oynatma bağlantısı
- * üretilmez; bir player başarısız olduğunda kalan kaynaklar yine denenir.
- */
 class AsyaWatch : MainAPI() {
     override var mainUrl = "https://asyawatch.com"
     override var name = "AsyaWatch"
@@ -51,7 +46,6 @@ class AsyaWatch : MainAPI() {
     override val hasDownloadSupport = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
-    // Kategori isteklerini paralel göndermek Cloudflare 1015 riskini artırıyor.
     override var sequentialMainPage = true
     override var sequentialMainPageDelay = 350L
     override var sequentialMainPageScrollDelay = 250L
@@ -200,14 +194,10 @@ class AsyaWatch : MainAPI() {
             .trim()
             .trim('"', '\'')
 
-        // Some API poster fields contain the Macellan host but omit the URL scheme.
-        // Without this, the host is incorrectly appended to the AsyaWatch origin.
         if (Regex("""(?i)^(?:[a-z0-9-]+\.)*macellan\.online(?=[:/?#]|$)""").containsMatchIn(value)) {
             value = "https://$value"
         }
 
-        // The Macellan CDN sometimes stores a poster path without its hostname.
-        // Only apply this CDN rule to its recognizable IMDb-poster path shape.
         val macellanPosterPath = Regex(
             """(?i)^/?images/\d+/\d+/\d+/{1,2}tt\d+-poster-\d+\.(?:jpe?g|png|webp)(?:[?#].*)?$"""
         )
@@ -217,11 +207,6 @@ class AsyaWatch : MainAPI() {
             value = "https://file.macellan.online/${value.trimStart('/')}"
         }
 
-        // AsyaWatch kartları AMP görsel proxy URL'sini doğrudan kullanıyor.
-        // Proxy alan adını kaynak CDN'ye çevirmek bazı istemcilerde görseli bozuyor;
-        // bu yüzden gelen AMP URL'sini aynen koruyoruz.
-
-        // The API occasionally percent-encodes the scheme and slashes.
         if (value.startsWith("https%3A%2F%2F", true)) {
             value = value.replaceFirst("https%3A%2F%2F", "https://", true)
         } else if (value.startsWith("http%3A%2F%2F", true)) {
@@ -283,7 +268,6 @@ class AsyaWatch : MainAPI() {
         for (attribute in attributes) {
             val raw = element.attr(attribute).trim()
             if (raw.isBlank()) continue
-            // srcset may contain multiple candidates, each followed by a width descriptor.
             val first = raw.split(',').firstOrNull()?.trim()?.substringBefore(' ') ?: raw
             imageUrl(first)?.let { return it }
         }
@@ -311,11 +295,6 @@ class AsyaWatch : MainAPI() {
         return parseObject(decodeBase64Text(raw)) ?: parseObject(raw)
     }
 
-    /**
-     * Next.js App Router payloads are streamed in self.__next_f.push([1, "..."]).
-     * Decode those string chunks so structured page data can be read without relying
-     * on the removed __NEXT_DATA__/secureData format.
-     */
     private fun nextFlightPayloads(document: Document): List<String> {
         val result = ArrayList<String>()
         val marker = "self.__next_f.push([1,"
@@ -362,10 +341,6 @@ class AsyaWatch : MainAPI() {
         return result
     }
 
-    /**
-     * Extract a balanced JSON object after a quoted property name inside a
-     * decoded React Server Components payload.
-     */
     private fun jsonObjectAfterKey(source: String, key: String): JSONObject? {
         val token = "\"$key\""
         var searchFrom = 0
@@ -424,10 +399,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    /**
-     * AsyaWatch App Router detail pages keep the card/catalogue record in data.cat.entries,
-     * while data.drama/data.film contains supplementary detail metadata.
-     */
     private fun detailCatalogEntry(document: Document, pageUrl: String): JSONObject? {
         val catalog = nextFlightObject(document, "cat") ?: return null
         val entries = arrayField(catalog, "entries") ?: return null
@@ -450,10 +421,6 @@ class AsyaWatch : MainAPI() {
         return entries.optJSONObject(0)?.takeIf { entries.length() == 1 }
     }
 
-    /**
-     * Keep the catalogue record as the primary source (img, g, sc, cast, sch),
-     * then fill absent fields from the drama/film detail object and legacy data.
-     */
     private fun mergeDetailObjects(vararg sources: JSONObject?): JSONObject {
         val merged = JSONObject()
         for (source in sources) {
@@ -700,7 +667,6 @@ class AsyaWatch : MainAPI() {
             .replace(Regex("""[^\p{L}\p{N}]"""), "")
 
     private fun detailPoster(content: JSONObject?, document: Document): String? {
-        // Structured API data first: it usually points to the exact poster used in cards.
         imageFromJson(content)?.let { return it }
 
         val metadataSelectors = listOf(
@@ -717,10 +683,6 @@ class AsyaWatch : MainAPI() {
             imageFromElement(element, mainUrl)?.let { return it }
         }
 
-        // AsyaWatch poster cards often use generic classes such as "lazyload w-full";
-        // the reliable identifiers are the image alt text and the Macellan URL itself.
-        // Match the page's actual title first so a logo, avatar, or unrelated image is
-        // not accidentally returned as this film's poster.
         val expectedTitles = listOfNotNull(
             field(content, "original_title", "originalTitle", "title", "object_name", "name", "t"),
             field(content, "culture_title", "cultureTitle"),
@@ -749,8 +711,6 @@ class AsyaWatch : MainAPI() {
             imageFromElement(element, mainUrl)?.let { return it }
         }
 
-        // If titles are missing from the markup, prefer Macellan's known poster filename
-        // pattern (for example .../tt39328047-poster-1791557492.jpg?v=4) to generic images.
         for (element in pageImages) {
             val candidate = imageFromElement(element, mainUrl) ?: continue
             val path = runCatching { URI(candidate).path.orEmpty() }
@@ -762,7 +722,6 @@ class AsyaWatch : MainAPI() {
             ) return candidate
         }
 
-        // Prefer image elements that are explicitly labelled as poster/cover artwork.
         val posterSelectors = listOf(
             ".poster img", ".poster-image", ".movie-poster img", ".drama-poster img",
             ".cover img", ".thumbnail img", "img[class*=poster]", "img[id*=poster]",
@@ -774,12 +733,10 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // The original site lazy-loads many images through data-* attributes.
         for (element in document.select("img, picture source, [style*=background]")) {
             imageFromElement(element, mainUrl)?.let { return it }
         }
 
-        // JSON-LD often contains an image even when the card/API poster field is empty.
         for (script in document.select("script[type=application/ld+json]")) {
             val json = parseObject(script.data().ifBlank { script.html() })
             imageFromJson(json)?.let { return it }
@@ -787,17 +744,9 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    /**
-     * A small number of the site's API entries omit the poster even though the
-     * content page contains it. Repair only those results and do not replace
-     * a poster already supplied by the API.
-     */
     private suspend fun fillMissingPosters(items: List<SearchResponse>): List<SearchResponse> {
         if (items.none { it.posterUrl.isNullOrBlank() }) return items
 
-        // Apply every cached result first. The old implementation returned as soon as
-        // it encountered the first cached item, so later missing posters in the same
-        // catalogue were never considered.
         var attemptedPageRequest = false
         for (item in items) {
             if (!item.posterUrl.isNullOrBlank()) continue
@@ -808,9 +757,6 @@ class AsyaWatch : MainAPI() {
                 continue
             }
 
-            // Keep network fallback conservative: extra page requests in a catalogue
-            // can trigger Cloudflare Error 1015. Try at most one uncached detail page
-            // per call, while still applying cached posters to all other entries.
             if (attemptedPageRequest || isCoolingDown()) continue
             val now = System.currentTimeMillis()
             if (now - lastPosterFallbackAt < 12 * 1000L) continue
@@ -854,8 +800,6 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun detailActors(related: JSONObject?): List<Actor> {
-        // The current detail payload's cast array is authoritative.
-        // Older getMovieCastsById data remains a compatibility fallback.
         val cast = objectField(related, "getMovieCastsById", "getContentCastsById")
         val rows = arrayField(related, "cast", "casts")
             ?: arrayField(cast, "result")
@@ -877,10 +821,6 @@ class AsyaWatch : MainAPI() {
         return actors
     }
 
-    /**
-     * New AsyaWatch detail pages render the full cast as .cast > .cc cards.
-     * Read names and roles from the visible markup, and ignore SVG placeholder portraits.
-     */
     private fun detailActorsFromDocument(document: Document): List<Actor> {
         val actors = ArrayList<Actor>()
         val seen = HashSet<String>()
@@ -888,7 +828,6 @@ class AsyaWatch : MainAPI() {
             val name = card.selectFirst("a.mj-cl")?.text()?.trim()
                 ?.takeIf { it.isNotBlank() } ?: continue
             if (!seen.add(name)) continue
-            val role = card.selectFirst("div > span")?.text()?.trim()
             val rawImage = card.selectFirst("img")?.let { image ->
                 image.attr("src").ifBlank {
                     image.attr("data-src").ifBlank { image.attr("data-original") }
@@ -911,8 +850,6 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun parseEpisodes(related: JSONObject?, poster: String?): List<Episode> {
-        // The current AsyaWatch detail payload stores published episodes directly in sch.
-        // Do not walk the whole object: unrelated nested data can contain other n/url fields.
         val schedule = arrayField(related, "sch") ?: return emptyList()
         val result = LinkedHashMap<String, Episode>()
 
@@ -922,11 +859,9 @@ class AsyaWatch : MainAPI() {
                 ?: continue
             val url = absoluteUrl(rawUrl) ?: continue
 
-            // Future schedule rows are not playable; keep only published entries.
             val isOn = field(item, "on")
             if (isOn != null && (isOn.equals("false", true) || isOn == "0")) continue
 
-            // The canonical episode number and season are encoded in the actual URL.
             val episodeNumber = Regex("""(?i)/bolum-(\d+)""")
                 .find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 ?: field(item, "n", "episode_no", "episodeNo", "episode")?.toIntOrNull()
@@ -951,10 +886,6 @@ class AsyaWatch : MainAPI() {
         )
     }
 
-    /**
-     * The server-rendered detail HTML already contains links for published episodes.
-     * Use these links as a fallback when a client receives a partial Flight payload.
-     */
     private fun parseEpisodesFromDocument(
         document: Document,
         poster: String?,
@@ -982,7 +913,6 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // Original AsyaWatch episode board: .eps links, title inside .tx b.
         val epsLinks = document.select(".eps a[href*='/bolum-']")
         for (element in epsLinks) {
             if (element.attr("aria-disabled").equals("true", true) ||
@@ -999,7 +929,6 @@ class AsyaWatch : MainAPI() {
             addEpisode(rawUrl, number, season, label)
         }
 
-        // Newer pages may also render the same board as .elist.
         val elistLinks = document.select(".elist a.er[href*='/bolum-']")
         for (element in elistLinks) {
             if (element.attr("aria-disabled").equals("true", true) ||
@@ -1016,7 +945,6 @@ class AsyaWatch : MainAPI() {
             addEpisode(rawUrl, number, season, label)
         }
 
-        // A currently playing .elist episode has no href; reconstruct it from its label.
         val current = document.selectFirst(".elist a.er.cur[aria-current=true]")
         if (current != null && seriesPath.startsWith("/dizi/", true)) {
             val label = current.selectFirst(".t1")?.text()
@@ -1071,7 +999,6 @@ class AsyaWatch : MainAPI() {
             .ifEmpty { detailActorsFromDocument(page.document) }
         val trailer = detailTrailer(related)
         val duration = field(content, "total_minutes", "totalMinutes", "duration", "min")?.toIntOrNull()
-        // Prefer the new sch array; if it cannot yield episodes, use the original .eps HTML board.
         val episodes = parseEpisodes(content, poster)
             .ifEmpty { parseEpisodesFromDocument(page.document, poster, url) }
             .ifEmpty { parseEpisodes(related, poster) }
@@ -1194,15 +1121,15 @@ class AsyaWatch : MainAPI() {
     private fun looksLikeSubtitle(url: String): Boolean {
         val value = url.lowercase()
         return Regex("""(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)(?:[?#].*)?$""").containsMatchIn(value) ||
-            // Several players expose translated subtitles as a dedicated HLS playlist,
-            // for example /sub_turkish/subtitles.m3u8. This is not a video master playlist.
             Regex("""(?i)/(?:sub_[a-z0-9_-]+/)?(?:subtitles?|captions?)(?:\.m3u8?)?(?:[?#].*)?$""").containsMatchIn(value) ||
             value.contains("/subtitle/") || value.contains("/subtitles/") ||
             value.contains("/caption/") || value.contains("/captions/") ||
             value.contains("/subtitle?") || value.contains("/subtitles?") ||
             value.contains("/caption?") || value.contains("/captions?") ||
             value.endsWith("/subtitle") || value.endsWith("/subtitles") ||
-            value.endsWith("/caption") || value.endsWith("/captions")
+            value.endsWith("/caption") || value.endsWith("/captions") ||
+            // nsub.php?v=... AsyaWatch/FourPichive subtitle pattern
+            Regex("""(?i)(?:nsub|subtitle|sub)\.php\?(?:[^#]*&)?v=""".toRegex()).containsMatchIn(value)
     }
 
     private fun normalizeSubtitleText(text: String): String {
@@ -1226,7 +1153,6 @@ class AsyaWatch : MainAPI() {
             match.groupValues[1].toInt(16).toChar().toString()
         }
 
-        // Yalnızca URL'nin başındaki yüzde-kaçışlı şemayı aç; imzalı query değerlerini bozma.
         value = value.replace(Regex("""(?i)^https%3a%2f%2f"""), "https://")
             .replace(Regex("""(?i)^http%3a%2f%2f"""), "http://")
         return value
@@ -1259,8 +1185,6 @@ class AsyaWatch : MainAPI() {
         val query = runCatching { URI(url).rawQuery.orEmpty() }.getOrDefault("")
         if (query.isBlank()) return null
 
-        // Only inspect parameters whose names explicitly indicate a subtitle language;
-        // unrelated signed token/query values must never determine the language.
         val languageKeys = setOf(
             "lang", "language", "locale", "srclang",
             "sub_lang", "sub_language", "subtitle_lang", "subtitle_language",
@@ -1288,8 +1212,6 @@ class AsyaWatch : MainAPI() {
             .getOrDefault(url.substringBefore('?'))
         val segments = path.split('/').filter { it.isNotBlank() }
 
-        // Trust explicit language folders and file names first. Some providers instead
-        // put a language code in a query parameter such as ?lang=tr or ?language=turkish.
         for (directory in segments.dropLast(1).asReversed()) {
             val language = when {
                 directory.startsWith("sub_", true) -> directory.substring(4)
@@ -1303,8 +1225,6 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun subtitleLanguage(label: String, url: String = ""): String {
-        // Prefer a clear language-specific URL over a mislabeled PlayerJS track, then
-        // use the player's language label when the URL itself is generic.
         subtitleUrlLanguage(url)?.let { return it }
         explicitSubtitleLanguage(label)?.let { return it }
 
@@ -1349,8 +1269,6 @@ class AsyaWatch : MainAPI() {
                 val explicitLanguage = pathLanguage ?: explicitSubtitleLanguage(label)
                 val previous = result[url]
 
-                // Keep the URL's own explicit language when the player label has been
-                // attached to another track by a broad match.
                 if (explicitLanguage != null) {
                     result[url] = language
                     explicitlyLabeledUrls.add(url)
@@ -1362,8 +1280,6 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // PlayerJS stores tracks with commas or packed together as
-        // [English].../en.vtt[Turkish].../tr.vtt. Stop each URL before the next '['.
         val taggedPlayerTrack = Regex(
             """(?i)\[\s*([^\]]{1,40})\s*\]\s*((?:https?:)?//[^,\s\[\]"']+|/[^,\s\[\]"']+|\.\.?/[^,\s\[\]"']+|[^,\s\[\]"']+\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^,\s\[\]"']*)?)"""
         )
@@ -1386,7 +1302,6 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // Inline PlayerJS variant: file:"...m3u8(subtitle:[English]... [Turkish]...)"
         Regex("""(?is)\(\s*subtitle(?:s)?\s*:\s*([^)]+)\)""")
             .findAll(body)
             .forEach { match ->
@@ -1395,7 +1310,6 @@ class AsyaWatch : MainAPI() {
                 }
             }
 
-        // Pair each label and URL only inside the same object to avoid cross-track pairing.
         val objectLabel = Regex(
             """(?is)["']?(?:label|srclang|language|lang|name)["']?\s*[:=]\s*["']([^"']{1,40})["']"""
         )
@@ -1416,6 +1330,13 @@ class AsyaWatch : MainAPI() {
         Regex(
             """(?i)["']((?:(?:https?:)?//|/|\.\.?/)?[^"'<>\s]{1,900}\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt|m3u8?)(?:\?[^"']*)?)["']"""
         ).findAll(body).forEach { add(it.groupValues[1]) }
+
+        // nsub.php?v=<token> — AsyaWatch/FourPichive altyazı deseni
+        Regex(
+            """(?i)["']?([^"'\s<>]*?nsub\.php\?v=[A-Za-z0-9_\-]{20,})["']?"""
+        ).findAll(body).forEach { match ->
+            add(match.groupValues[1], "Türkçe", forceSubtitle = true)
+        }
 
         Regex(
             """(?i)(subtitle|subtitles|caption|captions|subtitleUrl|subtitle_url|captionUrl|caption_url|track|file|src)\s*["']?\s*[:=]\s*["']([^"']+)["']"""
@@ -1454,9 +1375,6 @@ class AsyaWatch : MainAPI() {
                 lang = subtitleLanguage(label, url),
                 url = url
             )
-            // Altyazı sunucuları çoğu zaman oynatıcıdaki UA/Referer olmadan isteği reddeder.
-            // SubtitleFile başlıklarını doldurmak, doğrudan VTT/SRT ve HLS altyazı URL'lerinde
-            // tarayıcı ile CloudStream arasındaki bu farkı azaltır.
             val requestHeaders = siteHeaders.toMutableMap()
             requestHeaders["Referer"] = referer
             requestHeaders["Accept"] = "text/vtt, text/plain, */*"
@@ -1475,14 +1393,13 @@ class AsyaWatch : MainAPI() {
         val normalized = normalizeSubtitleText(text)
         variants.add(normalized)
 
-        // Bazı API'ler source_content alanını tek parça Base64 olarak döndürüyor.
         val compact = normalized.filterNot { it.isWhitespace() }.trim('"', '\'')
         if (compact.length in 80..200000 &&
             Regex("""^[A-Za-z0-9+/]+={0,2}$""").matches(compact)
         ) {
             val decoded = decodeBase64Text(compact)
             if (!decoded.isNullOrBlank() &&
-                Regex("""(?is)(subtitle|caption|playerjs|\.vtt|\.srt|\.m3u8|https?://)""").containsMatchIn(decoded)
+                Regex("""(?is)(subtitle|caption|playerjs|\.vtt|\.srt|\.m3u8|nsub\.php|https?://)""").containsMatchIn(decoded)
             ) {
                 variants.add(normalizeSubtitleText(decoded))
             }
@@ -1490,9 +1407,6 @@ class AsyaWatch : MainAPI() {
 
         for (payload in variants) {
             subtitleUrls(payload, baseUrl).forEach { (url, label) ->
-                // A URL may first appear without a language label and later reappear
-                // correctly tagged as Turkish/English. Do not let the early generic
-                // discovery suppress the later, useful language metadata.
                 if (seen.add(url) ||
                     subtitleUrlLanguage(url) != null ||
                     explicitSubtitleLanguage(label) != null
@@ -1516,8 +1430,6 @@ class AsyaWatch : MainAPI() {
                     track.attr("kind").equals("captions", true)
                 if (!looksLikeSubtitle(url) && !explicitTrack) return@forEach
 
-                // As with parsed PlayerJS entries, allow a later explicit language
-                // label to refresh an URL that was first discovered generically.
                 val firstDiscovery = seen.add(url)
                 if (!firstDiscovery &&
                     subtitleUrlLanguage(url) == null &&
@@ -1597,10 +1509,10 @@ class AsyaWatch : MainAPI() {
             .forEach { manifests.add(it) }
 
         manifests.take(3).forEach { manifest ->
-                extractSubtitlesFromManifest(
-                    manifest, pageUrl, seen, seenManifests, callback
-                )
-            }
+            extractSubtitlesFromManifest(
+                manifest, pageUrl, seen, seenManifests, callback
+            )
+        }
     }
 
     private fun isDirectMedia(url: String): Boolean =
@@ -1620,111 +1532,109 @@ class AsyaWatch : MainAPI() {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // FourPichive iframe çıkarıcı
-    // ---------------------------------------------------------------------
+    // =====================================================================
+    // FourPichive iframe çıkarıcı (nl.php?v=<token> → application/vnd.apple.mpegurl)
+    // =====================================================================
 
-    /**
-     * AsyaWatch oynatma akışını four.pichive.online/iframe.php üzerinden sunuyor.
-     * Eski ContentX openPlayer formatı kullanılmadığı için genel extractor tek başına
-     * yeterli olmuyor. Bu fonksiyon iframe sayfasını indirip içindeki PlayerJS
-     * yapılandırmasından veya packed JS içeriğinden .m3u8/.mp4 akış URL'sini çıkarır.
-     */
-    private suspend fun extractFourPichiveStream(iframeUrl: String, referer: String): String? {
-        val response = runCatching {
+    private suspend fun extractFourPichiveStream(iframeUrl: String, pageReferer: String): String? {
+        val iframeHeaders = mapOf(
+            "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language" to (siteHeaders["Accept-Language"] ?: ""),
+            "Referer" to pageReferer,
+            "Origin" to "https://four.pichive.online"
+        )
+        val iframeResponse = runCatching {
             app.get(
                 iframeUrl,
-                headers = siteHeaders,
-                referer = referer,
+                headers = iframeHeaders,
+                referer = pageReferer,
                 allowRedirects = true
             )
-        }.getOrNull() ?: run {
-            Log.w("AsyaWatch", "FourPichive iframe isteği başarısız: $iframeUrl")
+        }.onFailure {
+            Log.w("AsyaWatch", "FourPichive iframe fetch error: ${it.javaClass.simpleName}: ${it.message}")
+        }.getOrNull() ?: return null
+
+        if (!iframeResponse.isSuccessful) {
+            Log.w("AsyaWatch", "FourPichive iframe HTTP ${iframeResponse.code}: $iframeUrl")
             return null
         }
-        if (!response.isSuccessful) {
-            Log.w("AsyaWatch", "FourPichive iframe HTTP ${response.code}: $iframeUrl")
-            return null
-        }
-        val html = response.text
+        val html = iframeResponse.text
         if (html.isBlank()) {
             Log.w("AsyaWatch", "FourPichive iframe boş yanıt: $iframeUrl")
             return null
         }
+        val finalBase = iframeResponse.url.takeIf { it.isNotBlank() } ?: iframeUrl
 
-        // Redirect olmuşsa göreli URL'leri son adrese göre çöz.
-        val finalBase = response.url.takeIf { it.isNotBlank() } ?: iframeUrl
-        val normalized = normalizeSubtitleText(html)
-
-        // 1) Doğrudan HTML/JS içinde akış URL'si ara
-        extractStreamFromText(normalized, finalBase)?.let {
-            Log.d("AsyaWatch", "FourPichive akış URL'si bulundu (ham): $it")
+        // 1) Doğrudan nl.php?v=<token>
+        findNlPhpUrl(html, finalBase)?.let {
+            Log.d("AsyaWatch", "FourPichive nl.php bulundu: ${it.take(140)}...")
             return it
         }
 
-        // 2) Packed JS (eval(function(p,a,c,k,e,d){...})) varsa çöz ve tekrar ara
+        // 2) Packed JS içinde
         val packedMarker = Regex(
             """(?is)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*[rd]\s*\)"""
-        ).find(normalized)
+        ).find(html)
         if (packedMarker != null) {
-            val fromMarker = normalized.substring(packedMarker.range.first)
-            val unpacked = runCatching { unpackJs(fromMarker) }.getOrNull()
+            val unpacked = runCatching { unpackJs(html.substring(packedMarker.range.first)) }.getOrNull()
             if (!unpacked.isNullOrBlank()) {
-                extractStreamFromText(unpacked, finalBase)?.let {
-                    Log.d("AsyaWatch", "FourPichive akış URL'si bulundu (packed JS): $it")
+                findNlPhpUrl(unpacked, finalBase)?.let {
+                    Log.d("AsyaWatch", "FourPichive nl.php (unpacked) bulundu: ${it.take(140)}...")
                     return it
                 }
             }
         }
 
-        // 3) iframe sayfası başka bir player sayfasına yönlendiriyorsa onu da dene
-        val nestedIframes = Regex(
-            """(?i)<iframe[^>]+src=["']([^"']+)["']"""
-        ).findAll(normalized)
-            .mapNotNull { absoluteUrl(it.groupValues[1], finalBase) }
-            .filter { isDirectMedia(it) }
-            .toList()
-        for (nested in nestedIframes) {
-            // İç içe iframe doğrudan medya ise onu döndür
-            return nested
-        }
+        // 3) Genel m3u8 fallback
+        Regex("""(?i)(?:https?:)?//[^"'<>\s]+?\.m3u8(?:\?[^"'<>\s]*)?""")
+            .find(html)?.let {
+                Log.d("AsyaWatch", "FourPichive m3u8 fallback: ${it.value.take(140)}...")
+                return absoluteUrl(it.value, finalBase)
+            }
 
-        Log.w("AsyaWatch", "FourPichive iframe içinde akış URL'si bulunamadı: $iframeUrl")
+        Log.w(
+            "AsyaWatch",
+            "FourPichive iframe içinde stream URL bulunamadı: $iframeUrl (HTML uzunluğu: ${html.length})"
+        )
         return null
     }
 
-    private fun extractStreamFromText(text: String, baseUrl: String): String? {
-        // Öncelik: PlayerJS tarzı anahtar-değer eşleşmeleri
-        val keyedPatterns = listOf(
-            Regex("""(?i)["']?(?:file|source|src|url|video_url|videoUrl|hls|hls_url|hlsUrl|stream|stream_url|streamUrl|playlist|m3u8|video)["']?\s*[:=]\s*["']([^"']{4,2000}\.(?:m3u8|mp4|m4v|mpd)(?:\?[^"']*)?)["']"""),
-            // [HD]https://... veya [1080p]https://... gibi etiketli format
-            Regex("""(?i)\[\s*([^\]]{1,20})\s*\]\s*((?:https?:)?//[^,\s\[\]"']+\.(?:m3u8|mp4|m4v|mpd)(?:\?[^,\s\[\]"']*)?)""")
-        )
-        for (pattern in keyedPatterns) {
-            for (match in pattern.findAll(text)) {
-                val raw = match.groupValues.last().trim()
-                val absolute = absoluteUrl(raw, baseUrl) ?: continue
-                if (isDirectMedia(absolute)) return absolute
-            }
+    private fun findNlPhpUrl(text: String, base: String): String? {
+        // Mutlak: https://four.pichive.online/nl.php?v=<token>
+        Regex(
+            """(?i)(?:https?:)?//[^"'<>\s]{0,200}?four\.pichive\.online/nl\.php\?v=[A-Za-z0-9_\-]{20,}"""
+        ).find(text)?.let { match ->
+            return absoluteUrl(match.value.trimEnd('\\', '"', '\'', ','), base)
         }
 
-        // Yedek: metin içindeki tüm mutlak/yarı-mutlak .m3u8/.mp4 URL'leri
-        val fallbackPatterns = listOf(
-            Regex("""(?i)["']((?:https?:)?//[^"'<>\s]{4,2000}\.(?:m3u8|mp4|m4v|mpd)(?:\?[^"'<>\s]*)?)["']"""),
-            Regex("""(?i)((?:https?:)?//[^"'<>\s]{4,2000}\.(?:m3u8|mp4|m4v|mpd)(?:\?[^"'<>\s]*)?)""")
-        )
-        for (pattern in fallbackPatterns) {
-            for (match in pattern.findAll(text)) {
-                val raw = match.groupValues[1].trim()
-                val absolute = absoluteUrl(raw, baseUrl) ?: continue
-                if (isDirectMedia(absolute)) return absolute
-            }
+        // Tırnak içinde göreli: "/nl.php?v=..." veya "nl.php?v=..."
+        Regex(
+            """(?i)["']([^"'<>\s]{0,300}?/?nl\.php\?v=[A-Za-z0-9_\-]{20,})["']"""
+        ).find(text)?.let { match ->
+            return absoluteUrl(match.groupValues[1], base)
         }
+
+        // Tırnak dışı göreli
+        Regex(
+            """(?i)(?:^|[\s"'(=\[,])(/?nl\.php\?v=[A-Za-z0-9_\-]{20,})"""
+        ).find(text)?.let { match ->
+            return absoluteUrl(match.groupValues[1], base)
+        }
+
+        // JSON benzeri "v":"<token>" veya v:"<token>" (100+ karakter uzun token)
+        Regex(
+            """(?i)["']?v["']?\s*[:=]\s*["']([A-Za-z0-9_\-]{100,})["']"""
+        ).find(text)?.let { match ->
+            return "https://four.pichive.online/nl.php?v=${match.groupValues[1]}"
+        }
+
         return null
     }
 
     /**
-     * Dean Edwards tarzı packed JS'yi çözer: eval(function(p,a,c,k,e,d){...}(payload,radix,count,'keywords'.split('|'),0,{}))
+     * Dean Edwards tarzı packed JS'yi çözer.
+     * eval(function(p,a,c,k,e,d){...}(payload,radix,count,'keywords'.split('|'),0,{}))
      */
     private fun unpackJs(source: String): String? {
         val marker = Regex(
@@ -1732,9 +1642,8 @@ class AsyaWatch : MainAPI() {
         ).find(source) ?: return null
         val start = marker.range.first
 
-        // eval( ... ) parantez dengesini bul
         var depth = 0
-        var index = start + 4 // "eval" sonrası
+        var index = start + 4
         var end = -1
         while (index < source.length) {
             when (source[index]) {
@@ -1781,9 +1690,9 @@ class AsyaWatch : MainAPI() {
         return sb.toString()
     }
 
-    // ---------------------------------------------------------------------
+    // =====================================================================
     // loadLinks
-    // ---------------------------------------------------------------------
+    // =====================================================================
 
     override suspend fun loadLinks(
         data: String,
@@ -1821,8 +1730,6 @@ class AsyaWatch : MainAPI() {
                 """(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)$"""
             ).containsMatchIn(path)
 
-            // Prefer the provider's language-specific folder/filename, then explicit
-            // language query metadata. Generic labels alone should be the weakest signal.
             return when {
                 detectedLanguage == null && explicitSubtitleLanguage(subtitle.lang) == null -> 0
                 languageDirectory && isHlsSubtitlePlaylist -> 12
@@ -1836,17 +1743,11 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // Only expose one correctly identified track per supported language.
-        // URL language metadata takes precedence over a possibly mismatched label.
-        // If the same language is found more than once, prefer the URL that explicitly
-        // identifies its language, then a standalone VTT/SRT file.
         val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
             val language = subtitleUrlLanguage(subtitle.url)
                 ?: explicitSubtitleLanguage(subtitle.lang)
             if (language == "Türkçe" || language == "English") {
                 val existing = chosenSubtitles[language]
-                // Do not let later tracks of equal priority replace the first candidate.
-                // Replace only when the new URL carries stronger language/path evidence.
                 if (existing == null ||
                     subtitleTrackPriority(subtitle) > subtitleTrackPriority(existing)
                 ) {
@@ -1888,41 +1789,48 @@ class AsyaWatch : MainAPI() {
                 return
             }
 
-            // Player pages commonly contain their subtitle tracks outside secureData.
             extractSubtitlesFromPlayerPage(
                 candidate, referer, seenSubtitleUrls, seenSubtitlePages,
                 seenSubtitleManifests, emitSubtitle
             )
 
-            // FourPichive iframe'i için özel çıkarıcı; genel extractor'a ek olarak dene.
             val candidateHost = runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+
+            // ---- FourPichive özel çıkarıcı ----
             if (candidateHost == "four.pichive.online" ||
                 candidateHost?.endsWith(".four.pichive.online") == true
             ) {
                 val streamUrl = extractFourPichiveStream(candidate, referer)
                 if (!streamUrl.isNullOrBlank() && emittedUrls.add(streamUrl)) {
-                    val type = if (streamUrl.contains(".m3u8", true)) {
-                        ExtractorLinkType.M3U8
-                    } else {
-                        ExtractorLinkType.VIDEO
+                    // nl.php m3u8 döndürür; .m3u8 uzantısı olmasa da M3U8 tipi kullan.
+                    val isHls = streamUrl.contains(".m3u8", true) ||
+                        streamUrl.contains("nl.php", true) ||
+                        streamUrl.contains("nl.", true)
+                    val type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    val label = "$name FourPichive" +
+                        (quality.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
+                    val link = newExtractorLink(
+                        source = name,
+                        name = label,
+                        url = streamUrl,
+                        type = type
+                    ) {
+                        this.referer = candidate
+                        this.quality = qualityValue(quality, streamUrl)
                     }
-                    callback(
-                        newExtractorLink(
-                            source = name,
-                            name = "$name FourPichive",
-                            url = streamUrl,
-                            type = type
-                        ) {
-                            this.referer = candidate
-                            this.quality = qualityValue(quality, streamUrl)
-                        }
-                    )
+                    // Origin/Referer headerlarını da ekle (destekleniyorsa).
+                    runCatching {
+                        link.headers["Origin"] = "https://four.pichive.online"
+                        link.headers["Referer"] = candidate
+                        link.headers["User-Agent"] =
+                            siteHeaders["User-Agent"] ?: ""
+                    }
+                    callback(link)
                     found = true
+                    Log.d("AsyaWatch", "FourPichive M3U8 verildi: ${streamUrl.take(140)}...")
+                    return
                 }
-                // Özel çıkarıcı başarısız olduysa genel extractor'ı da dene (belki
-                // Cloudstream'de güncel bir FourPichive extractor'ı vardır). Ama
-                // başarılı olduysa loadExtractor'ı atlamak için return etme; o da
-                // alternatif kalite sunabilir.
+                Log.w("AsyaWatch", "FourPichive stream URL bulunamadı, genel extractor denenecek.")
             }
 
             try {
@@ -1931,7 +1839,6 @@ class AsyaWatch : MainAPI() {
                     found = true
                 }
             } catch (_: Exception) {
-                // Bir oynatıcı başarısız olduğunda kalan kaynaklar denenmeye devam eder.
             }
         }
 
@@ -1944,7 +1851,6 @@ class AsyaWatch : MainAPI() {
             objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
 
         if (page != null) {
-            // Bazı sürümlerde altyazı adresleri source_content JSON alanının içinde tutuluyor.
             publishSubtitlesFromText(root?.toString().orEmpty(), data, seenSubtitleUrls, emitSubtitle)
             publishSubtitlesFromText(page.document.html(), data, seenSubtitleUrls, emitSubtitle)
 
@@ -2018,7 +1924,6 @@ class AsyaWatch : MainAPI() {
             if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
         }
 
-        // Keep the list limited to one Turkish and one English option.
         chosenSubtitles.values.forEach { subtitleCallback(it) }
         return found
     }
