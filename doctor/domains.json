@@ -318,39 +318,52 @@
           "from": "https://jetfilmizle.now",
           "to": "https://jetfilmizle.app",
           "reason": "HTTP redirect from primary domain to https://jetfilmizle.app/; provider module brand matched candidate page header"
+        },
+        {
+          "from": "https://jetfilmizle.now",
+          "to": "https://jetfilmizle.wiki",
+          "reason": "confirmed primary-domain failure (http-404); web search nomination for '\"JetFilmizle\" official website'; identity matched (10/19 tokens, ratio=0.53)"
         }
       ],
       "identityProfile": {
-        "title": "JetFilmizle - Film İzle, Türkçe Dublaj, Altyazılı ve Yerli Filmler",
-        "h1": "Film İzle - Türkçe Dublaj, Altyazılı, Yerli Filmler",
+        "title": "JetFilmizle | HD Türkçe Dublaj ve Altyazılı Film & Dizi",
+        "h1": "Yellow Mirror",
         "siteName": "JetFilmizle",
-        "description": "Film izle arayanlar için yeni filmler, popüler yapımlar, yıl ve tür filtreleri, Türkçe dublaj ve altyazılı seçenekler tek yerde.",
+        "description": "JetFilmizle ile en yeni film ve dizileri Full HD, Türkçe dublaj ve altyazılı izleyin. Güncel vizyonlar, popüler yapımlar ve kesintisiz oynatma tek adreste.",
         "tokens": [
+          "adreste",
           "altyaz",
-          "arayanlar",
+          "dizi",
+          "dizileri",
           "dublaj",
           "film",
-          "filmler",
-          "filtreleri",
-          "icin",
-          "izle",
+          "full",
+          "guncel",
+          "ile",
+          "izleyin",
           "jetfilmizle",
+          "kesintisiz",
+          "mirror",
           "mlar",
+          "oynatma",
           "populer",
-          "secenekler",
           "tek",
-          "tur",
           "turkce",
+          "vizyonlar",
           "yap",
-          "yeni",
-          "yerde",
-          "yerli"
+          "yellow",
+          "yeni"
         ]
       },
       "lastDomainRestore": {
         "currentDomain": "https://jetfilmizle.now",
         "restoredFrom": "https://jetfilmizle.app",
         "reason": "The original URL redirects successfully to the current site; the working redirect URL is retained."
+      },
+      "lastSwitch": {
+        "from": "https://jetfilmizle.now",
+        "to": "https://jetfilmizle.wiki",
+        "reason": "confirmed primary-domain failure (http-404); web search nomination for '\"JetFilmizle\" official website'; identity matched (10/19 tokens, ratio=0.53)"
       }
     },
     "PatronSH": {
