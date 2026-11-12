@@ -1,5 +1,30 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-12
+
+<!-- kayra-commit:f0a15b9fd5a375dbbd26ae75498227323734e555 -->
+### Implement FourPichive iframe stream extractor
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [f0a15b9](https://github.com/Kayracs3/Kayra/commit/f0a15b9fd5a375dbbd26ae75498227323734e555)
+
+## 2026-11-12
+
+<!-- kayra-commit:bcd654f7ac08fb539f5f0f918c9bc3563803cff9 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: JetFilmizle, Repo / CI
+- Commit: [bcd654f](https://github.com/Kayracs3/Kayra/commit/bcd654f7ac08fb539f5f0f918c9bc3563803cff9)
+
+## 2026-11-11
+
+<!-- kayra-commit:7fdd726d43a50ab9943bbb91e687462a4f6c047e -->
+### AsyaWatch kaynak veri yapısını ayrıntılı tanıla
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [7fdd726](https://github.com/Kayracs3/Kayra/commit/7fdd726d43a50ab9943bbb91e687462a4f6c047e)
+
+
 ## 2026-11-11
 
 <!-- kayra-commit:4f7bfe54abb45e941c2c578ca0736319f1d815f9 -->
