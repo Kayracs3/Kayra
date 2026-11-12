@@ -56,7 +56,7 @@ class AsyaWatch : MainAPI() {
     override var sequentialMainPageDelay = 350L
     override var sequentialMainPageScrollDelay = 250L
 
-    override val mainPage = mainPageOf(       
+    override val mainPage = mainPageOf(
         "" to "Yeni Eklenen Diziler",
         "aksiyon" to "Aksiyon Dizi",
         "bilim-kurgu" to "Bilim Kurgu Dizi",
@@ -1620,6 +1620,171 @@ class AsyaWatch : MainAPI() {
         }
     }
 
+    // ---------------------------------------------------------------------
+    // FourPichive iframe çıkarıcı
+    // ---------------------------------------------------------------------
+
+    /**
+     * AsyaWatch oynatma akışını four.pichive.online/iframe.php üzerinden sunuyor.
+     * Eski ContentX openPlayer formatı kullanılmadığı için genel extractor tek başına
+     * yeterli olmuyor. Bu fonksiyon iframe sayfasını indirip içindeki PlayerJS
+     * yapılandırmasından veya packed JS içeriğinden .m3u8/.mp4 akış URL'sini çıkarır.
+     */
+    private suspend fun extractFourPichiveStream(iframeUrl: String, referer: String): String? {
+        val response = runCatching {
+            app.get(
+                iframeUrl,
+                headers = siteHeaders,
+                referer = referer,
+                allowRedirects = true
+            )
+        }.getOrNull() ?: run {
+            Log.w("AsyaWatch", "FourPichive iframe isteği başarısız: $iframeUrl")
+            return null
+        }
+        if (!response.isSuccessful) {
+            Log.w("AsyaWatch", "FourPichive iframe HTTP ${response.code}: $iframeUrl")
+            return null
+        }
+        val html = response.text
+        if (html.isBlank()) {
+            Log.w("AsyaWatch", "FourPichive iframe boş yanıt: $iframeUrl")
+            return null
+        }
+
+        // Redirect olmuşsa göreli URL'leri son adrese göre çöz.
+        val finalBase = response.url.takeIf { it.isNotBlank() } ?: iframeUrl
+        val normalized = normalizeSubtitleText(html)
+
+        // 1) Doğrudan HTML/JS içinde akış URL'si ara
+        extractStreamFromText(normalized, finalBase)?.let {
+            Log.d("AsyaWatch", "FourPichive akış URL'si bulundu (ham): $it")
+            return it
+        }
+
+        // 2) Packed JS (eval(function(p,a,c,k,e,d){...})) varsa çöz ve tekrar ara
+        val packedMarker = Regex(
+            """(?is)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*[rd]\s*\)"""
+        ).find(normalized)
+        if (packedMarker != null) {
+            val fromMarker = normalized.substring(packedMarker.range.first)
+            val unpacked = runCatching { unpackJs(fromMarker) }.getOrNull()
+            if (!unpacked.isNullOrBlank()) {
+                extractStreamFromText(unpacked, finalBase)?.let {
+                    Log.d("AsyaWatch", "FourPichive akış URL'si bulundu (packed JS): $it")
+                    return it
+                }
+            }
+        }
+
+        // 3) iframe sayfası başka bir player sayfasına yönlendiriyorsa onu da dene
+        val nestedIframes = Regex(
+            """(?i)<iframe[^>]+src=["']([^"']+)["']"""
+        ).findAll(normalized)
+            .mapNotNull { absoluteUrl(it.groupValues[1], finalBase) }
+            .filter { isDirectMedia(it) }
+            .toList()
+        for (nested in nestedIframes) {
+            // İç içe iframe doğrudan medya ise onu döndür
+            return nested
+        }
+
+        Log.w("AsyaWatch", "FourPichive iframe içinde akış URL'si bulunamadı: $iframeUrl")
+        return null
+    }
+
+    private fun extractStreamFromText(text: String, baseUrl: String): String? {
+        // Öncelik: PlayerJS tarzı anahtar-değer eşleşmeleri
+        val keyedPatterns = listOf(
+            Regex("""(?i)["']?(?:file|source|src|url|video_url|videoUrl|hls|hls_url|hlsUrl|stream|stream_url|streamUrl|playlist|m3u8|video)["']?\s*[:=]\s*["']([^"']{4,2000}\.(?:m3u8|mp4|m4v|mpd)(?:\?[^"']*)?)["']"""),
+            // [HD]https://... veya [1080p]https://... gibi etiketli format
+            Regex("""(?i)\[\s*([^\]]{1,20})\s*\]\s*((?:https?:)?//[^,\s\[\]"']+\.(?:m3u8|mp4|m4v|mpd)(?:\?[^,\s\[\]"']*)?)""")
+        )
+        for (pattern in keyedPatterns) {
+            for (match in pattern.findAll(text)) {
+                val raw = match.groupValues.last().trim()
+                val absolute = absoluteUrl(raw, baseUrl) ?: continue
+                if (isDirectMedia(absolute)) return absolute
+            }
+        }
+
+        // Yedek: metin içindeki tüm mutlak/yarı-mutlak .m3u8/.mp4 URL'leri
+        val fallbackPatterns = listOf(
+            Regex("""(?i)["']((?:https?:)?//[^"'<>\s]{4,2000}\.(?:m3u8|mp4|m4v|mpd)(?:\?[^"'<>\s]*)?)["']"""),
+            Regex("""(?i)((?:https?:)?//[^"'<>\s]{4,2000}\.(?:m3u8|mp4|m4v|mpd)(?:\?[^"'<>\s]*)?)""")
+        )
+        for (pattern in fallbackPatterns) {
+            for (match in pattern.findAll(text)) {
+                val raw = match.groupValues[1].trim()
+                val absolute = absoluteUrl(raw, baseUrl) ?: continue
+                if (isDirectMedia(absolute)) return absolute
+            }
+        }
+        return null
+    }
+
+    /**
+     * Dean Edwards tarzı packed JS'yi çözer: eval(function(p,a,c,k,e,d){...}(payload,radix,count,'keywords'.split('|'),0,{}))
+     */
+    private fun unpackJs(source: String): String? {
+        val marker = Regex(
+            """(?is)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*[rd]\s*\)"""
+        ).find(source) ?: return null
+        val start = marker.range.first
+
+        // eval( ... ) parantez dengesini bul
+        var depth = 0
+        var index = start + 4 // "eval" sonrası
+        var end = -1
+        while (index < source.length) {
+            when (source[index]) {
+                '(' -> depth++
+                ')' -> {
+                    depth--
+                    if (depth == 0) { end = index; break }
+                }
+            }
+            index++
+        }
+        if (end < 0) return null
+        val expr = source.substring(start, end + 1)
+
+        val argsMatch = Regex(
+            """(?is)\}\s*\(\s*['"](.+?)['"]\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*['"](.+?)['"]\s*\.split\s*\(\s*['"]\|['"]\s*\)"""
+        ).find(expr) ?: return null
+
+        val payload = argsMatch.groupValues[1]
+        val radix = argsMatch.groupValues[2].toIntOrNull() ?: 62
+        val count = argsMatch.groupValues[3].toIntOrNull() ?: return null
+        val keywords = argsMatch.groupValues[4].split("|")
+
+        var result = payload
+        for (i in count - 1 downTo 0) {
+            val keyword = keywords.getOrNull(i)
+            if (!keyword.isNullOrBlank()) {
+                val encoded = encodeBaseN(i, radix)
+                result = result.replace(Regex("""\b${Regex.escape(encoded)}\b"""), keyword)
+            }
+        }
+        return result
+    }
+
+    private fun encodeBaseN(value: Int, radix: Int): String {
+        val chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        if (value == 0) return "0"
+        var v = value
+        val sb = StringBuilder()
+        while (v > 0) {
+            sb.insert(0, chars[v % radix])
+            v /= radix
+        }
+        return sb.toString()
+    }
+
+    // ---------------------------------------------------------------------
+    // loadLinks
+    // ---------------------------------------------------------------------
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -1729,15 +1894,35 @@ class AsyaWatch : MainAPI() {
                 seenSubtitleManifests, emitSubtitle
             )
 
-            // FourPichive'ın güncel iframe'i eski ContentX openPlayer biçimini kullanmıyor.
-            // Belgelenmiş bir harici kaynak arayüzü olmadığı için bu iframe'i genel
-            // extractor'a göndermiyoruz; yukarıdaki sayfa/altyazı taraması korunur.
+            // FourPichive iframe'i için özel çıkarıcı; genel extractor'a ek olarak dene.
             val candidateHost = runCatching { URI(candidate).host?.lowercase() }.getOrNull()
             if (candidateHost == "four.pichive.online" ||
                 candidateHost?.endsWith(".four.pichive.online") == true
             ) {
-                Log.w("AsyaWatch", "FourPichive iframe için desteklenen doğrudan kaynak bulunamadı; genel extractor atlandı.")
-                return
+                val streamUrl = extractFourPichiveStream(candidate, referer)
+                if (!streamUrl.isNullOrBlank() && emittedUrls.add(streamUrl)) {
+                    val type = if (streamUrl.contains(".m3u8", true)) {
+                        ExtractorLinkType.M3U8
+                    } else {
+                        ExtractorLinkType.VIDEO
+                    }
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = "$name FourPichive",
+                            url = streamUrl,
+                            type = type
+                        ) {
+                            this.referer = candidate
+                            this.quality = qualityValue(quality, streamUrl)
+                        }
+                    )
+                    found = true
+                }
+                // Özel çıkarıcı başarısız olduysa genel extractor'ı da dene (belki
+                // Cloudstream'de güncel bir FourPichive extractor'ı vardır). Ama
+                // başarılı olduysa loadExtractor'ı atlamak için return etme; o da
+                // alternatif kalite sunabilir.
             }
 
             try {
