@@ -1075,7 +1075,7 @@ class AsyaWatch : MainAPI() {
                 "filemoon", "vidmoly", "youtube", "youtu.be", "vimeo", "dood",
                 "streamwish", "voe.sx", "ok.ru", "sibnet", "mixdrop", "uqload",
                 "mp4upload", "asianload", "googlevideo", "/e/",
-                "four.pichive.online"
+                "four.pichive.online", "pichive.online"
             ).any { value.contains(it) }
     }
 
@@ -1534,7 +1534,7 @@ class AsyaWatch : MainAPI() {
     }
 
     // =====================================================================
-    // FourPichive iframe çıkarıcı (nl.php?v=<token> → application/vnd.apple.mpegurl)
+    // FourPichive iframe çıkarıcı (nl.php / m.php / p.php / src.php)
     // =====================================================================
 
     private suspend fun extractFourPichiveStream(iframeUrl: String, pageReferer: String): String? {
@@ -1561,9 +1561,9 @@ class AsyaWatch : MainAPI() {
         }
         val finalBase = iframeResponse.url.takeIf { it.isNotBlank() } ?: iframeUrl
 
-        // 1) Doğrudan nl.php
-        findNlPhpUrl(html, finalBase)?.let {
-            Log.d("AsyaWatch", "FourPichive nl.php bulundu (statik): ${it.take(120)}...")
+        // 1) Doğrudan endpoint
+        findStreamEndpoint(html, finalBase)?.let {
+            Log.d("AsyaWatch", "FourPichive endpoint bulundu (statik): ${it.take(140)}...")
             return it
         }
 
@@ -1574,14 +1574,14 @@ class AsyaWatch : MainAPI() {
         if (packedMarker != null) {
             val unpacked = runCatching { unpackJs(html.substring(packedMarker.range.first)) }.getOrNull()
             if (!unpacked.isNullOrBlank()) {
-                findNlPhpUrl(unpacked, finalBase)?.let {
-                    Log.d("AsyaWatch", "FourPichive nl.php bulundu (unpacked): ${it.take(120)}...")
+                findStreamEndpoint(unpacked, finalBase)?.let {
+                    Log.d("AsyaWatch", "FourPichive endpoint bulundu (unpacked): ${it.take(140)}...")
                     return it
                 }
             }
         }
 
-        // 3) iframe HTML içindeki inline fetch/ajax çağrılarını takip et
+        // 3) Inline fetch/ajax API'leri
         val inlineCalls = discoverInlineApiCalls(html, finalBase)
         for (call in inlineCalls) {
             val callResponse = runCatching {
@@ -1590,20 +1590,20 @@ class AsyaWatch : MainAPI() {
             if (!callResponse.isSuccessful) continue
             val body = callResponse.text
             if (body.trimStart().startsWith("#EXTM3U")) {
-                Log.d("AsyaWatch", "FourPichive inline API doğrudan m3u8 döndü: $call")
+                Log.d("AsyaWatch", "FourPichive inline API m3u8: $call")
                 return call
             }
-            findNlPhpUrl(body, call)?.let {
-                Log.d("AsyaWatch", "FourPichive nl.php bulundu (inline API yanıtı): ${it.take(120)}...")
+            findStreamEndpoint(body, call)?.let {
+                Log.d("AsyaWatch", "FourPichive endpoint bulundu (inline API): ${it.take(140)}...")
                 return it
             }
-            Regex("""(?i)["']?v["']?\s*[:=]\s*["']([A-Za-z0-9_\-]{100,})["']""")
+            Regex("""(?i)["']?v["']?\s*[:=]\s*["']([A-Za-z0-9_\-+/=]{100,})["']""")
                 .find(body)?.let { match ->
                     return "https://four.pichive.online/nl.php?v=${match.groupValues[1]}"
                 }
         }
 
-        // 4) Yaygın token API'lerini iframe'in short-hex v'siyle dene
+        // 4) Common API'ler
         val shortToken = runCatching { URI(iframeUrl).rawQuery.orEmpty() }
             .getOrDefault("")
             .split('&')
@@ -1633,20 +1633,20 @@ class AsyaWatch : MainAPI() {
                 val body = apiResponse.text
                 if (body.isBlank() || body.contains("Not Found", true) || body.contains("404", true)) continue
                 if (body.trimStart().startsWith("#EXTM3U")) {
-                    Log.d("AsyaWatch", "FourPichive common API doğrudan m3u8: $apiUrl")
+                    Log.d("AsyaWatch", "FourPichive common API m3u8: $apiUrl")
                     return apiUrl
                 }
-                findNlPhpUrl(body, apiUrl)?.let {
-                    Log.d("AsyaWatch", "FourPichive nl.php bulundu (common API): ${it.take(120)}...")
+                findStreamEndpoint(body, apiUrl)?.let {
+                    Log.d("AsyaWatch", "FourPichive endpoint bulundu (common API): ${it.take(140)}...")
                     return it
                 }
             }
         }
 
-        // 5) Genel m3u8 fallback
+        // 5) Generic m3u8 fallback
         Regex("""(?i)(?:https?:)?//[^"'<>\s]+?\.m3u8(?:\?[^"'<>\s]*)?""")
             .find(html)?.let {
-                Log.d("AsyaWatch", "FourPichive m3u8 fallback: ${it.value.take(120)}...")
+                Log.d("AsyaWatch", "FourPichive m3u8 fallback: ${it.value.take(140)}...")
                 return absoluteUrl(it.value, finalBase)
             }
 
@@ -1658,10 +1658,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    /**
-     * iframe HTML'inde fetch/XMLHttpRequest/$.get/$.ajax çağrılarını bulur,
-     * four.pichive.online origin'ine ait olanları tam URL olarak döndürür.
-     */
     private fun discoverInlineApiCalls(html: String, base: String): List<String> {
         val result = LinkedHashSet<String>()
         val patterns = listOf(
@@ -1680,7 +1676,11 @@ class AsyaWatch : MainAPI() {
                 if (raw.startsWith("data:", true) || raw.startsWith("javascript:", true)) continue
                 val abs = absoluteUrl(raw, base) ?: continue
                 val host = runCatching { URI(abs).host?.lowercase() }.getOrNull() ?: continue
-                if (host == "four.pichive.online" || host.endsWith(".four.pichive.online")) {
+                if (host == "four.pichive.online" ||
+                    host.endsWith(".four.pichive.online") ||
+                    host == "pichive.online" ||
+                    host.endsWith(".pichive.online")
+                ) {
                     result.add(abs)
                 }
             }
@@ -1688,33 +1688,45 @@ class AsyaWatch : MainAPI() {
         return result.take(10).toList()
     }
 
-    private fun findNlPhpUrl(text: String, base: String): String? {
-        // Mutlak: https://four.pichive.online/nl.php?v=<token>
+    /**
+     * iframe HTML'inde video stream endpoint'ini arar. Gözlemlenen endpoint'ler:
+     * nl.php, m.php, p.php, src.php, video.php, player.php, stream.php.
+     * Token'lar Base64URL (A-Za-z0-9_-) ve 100+ karakter.
+     */
+    private fun findStreamEndpoint(text: String, base: String): String? {
+        // 1) Mutlak URL
         Regex(
-            """(?i)(?:https?:)?//[^"'<>\s]{0,200}?four\.pichive\.online/nl\.php\?v=[A-Za-z0-9_\-]{20,}"""
+            """(?i)(?:https?:)?//[^"'<>\s]{0,200}?(?:four\.pichive\.online|pichive\.online)/(?:nl|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,}"""
         ).find(text)?.let { match ->
             return absoluteUrl(match.value.trimEnd('\\', '"', '\'', ','), base)
         }
 
-        // Tırnak içinde göreli: "/nl.php?v=..."
+        // 2) Tırnak içinde göreli
         Regex(
-            """(?i)["']([^"'<>\s]{0,300}?/?nl\.php\?v=[A-Za-z0-9_\-]{20,})["']"""
+            """(?i)["']([^"'<>\s]{0,300}?/(?:nl|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,})["']"""
         ).find(text)?.let { match ->
             return absoluteUrl(match.groupValues[1], base)
         }
 
-        // Tırnak dışı göreli
+        // 3) Tırnak dışı göreli
         Regex(
-            """(?i)(?:^|[\s"'(=\[,])(/?nl\.php\?v=[A-Za-z0-9_\-]{20,})"""
+            """(?i)(?:^|[\s"'(=\[,])(/(?:nl|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,})"""
         ).find(text)?.let { match ->
             return absoluteUrl(match.groupValues[1], base)
         }
 
-        // "v":"<token>" veya v:"<token>" (100+ karakter)
+        // 4) "v":"<token>" veya v:"<token>" (100+ karakter = asıl token)
         Regex(
-            """(?i)["']?v["']?\s*[:=]\s*["']([A-Za-z0-9_\-]{100,})["']"""
+            """(?i)["']?v["']?\s*[:=]\s*["']([A-Za-z0-9_\-+/=]{100,})["']"""
         ).find(text)?.let { match ->
             return "https://four.pichive.online/nl.php?v=${match.groupValues[1]}"
+        }
+
+        // 5) file:/source:/src: "..." içinde endpoint
+        Regex(
+            """(?i)(?:file|source|src|url)\s*[:=]\s*["']([^"']*(?:nl|m|p|src)\.php\?v=[A-Za-z0-9_\-]{20,})["']"""
+        ).find(text)?.let { match ->
+            return absoluteUrl(match.groupValues[1], base)
         }
 
         return null
@@ -1879,39 +1891,80 @@ class AsyaWatch : MainAPI() {
             )
 
             val candidateHost = runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+            val isFourPichive = candidateHost == "four.pichive.online" ||
+                candidateHost?.endsWith(".four.pichive.online") == true
+            val isPichive = candidateHost == "pichive.online" ||
+                candidateHost?.endsWith(".pichive.online") == true
 
             // ---- FourPichive özel çıkarıcı ----
-            if (candidateHost == "four.pichive.online" ||
-                candidateHost?.endsWith(".four.pichive.online") == true
-            ) {
+            if (isFourPichive) {
                 val streamUrl = extractFourPichiveStream(candidate, referer)
                 if (!streamUrl.isNullOrBlank() && emittedUrls.add(streamUrl)) {
-                    // nl.php (uzantısız) m3u8 döndürür — segmentler .jpg ama içerik TS
                     val isHls = streamUrl.contains(".m3u8", true) ||
-                        streamUrl.contains("nl.php", true)
+                        streamUrl.contains("nl.php", true) ||
+                        streamUrl.contains("m.php", true) ||
+                        streamUrl.contains("p.php", true) ||
+                        streamUrl.contains("src.php", true)
                     val type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                     val label = "$name FourPichive" +
                         (quality.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
-                    val link = newExtractorLink(
-                        source = name,
-                        name = label,
-                        url = streamUrl,
-                        type = type
-                    ) {
-                        this.referer = candidate
-                        this.quality = qualityValue(quality, streamUrl)
-                        this.headers = mapOf(
-                            "Origin" to fourPichiveOrigin,
-                            "Referer" to candidate,
-                            "User-Agent" to (siteHeaders["User-Agent"] ?: "")
-                        )
-                    }
-                    callback(link)
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = label,
+                            url = streamUrl,
+                            type = type
+                        ) {
+                            this.referer = candidate
+                            this.quality = qualityValue(quality, streamUrl)
+                            this.headers = mapOf(
+                                "Origin" to fourPichiveOrigin,
+                                "Referer" to candidate,
+                                "User-Agent" to (siteHeaders["User-Agent"] ?: "")
+                            )
+                        }
+                    )
                     found = true
-                    Log.d("AsyaWatch", "FourPichive M3U8 verildi: ${streamUrl.take(120)}...")
+                    Log.d("AsyaWatch", "FourPichive M3U8 verildi: ${streamUrl.take(140)}...")
                     return
                 }
+
+                // FALLBACK: aynı token'ı pichive.online üzerinde dene
+                val vToken = runCatching {
+                    URI(candidate).rawQuery.orEmpty()
+                        .split('&')
+                        .firstOrNull { it.startsWith("v=") }
+                        ?.substringAfter("v=", "")
+                        .orEmpty()
+                }.getOrDefault("")
+
+                if (vToken.isNotBlank()) {
+                    val pichiveUrl = "https://pichive.online/iframe.php?v=$vToken"
+                    Log.d("AsyaWatch", "FourPichive fallback: pichive.online → $pichiveUrl")
+                    try {
+                        loadExtractor(pichiveUrl, referer, emitSubtitle) { link ->
+                            if (emittedUrls.add(link.url)) callback(link)
+                            found = true
+                        }
+                    } catch (e: Exception) {
+                        Log.w("AsyaWatch", "pichive.online fallback hatası: ${e.message}")
+                    }
+                    if (found) return
+                }
+
                 Log.w("AsyaWatch", "FourPichive stream bulunamadı, genel extractor denenecek.")
+            }
+
+            // pichive.online doğrudan mirror ise, genel extractor'ın yakalamasına izin ver
+            if (isPichive) {
+                try {
+                    loadExtractor(candidate, referer, emitSubtitle) { link ->
+                        if (emittedUrls.add(link.url)) callback(link)
+                        found = true
+                    }
+                } catch (_: Exception) {
+                }
+                return
             }
 
             try {
