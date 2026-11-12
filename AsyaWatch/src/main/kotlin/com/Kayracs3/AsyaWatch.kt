@@ -1900,11 +1900,11 @@ class AsyaWatch : MainAPI() {
                     ) {
                         this.referer = candidate
                         this.quality = qualityValue(quality, streamUrl)
-                    }
-                    runCatching {
-                        link.headers["Origin"] = fourPichiveOrigin
-                        link.headers["Referer"] = candidate
-                        link.headers["User-Agent"] = siteHeaders["User-Agent"] ?: ""
+                        this.headers = mapOf(
+                            "Origin" to fourPichiveOrigin,
+                            "Referer" to candidate,
+                            "User-Agent" to (siteHeaders["User-Agent"] ?: "")
+                        )
                     }
                     callback(link)
                     found = true
