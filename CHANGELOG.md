@@ -2,6 +2,15 @@
 
 ## 2026-11-12
 
+<!-- kayra-commit:ced37f0b5d10613d9380b05dbda54eb19bf11bb9 -->
+### Fix AsyaWatch immutable extractor headers
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [ced37f0](https://github.com/Kayracs3/Kayra/commit/ced37f0b5d10613d9380b05dbda54eb19bf11bb9)
+
+
+## 2026-11-12
+
 <!-- kayra-commit:8b0ebdd65b2fe97527ae7397d53091f5a8f70e1b -->
 ### Refactor FourPichive integration and logging
 
