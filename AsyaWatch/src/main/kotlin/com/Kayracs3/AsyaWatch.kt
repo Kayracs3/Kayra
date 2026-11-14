@@ -1885,4 +1885,101 @@ class AsyaWatch : MainAPI() {
                 Log.d("AsyaWatch", "FourPichive (özel extractor): ${candidate.take(120)}...")
                 val extracted = runCatching {
                     extractFourPichive(candidate, referer, emitSubtitle) { link ->
-                        if
+                        if (emittedUrls.add(link.url)) {
+                            callback(link)
+                            found = true
+                        }
+                    }
+                }.getOrElse { error ->
+                    Log.e("AsyaWatch", "FourPichive özel extractor hata: ${error.message}")
+                    false
+                }
+                if (!extracted) {
+                    Log.w("AsyaWatch", "FourPichive özel extractor başarısız.")
+                }
+                // Aynı URL için genel extractor'ı denemiyoruz — yine ContentX'e düşüp NPE verirdi.
+                return
+            }
+
+            try {
+                loadExtractor(candidate, referer, emitSubtitle) { link ->
+                    if (emittedUrls.add(link.url)) callback(link)
+                    found = true
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        if (isDirectMedia(data)) processCandidate(data, "$mainUrl/", "")
+
+        val page = runCatching { getPageData(data) }.getOrNull()
+        val root = page?.secureData
+        val related = objectField(root, "RelatedResults", "relatedResults")
+        val isSeries = data.contains("/dizi/", true) ||
+            objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
+
+        if (page != null) {
+            publishSubtitlesFromText(root?.toString().orEmpty(), data, seenSubtitleUrls, emitSubtitle)
+            publishSubtitlesFromText(page.document.html(), data, seenSubtitleUrls, emitSubtitle)
+
+            val sources = sourceItems(root, isSeries)
+            val relatedForSources = objectField(root, "RelatedResults", "relatedResults")
+            val episodeSourceHolder = objectField(relatedForSources, "getEpisodeSources", "getEpisodeSource")
+            val episodeSourceRows = arrayField(episodeSourceHolder, "result", "sources")
+
+            fun jsonKeys(value: JSONObject?): String {
+                if (value == null) return "yok"
+                val names = ArrayList<String>()
+                val iterator = value.keys()
+                while (iterator.hasNext() && names.size < 20) names.add(iterator.next())
+                return names.joinToString().ifBlank { "boş" }
+            }
+
+            val flightPayloads = nextFlightPayloads(page.document)
+            val flightHasEpisodeSources = flightPayloads.any {
+                it.contains("getEpisodeSources", true) || it.contains("getEpisodeSource", true)
+            }
+            val flightHasSourceContent = flightPayloads.any {
+                it.contains("source_content", true) || it.contains("sourceContent", true)
+            }
+
+            Log.d(
+                "AsyaWatch",
+                "Kaynak veri yapısı: secureData=${root != null}; rootKeys=${jsonKeys(root)}; relatedKeys=${jsonKeys(relatedForSources)}; episodeHolder=${episodeSourceHolder != null}; satır=${episodeSourceRows?.length() ?: 0}; flightPaket=${flightPayloads.size}; flightEpisodeSources=$flightHasEpisodeSources; flightSourceContent=$flightHasSourceContent"
+            )
+            Log.d("AsyaWatch", "Kaynak analizi: kayıt=${sources.size}; dizi=$isSeries")
+
+            for ((sourceIndex, source) in sources.withIndex()) {
+                publishSubtitlesFromText(source.raw, data, seenSubtitleUrls, emitSubtitle)
+                val candidates = extractCandidates(source.raw, data)
+                val hosts = candidates.mapNotNull { candidate ->
+                    runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+                }.distinct()
+                Log.d(
+                    "AsyaWatch",
+                    "Kaynak ${sourceIndex + 1}: kalite=${source.quality.ifBlank { "bilinmiyor" }}; aday=${candidates.size}; alanadları=${hosts.joinToString().ifBlank { "yok" }}"
+                )
+                for (candidate in candidates) {
+                    processCandidate(candidate, data, source.quality)
+                }
+            }
+
+            val pageCandidates = extractCandidates(page.document.html(), data)
+            val pageHosts = pageCandidates.mapNotNull { candidate ->
+                runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+            }.distinct()
+
+            Log.d(
+                "AsyaWatch",
+                "Sayfa adayları: adet=${pageCandidates.size}; alanadları=${pageHosts.joinToString().ifBlank { "yok" }}"
+            )
+            for (candidate in pageCandidates) {
+                processCandidate(candidate, data, "")
+            }
+            if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
+        }
+
+        chosenSubtitles.values.forEach { subtitleCallback(it) }
+        return found
+    }
+}
