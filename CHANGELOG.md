@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:4dd0a69dc80f80a3d5c251063d0a10b3bbdfe15b -->
+### Enhance stream extraction and URL resolution
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [4dd0a69](https://github.com/Kayracs3/Kayra/commit/4dd0a69dc80f80a3d5c251063d0a10b3bbdfe15b)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:95f8c127a6b814fec54a1224e9716e8d3dee60a1 -->
 ### Fix JetFilmizle loadLinks signature
 
