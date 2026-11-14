@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:9916d369625192e3dfe321657076e99e9fc1ab0c -->
+### Refactor M3U8 handling and remove unused code
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [9916d36](https://github.com/Kayracs3/Kayra/commit/9916d369625192e3dfe321657076e99e9fc1ab0c)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:c180d735b252b2498ac1373ba34620d5a0e9e8df -->
 ### Enhance M3U8 resolution and token extraction
 
