@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:f97e711a8049dd3928acea3df58563cb2c198fca -->
+### Refactor findStreamEndpoint and loadLinks methods
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [f97e711](https://github.com/Kayracs3/Kayra/commit/f97e711a8049dd3928acea3df58563cb2c198fca)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:d6c264ead1cce96e200231e75655df57fb674f20 -->
 ### Bump version from 24 to 25
 
