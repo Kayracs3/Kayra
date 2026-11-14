@@ -81,7 +81,6 @@ class AsyaWatch : MainAPI() {
     )
 
     private val fourPichiveOrigin = "https://four.pichive.online"
-    private val pichiveOrigin = "https://pichive.online"
 
     private data class PageData(
         val document: Document,
@@ -1561,16 +1560,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    private fun extractToken(url: String): String? {
-        return runCatching {
-            val query = URI(url).rawQuery.orEmpty()
-            query.split('&')
-                .firstOrNull { it.startsWith("v=") }
-                ?.substringAfter("v=", "")
-                ?.takeIf { it.isNotBlank() }
-        }.getOrNull()
-    }
-
     private fun resolveRelativeUrl(relative: String, base: String): String? {
         return runCatching {
             val baseUri = URI(base)
@@ -1591,96 +1580,47 @@ class AsyaWatch : MainAPI() {
         }.getOrNull()
     }
 
-    /**
-     * M3U8 içeriğini indirir. Üç başlık varyantı ve Accept-Encoding: identity yedeği dener.
-     * Master playlist ise alt medya playlist'ini çözer.
-     */
-    private suspend fun resolvePlayableM3u8(
-        m3u8Url: String,
-        headers: Map<String, String>,
-        referer: String,
-        depth: Int = 0
-    ): String? {
-        if (depth > 2) return null
-
-        val variants = listOf(
-            mapOf(
-                "Accept" to "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
-                "Accept-Encoding" to "identity"
-            ) + headers,
-            emptyMap<String, String>(),
-            mapOf("Accept" to "*/*")
-        )
-
-        var body: String? = null
-        for ((idx, hdrs) in variants.withIndex()) {
-            val resp = runCatching {
-                app.get(m3u8Url, headers = hdrs, referer = referer, allowRedirects = true)
-            }.onFailure {
-                Log.w("AsyaWatch", "m3u8[${idx}] err: ${it.javaClass.simpleName}: ${it.message}")
-            }.getOrNull()
-            if (resp == null || !resp.isSuccessful) {
-                Log.w("AsyaWatch", "m3u8[${idx}] HTTP ${resp?.code ?: "null"} for ${m3u8Url.take(80)}")
-                continue
-            }
-            val text = resp.text
-            Log.d("AsyaWatch", "m3u8[${idx}] HTTP ${resp.code}, len=${text.length}, head=${text.take(20).replace("\n", "\\n")}")
-            if (text.contains("#EXTM3U")) {
-                body = text
-                break
-            }
+    private suspend fun isMasterPlaylist(m3u8Url: String): Boolean {
+        val resp = runCatching {
+            app.get(m3u8Url, headers = mapOf(
+                "Accept" to "application/vnd.apple.mpegurl, */*",
+                "Accept-Encoding" to "identity",
+                "User-Agent" to (siteHeaders["User-Agent"] ?: "")
+            ), allowRedirects = true)
+        }.getOrNull() ?: return false
+        if (!resp.isSuccessful) {
+            Log.w("AsyaWatch", "isMaster HTTP ${resp.code}: ${m3u8Url.take(80)}")
+            return false
         }
-        if (body == null) {
-            Log.w("AsyaWatch", "m3u8 tüm varyantlar başarısız: ${m3u8Url.take(80)}")
-            return null
+        val text = resp.text
+        if (!text.contains("#EXTM3U")) {
+            Log.w("AsyaWatch", "isMaster içerik M3U8 değil: ${m3u8Url.take(80)}")
+            return false
         }
-
-        val lines = body.lines()
-        val hasStreamInf = lines.any { it.trim().startsWith("#EXT-X-STREAM-INF", ignoreCase = true) }
-        val hasExtinf = lines.any { it.trim().startsWith("#EXTINF", ignoreCase = true) }
-
-        if (hasStreamInf) {
-            var nextIsUrl = false
-            for (line in lines) {
-                val trimmed = line.trim()
-                if (trimmed.startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) {
-                    nextIsUrl = true
-                    continue
-                }
-                if (nextIsUrl && trimmed.isNotBlank() && !trimmed.startsWith("#")) {
-                    val absolute = resolveRelativeUrl(trimmed, m3u8Url) ?: continue
-                    Log.d("AsyaWatch", "m3u8 sub-playlist: ${absolute.take(100)}")
-                    val nested = resolvePlayableM3u8(absolute, headers, referer, depth + 1)
-                    return nested ?: absolute
-                }
-            }
-            return null
-        }
-
-        if (hasExtinf) {
-            Log.d("AsyaWatch", "m3u8 media playlist OK: ${m3u8Url.take(100)}")
-            return m3u8Url
-        }
-
-        Log.w("AsyaWatch", "m3u8 içeriği tanınmadı: ${m3u8Url.take(80)}")
-        return null
+        val isMaster = text.lines().any { it.trim().startsWith("#EXT-X-STREAM-INF", ignoreCase = true) }
+        Log.d("AsyaWatch", "isMaster=$isMaster: ${m3u8Url.take(80)}")
+        return isMaster
     }
 
-    private suspend fun tryEndpointsWithToken(
-        origin: String,
-        token: String,
-        headers: Map<String, String>,
-        referer: String
-    ): String? {
-        val endpoints = listOf(
-            "nl.php", "nm.php", "src.php", "video.php", "player.php", "m.php", "p.php"
-        )
-        for (endpoint in endpoints) {
-            val candidate = "$origin/$endpoint?v=$token"
-            val resolved = resolvePlayableM3u8(candidate, headers, referer)
-            if (resolved != null) {
-                Log.d("AsyaWatch", "FourPichive endpoint OK: $origin/$endpoint -> ${resolved.take(140)}")
-                return resolved
+    private suspend fun extractFirstSubPlaylist(masterUrl: String): String? {
+        val resp = runCatching {
+            app.get(masterUrl, headers = mapOf(
+                "Accept" to "application/vnd.apple.mpegurl, */*",
+                "Accept-Encoding" to "identity",
+                "User-Agent" to (siteHeaders["User-Agent"] ?: "")
+            ), allowRedirects = true)
+        }.getOrNull() ?: return null
+        if (!resp.isSuccessful) return null
+        val lines = resp.text.lines()
+        var nextIsUrl = false
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) {
+                nextIsUrl = true
+                continue
+            }
+            if (nextIsUrl && trimmed.isNotBlank() && !trimmed.startsWith("#")) {
+                return resolveRelativeUrl(trimmed, masterUrl)
             }
         }
         return null
@@ -1691,8 +1631,7 @@ class AsyaWatch : MainAPI() {
             "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language" to (siteHeaders["Accept-Language"] ?: ""),
-            "Referer" to pageReferer,
-            "Origin" to fourPichiveOrigin
+            "Referer" to pageReferer
         )
         val iframeResponse = runCatching {
             app.get(iframeUrl, headers = iframeHeaders, referer = pageReferer, allowRedirects = true)
@@ -1708,198 +1647,23 @@ class AsyaWatch : MainAPI() {
             Log.w("AsyaWatch", "FourPichive iframe boş yanıt: $iframeUrl")
             return null
         }
-        val finalBase = iframeResponse.url.takeIf { it.isNotBlank() } ?: iframeUrl
 
-        // 0) NP_CONFIG master + aynı token ile tüm endpoint'leri dene
+        // NP_CONFIG master — düz metin olarak duruyor, regex ile al
         findNpConfigMaster(html)?.let { masterUrl ->
-            Log.d("AsyaWatch", "FourPichive NP_CONFIG master bulundu: ${masterUrl.take(140)}...")
-            val token = extractToken(masterUrl)
-            if (!token.isNullOrBlank()) {
-                tryEndpointsWithToken(fourPichiveOrigin, token, emptyMap(), iframeUrl)?.let {
-                    Log.d("AsyaWatch", "FourPichive master çözüldü (four): ${it.take(140)}...")
-                    return it
+            Log.d("AsyaWatch", "FourPichive NP_CONFIG master: ${masterUrl.take(120)}...")
+            if (isMasterPlaylist(masterUrl)) {
+                val sub = extractFirstSubPlaylist(masterUrl)
+                if (sub != null) {
+                    Log.d("AsyaWatch", "FourPichive sub-playlist: ${sub.take(120)}...")
+                    return sub
                 }
-                tryEndpointsWithToken(pichiveOrigin, token, emptyMap(), iframeUrl)?.let {
-                    Log.d("AsyaWatch", "FourPichive master çözüldü (pichive): ${it.take(140)}...")
-                    return it
-                }
+                Log.w("AsyaWatch", "FourPichive master ama sub-playlist alınamadı")
             }
-            resolvePlayableM3u8(masterUrl, emptyMap(), iframeUrl)?.let {
-                Log.d("AsyaWatch", "FourPichive master çözüldü (fallback): ${it.take(140)}...")
-                return it
-            }
+            return masterUrl
         }
 
-        // 1) Doğrudan endpoint
-        findStreamEndpoint(html, finalBase)?.let { endpointUrl ->
-            Log.d("AsyaWatch", "FourPichive endpoint bulundu (statik): ${endpointUrl.take(140)}...")
-            resolvePlayableM3u8(endpointUrl, emptyMap(), iframeUrl)?.let {
-                return it
-            }
-        }
-
-        // 2) Packed JS
-        val packedMarker = Regex(
-            """(?is)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*[rd]\s*\)"""
-        ).find(html)
-        if (packedMarker != null) {
-            val unpacked = runCatching { unpackJs(html.substring(packedMarker.range.first)) }.getOrNull()
-            if (!unpacked.isNullOrBlank()) {
-                findNpConfigMaster(unpacked)?.let {
-                    resolvePlayableM3u8(it, emptyMap(), iframeUrl)?.let { r -> return r }
-                }
-                findStreamEndpoint(unpacked, finalBase)?.let {
-                    resolvePlayableM3u8(it, emptyMap(), iframeUrl)?.let { r -> return r }
-                }
-            }
-        }
-
-        // 3) Inline fetch/ajax
-        val inlineCalls = discoverInlineApiCalls(html, finalBase)
-        for (call in inlineCalls) {
-            resolvePlayableM3u8(call, emptyMap(), iframeUrl)?.let { return it }
-        }
-
-        // 4) Altyazı token'ını video token olarak dene
-        val subtitleTokens = Regex("""nsub\.php\?v=([A-Za-z0-9_\-+/=]{20,})""")
-            .findAll(html)
-            .map { it.groupValues[1] }
-            .distinct()
-            .toList()
-        for (subToken in subtitleTokens) {
-            tryEndpointsWithToken(fourPichiveOrigin, subToken, emptyMap(), iframeUrl)?.let { return it }
-        }
-
-        // 5) Generic m3u8 fallback
-        Regex("""(?i)(?:https?:)?//[^"'<>\s]+?\.m3u8(?:\?[^"'<>\s]*)?""")
-            .find(html)?.let {
-                resolvePlayableM3u8(it.value, emptyMap(), iframeUrl)?.let { r -> return r }
-            }
-
-        Log.w(
-            "AsyaWatch",
-            "FourPichive stream bulunamadı: $iframeUrl; inline=${inlineCalls.size} " +
-            "subTokens=${subtitleTokens.size} HTML=${html.length}b"
-        )
+        Log.w("AsyaWatch", "FourPichive NP_CONFIG master bulunamadı: $iframeUrl HTML=${html.length}b")
         return null
-    }
-
-    private fun discoverInlineApiCalls(html: String, base: String): List<String> {
-        val result = LinkedHashSet<String>()
-        val patterns = listOf(
-            Regex("""(?i)fetch\s*\(\s*["']([^"']+)["']"""),
-            Regex("""(?i)\$\.(?:get|post|ajax)\s*\(\s*["']([^"']+)["']"""),
-            Regex("""(?i)XMLHttpRequest[^;]{0,400}?\.open\s*\(\s*["'](?:GET|POST)["']\s*,\s*["']([^"']+)["']"""),
-            Regex("""(?i)\.open\s*\(\s*["'](?:GET|POST)["']\s*,\s*["']([^"']+)["']"""),
-            Regex("""(?i)axios\.(?:get|post)\s*\(\s*["']([^"']+)["']"""),
-            Regex("""(?i)\.src\s*=\s*["']([^"']+\.php[^"']*)["']"""),
-            Regex("""(?i)location\.(?:href|replace)\s*[=(]\s*["']([^"']+\.php[^"']*)["']""")
-        )
-        for (pattern in patterns) {
-            for (m in pattern.findAll(html)) {
-                val raw = m.groupValues[1].trim()
-                if (raw.isBlank()) continue
-                if (raw.startsWith("data:", true) || raw.startsWith("javascript:", true)) continue
-                val abs = absoluteUrl(raw, base) ?: continue
-                val host = runCatching { URI(abs).host?.lowercase() }.getOrNull() ?: continue
-                if (host == "four.pichive.online" ||
-                    host.endsWith(".four.pichive.online") ||
-                    host == "pichive.online" ||
-                    host.endsWith(".pichive.online")
-                ) {
-                    result.add(abs)
-                }
-            }
-        }
-        return result.take(10).toList()
-    }
-
-    private fun findStreamEndpoint(text: String, base: String): String? {
-        Regex(
-            """(?i)(?:https?:)?//[^"'<>\s]{0,200}?(?:four\.pichive\.online|pichive\.online)/(?:nl|nm|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,}"""
-        ).find(text)?.let { match ->
-            return absoluteUrl(match.value.trimEnd('\\', '"', '\'', ','), base)
-        }
-
-        Regex(
-            """(?i)["']([^"'<>\s]{0,300}?/(?:nl|nm|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,})["']"""
-        ).find(text)?.let { match ->
-            return absoluteUrl(match.groupValues[1], base)
-        }
-
-        Regex(
-            """(?i)(?:^|[\s"'(=\[,])(/(?:nl|nm|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,})"""
-        ).find(text)?.let { match ->
-            return absoluteUrl(match.groupValues[1], base)
-        }
-
-        Regex(
-            """(?i)["']?v["']?\s*[:=]\s*["']([A-Za-z0-9_\-+/=]{100,})["']"""
-        ).find(text)?.let { match ->
-            return "https://four.pichive.online/nm.php?v=${match.groupValues[1]}"
-        }
-
-        Regex(
-            """(?i)(?:file|source|src|url|stream|hls|master)\s*[:=]\s*["']([^"']*(?:nl|nm|m|p|src)\.php\?v=[A-Za-z0-9_\-]{20,})["']"""
-        ).find(text)?.let { match ->
-            return absoluteUrl(match.groupValues[1], base)
-        }
-
-        return null
-    }
-
-    private fun unpackJs(source: String): String? {
-        val marker = Regex(
-            """(?is)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*[rd]\s*\)"""
-        ).find(source) ?: return null
-        val start = marker.range.first
-
-        var depth = 0
-        var index = start + 4
-        var end = -1
-        while (index < source.length) {
-            when (source[index]) {
-                '(' -> depth++
-                ')' -> {
-                    depth--
-                    if (depth == 0) { end = index; break }
-                }
-            }
-            index++
-        }
-        if (end < 0) return null
-        val expr = source.substring(start, end + 1)
-
-        val argsMatch = Regex(
-            """(?is)\}\s*\(\s*['"](.+?)['"]\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*['"](.+?)['"]\s*\.split\s*\(\s*['"]\|['"]\s*\)"""
-        ).find(expr) ?: return null
-
-        val payload = argsMatch.groupValues[1]
-        val radix = argsMatch.groupValues[2].toIntOrNull() ?: 62
-        val count = argsMatch.groupValues[3].toIntOrNull() ?: return null
-        val keywords = argsMatch.groupValues[4].split("|")
-
-        var result = payload
-        for (i in count - 1 downTo 0) {
-            val keyword = keywords.getOrNull(i)
-            if (!keyword.isNullOrBlank()) {
-                val encoded = encodeBaseN(i, radix)
-                result = result.replace(Regex("""\b${Regex.escape(encoded)}\b"""), keyword)
-            }
-        }
-        return result
-    }
-
-    private fun encodeBaseN(value: Int, radix: Int): String {
-        val chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        if (value == 0) return "0"
-        var v = value
-        val sb = StringBuilder()
-        while (v > 0) {
-            sb.insert(0, chars[v % radix])
-            v /= radix
-        }
-        return sb.toString()
     }
 
     // =====================================================================
@@ -2039,10 +1803,13 @@ class AsyaWatch : MainAPI() {
                             url = streamUrl,
                             type = type
                         ) {
-                            this.referer = fourPichiveOrigin
+                            // Tarayıcı gibi davran — iframe URL'sini referer ver
+                            this.referer = candidate
                             this.quality = qualityValue(quality, streamUrl)
                             this.headers = mapOf(
-                                "User-Agent" to (siteHeaders["User-Agent"] ?: "")
+                                "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
+                                "Referer" to candidate,
+                                "Origin" to fourPichiveOrigin
                             )
                         }
                     )
