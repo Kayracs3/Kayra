@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:c9eb4869185884c9a27f9df30f46065144e36662 -->
+### Refactor stream resolution logic and add pichiveOrigin
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [c9eb486](https://github.com/Kayracs3/Kayra/commit/c9eb4869185884c9a27f9df30f46065144e36662)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:4dd0a69dc80f80a3d5c251063d0a10b3bbdfe15b -->
 ### Enhance stream extraction and URL resolution
 
