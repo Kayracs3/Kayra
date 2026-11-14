@@ -95,8 +95,6 @@ class AsyaWatch : MainAPI() {
     @Volatile private var lastPosterFallbackAt = 0L
     private val posterFallbackCache = ConcurrentHashMap<String, String>()
     private val noPosterSentinel = "__NO_ASYAWATCH_POSTER__"
-
-    // PoW cache: (id) -> (nonce, variant)
     private val powCache = ConcurrentHashMap<String, Pair<Long, String>>()
 
     private fun isRateLimitResponse(code: Int, body: String): Boolean {
@@ -1543,12 +1541,6 @@ class AsyaWatch : MainAPI() {
     // NP_GATE PoW çözücü
     // =====================================================================
 
-    /**
-     * NP_GATE PoW'u çözer.
-     *
-     * JS: (hash(salt + id + "." + i)[4] & 4095) === 0 → o i'yi döner.
-     * [4] = SHA-256 digest'in 4. 32-bit word'ü (big-endian veya little-endian).
-     */
     private fun solvePow(id: String): Pair<Long, String>? {
         powCache[id]?.let {
             Log.d("AsyaWatch", "PoW cache hit: id=$id, n=${it.first} (${it.second})")
@@ -1590,13 +1582,8 @@ class AsyaWatch : MainAPI() {
     }
 
     /**
-     * PoW çözümünü farklı yollarla sunucuya iletmeyi dener:
-     * 0) Bilinen doğrulama endpoint'lerine POST (en olası)
-     * 1) v parametresine ekleme (v=token.nonce, v=nonce.token)
-     * 2) Fetch-style XHR GET
-     * 3) Custom header
-     * 4) Query param
-     * Her istekte response headers + body loglanır.
+     * PoW çözümünü farklı yollarla sunucuya iletmeyi dener.
+     * data parametresi Map<String, String> (form-encoded) olmalı.
      */
     private suspend fun tryPowOnUrl(
         nmUrl: String,
@@ -1610,7 +1597,7 @@ class AsyaWatch : MainAPI() {
         val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
         val vToken = vMatch?.groupValues?.get(1) ?: ""
 
-        // === STRATEJİ 0: Bilinen doğrulama endpoint'lerine POST ===
+        // === STRATEJİ 0: Bilinen doğrulama endpoint'lerine POST (form-encoded) ===
         val verifyEndpoints = listOf(
             "$fourPichiveOrigin/api/pow",
             "$fourPichiveOrigin/api/verify",
@@ -1627,19 +1614,25 @@ class AsyaWatch : MainAPI() {
             "$fourPichiveOrigin/api/np"
         )
 
+        // Form-encoded Map (String, String)
+        val formData = mapOf(
+            "v" to vToken,
+            "n" to powValue.toString(),
+            "id" to id,
+            "nonce" to powValue.toString()
+        )
+
         val xhrHeaders = browserLikeHeadersForWrapper(iframeUrl) + mapOf(
-            "Content-Type" to "application/json; charset=UTF-8",
+            "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
             "X-Requested-With" to "XMLHttpRequest",
             "Accept" to "application/json, text/plain, */*",
             "Sec-Fetch-Dest" to "empty",
             "Sec-Fetch-Mode" to "cors"
         )
 
-        val payload = """{"v":"$vToken","n":$powValue,"id":"$id","nonce":"$powValue"}"""
-
         for (endpoint in verifyEndpoints) {
             val resp = runCatching {
-                app.post(endpoint, headers = xhrHeaders, data = payload, referer = iframeUrl)
+                app.post(endpoint, headers = xhrHeaders, data = formData, referer = iframeUrl)
             }.getOrNull() ?: continue
 
             val respHeaders = resp.headers.toString().replace("\n", " ")
@@ -1712,7 +1705,7 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // === STRATEJİ 4: Query param (sadece 2 tane) ===
+        // === STRATEJİ 4: Query param ===
         for (param in listOf("pow", "n")) {
             val resp = runCatching {
                 app.get("$nmUrl&$param=$powValue", headers = browserLikeHeaders(iframeUrl), referer = iframeUrl)
@@ -1782,10 +1775,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    /**
-     * FourPichive iframe'i için özel extractor.
-     * PoW'u dener, sonuç gelirse onu verir; gelmezse ham URL'yi ExoPlayer'a iletir.
-     */
     private suspend fun extractFourPichive(
         iframeUrl: String,
         referer: String,
@@ -1809,7 +1798,6 @@ class AsyaWatch : MainAPI() {
         val npId = npConfig?.optString("id")?.takeIf { it.isNotBlank() }
         Log.d("AsyaWatch", "NP_CONFIG: id=$npId, sources=${npConfig?.optJSONArray("sources")?.length() ?: 0}")
 
-        // Altyazılar
         val localSeenSubs = HashSet<String>()
         runCatching {
             val subsArray = npConfig?.optJSONArray("subtitles")
@@ -1834,7 +1822,6 @@ class AsyaWatch : MainAPI() {
             publishSubtitlesFromText(html, iframeUrl, localSeenSubs, subtitleCallback, iframeUrl)
         }
 
-        // Master URL
         val masterUrl = npConfig?.optJSONArray("sources")?.optJSONObject(0)?.optString("master")
             ?.takeIf { it.isNotBlank() }
             ?: Regex("""(?i)"master"\s*:\s*"([^"]+)"""")
@@ -1849,7 +1836,6 @@ class AsyaWatch : MainAPI() {
 
         Log.d("AsyaWatch", "FourPichive master: ${masterUrl.take(120)}")
 
-        // PoW dene
         var finalUrl = masterUrl
         if (html.contains("NP_GATE") && npId != null) {
             Log.d("AsyaWatch", "NP_GATE PoW çözülüyor (id=$npId)...")
