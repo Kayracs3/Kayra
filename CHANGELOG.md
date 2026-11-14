@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:62f5353100166b9e86275968716f44d53ee3d4a4 -->
+### Limit DiziPal ad filtering to confirmed ad CDN path
+
+- Etkilenen alanlar: DiziPal
+- Commit: [62f5353](https://github.com/Kayracs3/Kayra/commit/62f5353100166b9e86275968716f44d53ee3d4a4)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:1c7532b6dcd769ba1a75788e6abbc698264a5d7c -->
 ### Fix DiziPal DPlayer iframe playback source resolution
 
