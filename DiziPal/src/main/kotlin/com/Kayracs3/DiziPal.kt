@@ -708,7 +708,9 @@ class DiziPal : MainAPI() {
         var found = false
 
         // 1) Kaynak sayfada doğrudan m3u8
-        for (media in findMediaUrls(raw)) {
+        // Sayfa HTML'indeki kısa MP4 dosyaları reklam/önizleme olabildiğinden
+        // doğrudan kaynak kabul edilmez. HLS/DASH kaynakları korunur.
+        for (media in findMediaUrls(raw).filterNot { it.contains(".mp4", ignoreCase = true) }) {
             if (emitMediaLink(media, sourceUrl, callback)) found = true
         }
 
@@ -836,13 +838,38 @@ class DiziPal : MainAPI() {
             Log.e("DiziPal", "Şifreli config bulunamadı.")
         }
 
-        // 3) Kaynak sayfada iframe/video etiketleri
-        document.select("iframe[src], iframe[data-src], video[src], video source[src], source[src], [data-video-url], [data-stream]").forEach { el ->
+        // 3) DPlayer iframe'lerini gerçek oynatma zincirine yönlendir.
+        // iframe.php bir medya dosyası değildir; önce iframe içindeki openPlayer
+        // kimliği, ardından source2.php yanıtındaki gerçek kaynaklar alınmalıdır.
+        val iframeUrls = LinkedHashSet<String>()
+        document.select("iframe[src], iframe[data-src], iframe[data-lazy-src]").forEach { el ->
+            val candidate = sequenceOf(
+                el.attr("data-src"),
+                el.attr("data-lazy-src"),
+                el.attr("src")
+            ).firstOrNull { it.isNotBlank() && !it.equals("about:blank", true) }.orEmpty()
+            if (candidate.isBlank()) return@forEach
+            val target = normalizeUrl(candidate, sourceUrl)
+            if (isDPlayerIframeUrl(target)) iframeUrls.add(target)
+        }
+        Regex("""(?i)https?://[^'"\s<>]+/iframe\.php\?[^'"\s<>]+""")
+            .findAll(raw).forEach { iframeUrls.add(it.value) }
+
+        for (iframeUrl in iframeUrls) {
+            if (resolveDPlayerIframe(iframeUrl, sourceUrl, subtitleCallback, callback)) {
+                found = true
+            }
+        }
+
+        // Sayfa üzerinde doğrudan video/source etiketi varsa değerlendir.
+        // iframe'ler yukarıda ayrı çözümlendiği için burada tekrar ele alınmaz.
+        document.select("video[src], video source[src], source[src], [data-video-url], [data-stream]").forEach { el ->
             val rawUrl = el.attr("src").ifBlank { el.attr("data-src") }
                 .ifBlank { el.attr("data-video-url") }.ifBlank { el.attr("data-stream") }
             if (rawUrl.isBlank()) return@forEach
             val target = normalizeUrl(rawUrl, sourceUrl)
-            if (isMediaUrl(target) && emitMediaLink(target, sourceUrl, callback)) found = true
+            if (isMediaUrl(target) && !target.contains(".mp4", ignoreCase = true) &&
+                emitMediaLink(target, sourceUrl, callback)) found = true
         }
 
         // 4) Track tag'leri
@@ -858,6 +885,116 @@ class DiziPal : MainAPI() {
         }
 
         if (!found) Log.e("DiziPal", "Hiçbir oynatma linki bulunamadı.")
+        return found
+    }
+
+    // ================= DPLAYER IFRAME ÇÖZÜMLEME =================
+    private fun isDPlayerIframeUrl(url: String): Boolean = runCatching {
+        val uri = java.net.URI(url)
+        uri.scheme in setOf("http", "https") &&
+            uri.path.orEmpty().endsWith("/iframe.php", ignoreCase = true) &&
+            Regex("""(?:^|&)v=[^&]+""").containsMatchIn(uri.rawQuery.orEmpty())
+    }.getOrDefault(false)
+
+    private suspend fun resolveDPlayerIframe(
+        iframeUrl: String,
+        sourcePageUrl: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit,
+    ): Boolean {
+        val iframeHeaders = mapOf(
+            "User-Agent" to BROWSER_UA,
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer" to sourcePageUrl,
+            "Origin" to (originOf(sourcePageUrl) ?: sourcePageUrl),
+        )
+
+        val iframeResponse = runCatching {
+            app.get(
+                iframeUrl,
+                headers = iframeHeaders,
+                referer = sourcePageUrl,
+                timeout = 15000,
+                allowRedirects = true,
+            )
+        }.onFailure {
+            Log.e("DiziPal", "DPlayer iframe isteği başarısız: " + it.message)
+        }.getOrNull() ?: return false
+
+        if (!iframeResponse.isSuccessful) {
+            Log.e("DiziPal", "DPlayer iframe HTTP hatası: " + iframeResponse.code)
+            return false
+        }
+
+        val iframeHtml = iframeResponse.text.decodeEscapes()
+        Log.d("DiziPal", "DPlayer iframe açıldı: " + iframeUrl)
+        extractSubtitles(iframeHtml, iframeUrl, subtitleCallback)
+
+        var found = false
+
+        // Iframe HTML'indeki doğrudan HLS/DASH adresleri; kısa reklam MP4'leri alınmaz.
+        for (media in findMediaUrls(iframeHtml).filterNot { it.contains(".mp4", ignoreCase = true) }) {
+            if (emitMediaLink(media, iframeUrl, callback)) found = true
+        }
+
+        // source2.php, iframe URL'sindeki v değerini değil openPlayer içindeki
+        // oynatma listesi kimliğini bekler.
+        val playlistId = Regex(
+            """window\.openPlayer\s*\(\s*['"]([^'"]+)['"]""",
+            RegexOption.IGNORE_CASE
+        ).find(iframeHtml)?.groupValues?.getOrNull(1)
+            ?: Regex(
+                """source2\.php\?v=([A-Za-z0-9_-]+)""",
+                RegexOption.IGNORE_CASE
+            ).find(iframeHtml)?.groupValues?.getOrNull(1)
+
+        if (playlistId.isNullOrBlank()) {
+            Log.e("DiziPal", "DPlayer iframe içinde openPlayer kimliği bulunamadı.")
+            return found
+        }
+
+        val origin = originOf(iframeUrl) ?: return found
+        val source2Url = origin.trimEnd('/') + "/source2.php?v=" +
+            URLEncoder.encode(playlistId, "UTF-8")
+        val sourceHeaders = mapOf(
+            "User-Agent" to BROWSER_UA,
+            "Accept" to "application/json,text/plain,*/*",
+            "X-Requested-With" to "XMLHttpRequest",
+            "Referer" to iframeUrl,
+            "Origin" to origin,
+        )
+
+        Log.d("DiziPal", "DPlayer source2 isteği: " + source2Url)
+        val source2Response = runCatching {
+            app.get(
+                source2Url,
+                headers = sourceHeaders,
+                referer = iframeUrl,
+                timeout = 15000,
+                allowRedirects = true,
+            )
+        }.onFailure {
+            Log.e("DiziPal", "DPlayer source2 isteği başarısız: " + it.message)
+        }.getOrNull() ?: return found
+
+        if (!source2Response.isSuccessful) {
+            Log.e("DiziPal", "DPlayer source2 HTTP hatası: " + source2Response.code)
+            return found
+        }
+
+        val source2Text = source2Response.text.decodeEscapes()
+        Log.d("DiziPal", "DPlayer source2 yanıt uzunluğu: " + source2Text.length)
+        extractSubtitles(source2Text, iframeUrl, subtitleCallback)
+
+        for (candidate in extractFileUrls(source2Text)) {
+            var mediaUrl = normalizeUrl(candidate, iframeUrl)
+            if (mediaUrl.contains("m.php", ignoreCase = true)) {
+                mediaUrl = mediaUrl.replace("m.php", "master.m3u8", ignoreCase = true)
+            }
+            if (emitMediaLink(mediaUrl, iframeUrl, callback)) found = true
+        }
+
         return found
     }
 
