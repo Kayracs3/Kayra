@@ -880,8 +880,9 @@ class DiziPal : MainAPI() {
             val target = normalizeUrl(candidate, sourceUrl)
             if (isDPlayerIframeUrl(target)) iframeUrls.add(target)
         }
-        Regex("""(?i)https?://[^'"\s<>]+/iframe\.php\?[^'"\s<>]+""")
+        Regex("""(?i)(?:https?:)?//[^'"\s<>]+/iframe\.php\?[^'"\s<>]+|/iframe\.php\?[^'"\s<>]+""")
             .findAll(raw).forEach { iframeUrls.add(it.value) }
+        Log.d("DiziPal", "Video sayfasında DPlayer iframe adayı: ${iframeUrls.size}")
 
         for (iframeUrl in iframeUrls) {
             if (resolveDPlayerIframe(iframeUrl, sourceUrl, subtitleCallback, callback)) {
@@ -967,13 +968,87 @@ class DiziPal : MainAPI() {
 
         var found = false
 
+        // Yeni NP oynatıcı: NP_CONFIG.sources[].master -> nm.php (HLS manifest).
+        // Bu şema openPlayer/source2.php kullanmıyor; nm.php yanıtı HLS manifesti olarak verilir.
+        val npMasterUrls = Regex("""(?i)["']master["']\\s*:\\s*["']([^"']+)["']""")
+            .findAll(iframeHtml)
+            .map { it.groupValues[1].decodeEscapes() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+
+        val origin = originOf(iframeUrl) ?: return false
+        val sourceHeaders = mapOf(
+            "User-Agent" to BROWSER_UA,
+            "Accept" to "application/vnd.apple.mpegurl,application/x-mpegURL,application/json,text/plain,*/*",
+            "X-Requested-With" to "XMLHttpRequest",
+            "Referer" to iframeUrl,
+            "Origin" to origin,
+        )
+
+        Log.d("DiziPal", "NP_CONFIG master kaynağı: ${npMasterUrls.size}")
+        for (candidate in npMasterUrls) {
+            val masterUrl = normalizeUrl(candidate, iframeUrl)
+            Log.d("DiziPal", "NP master isteği: ${masterUrl.substringBefore('?')}")
+            val masterResponse = runCatching {
+                app.get(
+                    masterUrl,
+                    headers = sourceHeaders,
+                    referer = iframeUrl,
+                    timeout = 20000,
+                    allowRedirects = true,
+                )
+            }.onFailure {
+                Log.e("DiziPal", "NP master isteği başarısız: ${it.javaClass.simpleName}: ${it.message}")
+            }.getOrNull() ?: continue
+
+            if (!masterResponse.isSuccessful) {
+                Log.e("DiziPal", "NP master HTTP hatası: ${masterResponse.code}")
+                continue
+            }
+
+            val masterBody = masterResponse.text.trimStart('\\uFEFF', ' ', '\\n', '\\r', '\\t')
+            val contentType = (
+                masterResponse.headers["Content-Type"]
+                    ?: masterResponse.headers["content-type"]
+                    ?: ""
+                )
+            val finalMasterUrl = normalizeUrl(masterResponse.url, masterUrl)
+
+            if (finalMasterUrl != masterUrl && isMediaUrl(finalMasterUrl)) {
+                if (emitMediaLink(finalMasterUrl, iframeUrl, callback)) found = true
+            } else if (
+                masterBody.startsWith("#EXTM3U", ignoreCase = true) ||
+                contentType.contains("mpegurl", ignoreCase = true)
+            ) {
+                if (emitMediaLink(masterUrl, iframeUrl, callback, ExtractorLinkType.M3U8)) {
+                    found = true
+                }
+                Log.d("DiziPal", "NP HLS manifest doğrulandı: ${masterUrl.substringBefore('?')}")
+            } else {
+                val responseCandidates = extractFileUrls(masterBody) +
+                    Regex("""(?i)["'](?:url|file|src|source|playlist)["']\\s*:\\s*["']([^"']+)["']""")
+                        .findAll(masterBody)
+                        .map { it.groupValues[1].decodeEscapes() }
+                        .toList()
+                for (url in responseCandidates.distinct()) {
+                    if (emitMediaLink(normalizeUrl(url, masterUrl), iframeUrl, callback)) {
+                        found = true
+                    }
+                }
+                Log.w(
+                    "DiziPal",
+                    "NP master yanıtı manifest değil: type=${contentType.take(80)}, uzunluk=${masterBody.length}"
+                )
+            }
+        }
+
         // Iframe HTML'indeki doğrudan HLS/DASH adresleri; kısa reklam MP4'leri alınmaz.
         for (media in findMediaUrls(iframeHtml).filterNot { isKnownDiziPalAdUrl(it) }) {
             if (emitMediaLink(media, iframeUrl, callback)) found = true
         }
 
-        // source2.php, iframe URL'sindeki v değerini değil openPlayer içindeki
-        // oynatma listesi kimliğini bekler.
+        // Eski oynatıcı uyumluluğu: source2.php, openPlayer içindeki kimliği bekler.
         val playlistId = Regex(
             """window\.openPlayer\s*\(\s*['"]([^'"]+)['"]""",
             RegexOption.IGNORE_CASE
@@ -991,7 +1066,7 @@ class DiziPal : MainAPI() {
         val origin = originOf(iframeUrl) ?: return found
         val source2Url = origin.trimEnd('/') + "/source2.php?v=" +
             URLEncoder.encode(playlistId, "UTF-8")
-        val sourceHeaders = mapOf(
+        val legacySourceHeaders = mapOf(
             "User-Agent" to BROWSER_UA,
             "Accept" to "application/json,text/plain,*/*",
             "X-Requested-With" to "XMLHttpRequest",
@@ -1003,7 +1078,7 @@ class DiziPal : MainAPI() {
         val source2Response = runCatching {
             app.get(
                 source2Url,
-                headers = sourceHeaders,
+                headers = legacySourceHeaders,
                 referer = iframeUrl,
                 timeout = 15000,
                 allowRedirects = true,
@@ -1155,10 +1230,15 @@ class DiziPal : MainAPI() {
         }.getOrElse { runCatching { String(Base64.decode(clean, Base64.DEFAULT)) }.getOrDefault(clean) }
     }
 
-    private suspend fun emitMediaLink(url: String, referer: String, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun emitMediaLink(
+        url: String,
+        referer: String,
+        callback: (ExtractorLink) -> Unit,
+        forcedType: ExtractorLinkType? = null,
+    ): Boolean {
         val finalUrl = normalizeUrl(url, referer)
-        if (!isMediaUrl(finalUrl)) return false
-        val type = when {
+        if (forcedType == null && !isMediaUrl(finalUrl)) return false
+        val type = forcedType ?: when {
             finalUrl.contains(".m3u8", true) -> ExtractorLinkType.M3U8
             finalUrl.contains(".mpd", true) -> ExtractorLinkType.DASH
             else -> ExtractorLinkType.VIDEO
