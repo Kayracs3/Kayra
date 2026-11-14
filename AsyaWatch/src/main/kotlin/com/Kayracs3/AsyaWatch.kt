@@ -1,6 +1,5 @@
 package com.Kayracs3
 
-import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.Episode
@@ -1540,7 +1539,7 @@ class AsyaWatch : MainAPI() {
     }
 
     // =====================================================================
-    // NP_GATE PoW çözücü
+    // NP_GATE PoW çözücü (SHA-1 + SHA-256)
     // =====================================================================
 
     private fun solvePow(id: String, algorithm: String, variant: String): Pair<Long, String>? {
@@ -1582,6 +1581,10 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
+    /**
+     * iframe'den Set-Cookie başlıklarını çıkarır → nm.php ve ExoPlayer'a iletilir.
+     * OkHttp Headers tipini doğrudan kabul eder.
+     */
     private fun extractCookiesFromHeaders(headers: Headers?): String? {
         if (headers == null) return null
         val cookieValues = mutableListOf<String>()
@@ -1596,6 +1599,11 @@ class AsyaWatch : MainAPI() {
         return cookieValues.joinToString("; ").takeIf { it.isNotBlank() }
     }
 
+    /**
+     * Sadece 4 istek yapar (SHA-1/SHA-256 × wordBE/wordLE).
+     * Her istekte çerez + X-PoW header + v.nonce query aynı anda gönderilir.
+     * 429 gelirse derhal durur.
+     */
     private suspend fun tryPowOnUrl(
         nmUrl: String,
         iframeUrl: String,
@@ -1648,155 +1656,11 @@ class AsyaWatch : MainAPI() {
                     return it
                 }
             }
-        }
 
-        return null
-    }
-
-    /**
-     * track.php'yi dener (tarayıcıda gözlemlenen endpoint).
-     * NOT: cf_clearance çerezi olmadan beyaz ekran döner — yani cf_clearance yoksa başarısız olur.
-     * Yine de dener, cf_clearance varsa çalışır.
-     */
-    private suspend fun tryTrackPhp(
-        iframeUrl: String,
-        iframeId: String,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean {
-        val siteRoot = "$mainUrl/"
-        val hRaw = Base64.encodeToString(siteRoot.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-        val hEncoded = URLEncoder.encode(hRaw, "UTF-8")
-        val trackUrl = "$fourPichiveOrigin/track.php?v=$iframeId&h=$hEncoded"
-        Log.d("AsyaWatch", "track.php deneniyor: v=$iframeId h=$hRaw")
-
-        val headers = mapOf(
-            "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
-            "Accept" to "*/*",
-            "Accept-Language" to (siteHeaders["Accept-Language"] ?: ""),
-            "Accept-Encoding" to "gzip, deflate, br",
-            "Referer" to iframeUrl,
-            "Origin" to fourPichiveOrigin,
-            "Sec-Fetch-Dest" to "empty",
-            "Sec-Fetch-Mode" to "cors",
-            "Sec-Fetch-Site" to "same-origin",
-            "Sec-Fetch-Storage-Access" to "active"
-        )
-
-        val resp = runCatching {
-            app.get(trackUrl, headers = headers, referer = iframeUrl)
-        }.getOrNull() ?: return false
-
-        val ct = resp.headers["Content-Type"] ?: "yok"
-        Log.d("AsyaWatch", "track.php HTTP ${resp.code}, bodyLen=${resp.text.length}, ct=$ct")
-
-        if (resp.code == 403 || resp.code == 429) {
-            Log.w("AsyaWatch", "track.php WAF/challenge bloklu (HTTP ${resp.code})")
-            return false
-        }
-        if (!resp.isSuccessful || resp.text.isBlank()) return false
-
-        val html = resp.text
-        // Beyaz ekran / boş body kontrolü
-        if (html.trim().isEmpty() || html.length < 20) {
-            Log.w("AsyaWatch", "track.php beyaz ekran döndü (cf_clearance gerekli)")
-            return false
-        }
-
-        Log.d("AsyaWatch", "track.php body[${html.length}]: ${html.take(600).replace("\n", " ")}")
-
-        val videoUrl = findVideoUrlInPlayerHtml(html)
-        if (videoUrl != null) {
-            Log.d("AsyaWatch", "track.php içinde video URL: ${videoUrl.take(120)}")
-            val isHls = videoUrl.contains(".m3u8", true)
-            callback(
-                newExtractorLink(
-                    source = name,
-                    name = "$name FourPichive (track)",
-                    url = videoUrl,
-                    type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                ) {
-                    this.referer = iframeUrl
-                    this.headers = browserLikeHeaders(iframeUrl)
-                    this.quality = qualityValue("", videoUrl)
-                }
-            )
-            return true
-        }
-
-        val playerUrls = Regex(
-            """(?i)(?:https?:)?//[^\s"'<>]+(?:nm\.php|player\.php|embed\.php|get\.php|play\.php)\?[^\s"'<>]+"""
-        ).findAll(html).map { it.value }.distinct().toList()
-
-        for (pu in playerUrls) {
-            Log.d("AsyaWatch", "track.php içinde player URL: ${pu.take(120)}")
-            val presp = runCatching {
-                app.get(pu, headers = browserLikeHeaders(iframeUrl), referer = iframeUrl)
-            }.getOrNull() ?: continue
-            Log.d("AsyaWatch", "  → HTTP ${presp.code}, bodyLen=${presp.text.length}")
-            if (presp.isSuccessful) {
-                val purl = findVideoUrlInPlayerHtml(presp.text)
-                if (purl != null) {
-                    Log.d("AsyaWatch", "  → video URL: ${purl.take(120)}")
-                    callback(
-                        newExtractorLink(
-                            source = name,
-                            name = "$name FourPichive (track+player)",
-                            url = purl,
-                            type = if (purl.contains(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                        ) {
-                            this.referer = iframeUrl
-                            this.headers = browserLikeHeaders(iframeUrl)
-                            this.quality = qualityValue("", purl)
-                        }
-                    )
-                    return true
-                }
+            if (resp.code != 404 && resp.text.isNotBlank()) {
+                Log.d("AsyaWatch", "PoW [$label] body: ${resp.text.take(400).replace("\n", " ")}")
             }
         }
-
-        val localSeen = HashSet<String>()
-        publishSubtitlesFromText(html, iframeUrl, localSeen, subtitleCallback, iframeUrl)
-
-        return false
-    }
-
-    private fun findVideoUrlInPlayerHtml(html: String): String? {
-        if (html.isBlank()) return null
-
-        val cleaned = html
-            .replace("\\/", "/")
-            .replace("\\u0026", "&")
-            .replace("\\u003d", "=")
-            .replace("\\u003a", ":")
-            .replace("&amp;", "&")
-            .replace("&#x2f;", "/")
-            .replace("&#47;", "/")
-            .replace("&quot;", "\"")
-
-        Regex("""(?i)"master"\s*:\s*"([^"]{20,})"""")
-            .find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
-
-        val jsonKeys = listOf(
-            "master", "file", "src", "url", "hls", "source",
-            "video_url", "videoUrl", "playlist", "stream_url", "streamUrl",
-            "media", "link"
-        ).joinToString("|") { Regex.escape(it) }
-
-        Regex(
-            """(?i)"(?:$jsonKeys)"\s*:\s*"(https?://[^"\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"\s<>]*)?)""""
-        ).find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
-
-        Regex(
-            """(?i)\b(?:master|file|src|source|video|videoUrl|video_url|stream_url|streamUrl|hls)\s*[:=]\s*["'](https?://[^"'\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"'\s<>]*)?)["']"""
-        ).find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
-
-        Regex(
-            """(?i)"sources"\s*:\s*\[\s*\{[^{}]*?"(?:src|file)"\s*:\s*"(https?://[^"\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"\s<>]*)?)""""
-        ).find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
-
-        Regex("""(?i)https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""")
-            .find(cleaned)?.value?.let { return it }
 
         return null
     }
@@ -1842,6 +1706,14 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
+    /**
+     * FourPichive iframe'i için özel extractor.
+     * 1) iframe HTML al
+     * 2) NP_CONFIG parse et
+     * 3) Set-Cookie yakala
+     * 4) PoW'u dene (4 varyant, tek istekte çerez+header+query)
+     * 5) Başarısızsa ham URL + çerez ile ExoPlayer'a ver
+     */
     private suspend fun extractFourPichive(
         iframeUrl: String,
         referer: String,
@@ -1861,6 +1733,7 @@ class AsyaWatch : MainAPI() {
         val html = response.text
         if (html.isBlank()) return false
 
+        // === Çerezleri yakala ===
         val cookies = runCatching {
             extractCookiesFromHeaders(response.headers)
         }.getOrNull()
@@ -1870,6 +1743,7 @@ class AsyaWatch : MainAPI() {
         val npId = npConfig?.optString("id")?.takeIf { it.isNotBlank() }
         Log.d("AsyaWatch", "NP_CONFIG: id=$npId, sources=${npConfig?.optJSONArray("sources")?.length() ?: 0}")
 
+        // Altyazılar
         val localSeenSubs = HashSet<String>()
         runCatching {
             val subsArray = npConfig?.optJSONArray("subtitles")
@@ -1911,16 +1785,7 @@ class AsyaWatch : MainAPI() {
 
         var finalUrl = masterUrl
         if (html.contains("NP_GATE") && npId != null) {
-            // 1. track.php dene (beyaz ekran dönerse başarısız)
-            Log.d("AsyaWatch", "track.php deneniyor...")
-            val trackSuccess = tryTrackPhp(iframeUrl, npId, subtitleCallback, callback)
-            if (trackSuccess) {
-                Log.d("AsyaWatch", "track.php BAŞARILI!")
-                return true
-            }
-            Log.d("AsyaWatch", "track.php başarısız, PoW fallback...")
-
-            // 2. PoW dene
+            Log.d("AsyaWatch", "NP_GATE PoW deneniyor (id=$npId, 4 varyant)...")
             val powResult = tryPowOnUrl(masterUrl, iframeUrl, npId, cookies)
             if (powResult != null) {
                 finalUrl = powResult
@@ -1951,6 +1816,10 @@ class AsyaWatch : MainAPI() {
         Log.d("AsyaWatch", "FourPichive URL verildi (type=$type, cookie=${!cookies.isNullOrBlank()}): ${finalUrl.take(120)}")
         return true
     }
+
+    // =====================================================================
+    // loadLinks
+    // =====================================================================
 
     override suspend fun loadLinks(
         data: String,
