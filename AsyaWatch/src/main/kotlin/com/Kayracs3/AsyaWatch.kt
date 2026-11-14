@@ -1897,7 +1897,6 @@ class AsyaWatch : MainAPI() {
                 if (!extracted) {
                     Log.w("AsyaWatch", "FourPichive özel extractor başarısız.")
                 }
-                // Aynı URL için genel extractor'ı denemiyoruz — yine ContentX'e düşüp NPE verirdi.
                 return
             }
 
