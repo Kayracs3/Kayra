@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:95f8c127a6b814fec54a1224e9716e8d3dee60a1 -->
+### Fix JetFilmizle loadLinks signature
+
+- Etkilenen alanlar: JetFilmizle
+- Commit: [95f8c12](https://github.com/Kayracs3/Kayra/commit/95f8c127a6b814fec54a1224e9716e8d3dee60a1)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:3ad323c74ae61aee0aa4766ea83ba0ddedfe1388 -->
 ### Fix JetFilmizle module API references
 
