@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:1f63803ffdd4e56305c0662162019de35114cee0 -->
+### Enhance stream extraction logic and regex patterns
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [1f63803](https://github.com/Kayracs3/Kayra/commit/1f63803ffdd4e56305c0662162019de35114cee0)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:f97e711a8049dd3928acea3df58563cb2c198fca -->
 ### Refactor findStreamEndpoint and loadLinks methods
 
