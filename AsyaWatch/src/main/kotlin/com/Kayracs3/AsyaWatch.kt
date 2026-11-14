@@ -1560,6 +1560,16 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
+    private fun extractToken(url: String): String? {
+        return runCatching {
+            val query = URI(url).rawQuery.orEmpty()
+            query.split('&')
+                .firstOrNull { it.startsWith("v=") }
+                ?.substringAfter("v=", "")
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
     private fun resolveRelativeUrl(relative: String, base: String): String? {
         return runCatching {
             val baseUri = URI(base)
@@ -1580,48 +1590,58 @@ class AsyaWatch : MainAPI() {
         }.getOrNull()
     }
 
-    private suspend fun isMasterPlaylist(m3u8Url: String): Boolean {
-        val resp = runCatching {
-            app.get(m3u8Url, headers = mapOf(
-                "Accept" to "application/vnd.apple.mpegurl, */*",
-                "Accept-Encoding" to "identity",
-                "User-Agent" to (siteHeaders["User-Agent"] ?: "")
-            ), allowRedirects = true)
-        }.getOrNull() ?: return false
-        if (!resp.isSuccessful) {
-            Log.w("AsyaWatch", "isMaster HTTP ${resp.code}: ${m3u8Url.take(80)}")
-            return false
-        }
-        val text = resp.text
-        if (!text.contains("#EXTM3U")) {
-            Log.w("AsyaWatch", "isMaster içerik M3U8 değil: ${m3u8Url.take(80)}")
-            return false
-        }
-        val isMaster = text.lines().any { it.trim().startsWith("#EXT-X-STREAM-INF", ignoreCase = true) }
-        Log.d("AsyaWatch", "isMaster=$isMaster: ${m3u8Url.take(80)}")
-        return isMaster
+    /**
+     * Tarayıcı gibi davranan başlıklar üretir. Cloudflare'in cf_clearance cookie'si olmadan
+     * nm.php'yi 404 döndürdüğünü gözlemledik; bu yüzden tarayıcının gönderdiği TÜM
+     * başlıkları gönderiyoruz.
+     */
+    private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
+        return mapOf(
+            "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
+            "Accept" to "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+            "Accept-Language" to (siteHeaders["Accept-Language"] ?: ""),
+            "Accept-Encoding" to "identity",
+            "Referer" to iframeUrl,
+            "Origin" to fourPichiveOrigin,
+            "Sec-Fetch-Dest" to "empty",
+            "Sec-Fetch-Mode" to "cors",
+            "Sec-Fetch-Site" to "same-origin",
+            "Sec-Fetch-Storage-Access" to "active",
+            "Priority" to "u=1, i"
+        )
     }
 
-    private suspend fun extractFirstSubPlaylist(masterUrl: String): String? {
-        val resp = runCatching {
-            app.get(masterUrl, headers = mapOf(
-                "Accept" to "application/vnd.apple.mpegurl, */*",
-                "Accept-Encoding" to "identity",
-                "User-Agent" to (siteHeaders["User-Agent"] ?: "")
-            ), allowRedirects = true)
-        }.getOrNull() ?: return null
-        if (!resp.isSuccessful) return null
-        val lines = resp.text.lines()
-        var nextIsUrl = false
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) {
-                nextIsUrl = true
+    /**
+     * Token için sırayla nl.php, nm.php, m.php endpoint'lerini dener.
+     * Tarayıcı testlerinde nl.php çalışıyordu; nm.php bazen çalışıyor bazense 404.
+     */
+    private suspend fun tryTokenOnEndpoints(
+        origin: String,
+        token: String,
+        iframeUrl: String
+    ): String? {
+        // nl.php öncelikli — tarayıcıda doğrulandı
+        val endpoints = listOf("nl.php", "nm.php", "m.php")
+        val headers = browserLikeHeaders(iframeUrl)
+        for (endpoint in endpoints) {
+            val url = "$origin/$endpoint?v=$token"
+            val resp = runCatching {
+                app.get(url, headers = headers, allowRedirects = true)
+            }.onFailure {
+                Log.w("AsyaWatch", "$endpoint fetch err: ${it.message}")
+            }.getOrNull() ?: continue
+
+            if (!resp.isSuccessful) {
+                Log.w("AsyaWatch", "$endpoint HTTP ${resp.code}: ${url.take(80)}")
                 continue
             }
-            if (nextIsUrl && trimmed.isNotBlank() && !trimmed.startsWith("#")) {
-                return resolveRelativeUrl(trimmed, masterUrl)
+            val body = resp.text
+            if (!body.contains("#EXTM3U")) {
+                Log.w("AsyaWatch", "$endpoint M3U8 değil: ${url.take(80)} head=${body.take(60).replace("\n", "\\n")}")
+                continue
             }
+            Log.d("AsyaWatch", "$endpoint OK: ${url.take(80)} len=${body.length}")
+            return url
         }
         return null
     }
@@ -1648,17 +1668,20 @@ class AsyaWatch : MainAPI() {
             return null
         }
 
-        // NP_CONFIG master — düz metin olarak duruyor, regex ile al
-        findNpConfigMaster(html)?.let { masterUrl ->
+        // NP_CONFIG'ten master URL'sini ve token'ını çıkar
+        val masterUrl = findNpConfigMaster(html)
+        if (masterUrl != null) {
             Log.d("AsyaWatch", "FourPichive NP_CONFIG master: ${masterUrl.take(120)}...")
-            if (isMasterPlaylist(masterUrl)) {
-                val sub = extractFirstSubPlaylist(masterUrl)
-                if (sub != null) {
-                    Log.d("AsyaWatch", "FourPichive sub-playlist: ${sub.take(120)}...")
-                    return sub
+            val token = extractToken(masterUrl)
+            if (!token.isNullOrBlank()) {
+                // nl.php → nm.php → m.php sırayla dene
+                tryTokenOnEndpoints(fourPichiveOrigin, token, iframeUrl)?.let {
+                    Log.d("AsyaWatch", "FourPichive stream OK: ${it.take(120)}...")
+                    return it
                 }
-                Log.w("AsyaWatch", "FourPichive master ama sub-playlist alınamadı")
             }
+            // Fallback: master URL'sini olduğu gibi dene (belki nm.php çalışır)
+            Log.w("AsyaWatch", "FourPichive tüm endpoint'ler başarısız, master fallback")
             return masterUrl
         }
 
@@ -1803,14 +1826,9 @@ class AsyaWatch : MainAPI() {
                             url = streamUrl,
                             type = type
                         ) {
-                            // Tarayıcı gibi davran — iframe URL'sini referer ver
                             this.referer = candidate
                             this.quality = qualityValue(quality, streamUrl)
-                            this.headers = mapOf(
-                                "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
-                                "Referer" to candidate,
-                                "Origin" to fourPichiveOrigin
-                            )
+                            this.headers = browserLikeHeaders(candidate)
                         }
                     )
                     found = true
