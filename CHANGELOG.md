@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:d6c264ead1cce96e200231e75655df57fb674f20 -->
+### Bump version from 24 to 25
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [d6c264e](https://github.com/Kayracs3/Kayra/commit/d6c264ead1cce96e200231e75655df57fb674f20)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:31efdbbe952d604132f0e0e5607a53e0c3969229 -->
 ### Enhance data extraction for video streams
 
