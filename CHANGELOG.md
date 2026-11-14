@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:21c76d620a7d7d11f5b9be8990bbc761bd54fe94 -->
+### Add DiziPal RM-K encrypted player config support
+
+- Etkilenen alanlar: DiziPal
+- Commit: [21c76d6](https://github.com/Kayracs3/Kayra/commit/21c76d620a7d7d11f5b9be8990bbc761bd54fe94)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:15dba53e11ac5754a81e2c29fcae3fe1f83ce649 -->
 ### Remove comment about general extractor for URL
 
