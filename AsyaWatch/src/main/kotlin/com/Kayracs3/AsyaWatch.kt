@@ -27,6 +27,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import okhttp3.Headers
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -1556,7 +1557,6 @@ class AsyaWatch : MainAPI() {
             val input = "$powSalt$id.$i"
             val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
 
-            // Her iki algoritma için bytes 16-19 aynı pozisyonda
             val value = when (variant) {
                 "wordBE" -> ((hash[16].toInt() and 0xFF) shl 24) or
                             ((hash[17].toInt() and 0xFF) shl 16) or
@@ -1583,13 +1583,14 @@ class AsyaWatch : MainAPI() {
 
     /**
      * iframe'den Set-Cookie başlıklarını çıkarır → nm.php ve ExoPlayer'a iletilir.
+     * OkHttp Headers tipini doğrudan kabul eder.
      */
-    private fun extractCookiesFromHeaders(headers: Map<String, List<String>>?): String? {
+    private fun extractCookiesFromHeaders(headers: Headers?): String? {
         if (headers == null) return null
         val cookieValues = mutableListOf<String>()
-        for ((key, values) in headers) {
-            if (key.equals("Set-Cookie", true) || key.equals("set-cookie", true)) {
-                for (v in values) {
+        for (name in headers.names()) {
+            if (name.equals("Set-Cookie", true)) {
+                for (v in headers.values(name)) {
                     val cookiePart = v.substringBefore(';').trim()
                     if (cookiePart.isNotBlank()) cookieValues.add(cookiePart)
                 }
@@ -1628,7 +1629,6 @@ class AsyaWatch : MainAPI() {
             val (powValue, _) = solution ?: continue
             val label = "$alg-$variantName"
 
-            // Yeni v (token.nonce) + X-PoW header + cookie hepsi tek istekte
             val newUrl = if (vToken.isNotBlank()) {
                 nmUrl.replace(vToken, "$vToken.$powValue")
             } else nmUrl
@@ -1657,7 +1657,6 @@ class AsyaWatch : MainAPI() {
                 }
             }
 
-            // 404 değilse body'ye bak (belki hata mesajı ipucu verir)
             if (resp.code != 404 && resp.text.isNotBlank()) {
                 Log.d("AsyaWatch", "PoW [$label] body: ${resp.text.take(400).replace("\n", " ")}")
             }
