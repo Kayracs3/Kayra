@@ -330,7 +330,7 @@ class JetFilmizle : MainAPI() {
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
-
+        subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         Log.d(JET_TAG, "loadLinks: " + data)
