@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:0b3d5f4c3a4868c26c5a746f2062564e7486b753 -->
+### Bump version from 25 to 26
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [0b3d5f4](https://github.com/Kayracs3/Kayra/commit/0b3d5f4c3a4868c26c5a746f2062564e7486b753)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:1f63803ffdd4e56305c0662162019de35114cee0 -->
 ### Enhance stream extraction logic and regex patterns
 
