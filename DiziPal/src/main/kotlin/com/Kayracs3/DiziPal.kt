@@ -708,9 +708,10 @@ class DiziPal : MainAPI() {
         var found = false
 
         // 1) Kaynak sayfada doğrudan m3u8
-        // Sayfa HTML'indeki kısa MP4 dosyaları reklam/önizleme olabildiğinden
-        // doğrudan kaynak kabul edilmez. HLS/DASH kaynakları korunur.
-        for (media in findMediaUrls(raw).filterNot { it.contains(".mp4", ignoreCase = true) }) {
+        // Aynı reklam dosyasının farklı içeriklerde tekrarlandığı logla doğrulandı.
+        // Diğer sağlayıcılardaki gerçek MP4 kaynaklarını engellememek için yalnızca
+        // doğrulanmış reklam yolu filtrelenir.
+        for (media in findMediaUrls(raw).filterNot { isKnownDiziPalAdUrl(it) }) {
             if (emitMediaLink(media, sourceUrl, callback)) found = true
         }
 
@@ -868,7 +869,7 @@ class DiziPal : MainAPI() {
                 .ifBlank { el.attr("data-video-url") }.ifBlank { el.attr("data-stream") }
             if (rawUrl.isBlank()) return@forEach
             val target = normalizeUrl(rawUrl, sourceUrl)
-            if (isMediaUrl(target) && !target.contains(".mp4", ignoreCase = true) &&
+            if (isMediaUrl(target) && !isKnownDiziPalAdUrl(target) &&
                 emitMediaLink(target, sourceUrl, callback)) found = true
         }
 
@@ -889,6 +890,12 @@ class DiziPal : MainAPI() {
     }
 
     // ================= DPLAYER IFRAME ÇÖZÜMLEME =================
+    private fun isKnownDiziPalAdUrl(url: String): Boolean = runCatching {
+        val uri = java.net.URI(url)
+        uri.host.orEmpty().equals("cdn.cdnhipter.xyz", ignoreCase = true) &&
+            uri.path.orEmpty().lowercase().startsWith("/f/fv/")
+    }.getOrDefault(false)
+
     private fun isDPlayerIframeUrl(url: String): Boolean = runCatching {
         val uri = java.net.URI(url)
         uri.scheme in setOf("http", "https") &&
@@ -934,7 +941,7 @@ class DiziPal : MainAPI() {
         var found = false
 
         // Iframe HTML'indeki doğrudan HLS/DASH adresleri; kısa reklam MP4'leri alınmaz.
-        for (media in findMediaUrls(iframeHtml).filterNot { it.contains(".mp4", ignoreCase = true) }) {
+        for (media in findMediaUrls(iframeHtml).filterNot { isKnownDiziPalAdUrl(it) }) {
             if (emitMediaLink(media, iframeUrl, callback)) found = true
         }
 
