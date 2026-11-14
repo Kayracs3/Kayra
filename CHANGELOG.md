@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:1c7532b6dcd769ba1a75788e6abbc698264a5d7c -->
+### Fix DiziPal DPlayer iframe playback source resolution
+
+- Etkilenen alanlar: DiziPal
+- Commit: [1c7532b](https://github.com/Kayracs3/Kayra/commit/1c7532b6dcd769ba1a75788e6abbc698264a5d7c)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:06fca948db62997085bf0428d3b467980df5f126 -->
 ### Refactor FourPichive extractor and comments
 
