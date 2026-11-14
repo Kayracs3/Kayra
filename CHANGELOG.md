@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:3ad323c74ae61aee0aa4766ea83ba0ddedfe1388 -->
+### Fix JetFilmizle module API references
+
+- Etkilenen alanlar: JetFilmizle
+- Commit: [3ad323c](https://github.com/Kayracs3/Kayra/commit/3ad323c74ae61aee0aa4766ea83ba0ddedfe1388)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:1aabfc2b7ee4cbc80c8768e4ee828c506c1f8e25 -->
 ### Fix AsyaWatch compilation by restoring stream extraction methods
 
