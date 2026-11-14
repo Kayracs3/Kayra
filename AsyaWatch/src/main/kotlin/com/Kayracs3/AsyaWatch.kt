@@ -96,6 +96,9 @@ class AsyaWatch : MainAPI() {
     private val posterFallbackCache = ConcurrentHashMap<String, String>()
     private val noPosterSentinel = "__NO_ASYAWATCH_POSTER__"
 
+    // PoW cache: (id) -> (nonce, variant)
+    private val powCache = ConcurrentHashMap<String, Pair<Long, String>>()
+
     private fun isRateLimitResponse(code: Int, body: String): Boolean {
         val lower = body.lowercase()
         return code == 1015 || code == 429 ||
@@ -1537,249 +1540,156 @@ class AsyaWatch : MainAPI() {
     }
 
     // =====================================================================
-    // NP_GATE (Proof-of-Work) ÇÖZÜCÜ
+    // NP_GATE PoW çözücü — DÜZELTİLMİŞ
     // =====================================================================
 
     /**
-     * PoW çöz: "Tu6UwcgeK8" + id + "." + n SHA-256'sının 5. kelimesinin
-     * (veya 5. byte'ının / hex 5. karakterinin) alt 12 biti 0 olan n'i bulur.
-     * Farklı yorumları dener ve (n, yorum) döner.
+     * NP_GATE PoW'u çözer.
+     *
+     * JS kodu:
+     *   var salt = "Tu6UwcgeK8";
+     *   for (i=0; i<1e8; i++)
+     *     if ((hash(salt + id + "." + i)[4] & 4095) === 0) return i;
+     *
+     * Burada [4] = Uint32Array[4] = SHA-256 digest'in 4. 32-bit word'ü.
+     * wordBE (big-endian) ve wordLE (little-endian) — ikisini de dene.
+     * Eski hatalı "hexChar" ve "byte4" varyantları KALDIRILDI.
      */
     private fun solvePow(id: String): Pair<Long, String>? {
+        powCache[id]?.let {
+            Log.d("AsyaWatch", "PoW cache hit: id=$id, n=${it.first} (${it.second})")
+            return it
+        }
+
         val digest = MessageDigest.getInstance("SHA-256")
-        val maxIter = 2_000_000
+        val maxIter = 500_000
 
         for (i in 0 until maxIter) {
             val input = "$powSalt$id.$i"
             val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
 
-            // Yorum 1: word[4] (bytes 16..19) big-endian, alt 12 bit 0
             val word4BE = ((hash[16].toInt() and 0xFF) shl 24) or
                           ((hash[17].toInt() and 0xFF) shl 16) or
                           ((hash[18].toInt() and 0xFF) shl 8) or
                           (hash[19].toInt() and 0xFF)
-            if ((word4BE and 0xFFF) == 0) return i.toLong() to "wordBE"
+            if ((word4BE and 0xFFF) == 0) {
+                val result = i.toLong() to "wordBE"
+                powCache[id] = result
+                Log.d("AsyaWatch", "PoW bulundu: n=$i (wordBE), iter=$i")
+                return result
+            }
 
-            // Yorum 2: word[4] little-endian
             val word4LE = ((hash[19].toInt() and 0xFF) shl 24) or
                           ((hash[18].toInt() and 0xFF) shl 16) or
                           ((hash[17].toInt() and 0xFF) shl 8) or
                           (hash[16].toInt() and 0xFF)
-            if ((word4LE and 0xFFF) == 0) return i.toLong() to "wordLE"
-
-            // Yorum 3: byte[4] == 0
-            if ((hash[4].toInt() and 0xFF) == 0) return i.toLong() to "byte4"
-
-            // Yorum 4: hex string [4] karakteri 'a'-'f' veya '0' (NaN & 4095 = 0)
-            val hexChar = String.format("%02x", hash[2].toInt() and 0xFF)[0] // hash[4] = 5. byte
-            val fifthByte = hash[4].toInt() and 0xFF
-            val hexFifth = "0123456789abcdef"[fifthByte shr 4] // high nibble
-            // aslında [4] = 5. karakter = hash[2]'nin low nibble'ı
-            val fifthChar = "0123456789abcdef"[hash[2].toInt() and 0xF]
-            if (fifthChar in 'a'..'f' || fifthChar == '0') return i.toLong() to "hexChar"
+            if ((word4LE and 0xFFF) == 0) {
+                val result = i.toLong() to "wordLE"
+                powCache[id] = result
+                Log.d("AsyaWatch", "PoW bulundu: n=$i (wordLE), iter=$i")
+                return result
+            }
         }
+
+        Log.e("AsyaWatch", "PoW çözülemedi ($maxIter iterasyon). Hash fonksiyonu SHA-256 değil olabilir.")
         return null
     }
 
     /**
-     * nm.php URL'sine PoW çözümünü ekleyerek deneme yapar.
-     * Farklı query parametre isimleri + 4 PoW yorumu dener.
+     * PoW sonucunu nm.php URL'sine uygulayarak video URL'si elde etmeye çalışır.
+     * Öncelikli strateji: v parametresini değiştir (v=token.nonce).
      */
     private suspend fun tryPowOnUrl(
         nmUrl: String,
         iframeUrl: String,
         id: String
     ): String? {
-        val solution = solvePow(id)
-        if (solution == null) {
-            Log.e("AsyaWatch", "PoW çözülemedi (2M iterasyon denendi)")
-            return null
-        }
+        val solution = solvePow(id) ?: return null
         val (powValue, variant) = solution
-        Log.d("AsyaWatch", "PoW çözüldü: n=$powValue (variant=$variant)")
-
-        val powParamNames = listOf(
-            "pow", "n", "nonce", "challenge", "solution",
-            "hash", "c", "t", "proof", "answer",
-            "x", "s", "sig", "valid", "ok", "ch"
-        )
+        Log.d("AsyaWatch", "PoW: n=$powValue (variant=$variant)")
 
         val headers = browserLikeHeaders(iframeUrl)
 
-        for (param in powParamNames) {
-            val candidate = "$nmUrl&$param=$powValue"
-            val response = runCatching {
-                app.get(candidate, headers = headers, referer = iframeUrl, allowRedirects = true)
-            }.getOrNull() ?: continue
-
-            val body = response.text
-            Log.d(
-                "AsyaWatch",
-                "PoW denemesi [$param=$powValue]: HTTP ${response.code}, bodyLen=${body.length}"
+        // === Strateji 1: v parametresine ekle (v=token.nonce, v=nonce.token) ===
+        val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
+        if (vMatch != null) {
+            val v = vMatch.groupValues[1]
+            val variants = listOf(
+                "$v.$powValue" to "v=token.nonce",
+                "$powValue.$v" to "v=nonce.token"
             )
-            if (response.isSuccessful && body.isNotBlank()) {
-                bodyLooksLikeMedia(body)?.let {
-                    Log.d("AsyaWatch", "PoW BAŞARILI! [$param=$powValue] → ${it.take(120)}")
-                    return it
+            for ((newV, label) in variants) {
+                val url = nmUrl.replace("v=$v", "v=$newV")
+                val resp = runCatching {
+                    app.get(url, headers = headers, referer = iframeUrl, allowRedirects = true)
+                }.getOrNull() ?: continue
+
+                Log.d("AsyaWatch", "PoW $label: HTTP ${resp.code}, bodyLen=${resp.text.length}")
+                if (resp.code == 429) {
+                    noteRateLimit()
+                    Log.w("AsyaWatch", "429 alındı, PoW denemeleri durduruluyor")
+                    return null
                 }
-                if (body.contains(".m3u8", true) || body.contains(".mp4", true)) {
-                    Log.d("AsyaWatch", "PoW BAŞARILI (gövde) [$param=$powValue]")
-                    return nmUrl // orijinal URL'yi ExoPlayer'a ver, body'den medya çıkarsın
+                if (resp.isSuccessful && resp.text.isNotBlank()) {
+                    bodyLooksLikeMedia(resp.text)?.let {
+                        Log.d("AsyaWatch", "PoW BAŞARILI ($label) → ${it.take(120)}")
+                        return it
+                    }
+                }
+                // 404 değilse body'yi incele (belki JSON/hata döndü, ipucu verir)
+                if (resp.code != 404 && resp.text.isNotBlank()) {
+                    Log.d("AsyaWatch", "PoW $label body: ${resp.text.take(300).replace("\n", " ")}")
                 }
             }
         }
 
-        // Cookie olarak dene
-        for (cookieName in listOf("pow", "nonce", "challenge", "solution")) {
-            val headersWithCookie = headers + mapOf("Cookie" to "$cookieName=$powValue")
-            val response = runCatching {
-                app.get(nmUrl, headers = headersWithCookie, referer = iframeUrl, allowRedirects = true)
+        // === Strateji 2: Custom header ===
+        val headerNames = listOf("X-PoW", "X-Nonce", "X-Challenge", "X-Pow")
+        for (h in headerNames) {
+            val resp = runCatching {
+                app.get(nmUrl, headers = headers + mapOf(h to powValue.toString()), referer = iframeUrl, allowRedirects = true)
             }.getOrNull() ?: continue
-            Log.d(
-                "AsyaWatch",
-                "PoW cookie [$cookieName=$powValue]: HTTP ${response.code}, bodyLen=${response.text.length}"
-            )
-            if (response.isSuccessful && response.text.isNotBlank()) {
-                bodyLooksLikeMedia(response.text)?.let { return it }
+            Log.d("AsyaWatch", "PoW header [$h=$powValue]: HTTP ${resp.code}")
+            if (resp.code == 429) { noteRateLimit(); return null }
+            if (resp.isSuccessful && resp.text.isNotBlank()) {
+                bodyLooksLikeMedia(resp.text)?.let { return it }
+            }
+        }
+
+        // === Strateji 3: 4 farklı query param (azaltıldı, 429'u önlemek için) ===
+        for (param in listOf("pow", "n", "nonce", "solution")) {
+            val url = "$nmUrl&$param=$powValue"
+            val resp = runCatching {
+                app.get(url, headers = headers, referer = iframeUrl, allowRedirects = true)
+            }.getOrNull() ?: continue
+            Log.d("AsyaWatch", "PoW query [$param=$powValue]: HTTP ${resp.code}")
+            if (resp.code == 429) { noteRateLimit(); return null }
+            if (resp.isSuccessful && resp.text.isNotBlank()) {
+                bodyLooksLikeMedia(resp.text)?.let { return it }
+            }
+        }
+
+        // === Strateji 4: 2 farklı cookie (azaltıldı) ===
+        for (name in listOf("pow", "nonce")) {
+            val resp = runCatching {
+                app.get(nmUrl, headers = headers + mapOf("Cookie" to "$name=$powValue"), referer = iframeUrl, allowRedirects = true)
+            }.getOrNull() ?: continue
+            Log.d("AsyaWatch", "PoW cookie [$name=$powValue]: HTTP ${resp.code}")
+            if (resp.code == 429) { noteRateLimit(); return null }
+            if (resp.isSuccessful && resp.text.isNotBlank()) {
+                bodyLooksLikeMedia(resp.text)?.let { return it }
             }
         }
 
         return null
     }
 
-    /**
-     * iframe HTML'ini parse edip NP_CONFIG'i çıkarır.
-     */
     private fun parseNpConfig(html: String): JSONObject? {
         val regex = Regex("""window\.NP_CONFIG\s*=\s*(\{.+?\});\s*(?:window\.|</script>|$)""", RegexOption.DOT_MATCHES_ALL)
         val match = regex.find(html) ?: return null
-        val raw = match.groupValues[1].trim()
-        return parseObject(raw)
+        return parseObject(match.groupValues[1].trim())
     }
 
-    /**
-     * hls.min.js ve diğer JS'leri indirip NP_GATE çağrısını bulmaya çalışır.
-     */
-    private suspend fun analyzePlayerScripts(iframeUrl: String, html: String) {
-        val scriptUrls = runCatching {
-            Jsoup.parse(html, iframeUrl).select("script[src]").mapNotNull { s ->
-                absoluteUrl(s.attr("src"), iframeUrl)
-            }
-        }.getOrDefault(emptyList())
-
-        Log.d("AsyaWatch", "Player scriptleri: ${scriptUrls.joinToString(" | ")}")
-
-        for (url in scriptUrls) {
-            val response = runCatching {
-                app.get(url, headers = browserLikeHeaders(iframeUrl), referer = iframeUrl)
-            }.getOrNull() ?: continue
-            val js = response.text
-            Log.d("AsyaWatch", "JS [${url.take(80)}] length=${js.length}")
-
-            // NP_GATE kullanımı
-            var idx = js.indexOf("NP_GATE")
-            while (idx >= 0) {
-                val start = maxOf(0, idx - 400)
-                val end = minOf(js.length, idx + 1500)
-                Log.d(
-                    "AsyaWatch",
-                    "NP_GATE bağlamı: ${js.substring(start, end).replace("\n", " ")}"
-                )
-                idx = js.indexOf("NP_GATE", idx + 100)
-            }
-
-            // pow, challenge, nonce, fetch patterns
-            for (keyword in listOf("pow", "challenge", "nonce", "&n=", "&c=", "&t=", "solution", "solve")) {
-                var k = js.indexOf(keyword)
-                while (k >= 0 && k < js.length) {
-                    val start = maxOf(0, k - 150)
-                    val end = minOf(js.length, k + 400)
-                    Log.d(
-                        "AsyaWatch",
-                        "JS '$keyword': ${js.substring(start, end).replace("\n", " ")}"
-                    )
-                    k = js.indexOf(keyword, k + 50)
-                }
-            }
-        }
-    }
-
-    /**
-     * nm.php gibi wrapper endpoint'leri çözmek için çok stratejili yaklaşım.
-     */
-    private suspend fun resolveMediaUrl(candidateUrl: String, referer: String): String? {
-        // Strateji 1: Redirect (takip etmeden)
-        runCatching {
-            val response = app.get(
-                candidateUrl,
-                headers = browserLikeHeadersForWrapper(referer),
-                referer = referer,
-                allowRedirects = false
-            )
-            if (response.code in 300..399) {
-                val location = response.headers["Location"]
-                    ?: response.headers["location"]
-                if (!location.isNullOrBlank()) {
-                    val absolute = absoluteUrl(location, candidateUrl)
-                    if (absolute != null && (isDirectMedia(absolute) || looksLikePlayer(absolute))) {
-                        Log.d("AsyaWatch", "Wrapper redirect → ${absolute.take(120)}")
-                        return absolute
-                    }
-                }
-            }
-        }.onFailure {
-            Log.w("AsyaWatch", "Redirect kontrol hatası: ${it.message}")
-        }
-
-        // Strateji 2: GET + wrapper headers
-        runCatching {
-            val response = app.get(
-                candidateUrl,
-                headers = browserLikeHeadersForWrapper(referer),
-                referer = referer,
-                allowRedirects = true
-            )
-            val finalUrl = response.url
-            if (finalUrl != candidateUrl && isDirectMedia(finalUrl)) {
-                Log.d("AsyaWatch", "Wrapper GET redirect → ${finalUrl.take(120)}")
-                return finalUrl
-            }
-            if (response.isSuccessful) {
-                bodyLooksLikeMedia(response.text)?.let {
-                    Log.d("AsyaWatch", "Wrapper GET body → ${it.take(120)}")
-                    return it
-                }
-            } else {
-                Log.w("AsyaWatch", "Wrapper GET HTTP ${response.code} [${candidateUrl.take(80)}] bodyLen=${response.text.length}")
-            }
-        }.onFailure {
-            Log.w("AsyaWatch", "Wrapper GET hata: ${it.message}")
-        }
-
-        // Strateji 3: GET + minimal headers
-        runCatching {
-            val response = app.get(
-                candidateUrl,
-                headers = minimalHeaders(referer),
-                referer = referer,
-                allowRedirects = true
-            )
-            if (response.isSuccessful) {
-                bodyLooksLikeMedia(response.text)?.let {
-                    Log.d("AsyaWatch", "Wrapper minimal body → ${it.take(120)}")
-                    return it
-                }
-            } else {
-                Log.w("AsyaWatch", "Wrapper minimal HTTP ${response.code} [${candidateUrl.take(80)}] bodyLen=${response.text.length}")
-            }
-        }.onFailure {
-            Log.w("AsyaWatch", "Wrapper minimal hata: ${it.message}")
-        }
-
-        return null
-    }
-
-    /** ExoPlayer için video (medya) başlıkları. */
     private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
         return mapOf(
             "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
@@ -1810,14 +1720,6 @@ class AsyaWatch : MainAPI() {
         )
     }
 
-    private fun minimalHeaders(referer: String): Map<String, String> {
-        return mapOf(
-            "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
-            "Accept" to "*/*",
-            "Referer" to referer
-        )
-    }
-
     private fun bodyLooksLikeMedia(body: String): String? {
         val trimmed = body.trim().trim('"', '\'')
         if (trimmed.length in 15..3000) {
@@ -1831,62 +1733,15 @@ class AsyaWatch : MainAPI() {
             ).find(body)?.groupValues?.getOrNull(1)?.let { return it }
         }
         if (body.contains(".m3u8", true) || body.contains(".mp4", true)) {
-            findVideoUrlInPlayerHtml(body)?.let { return it }
+            Regex("""(?i)https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""")
+                .find(body)?.value?.let { return it }
         }
         return null
     }
 
-    private fun findNpConfigMaster(html: String): String? {
-        Regex("""(?i)"master"\s*:\s*"([^"]{20,})"""")
-            .find(html)?.let { match ->
-                val raw = match.groupValues[1]
-                    .replace("\\/", "/")
-                    .replace("\\u0026", "&")
-                    .trim()
-                if (raw.startsWith("http://", true) || raw.startsWith("https://", true)) {
-                    return raw
-                }
-            }
-        return null
-    }
-
-    private fun findVideoUrlInPlayerHtml(html: String): String? {
-        if (html.isBlank()) return null
-
-        val cleaned = html
-            .replace("\\/", "/")
-            .replace("\\u0026", "&")
-            .replace("\\u003d", "=")
-            .replace("\\u003a", ":")
-            .replace("&amp;", "&")
-            .replace("&#x2f;", "/")
-            .replace("&#47;", "/")
-            .replace("&quot;", "\"")
-
-        findNpConfigMaster(html)?.let { return it }
-
-        val jsonKeys = listOf(
-            "master", "file", "src", "url", "hls", "source",
-            "video_url", "videoUrl", "playlist", "stream_url", "streamUrl",
-            "media", "link"
-        ).joinToString("|") { Regex.escape(it) }
-
-        Regex(
-            """(?i)"(?:$jsonKeys)"\s*:\s*"(https?://[^"\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"\s<>]*)?)""""
-        ).find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
-
-        Regex(
-            """(?i)"(?:$jsonKeys)"\s*:\s*"(https?://[^"\s<>]+)""""
-        ).find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
-
-        Regex("""(?i)https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""")
-            .find(cleaned)?.value?.let { return it }
-
-        return null
-    }
-
     /**
-     * FourPichive iframe'i için özel extractor + PoW çözücü.
+     * FourPichive iframe'i için özel extractor.
+     * PoW'u dener, sonuç gelirse onu verir; gelmezse ham URL'yi ExoPlayer'a iletir.
      */
     private suspend fun extractFourPichive(
         iframeUrl: String,
@@ -1896,35 +1751,22 @@ class AsyaWatch : MainAPI() {
     ): Boolean {
         val headers = browserLikeHeaders(iframeUrl)
         val response = runCatching {
-            app.get(
-                iframeUrl,
-                headers = headers,
-                referer = referer,
-                allowRedirects = true
-            )
+            app.get(iframeUrl, headers = headers, referer = referer, allowRedirects = true)
         }.getOrNull() ?: return false
 
         if (!response.isSuccessful) {
-            Log.e("AsyaWatch", "FourPichive iframe HTTP ${response.code}: ${iframeUrl.take(120)}")
+            Log.e("AsyaWatch", "FourPichive iframe HTTP ${response.code}")
             return false
         }
 
         val html = response.text
-        if (html.isBlank()) {
-            Log.e("AsyaWatch", "FourPichive iframe boş HTML döndü")
-            return false
-        }
+        if (html.isBlank()) return false
 
-        // NP_CONFIG parse
         val npConfig = parseNpConfig(html)
         val npId = npConfig?.optString("id")?.takeIf { it.isNotBlank() }
-        Log.d(
-            "AsyaWatch",
-            "NP_CONFIG: id=$npId, sources=${npConfig?.optJSONArray("sources")?.length() ?: 0}, " +
-                "subs=${npConfig?.optJSONArray("subtitles")?.length() ?: 0}"
-        )
+        Log.d("AsyaWatch", "NP_CONFIG: id=$npId, sources=${npConfig?.optJSONArray("sources")?.length() ?: 0}")
 
-        // Altyazıları NP_CONFIG'ten al
+        // Altyazılar
         val localSeenSubs = HashSet<String>()
         runCatching {
             val subsArray = npConfig?.optJSONArray("subtitles")
@@ -1940,23 +1782,22 @@ class AsyaWatch : MainAPI() {
                         subHeaders["Origin"] = fourPichiveOrigin
                         subHeaders["Accept"] = "text/vtt, text/plain, */*"
                         subtitle.headers = subHeaders
-                        if (localSeenSubs.add(url)) {
-                            subtitleCallback(subtitle)
-                        }
+                        if (localSeenSubs.add(url)) subtitleCallback(subtitle)
                     }
                 }
             }
         }
-
-        // NP_CONFIG yoksa eski yöntemle altyazı çıkar
         if (npConfig == null) {
             publishSubtitlesFromText(html, iframeUrl, localSeenSubs, subtitleCallback, iframeUrl)
         }
 
-        // Master URL'yi al
+        // Master URL
         val masterUrl = npConfig?.optJSONArray("sources")?.optJSONObject(0)?.optString("master")
             ?.takeIf { it.isNotBlank() }
-            ?: findVideoUrlInPlayerHtml(html)
+            ?: Regex("""(?i)"master"\s*:\s*"([^"]+)"""")
+                .find(html)?.groupValues?.getOrNull(1)
+                ?.replace("\\/", "/")
+                ?.takeIf { it.isNotBlank() }
 
         if (masterUrl.isNullOrBlank()) {
             Log.e("AsyaWatch", "FourPichive: master URL bulunamadı")
@@ -1965,31 +1806,17 @@ class AsyaWatch : MainAPI() {
 
         Log.d("AsyaWatch", "FourPichive master: ${masterUrl.take(120)}")
 
-        // NP_GATE PoW varsa çöz
+        // PoW dene
         var finalUrl = masterUrl
-        val hasPowGate = html.contains("NP_GATE")
-        if (hasPowGate && npId != null) {
-            Log.d("AsyaWatch", "NP_GATE tespit edildi, PoW çözülüyor (id=$npId)...")
+        if (html.contains("NP_GATE") && npId != null) {
+            Log.d("AsyaWatch", "NP_GATE PoW çözülüyor (id=$npId)...")
             val powResult = tryPowOnUrl(masterUrl, iframeUrl, npId)
             if (powResult != null) {
-                Log.d("AsyaWatch", "PoW BAŞARILI: ${powResult.take(120)}")
                 finalUrl = powResult
+                Log.d("AsyaWatch", "PoW BAŞARILI, çözümlenen URL: ${finalUrl.take(120)}")
             } else {
-                Log.w("AsyaWatch", "PoW çözümü işe yaramadı, orijinal URL denenecek")
+                Log.w("AsyaWatch", "PoW başarısız, orijinal master URL verilecek")
             }
-        }
-
-        // Normal wrapper çözümleme
-        if (!isDirectMedia(finalUrl)) {
-            val resolved = resolveMediaUrl(finalUrl, iframeUrl)
-            if (!resolved.isNullOrBlank()) {
-                finalUrl = resolved
-            }
-        }
-
-        // Tanı için JS'leri analiz et (ilk seferde)
-        if (hasPowGate) {
-            runCatching { analyzePlayerScripts(iframeUrl, html) }
         }
 
         val isHls = finalUrl.contains(".m3u8", true)
@@ -2081,7 +1908,6 @@ class AsyaWatch : MainAPI() {
         suspend fun processCandidate(raw: String, referer: String, quality: String) {
             val candidate = absoluteUrl(raw, referer) ?: return
             if (!seenCandidates.add(candidate)) return
-
             if (candidate.startsWith("<", true) || candidate.contains("<!doctype", true)) return
 
             val candidatePath = runCatching { URI(candidate).path.orEmpty() }.getOrDefault("")
@@ -2094,11 +1920,7 @@ class AsyaWatch : MainAPI() {
                     )
                 }
                 if (emittedUrls.add(candidate)) {
-                    val type = if (candidate.contains(".m3u8", true)) {
-                        ExtractorLinkType.M3U8
-                    } else {
-                        ExtractorLinkType.VIDEO
-                    }
+                    val type = if (candidate.contains(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                     callback(
                         newExtractorLink(
                             source = name,
@@ -2136,12 +1958,10 @@ class AsyaWatch : MainAPI() {
                         }
                     }
                 }.getOrElse { error ->
-                    Log.e("AsyaWatch", "FourPichive özel extractor hata: ${error.message}")
+                    Log.e("AsyaWatch", "FourPichive hata: ${error.message}")
                     false
                 }
-                if (!extracted) {
-                    Log.w("AsyaWatch", "FourPichive özel extractor başarısız.")
-                }
+                if (!extracted) Log.w("AsyaWatch", "FourPichive başarısız")
                 return
             }
 
@@ -2179,17 +1999,9 @@ class AsyaWatch : MainAPI() {
                 return names.joinToString().ifBlank { "boş" }
             }
 
-            val flightPayloads = nextFlightPayloads(page.document)
-            val flightHasEpisodeSources = flightPayloads.any {
-                it.contains("getEpisodeSources", true) || it.contains("getEpisodeSource", true)
-            }
-            val flightHasSourceContent = flightPayloads.any {
-                it.contains("source_content", true) || it.contains("sourceContent", true)
-            }
-
             Log.d(
                 "AsyaWatch",
-                "Kaynak veri yapısı: secureData=${root != null}; rootKeys=${jsonKeys(root)}; relatedKeys=${jsonKeys(relatedForSources)}; episodeHolder=${episodeSourceHolder != null}; satır=${episodeSourceRows?.length() ?: 0}; flightPaket=${flightPayloads.size}; flightEpisodeSources=$flightHasEpisodeSources; flightSourceContent=$flightHasSourceContent"
+                "Kaynak veri yapısı: secureData=${root != null}; rootKeys=${jsonKeys(root)}; relatedKeys=${jsonKeys(relatedForSources)}; episodeHolder=${episodeSourceHolder != null}; satır=${episodeSourceRows?.length() ?: 0}"
             )
             Log.d("AsyaWatch", "Kaynak analizi: kayıt=${sources.size}; dizi=$isSeries")
 
