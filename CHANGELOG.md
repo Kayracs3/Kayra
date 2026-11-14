@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:fce5375802d1d0d448a527faf78dc0bf56156f84 -->
+### Restore missing AsyaWatch loadLinks continuation
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [fce5375](https://github.com/Kayracs3/Kayra/commit/fce5375802d1d0d448a527faf78dc0bf56156f84)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:62f5353100166b9e86275968716f44d53ee3d4a4 -->
 ### Limit DiziPal ad filtering to confirmed ad CDN path
 
