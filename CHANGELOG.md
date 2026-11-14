@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:1aabfc2b7ee4cbc80c8768e4ee828c506c1f8e25 -->
+### Fix AsyaWatch compilation by restoring stream extraction methods
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [1aabfc2](https://github.com/Kayracs3/Kayra/commit/1aabfc2b7ee4cbc80c8768e4ee828c506c1f8e25)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:8ddc31213a4370e397a30f348c46cbf0b5745b46 -->
 ### Bump version from 26 to 27
 
