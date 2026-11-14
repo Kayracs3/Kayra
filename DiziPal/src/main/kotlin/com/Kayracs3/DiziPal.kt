@@ -12,7 +12,9 @@ import com.lagradost.cloudstream3.newSubtitleFile
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 import javax.crypto.Cipher
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 class DiziPal : MainAPI() {
@@ -707,6 +709,31 @@ class DiziPal : MainAPI() {
 
         var found = false
 
+        // DiziPal'in yeni oynatıcı şeması: div[data-rm-k=true] içinde
+        // PBKDF2-SHA512 + AES-CBC ile şifrelenmiş player adresi bulunur.
+        val rmKPayload = document.selectFirst("div[data-rm-k=true]")?.text()?.trim().orEmpty()
+        if (rmKPayload.isNotBlank()) {
+            Log.d("DiziPal", "Yeni player config bulundu: data-rm-k, uzunluk=${rmKPayload.length}")
+            val rmKPlayer = decryptRmKPlayer(rmKPayload)
+            if (!rmKPlayer.isNullOrBlank()) {
+                val playerUrl = normalizeUrl(rmKPlayer, sourceUrl)
+                Log.d("DiziPal", "Yeni player adresi çözüldü: ${playerUrl.substringBefore('?')}")
+                if (isMediaUrl(playerUrl)) {
+                    if (emitMediaLink(playerUrl, sourceUrl, callback)) found = true
+                } else if (isDPlayerIframeUrl(playerUrl)) {
+                    if (resolveDPlayerIframe(playerUrl, sourceUrl, subtitleCallback, callback)) {
+                        found = true
+                    }
+                } else {
+                    Log.w("DiziPal", "Çözülen player adresi tanınan medya/iframe biçiminde değil.")
+                }
+            } else {
+                Log.e("DiziPal", "data-rm-k player şifresi çözülemedi.")
+            }
+        } else {
+            Log.d("DiziPal", "data-rm-k alanı bulunamadı.")
+        }
+
         // 1) Kaynak sayfada doğrudan m3u8
         // Aynı reklam dosyasının farklı içeriklerde tekrarlandığı logla doğrulandı.
         // Diğer sağlayıcılardaki gerçek MP4 kaynaklarını engellememek için yalnızca
@@ -1059,6 +1086,64 @@ class DiziPal : MainAPI() {
             if (value.startsWith("enc:") || value.length > 40) return value
         }
         return null
+    }
+
+    private fun decryptRmKPlayer(payload: String): String? {
+        val ciphertext = Regex("""["']ciphertext["']\\s*:\\s*["']([^"']+)["']""")
+            .find(payload)?.groupValues?.getOrNull(1) ?: return null
+        val ivHex = Regex("""["']iv["']\\s*:\\s*["']([^"']+)["']""")
+            .find(payload)?.groupValues?.getOrNull(1) ?: return null
+        val saltHex = Regex("""["']salt["']\\s*:\\s*["']([^"']+)["']""")
+            .find(payload)?.groupValues?.getOrNull(1) ?: return null
+
+        fun hexToBytes(hex: String): ByteArray? {
+            val value = hex.trim()
+            if (value.isEmpty() || value.length % 2 != 0 ||
+                !value.matches(Regex("""[0-9a-fA-F]+"""))
+            ) return null
+            return runCatching {
+                ByteArray(value.length / 2) { index ->
+                    value.substring(index * 2, index * 2 + 2).toInt(16).toByte()
+                }
+            }.getOrNull()
+        }
+
+        val iv = hexToBytes(ivHex) ?: return null
+        val salt = hexToBytes(saltHex) ?: return null
+        if (iv.size != 16 || salt.isEmpty()) return null
+
+        return runCatching {
+            val encryptedBytes = Base64.decode(
+                ciphertext.replace("\\\\/", "/"),
+                Base64.DEFAULT
+            )
+            val password = (
+                "3hPn4uCjTVtfYWcjIcoJQ4cL1WWk1qxXI39egLYOmNv6IblA7eKJz68uU3eLzux1biZLCms0quEjTYniGv5z1JcKbNIsDQFSeIZOBZJz4is6pD7UyWDggWWzTLBQbHcQFpBQdClnuQaMNUHtLHTpzCvZy33p6I7wFBvL4fnXBYH84aUIyWGTRvM2G5cfoNf4705tO2kv"
+            ).toCharArray()
+            val keySpec = PBEKeySpec(password, salt, 999, 256)
+            val key = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512")
+                .generateSecret(keySpec).encoded
+            keySpec.clearPassword()
+
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                SecretKeySpec(key, "AES"),
+                IvParameterSpec(iv)
+            )
+            val decoded = String(cipher.doFinal(encryptedBytes), Charsets.UTF_8)
+                .replace("\\\\/", "/")
+                .trim()
+
+            when {
+                decoded.startsWith("://") -> "https" + decoded
+                decoded.startsWith("//") -> "https:$decoded"
+                decoded.startsWith("http://", true) || decoded.startsWith("https://", true) -> decoded
+                else -> "https://$decoded"
+            }
+        }.onFailure {
+            Log.e("DiziPal", "data-rm-k çözme hatası: ${it.javaClass.simpleName}: ${it.message}")
+        }.getOrNull()
     }
 
     private fun decryptDizipalConfig(encrypted: String): String {
