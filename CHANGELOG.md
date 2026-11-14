@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:831084f1e1fde017979b8a1faefa182ecdb3f4ca -->
+### Refactor media URL extraction logic and comments
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [831084f](https://github.com/Kayracs3/Kayra/commit/831084f1e1fde017979b8a1faefa182ecdb3f4ca)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:0ced67e12397e481ee75a680295318d0238b1351 -->
 ### Correct DiziPal RM-K JSON parsing escapes
 
