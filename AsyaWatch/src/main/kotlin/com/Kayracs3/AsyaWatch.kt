@@ -1535,7 +1535,7 @@ class AsyaWatch : MainAPI() {
     }
 
     // =====================================================================
-    // FourPichive iframe çıkarıcı
+    // FourPichive iframe — artık yerleşik extractor kullanılıyor
     // =====================================================================
 
     private fun findNpConfigMaster(html: String): String? {
@@ -1561,8 +1561,7 @@ class AsyaWatch : MainAPI() {
     }
 
     /**
-     * Tarayıcı gibi davranan başlıklar üretir.
-     * Cloudflare korumasını aşmak için gereklidir.
+     * Tarayıcı gibi davranan başlıklar üretir (Cloudflare için).
      */
     private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
         return mapOf(
@@ -1578,39 +1577,6 @@ class AsyaWatch : MainAPI() {
             "Sec-Fetch-Storage-Access" to "active",
             "Priority" to "u=1, i"
         )
-    }
-
-    private suspend fun extractFourPichiveStream(iframeUrl: String, pageReferer: String): String? {
-        val iframeHeaders = mapOf(
-            "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
-            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language" to (siteHeaders["Accept-Language"] ?: ""),
-            "Referer" to pageReferer
-        )
-        val iframeResponse = runCatching {
-            app.get(iframeUrl, headers = iframeHeaders, referer = pageReferer, allowRedirects = true)
-        }.onFailure {
-            Log.w("AsyaWatch", "FourPichive iframe fetch error: ${it.javaClass.simpleName}: ${it.message}")
-        }.getOrNull() ?: return null
-        if (!iframeResponse.isSuccessful) {
-            Log.w("AsyaWatch", "FourPichive iframe HTTP ${iframeResponse.code}: $iframeUrl")
-            return null
-        }
-        val html = iframeResponse.text
-        if (html.isBlank()) {
-            Log.w("AsyaWatch", "FourPichive iframe boş yanıt: $iframeUrl")
-            return null
-        }
-
-        // NP_CONFIG'ten master URL'sini çıkar ve doğrudan kullan
-        val masterUrl = findNpConfigMaster(html)
-        if (masterUrl != null) {
-            Log.d("AsyaWatch", "FourPichive NP_CONFIG master: ${masterUrl.take(120)}...")
-            return masterUrl
-        }
-
-        Log.w("AsyaWatch", "FourPichive NP_CONFIG master bulunamadı: $iframeUrl HTML=${html.length}b")
-        return null
     }
 
     // =====================================================================
@@ -1732,35 +1698,20 @@ class AsyaWatch : MainAPI() {
                 candidateHost?.endsWith(".four.pichive.online") == true
 
             if (isFourPichive) {
-                val streamUrl = extractFourPichiveStream(candidate, referer)
-                if (!streamUrl.isNullOrBlank() && emittedUrls.add(streamUrl)) {
-                    val isHls = streamUrl.contains(".m3u8", true) ||
-                        streamUrl.contains("nl.php", true) ||
-                        streamUrl.contains("nm.php", true) ||
-                        streamUrl.contains("m.php", true) ||
-                        streamUrl.contains("p.php", true) ||
-                        streamUrl.contains("src.php", true)
-                    val type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                    val label = "$name FourPichive" +
-                        (quality.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
-                    callback(
-                        newExtractorLink(
-                            source = name,
-                            name = label,
-                            url = streamUrl,
-                            type = type
-                        ) {
-                            this.referer = candidate
-                            this.quality = qualityValue(quality, streamUrl)
-                            this.headers = browserLikeHeaders(candidate)
-                        }
-                    )
-                    found = true
-                    Log.d("AsyaWatch", "FourPichive M3U8 verildi: ${streamUrl.take(140)}...")
-                    return
+                // Doğrudan Cloudstream'in yerleşik FourPichive extractor'ını çağır.
+                // iframe URL'sini ver — extractor kendi içinde doğru endpoint'i bulacaktır.
+                Log.d("AsyaWatch", "FourPichive (yerleşik extractor): ${candidate.take(120)}...")
+                try {
+                    loadExtractor(candidate, referer, emitSubtitle) { link ->
+                        if (emittedUrls.add(link.url)) callback(link)
+                        found = true
+                        Log.d("AsyaWatch", "FourPichive (yerleşik) M3U8 verildi: ${link.url.take(140)}...")
+                    }
+                } catch (e: Exception) {
+                    Log.e("AsyaWatch", "Yerleşik FourPichive extractor başarısız: ${e.message}")
                 }
-
-                Log.w("AsyaWatch", "FourPichive stream bulunamadı, genel extractor denenecek.")
+                if (found) return
+                Log.w("AsyaWatch", "FourPichive yerleşik extractor başarısız, genel extractor denenecek.")
             }
 
             try {
