@@ -1561,9 +1561,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    /**
-     * NP_CONFIG'ten çıkarılan master URL'sindeki `v=` token'ını alır.
-     */
     private fun extractToken(url: String): String? {
         return runCatching {
             val query = URI(url).rawQuery.orEmpty()
@@ -1595,10 +1592,8 @@ class AsyaWatch : MainAPI() {
     }
 
     /**
-     * M3U8 içeriğini analiz edip geçerli stream URL'sini döndürür.
-     * - Master playlist ise: içindeki ilk alt medya playlist'ini çözer
-     * - Media playlist ise: kendisini döndürür
-     * - Geçersizse: null
+     * M3U8 içeriğini indirir. Üç başlık varyantı ve Accept-Encoding: identity yedeği dener.
+     * Master playlist ise alt medya playlist'ini çözer.
      */
     private suspend fun resolvePlayableM3u8(
         m3u8Url: String,
@@ -1607,12 +1602,38 @@ class AsyaWatch : MainAPI() {
         depth: Int = 0
     ): String? {
         if (depth > 2) return null
-        val response = runCatching {
-            app.get(m3u8Url, headers = headers, referer = referer, allowRedirects = true)
-        }.getOrNull() ?: return null
-        if (!response.isSuccessful) return null
-        val body = response.text
-        if (!body.trimStart().startsWith("#EXTM3U")) return null
+
+        val variants = listOf(
+            mapOf(
+                "Accept" to "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+                "Accept-Encoding" to "identity"
+            ) + headers,
+            emptyMap<String, String>(),
+            mapOf("Accept" to "*/*")
+        )
+
+        var body: String? = null
+        for ((idx, hdrs) in variants.withIndex()) {
+            val resp = runCatching {
+                app.get(m3u8Url, headers = hdrs, referer = referer, allowRedirects = true)
+            }.onFailure {
+                Log.w("AsyaWatch", "m3u8[${idx}] err: ${it.javaClass.simpleName}: ${it.message}")
+            }.getOrNull()
+            if (resp == null || !resp.isSuccessful) {
+                Log.w("AsyaWatch", "m3u8[${idx}] HTTP ${resp?.code ?: "null"} for ${m3u8Url.take(80)}")
+                continue
+            }
+            val text = resp.text
+            Log.d("AsyaWatch", "m3u8[${idx}] HTTP ${resp.code}, len=${text.length}, head=${text.take(20).replace("\n", "\\n")}")
+            if (text.contains("#EXTM3U")) {
+                body = text
+                break
+            }
+        }
+        if (body == null) {
+            Log.w("AsyaWatch", "m3u8 tüm varyantlar başarısız: ${m3u8Url.take(80)}")
+            return null
+        }
 
         val lines = body.lines()
         val hasStreamInf = lines.any { it.trim().startsWith("#EXT-X-STREAM-INF", ignoreCase = true) }
@@ -1628,24 +1649,23 @@ class AsyaWatch : MainAPI() {
                 }
                 if (nextIsUrl && trimmed.isNotBlank() && !trimmed.startsWith("#")) {
                     val absolute = resolveRelativeUrl(trimmed, m3u8Url) ?: continue
+                    Log.d("AsyaWatch", "m3u8 sub-playlist: ${absolute.take(100)}")
                     val nested = resolvePlayableM3u8(absolute, headers, referer, depth + 1)
-                    if (nested != null) return nested
-                    return absolute
+                    return nested ?: absolute
                 }
             }
             return null
         }
 
         if (hasExtinf) {
+            Log.d("AsyaWatch", "m3u8 media playlist OK: ${m3u8Url.take(100)}")
             return m3u8Url
         }
 
+        Log.w("AsyaWatch", "m3u8 içeriği tanınmadı: ${m3u8Url.take(80)}")
         return null
     }
 
-    /**
-     * Bir token'la birden fazla endpoint dener. Geçerli m3u8 döndüren ilk URL'yi seçer.
-     */
     private suspend fun tryEndpointsWithToken(
         origin: String,
         token: String,
@@ -1659,7 +1679,7 @@ class AsyaWatch : MainAPI() {
             val candidate = "$origin/$endpoint?v=$token"
             val resolved = resolvePlayableM3u8(candidate, headers, referer)
             if (resolved != null) {
-                Log.d("AsyaWatch", "FourPichive endpoint OK: $endpoint -> ${resolved.take(140)}")
+                Log.d("AsyaWatch", "FourPichive endpoint OK: $origin/$endpoint -> ${resolved.take(140)}")
                 return resolved
             }
         }
@@ -1695,19 +1715,16 @@ class AsyaWatch : MainAPI() {
             Log.d("AsyaWatch", "FourPichive NP_CONFIG master bulundu: ${masterUrl.take(140)}...")
             val token = extractToken(masterUrl)
             if (!token.isNullOrBlank()) {
-                // Önce four.pichive üzerindeki tüm endpoint'ler
-                tryEndpointsWithToken(fourPichiveOrigin, token, iframeHeaders, iframeUrl)?.let {
+                tryEndpointsWithToken(fourPichiveOrigin, token, emptyMap(), iframeUrl)?.let {
                     Log.d("AsyaWatch", "FourPichive master çözüldü (four): ${it.take(140)}...")
                     return it
                 }
-                // Sonra pichive.online üzerindeki tüm endpoint'ler
-                tryEndpointsWithToken(pichiveOrigin, token, iframeHeaders, iframeUrl)?.let {
+                tryEndpointsWithToken(pichiveOrigin, token, emptyMap(), iframeUrl)?.let {
                     Log.d("AsyaWatch", "FourPichive master çözüldü (pichive): ${it.take(140)}...")
                     return it
                 }
             }
-            // Token yoksa veya hiçbir endpoint çalışmadıysa master'ı olduğu gibi dene
-            resolvePlayableM3u8(masterUrl, iframeHeaders, iframeUrl)?.let {
+            resolvePlayableM3u8(masterUrl, emptyMap(), iframeUrl)?.let {
                 Log.d("AsyaWatch", "FourPichive master çözüldü (fallback): ${it.take(140)}...")
                 return it
             }
@@ -1716,7 +1733,7 @@ class AsyaWatch : MainAPI() {
         // 1) Doğrudan endpoint
         findStreamEndpoint(html, finalBase)?.let { endpointUrl ->
             Log.d("AsyaWatch", "FourPichive endpoint bulundu (statik): ${endpointUrl.take(140)}...")
-            resolvePlayableM3u8(endpointUrl, iframeHeaders, iframeUrl)?.let {
+            resolvePlayableM3u8(endpointUrl, emptyMap(), iframeUrl)?.let {
                 return it
             }
         }
@@ -1729,10 +1746,10 @@ class AsyaWatch : MainAPI() {
             val unpacked = runCatching { unpackJs(html.substring(packedMarker.range.first)) }.getOrNull()
             if (!unpacked.isNullOrBlank()) {
                 findNpConfigMaster(unpacked)?.let {
-                    resolvePlayableM3u8(it, iframeHeaders, iframeUrl)?.let { r -> return r }
+                    resolvePlayableM3u8(it, emptyMap(), iframeUrl)?.let { r -> return r }
                 }
                 findStreamEndpoint(unpacked, finalBase)?.let {
-                    resolvePlayableM3u8(it, iframeHeaders, iframeUrl)?.let { r -> return r }
+                    resolvePlayableM3u8(it, emptyMap(), iframeUrl)?.let { r -> return r }
                 }
             }
         }
@@ -1740,7 +1757,7 @@ class AsyaWatch : MainAPI() {
         // 3) Inline fetch/ajax
         val inlineCalls = discoverInlineApiCalls(html, finalBase)
         for (call in inlineCalls) {
-            resolvePlayableM3u8(call, iframeHeaders, iframeUrl)?.let { return it }
+            resolvePlayableM3u8(call, emptyMap(), iframeUrl)?.let { return it }
         }
 
         // 4) Altyazı token'ını video token olarak dene
@@ -1750,13 +1767,13 @@ class AsyaWatch : MainAPI() {
             .distinct()
             .toList()
         for (subToken in subtitleTokens) {
-            tryEndpointsWithToken(fourPichiveOrigin, subToken, iframeHeaders, iframeUrl)?.let { return it }
+            tryEndpointsWithToken(fourPichiveOrigin, subToken, emptyMap(), iframeUrl)?.let { return it }
         }
 
         // 5) Generic m3u8 fallback
         Regex("""(?i)(?:https?:)?//[^"'<>\s]+?\.m3u8(?:\?[^"'<>\s]*)?""")
             .find(html)?.let {
-                resolvePlayableM3u8(it.value, iframeHeaders, iframeUrl)?.let { r -> return r }
+                resolvePlayableM3u8(it.value, emptyMap(), iframeUrl)?.let { r -> return r }
             }
 
         Log.w(
@@ -1819,7 +1836,7 @@ class AsyaWatch : MainAPI() {
         Regex(
             """(?i)["']?v["']?\s*[:=]\s*["']([A-Za-z0-9_\-+/=]{100,})["']"""
         ).find(text)?.let { match ->
-            return "https://four.pichive.online/nl.php?v=${match.groupValues[1]}"
+            return "https://four.pichive.online/nm.php?v=${match.groupValues[1]}"
         }
 
         Regex(
@@ -2025,7 +2042,6 @@ class AsyaWatch : MainAPI() {
                             this.referer = fourPichiveOrigin
                             this.quality = qualityValue(quality, streamUrl)
                             this.headers = mapOf(
-                                "Referer" to "$fourPichiveOrigin/",
                                 "User-Agent" to (siteHeaders["User-Agent"] ?: "")
                             )
                         }
