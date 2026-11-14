@@ -43,10 +43,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=asyawatch.com&sz=%size%",
-        "fileHash": "sha256-75f749ce65ad281d0c48ff630b75c4bc49aab581f64dbe92bdbc23b22f716169",
+        "fileHash": "sha256-b19f16a0be332d615aa7bc13f4c30b86374272189355b9c4dc829f86da13f9c0",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 83342,
+        "fileSize": 77676,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -317,10 +317,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=dizipalorjinal18.com&sz=%size%",
-        "fileHash": "sha256-7b21948807894e6e2ad2bd3f4ace87e14230b6abdce0019b554d5082c65f236d",
+        "fileHash": "sha256-882041d0d3d2c2cadf87229a376aa6376549fcd5aaf876b9d4e84bcb75a750ce",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 46675,
+        "fileSize": 46676,
         "status": 1,
         "language": "tr",
         "authors": [
