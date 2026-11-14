@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:b212fcd91d80b237a178a00510f6580815a65139 -->
+### Refactor solvePow to support multiple algorithms
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [b212fcd](https://github.com/Kayracs3/Kayra/commit/b212fcd91d80b237a178a00510f6580815a65139)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:8b95ef12ad8f0422d9cf65e96c7278fdd2a5e739 -->
 ### Refactor PoW methods and update comments
 
