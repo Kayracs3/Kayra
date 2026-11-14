@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:e6786f20441581a70cf42321cd0bc78fa19e0651 -->
+### Update mainUrl to new DiziPalOrjinal domain
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [e6786f2](https://github.com/Kayracs3/Kayra/commit/e6786f20441581a70cf42321cd0bc78fa19e0651)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:5296cfdb2b0500046854aa9d52edce479f200e6b -->
 ### Update AsyaWatch.kt
 
