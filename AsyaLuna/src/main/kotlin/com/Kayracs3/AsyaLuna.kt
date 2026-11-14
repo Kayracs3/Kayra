@@ -1,5 +1,11 @@
 package com.Kayracs3
 
+import com.lagradost.cloudstream3.newEpisode
+
+import com.lagradost.cloudstream3.newHomePageResponse
+
+import com.lagradost.cloudstream3.newTvSeriesLoadResponse
+
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
