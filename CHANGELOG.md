@@ -2,6 +2,23 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:33cdfcf9a74bbf2a13776f2d0f193409d6dcd478 -->
+### Update version from 27 to 28
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [33cdfcf](https://github.com/Kayracs3/Kayra/commit/33cdfcf9a74bbf2a13776f2d0f193409d6dcd478)
+
+## 2026-11-14
+
+<!-- kayra-commit:4a40a699fb22f9b35401652659ccb82a289767e8 -->
+### Enhance playlist handling and token extraction
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [4a40a69](https://github.com/Kayracs3/Kayra/commit/4a40a699fb22f9b35401652659ccb82a289767e8)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:9916d369625192e3dfe321657076e99e9fc1ab0c -->
 ### Refactor M3U8 handling and remove unused code
 
