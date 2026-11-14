@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:eafa7db60272a2719efa1d8979854f505854fe1d -->
+### Support DiziPal NP_CONFIG nm.php HLS master
+
+- Etkilenen alanlar: DiziPal
+- Commit: [eafa7db](https://github.com/Kayracs3/Kayra/commit/eafa7db60272a2719efa1d8979854f505854fe1d)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:ac174f8cc19bfa4c5880ddc9878331099a4d5c23 -->
 ### Implement PoW caching and enhance solving logic
 
