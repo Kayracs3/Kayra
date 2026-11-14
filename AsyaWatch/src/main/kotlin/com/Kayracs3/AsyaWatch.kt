@@ -1535,7 +1535,7 @@ class AsyaWatch : MainAPI() {
     }
 
     // =====================================================================
-    // FourPichive — yerleşik ContentX yerine özel extractor
+    // FourPichive — özel extractor + wrapper çözümleme
     // =====================================================================
 
     private fun findNpConfigMaster(html: String): String? {
@@ -1560,10 +1560,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    /**
-     * FourPichive iframe HTML'i içinden video URL'sini çıkarır.
-     * Birden fazla kalıbı dener: "master", "file", "src", "sources[]" vs.
-     */
     private fun findVideoUrlInPlayerHtml(html: String): String? {
         if (html.isBlank()) return null
 
@@ -1577,10 +1573,8 @@ class AsyaWatch : MainAPI() {
             .replace("&#47;", "/")
             .replace("&quot;", "\"")
 
-        // 1) "master": "..." (np config)
         findNpConfigMaster(html)?.let { return it }
 
-        // 2) JSON benzeri anahtar-değer: "file": "https://...m3u8"
         val jsonKeys = listOf(
             "master", "file", "src", "url", "hls", "source",
             "video_url", "videoUrl", "playlist", "stream_url", "streamUrl",
@@ -1592,37 +1586,31 @@ class AsyaWatch : MainAPI() {
         )
         jsonPattern.find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
 
-        // 3) JS atama stili: file: "https://...m3u8"
         val jsPattern = Regex(
             """(?i)\b(?:master|file|src|source|video|videoUrl|video_url|stream_url|streamUrl|hls)\s*[:=]\s*["'](https?://[^"'\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"'\s<>]*)?)["']"""
         )
         jsPattern.find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
 
-        // 4) sources: [{src: "https://...m3u8"}]
         val sourcesPattern = Regex(
             """(?i)"sources"\s*:\s*\[\s*\{[^{}]*?"(?:src|file)"\s*:\s*"(https?://[^"\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"\s<>]*)?)""""
         )
         sourcesPattern.find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
 
-        // 5) Herhangi bir .m3u8 / .mp4 / .mpd URL
         Regex("""(?i)https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""")
             .find(cleaned)?.value?.let { return it }
 
         return null
     }
 
-    /**
-     * Tarayıcı gibi davranan başlıklar üretir.
-     */
     private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
         return mapOf(
             "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
-            "Accept" to "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+            "Accept" to "application/vnd.apple.mpegurl, application/x-mpegURL, video/*, */*",
             "Accept-Language" to (siteHeaders["Accept-Language"] ?: ""),
             "Accept-Encoding" to "identity",
             "Referer" to iframeUrl,
             "Origin" to fourPichiveOrigin,
-            "Sec-Fetch-Dest" to "empty",
+            "Sec-Fetch-Dest" to "video",
             "Sec-Fetch-Mode" to "cors",
             "Sec-Fetch-Site" to "same-origin",
             "Sec-Fetch-Storage-Access" to "active",
@@ -1631,8 +1619,60 @@ class AsyaWatch : MainAPI() {
     }
 
     /**
+     * nm.php gibi wrapper endpoint'leri kendi `app` istemcimizle (çerezlerimizle)
+     * çağırıp 302 yönlendirmesini takip eder ve gerçek medya URL'sini döner.
+     */
+    private suspend fun resolveMediaUrl(candidateUrl: String, referer: String): String? {
+        return try {
+            val response = app.get(
+                candidateUrl,
+                headers = browserLikeHeaders(referer),
+                referer = referer,
+                allowRedirects = true
+            )
+            if (!response.isSuccessful) {
+                Log.w("AsyaWatch", "Wrapper HTTP ${response.code}: ${candidateUrl.take(80)}")
+                return null
+            }
+
+            // 1) Redirect zinciri sonunda medya URL'si mi?
+            val finalUrl = response.url
+            if (finalUrl != candidateUrl && isDirectMedia(finalUrl)) {
+                Log.d("AsyaWatch", "Wrapper redirect → ${finalUrl.take(100)}")
+                return finalUrl
+            }
+
+            // 2) Body doğrudan medya URL'si mi? (bazı servisler text/plain döner)
+            val body = response.text
+            val trimmed = body.trim()
+            if (trimmed.length in 20..2000 && isDirectMedia(trimmed)) {
+                Log.d("AsyaWatch", "Wrapper body → ${trimmed.take(100)}")
+                return trimmed
+            }
+
+            // 3) Body HTML/JSON ise içinde gömülü medya URL'si ara
+            if (body.contains(".m3u8", true) || body.contains(".mp4", true) || body.contains(".mpd", true)) {
+                findVideoUrlInPlayerHtml(body)?.let { embedded ->
+                    if (isDirectMedia(embedded)) {
+                        Log.d("AsyaWatch", "Wrapper embedded → ${embedded.take(100)}")
+                        return embedded
+                    }
+                }
+            }
+
+            null
+        } catch (e: Exception) {
+            Log.e("AsyaWatch", "Wrapper çözümleme hatası: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * FourPichive iframe'i için özel extractor.
-     * Yerleşik ContentX extractor'ındaki NPE'yi (ContentXExtractor.kt:18) atlar.
+     * 1) iframe sayfasını çeker
+     * 2) HTML'den video URL adayını bulur
+     * 3) Aday bir wrapper ise (nm.php gibi) kendisi çözümler
+     * 4) ExtractorLink'e tam headers set ederek ExoPlayer'a verir
      */
     private suspend fun extractFourPichive(
         iframeUrl: String,
@@ -1661,15 +1701,12 @@ class AsyaWatch : MainAPI() {
             return false
         }
 
-        // Player sayfasında bulunan altyazıları yayınla
         val localSeenSubs = HashSet<String>()
         runCatching {
-            publishSubtitlesFromText(
-                html, iframeUrl, localSeenSubs, subtitleCallback, iframeUrl
-            )
+            publishSubtitlesFromText(html, iframeUrl, localSeenSubs, subtitleCallback, iframeUrl)
         }
 
-        val videoUrl = findVideoUrlInPlayerHtml(html)
+        var videoUrl = findVideoUrlInPlayerHtml(html)
         if (videoUrl.isNullOrBlank()) {
             Log.e(
                 "AsyaWatch",
@@ -1677,6 +1714,18 @@ class AsyaWatch : MainAPI() {
                     "head=${html.take(200).replace("\n", " ")}"
             )
             return false
+        }
+
+        // Wrapper URL'leri (nm.php, /redirect, /play vs.) kendimiz çözelim
+        if (!isDirectMedia(videoUrl)) {
+            Log.d("AsyaWatch", "FourPichive wrapper çözümleniyor: ${videoUrl.take(100)}")
+            val resolved = resolveMediaUrl(videoUrl, iframeUrl)
+            if (resolved != null && resolved != videoUrl) {
+                Log.d("AsyaWatch", "FourPichive çözümlenen medya URL: ${resolved.take(100)}")
+                videoUrl = resolved
+            } else {
+                Log.w("AsyaWatch", "FourPichive wrapper çözümlenemedi, orijinal URL + headers ile denenecek.")
+            }
         }
 
         val isHls = videoUrl.contains(".m3u8", true)
@@ -1690,10 +1739,15 @@ class AsyaWatch : MainAPI() {
                 type = type
             ) {
                 this.referer = iframeUrl
+                // KRİTİK: ExoPlayer'a tam headers set ver, aksi halde nm.php 404 döner
+                this.headers = headers
                 this.quality = qualityValue("", videoUrl)
             }
         )
-        Log.d("AsyaWatch", "FourPichive video URL verildi: ${videoUrl.take(140)}...")
+        Log.d(
+            "AsyaWatch",
+            "FourPichive URL verildi (type=$type, headers=${headers.size}): ${videoUrl.take(140)}..."
+        )
 
         if (isHls) {
             val localSeenManifests = HashSet<String>()
@@ -1828,106 +1882,7 @@ class AsyaWatch : MainAPI() {
                 candidateHost?.endsWith(".pichive.online") == true
 
             if (isFourPichive) {
-                // Yerleşik ContentX extractor'ı yerine kendi extractor'ımızı kullan.
-                // Böylece ContentXExtractor.kt:18 NPE'sini atlarız.
                 Log.d("AsyaWatch", "FourPichive (özel extractor): ${candidate.take(120)}...")
                 val extracted = runCatching {
                     extractFourPichive(candidate, referer, emitSubtitle) { link ->
-                        if (emittedUrls.add(link.url)) {
-                            callback(link)
-                            found = true
-                        }
-                    }
-                }.getOrElse { error ->
-                    Log.e("AsyaWatch", "FourPichive özel extractor hata: ${error.message}")
-                    false
-                }
-                if (!extracted) {
-                    Log.w("AsyaWatch", "FourPichive özel extractor başarısız.")
-                }
-                // Aynı URL için genel extractor'ı denemiyoruz — yine ContentX'e düşüp NPE verirdi.
-                return
-            }
-
-            try {
-                loadExtractor(candidate, referer, emitSubtitle) { link ->
-                    if (emittedUrls.add(link.url)) callback(link)
-                    found = true
-                }
-            } catch (_: Exception) {
-            }
-        }
-
-        if (isDirectMedia(data)) processCandidate(data, "$mainUrl/", "")
-
-        val page = runCatching { getPageData(data) }.getOrNull()
-        val root = page?.secureData
-        val related = objectField(root, "RelatedResults", "relatedResults")
-        val isSeries = data.contains("/dizi/", true) ||
-            objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
-
-        if (page != null) {
-            publishSubtitlesFromText(root?.toString().orEmpty(), data, seenSubtitleUrls, emitSubtitle)
-            publishSubtitlesFromText(page.document.html(), data, seenSubtitleUrls, emitSubtitle)
-
-            val sources = sourceItems(root, isSeries)
-            val relatedForSources = objectField(root, "RelatedResults", "relatedResults")
-            val episodeSourceHolder = objectField(relatedForSources, "getEpisodeSources", "getEpisodeSource")
-            val episodeSourceRows = arrayField(episodeSourceHolder, "result", "sources")
-
-            fun jsonKeys(value: JSONObject?): String {
-                if (value == null) return "yok"
-                val names = ArrayList<String>()
-                val iterator = value.keys()
-                while (iterator.hasNext() && names.size < 20) names.add(iterator.next())
-                return names.joinToString().ifBlank { "boş" }
-            }
-
-            val flightPayloads = nextFlightPayloads(page.document)
-            val flightHasEpisodeSources = flightPayloads.any {
-                it.contains("getEpisodeSources", true) || it.contains("getEpisodeSource", true)
-            }
-            val flightHasSourceContent = flightPayloads.any {
-                it.contains("source_content", true) || it.contains("sourceContent", true)
-            }
-
-            Log.d(
-                "AsyaWatch",
-                "Kaynak veri yapısı: secureData=${root != null}; rootKeys=${jsonKeys(root)}; relatedKeys=${jsonKeys(relatedForSources)}; episodeHolder=${episodeSourceHolder != null}; satır=${episodeSourceRows?.length() ?: 0}; flightPaket=${flightPayloads.size}; flightEpisodeSources=$flightHasEpisodeSources; flightSourceContent=$flightHasSourceContent"
-            )
-            Log.d("AsyaWatch", "Kaynak analizi: kayıt=${sources.size}; dizi=$isSeries")
-
-            for ((sourceIndex, source) in sources.withIndex()) {
-                publishSubtitlesFromText(source.raw, data, seenSubtitleUrls, emitSubtitle)
-                val candidates = extractCandidates(source.raw, data)
-                val hosts = candidates.mapNotNull { candidate ->
-                    runCatching { URI(candidate).host?.lowercase() }.getOrNull()
-                }.distinct()
-                Log.d(
-                    "AsyaWatch",
-                    "Kaynak ${sourceIndex + 1}: kalite=${source.quality.ifBlank { "bilinmiyor" }}; aday=${candidates.size}; alanadları=${hosts.joinToString().ifBlank { "yok" }}"
-                )
-                for (candidate in candidates) {
-                    processCandidate(candidate, data, source.quality)
-                }
-            }
-
-            val pageCandidates = extractCandidates(page.document.html(), data)
-            val pageHosts = pageCandidates.mapNotNull { candidate ->
-                runCatching { URI(candidate).host?.lowercase() }.getOrNull()
-            }.distinct()
-
-            Log.d(
-                "AsyaWatch",
-                "Sayfa adayları: adet=${pageCandidates.size}; alanadları=${pageHosts.joinToString().ifBlank { "yok" }}"
-            )
-            for (candidate in pageCandidates) {
-                processCandidate(candidate, data, "")
-            }
-            if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
-        }
-
-        chosenSubtitles.values.forEach { subtitleCallback(it) }
-        return found
-    }
-}
+                        if
