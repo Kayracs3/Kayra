@@ -970,7 +970,7 @@ class DiziPal : MainAPI() {
 
         // Yeni NP oynatıcı: NP_CONFIG.sources[].master -> nm.php (HLS manifest).
         // Bu şema openPlayer/source2.php kullanmıyor; nm.php yanıtı HLS manifesti olarak verilir.
-        val npMasterUrls = Regex("""(?i)["']master["']\\s*:\\s*["']([^"']+)["']""")
+        val npMasterUrls = Regex("""(?i)["']master["']\s*:\s*["']([^"']+)["']""")
             .findAll(iframeHtml)
             .map { it.groupValues[1].decodeEscapes() }
             .filter { it.isNotBlank() }
@@ -1007,7 +1007,7 @@ class DiziPal : MainAPI() {
                 continue
             }
 
-            val masterBody = masterResponse.text.trimStart('\\uFEFF', ' ', '\\n', '\\r', '\\t')
+            val masterBody = masterResponse.text.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
             val contentType = (
                 masterResponse.headers["Content-Type"]
                     ?: masterResponse.headers["content-type"]
@@ -1027,7 +1027,7 @@ class DiziPal : MainAPI() {
                 Log.d("DiziPal", "NP HLS manifest doğrulandı: ${masterUrl.substringBefore('?')}")
             } else {
                 val responseCandidates = extractFileUrls(masterBody) +
-                    Regex("""(?i)["'](?:url|file|src|source|playlist)["']\\s*:\\s*["']([^"']+)["']""")
+                    Regex("""(?i)["'](?:url|file|src|source|playlist)["']\s*:\s*["']([^"']+)["']""")
                         .findAll(masterBody)
                         .map { it.groupValues[1].decodeEscapes() }
                         .toList()
@@ -1063,7 +1063,6 @@ class DiziPal : MainAPI() {
             return found
         }
 
-        val origin = originOf(iframeUrl) ?: return found
         val source2Url = origin.trimEnd('/') + "/source2.php?v=" +
             URLEncoder.encode(playlistId, "UTF-8")
         val legacySourceHeaders = mapOf(
