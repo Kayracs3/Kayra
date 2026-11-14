@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:e2f2ea4335868e7a2c71db814d69b9db62b76134 -->
+### Fix DiziPal NP master parser syntax
+
+- Etkilenen alanlar: DiziPal
+- Commit: [e2f2ea4](https://github.com/Kayracs3/Kayra/commit/e2f2ea4335868e7a2c71db814d69b9db62b76134)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:eafa7db60272a2719efa1d8979854f505854fe1d -->
 ### Support DiziPal NP_CONFIG nm.php HLS master
 
