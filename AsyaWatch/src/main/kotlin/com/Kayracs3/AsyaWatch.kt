@@ -1713,4 +1713,351 @@ class AsyaWatch : MainAPI() {
      */
     private fun findStreamEndpoint(text: String, base: String): String? {
         Regex(
-            """(?i)(?:https?:)?//[^"'<>\s]{0,200}?(?:four\.pichive\.online|pichive\.
+            """(?i)(?:https?:)?//[^"'<>\s]{0,200}?(?:four\.pichive\.online|pichive\.online)/(?:nl|nm|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,}"""
+        ).find(text)?.let { match ->
+            return absoluteUrl(match.value.trimEnd('\\', '"', '\'', ','), base)
+        }
+
+        Regex(
+            """(?i)["']([^"'<>\s]{0,300}?/(?:nl|nm|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,})["']"""
+        ).find(text)?.let { match ->
+            return absoluteUrl(match.groupValues[1], base)
+        }
+
+        Regex(
+            """(?i)(?:^|[\s"'(=\[,])(/(?:nl|nm|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,})"""
+        ).find(text)?.let { match ->
+            return absoluteUrl(match.groupValues[1], base)
+        }
+
+        Regex(
+            """(?i)["']?v["']?\s*[:=]\s*["']([A-Za-z0-9_\-+/=]{100,})["']"""
+        ).find(text)?.let { match ->
+            return "https://four.pichive.online/nm.php?v=${match.groupValues[1]}"
+        }
+
+        Regex(
+            """(?i)(?:file|source|src|url|stream|hls|master)\s*[:=]\s*["']([^"']*(?:nl|nm|m|p|src)\.php\?v=[A-Za-z0-9_\-]{20,})["']"""
+        ).find(text)?.let { match ->
+            return absoluteUrl(match.groupValues[1], base)
+        }
+
+        return null
+    }
+
+    private fun unpackJs(source: String): String? {
+        val marker = Regex(
+            """(?is)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*[rd]\s*\)"""
+        ).find(source) ?: return null
+        val start = marker.range.first
+
+        var depth = 0
+        var index = start + 4
+        var end = -1
+        while (index < source.length) {
+            when (source[index]) {
+                '(' -> depth++
+                ')' -> {
+                    depth--
+                    if (depth == 0) { end = index; break }
+                }
+            }
+            index++
+        }
+        if (end < 0) return null
+        val expr = source.substring(start, end + 1)
+
+        val argsMatch = Regex(
+            """(?is)\}\s*\(\s*['"](.+?)['"]\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*['"](.+?)['"]\s*\.split\s*\(\s*['"]\|['"]\s*\)"""
+        ).find(expr) ?: return null
+
+        val payload = argsMatch.groupValues[1]
+        val radix = argsMatch.groupValues[2].toIntOrNull() ?: 62
+        val count = argsMatch.groupValues[3].toIntOrNull() ?: return null
+        val keywords = argsMatch.groupValues[4].split("|")
+
+        var result = payload
+        for (i in count - 1 downTo 0) {
+            val keyword = keywords.getOrNull(i)
+            if (!keyword.isNullOrBlank()) {
+                val encoded = encodeBaseN(i, radix)
+                result = result.replace(Regex("""\b${Regex.escape(encoded)}\b"""), keyword)
+            }
+        }
+        return result
+    }
+
+    private fun encodeBaseN(value: Int, radix: Int): String {
+        val chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        if (value == 0) return "0"
+        var v = value
+        val sb = StringBuilder()
+        while (v > 0) {
+            sb.insert(0, chars[v % radix])
+            v /= radix
+        }
+        return sb.toString()
+    }
+
+    // =====================================================================
+    // loadLinks
+    // =====================================================================
+
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        var found = false
+        val emittedUrls = HashSet<String>()
+        val seenCandidates = HashSet<String>()
+        val seenSubtitleUrls = LinkedHashSet<String>()
+        val seenSubtitlePages = LinkedHashSet<String>()
+        val seenSubtitleManifests = LinkedHashSet<String>()
+        val chosenSubtitles = LinkedHashMap<String, SubtitleFile>()
+
+        fun subtitleTrackPriority(subtitle: SubtitleFile): Int {
+            val path = runCatching { URI(subtitle.url).path.orEmpty() }
+                .getOrDefault(subtitle.url.substringBefore('?'))
+            val segments = path.split('/').filter { it.isNotBlank() }
+            val detectedLanguage = subtitleUrlLanguage(subtitle.url)
+            val queryLanguage = subtitleUrlQueryLanguage(subtitle.url)
+            val languageDirectory = segments.dropLast(1).any { directory ->
+                val value = when {
+                    directory.startsWith("sub_", true) -> directory.substring(4)
+                    directory.startsWith("sub-", true) -> directory.substring(4)
+                    else -> ""
+                }
+                value.isNotBlank() &&
+                    explicitSubtitleLanguage(value) == detectedLanguage
+            }
+            val fileNameLanguage =
+                explicitSubtitleLanguage(segments.lastOrNull().orEmpty()) == detectedLanguage
+            val isHlsSubtitlePlaylist = Regex("""(?i)\.m3u8$""").containsMatchIn(path)
+            val standaloneTextTrack = Regex(
+                """(?i)\.(?:vtt|srt|ass|ssa|ttml|dfxp|webvtt)$"""
+            ).containsMatchIn(path)
+
+            return when {
+                detectedLanguage == null && explicitSubtitleLanguage(subtitle.lang) == null -> 0
+                languageDirectory && isHlsSubtitlePlaylist -> 12
+                languageDirectory -> 10
+                fileNameLanguage -> 9
+                queryLanguage != null && queryLanguage == detectedLanguage -> 8
+                detectedLanguage != null -> 6
+                standaloneTextTrack -> 4
+                isHlsSubtitlePlaylist -> 2
+                else -> 1
+            }
+        }
+
+        val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
+            val language = subtitleUrlLanguage(subtitle.url)
+                ?: explicitSubtitleLanguage(subtitle.lang)
+            if (language == "Türkçe" || language == "English") {
+                val existing = chosenSubtitles[language]
+                if (existing == null ||
+                    subtitleTrackPriority(subtitle) > subtitleTrackPriority(existing)
+                ) {
+                    subtitle.lang = language
+                    chosenSubtitles[language] = subtitle
+                }
+            }
+        }
+
+        suspend fun processCandidate(raw: String, referer: String, quality: String) {
+            val candidate = absoluteUrl(raw, referer) ?: return
+            if (!seenCandidates.add(candidate)) return
+
+            // HTML gömülü yanlış URL'leri atla
+            if (candidate.startsWith("<", true) || candidate.contains("<!doctype", true)) {
+                return
+            }
+
+            // Bare domain (path yok) → 403, boşuna istek atma
+            val candidatePath = runCatching { URI(candidate).path.orEmpty() }.getOrDefault("")
+            if (candidatePath.isBlank() || candidatePath == "/") {
+                return
+            }
+
+            if (isDirectMedia(candidate)) {
+                if (candidate.contains(".m3u8", true)) {
+                    extractSubtitlesFromManifest(
+                        candidate, referer, seenSubtitleUrls, seenSubtitleManifests, emitSubtitle
+                    )
+                }
+                if (emittedUrls.add(candidate)) {
+                    val type = if (candidate.contains(".m3u8", true)) {
+                        ExtractorLinkType.M3U8
+                    } else {
+                        ExtractorLinkType.VIDEO
+                    }
+                    val label = name + " " + quality.ifBlank { "Kaynak" }
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = label,
+                            url = candidate,
+                            type = type
+                        ) {
+                            this.referer = referer
+                            this.quality = qualityValue(quality, candidate)
+                        }
+                    )
+                    found = true
+                }
+                return
+            }
+
+            extractSubtitlesFromPlayerPage(
+                candidate, referer, seenSubtitleUrls, seenSubtitlePages,
+                seenSubtitleManifests, emitSubtitle
+            )
+
+            val candidateHost = runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+            val isFourPichive = candidateHost == "four.pichive.online" ||
+                candidateHost?.endsWith(".four.pichive.online") == true
+
+            // ---- FourPichive özel çıkarıcı ----
+            if (isFourPichive) {
+                val streamUrl = extractFourPichiveStream(candidate, referer)
+                if (!streamUrl.isNullOrBlank() && emittedUrls.add(streamUrl)) {
+                    val isHls = streamUrl.contains(".m3u8", true) ||
+                        streamUrl.contains("nl.php", true) ||
+                        streamUrl.contains("nm.php", true) ||
+                        streamUrl.contains("m.php", true) ||
+                        streamUrl.contains("p.php", true) ||
+                        streamUrl.contains("src.php", true)
+                    val type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    val label = "$name FourPichive" +
+                        (quality.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = label,
+                            url = streamUrl,
+                            type = type
+                        ) {
+                            this.referer = candidate
+                            this.quality = qualityValue(quality, streamUrl)
+                            this.headers = mapOf(
+                                "Origin" to fourPichiveOrigin,
+                                "Referer" to candidate,
+                                "User-Agent" to (siteHeaders["User-Agent"] ?: "")
+                            )
+                        }
+                    )
+                    found = true
+                    Log.d("AsyaWatch", "FourPichive M3U8 verildi: ${streamUrl.take(140)}...")
+                    return
+                }
+
+                // Fallback: aynı v= token'ı pichive.online üzerinde dene
+                val vToken = runCatching {
+                    URI(candidate).rawQuery.orEmpty()
+                        .split('&')
+                        .firstOrNull { it.startsWith("v=") }
+                        ?.substringAfter("v=", "")
+                        .orEmpty()
+                }.getOrDefault("")
+
+                if (vToken.isNotBlank()) {
+                    val pichiveUrl = "https://pichive.online/iframe.php?v=$vToken"
+                    Log.d("AsyaWatch", "FourPichive fallback: pichive.online → $pichiveUrl")
+                    try {
+                        loadExtractor(pichiveUrl, referer, emitSubtitle) { link ->
+                            if (emittedUrls.add(link.url)) callback(link)
+                            found = true
+                        }
+                    } catch (e: Exception) {
+                        Log.w("AsyaWatch", "pichive.online fallback hatası: ${e.message}")
+                    }
+                    if (found) return
+                }
+
+                Log.w("AsyaWatch", "FourPichive stream bulunamadı, genel extractor denenecek.")
+            }
+
+            try {
+                loadExtractor(candidate, referer, emitSubtitle) { link ->
+                    if (emittedUrls.add(link.url)) callback(link)
+                    found = true
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        if (isDirectMedia(data)) processCandidate(data, "$mainUrl/", "")
+
+        val page = runCatching { getPageData(data) }.getOrNull()
+        val root = page?.secureData
+        val related = objectField(root, "RelatedResults", "relatedResults")
+        val isSeries = data.contains("/dizi/", true) ||
+            objectField(related, "getSerieSeasonAndEpisodes", "getSeriesSeasons") != null
+
+        if (page != null) {
+            publishSubtitlesFromText(root?.toString().orEmpty(), data, seenSubtitleUrls, emitSubtitle)
+            publishSubtitlesFromText(page.document.html(), data, seenSubtitleUrls, emitSubtitle)
+
+            val sources = sourceItems(root, isSeries)
+            val relatedForSources = objectField(root, "RelatedResults", "relatedResults")
+            val episodeSourceHolder = objectField(relatedForSources, "getEpisodeSources", "getEpisodeSource")
+            val episodeSourceRows = arrayField(episodeSourceHolder, "result", "sources")
+
+            fun jsonKeys(value: JSONObject?): String {
+                if (value == null) return "yok"
+                val names = ArrayList<String>()
+                val iterator = value.keys()
+                while (iterator.hasNext() && names.size < 20) names.add(iterator.next())
+                return names.joinToString().ifBlank { "boş" }
+            }
+
+            val flightPayloads = nextFlightPayloads(page.document)
+            val flightHasEpisodeSources = flightPayloads.any {
+                it.contains("getEpisodeSources", true) || it.contains("getEpisodeSource", true)
+            }
+            val flightHasSourceContent = flightPayloads.any {
+                it.contains("source_content", true) || it.contains("sourceContent", true)
+            }
+
+            Log.d(
+                "AsyaWatch",
+                "Kaynak veri yapısı: secureData=${root != null}; rootKeys=${jsonKeys(root)}; relatedKeys=${jsonKeys(relatedForSources)}; episodeHolder=${episodeSourceHolder != null}; satır=${episodeSourceRows?.length() ?: 0}; flightPaket=${flightPayloads.size}; flightEpisodeSources=$flightHasEpisodeSources; flightSourceContent=$flightHasSourceContent"
+            )
+            Log.d("AsyaWatch", "Kaynak analizi: kayıt=${sources.size}; dizi=$isSeries")
+
+            for ((sourceIndex, source) in sources.withIndex()) {
+                publishSubtitlesFromText(source.raw, data, seenSubtitleUrls, emitSubtitle)
+                val candidates = extractCandidates(source.raw, data)
+                val hosts = candidates.mapNotNull { candidate ->
+                    runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+                }.distinct()
+                Log.d(
+                    "AsyaWatch",
+                    "Kaynak ${sourceIndex + 1}: kalite=${source.quality.ifBlank { "bilinmiyor" }}; aday=${candidates.size}; alanadları=${hosts.joinToString().ifBlank { "yok" }}"
+                )
+                for (candidate in candidates) {
+                    processCandidate(candidate, data, source.quality)
+                }
+            }
+
+            val pageCandidates = extractCandidates(page.document.html(), data)
+            val pageHosts = pageCandidates.mapNotNull { candidate ->
+                runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+            }.distinct()
+
+            Log.d(
+                "AsyaWatch",
+                "Sayfa adayları: adet=${pageCandidates.size}; alanadları=${pageHosts.joinToString().ifBlank { "yok" }}"
+            )
+            for (candidate in pageCandidates) {
+                processCandidate(candidate, data, "")
+            }
+            if (looksLikePlayer(data)) processCandidate(data, "$mainUrl/", "")
+        }
+
+        chosenSubtitles.values.forEach { subtitleCallback(it) }
+        return found
+    }
+}
