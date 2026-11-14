@@ -1560,40 +1560,9 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    private fun extractToken(url: String): String? {
-        return runCatching {
-            val query = URI(url).rawQuery.orEmpty()
-            query.split('&')
-                .firstOrNull { it.startsWith("v=") }
-                ?.substringAfter("v=", "")
-                ?.takeIf { it.isNotBlank() }
-        }.getOrNull()
-    }
-
-    private fun resolveRelativeUrl(relative: String, base: String): String? {
-        return runCatching {
-            val baseUri = URI(base)
-            val scheme = baseUri.scheme ?: "https"
-            val authority = baseUri.authority ?: return@runCatching null
-            val origin = "$scheme://$authority"
-            when {
-                relative.startsWith("http://", true) || relative.startsWith("https://", true) -> relative
-                relative.startsWith("//") -> "$scheme:$relative"
-                relative.startsWith("/") -> origin + relative
-                else -> {
-                    val basePath = baseUri.path.orEmpty()
-                    val lastSlash = basePath.lastIndexOf('/')
-                    val dir = if (lastSlash >= 0) basePath.substring(0, lastSlash + 1) else "/"
-                    origin + dir + relative
-                }
-            }
-        }.getOrNull()
-    }
-
     /**
-     * Tarayıcı gibi davranan başlıklar üretir. Cloudflare'in cf_clearance cookie'si olmadan
-     * nm.php'yi 404 döndürdüğünü gözlemledik; bu yüzden tarayıcının gönderdiği TÜM
-     * başlıkları gönderiyoruz.
+     * Tarayıcı gibi davranan başlıklar üretir.
+     * Cloudflare korumasını aşmak için gereklidir.
      */
     private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
         return mapOf(
@@ -1609,41 +1578,6 @@ class AsyaWatch : MainAPI() {
             "Sec-Fetch-Storage-Access" to "active",
             "Priority" to "u=1, i"
         )
-    }
-
-    /**
-     * Token için sırayla nl.php, nm.php, m.php endpoint'lerini dener.
-     * Tarayıcı testlerinde nl.php çalışıyordu; nm.php bazen çalışıyor bazense 404.
-     */
-    private suspend fun tryTokenOnEndpoints(
-        origin: String,
-        token: String,
-        iframeUrl: String
-    ): String? {
-        // nl.php öncelikli — tarayıcıda doğrulandı
-        val endpoints = listOf("nl.php", "nm.php", "m.php")
-        val headers = browserLikeHeaders(iframeUrl)
-        for (endpoint in endpoints) {
-            val url = "$origin/$endpoint?v=$token"
-            val resp = runCatching {
-                app.get(url, headers = headers, allowRedirects = true)
-            }.onFailure {
-                Log.w("AsyaWatch", "$endpoint fetch err: ${it.message}")
-            }.getOrNull() ?: continue
-
-            if (!resp.isSuccessful) {
-                Log.w("AsyaWatch", "$endpoint HTTP ${resp.code}: ${url.take(80)}")
-                continue
-            }
-            val body = resp.text
-            if (!body.contains("#EXTM3U")) {
-                Log.w("AsyaWatch", "$endpoint M3U8 değil: ${url.take(80)} head=${body.take(60).replace("\n", "\\n")}")
-                continue
-            }
-            Log.d("AsyaWatch", "$endpoint OK: ${url.take(80)} len=${body.length}")
-            return url
-        }
-        return null
     }
 
     private suspend fun extractFourPichiveStream(iframeUrl: String, pageReferer: String): String? {
@@ -1668,20 +1602,10 @@ class AsyaWatch : MainAPI() {
             return null
         }
 
-        // NP_CONFIG'ten master URL'sini ve token'ını çıkar
+        // NP_CONFIG'ten master URL'sini çıkar ve doğrudan kullan
         val masterUrl = findNpConfigMaster(html)
         if (masterUrl != null) {
             Log.d("AsyaWatch", "FourPichive NP_CONFIG master: ${masterUrl.take(120)}...")
-            val token = extractToken(masterUrl)
-            if (!token.isNullOrBlank()) {
-                // nl.php → nm.php → m.php sırayla dene
-                tryTokenOnEndpoints(fourPichiveOrigin, token, iframeUrl)?.let {
-                    Log.d("AsyaWatch", "FourPichive stream OK: ${it.take(120)}...")
-                    return it
-                }
-            }
-            // Fallback: master URL'sini olduğu gibi dene (belki nm.php çalışır)
-            Log.w("AsyaWatch", "FourPichive tüm endpoint'ler başarısız, master fallback")
             return masterUrl
         }
 
