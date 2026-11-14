@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:44c9edb7f17dcabd7430cb4a2549b2fef41df3b4 -->
+### Refactor FourPichive iframe extraction to use built-in method
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [44c9edb](https://github.com/Kayracs3/Kayra/commit/44c9edb7f17dcabd7430cb4a2549b2fef41df3b4)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:43fe3d984f9608ef2022f4fcf250480487a0fb70 -->
 ### Bump version from 28 to 29
 
