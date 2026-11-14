@@ -1,0 +1,467 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.9/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :AsyaFilmIzle
+w: ⚠️ Deprecated Gradle Version
+The used Gradle version (Gradle 8.9) is deprecated and will not be supported in future Kotlin Gradle Plugin releases.
+The minimum supported Gradle version will become Gradle 8.14.4 in Kotlin 2.5.0.
+
+This warning can be suppressed in 'gradle.properties':
+    kotlin.suppressGradlePluginWarnings=DeprecatedGradleVersionWarning
+Solution: Please update the Gradle version to at least Gradle 8.14.4.
+
+
+> Task :clean UP-TO-DATE
+> Task :AsyaFilmIzle:clean
+> Task :AsyaLuna:clean
+> Task :AsyaWatch:clean
+> Task :CineStream:clean
+> Task :ClipBox:clean UP-TO-DATE
+> Task :DDizi:clean UP-TO-DATE
+> Task :DiziAsya:clean UP-TO-DATE
+> Task :DiziBox:clean UP-TO-DATE
+> Task :DiziDad:clean UP-TO-DATE
+> Task :Dizigecesi:clean UP-TO-DATE
+> Task :DiziKorea:clean UP-TO-DATE
+> Task :DiziLife:clean UP-TO-DATE
+> Task :Dizilla:clean UP-TO-DATE
+> Task :DiziMom:clean UP-TO-DATE
+> Task :DiziPal:clean UP-TO-DATE
+> Task :DiziPalOrjinal:clean UP-TO-DATE
+> Task :DiziPod:clean UP-TO-DATE
+> Task :DiziSol:clean UP-TO-DATE
+> Task :DiziYou:clean UP-TO-DATE
+> Task :Dramadizilerim:clean UP-TO-DATE
+> Task :FilmizleHell:clean UP-TO-DATE
+> Task :FilmKutusu:clean UP-TO-DATE
+> Task :FilmMakinesi:clean UP-TO-DATE
+> Task :FilmModu:clean UP-TO-DATE
+> Task :Flix:clean UP-TO-DATE
+> Task :FullHDFilmizlesene:clean UP-TO-DATE
+> Task :HDFilmCehennemi:clean UP-TO-DATE
+> Task :InatBox:clean UP-TO-DATE
+> Task :InatBoxYedek:clean UP-TO-DATE
+> Task :JetFilmizle:clean UP-TO-DATE
+> Task :Newtv:clean UP-TO-DATE
+> Task :PatronSH:clean UP-TO-DATE
+> Task :RecTV:clean UP-TO-DATE
+> Task :Reelpulse:clean UP-TO-DATE
+> Task :SetFilmIzle:clean UP-TO-DATE
+> Task :SinemaCX:clean UP-TO-DATE
+> Task :SinezyTo:clean UP-TO-DATE
+> Task :TrDiziIzle:clean UP-TO-DATE
+> Task :TVDiziler:clean UP-TO-DATE
+> Task :WebDramaTurkey:clean UP-TO-DATE
+> Task :AsyaFilmIzle:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :AsyaFilmIzle:preBuild UP-TO-DATE
+> Task :AsyaFilmIzle:preDebugBuild UP-TO-DATE
+> Task :AsyaFilmIzle:generateDebugBuildConfig
+> Task :AsyaFilmIzle:generateDebugResValues
+> Task :AsyaFilmIzle:generateDebugResources
+> Task :AsyaFilmIzle:packageDebugResources
+> Task :AsyaLuna:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :AsyaLuna:preBuild UP-TO-DATE
+> Task :AsyaLuna:preDebugBuild UP-TO-DATE
+> Task :AsyaLuna:generateDebugBuildConfig
+> Task :AsyaLuna:generateDebugResValues
+> Task :AsyaLuna:generateDebugResources
+> Task :AsyaLuna:packageDebugResources
+> Task :AsyaWatch:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :AsyaWatch:preBuild UP-TO-DATE
+> Task :AsyaWatch:preDebugBuild UP-TO-DATE
+> Task :AsyaWatch:generateDebugBuildConfig
+> Task :AsyaWatch:generateDebugResValues
+> Task :AsyaWatch:generateDebugResources
+> Task :AsyaLuna:parseDebugLocalResources
+> Task :AsyaWatch:packageDebugResources
+> Task :AsyaFilmIzle:parseDebugLocalResources
+> Task :CineStream:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :CineStream:preBuild UP-TO-DATE
+> Task :CineStream:preDebugBuild UP-TO-DATE
+> Task :AsyaWatch:parseDebugLocalResources
+> Task :CineStream:generateDebugBuildConfig
+> Task :CineStream:generateDebugResValues
+> Task :CineStream:generateDebugResources
+> Task :AsyaFilmIzle:generateDebugRFile
+> Task :AsyaLuna:generateDebugRFile
+> Task :AsyaWatch:generateDebugRFile
+> Task :CineStream:packageDebugResources
+> Task :CineStream:parseDebugLocalResources
+> Task :CineStream:generateDebugRFile
+
+> Task :AsyaWatch:compileDebugKotlin
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:116:61 Unresolved reference 'WebViewResolver'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:199:24 Unresolved reference 'findVideoUrlInPlayerHtml'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:201:72 Unresolved reference 'take'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:202:34 None of the following candidates is applicable:
+
+fun <T : Comparable<T>, R : ClosedRange<T>, Iterable<T>> R.contains(element: T?): Boolean:
+  Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T : Comparable<T>, R : ClosedRange<T>, Iterable<T>> R.contains(element: T?): Boolean
+
+fun <T : Comparable<T>, R : OpenEndRange<T>, Iterable<T>> R.contains(element: T?): Boolean:
+  Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T : Comparable<T>, R : OpenEndRange<T>, Iterable<T>> R.contains(element: T?): Boolean
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:207:27 Argument type mismatch: actual type is 'Any', but 'String' was expected.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:211:36 Unresolved reference 'browserLikeHeaders'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:212:36 Unresolved reference 'qualityValue'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:226:39 Unresolved reference 'browserLikeHeaders'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:230:28 Unresolved reference 'findVideoUrlInPlayerHtml'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:232:63 Unresolved reference 'take'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:237:35 Argument type mismatch: actual type is 'Any', but 'String' was expected.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:238:45 None of the following candidates is applicable:
+
+fun <T : Comparable<T>, R : ClosedRange<T>, Iterable<T>> R.contains(element: T?): Boolean:
+  Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T : Comparable<T>, R : ClosedRange<T>, Iterable<T>> R.contains(element: T?): Boolean
+
+fun <T : Comparable<T>, R : OpenEndRange<T>, Iterable<T>> R.contains(element: T?): Boolean:
+  Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T : Comparable<T>, R : OpenEndRange<T>, Iterable<T>> R.contains(element: T?): Boolean
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:241:44 Unresolved reference 'browserLikeHeaders'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:242:44 Unresolved reference 'qualityValue'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:252:9 Unresolved reference 'publishSubtitlesFromText'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:267:23 Unresolved reference 'browserLikeHeaders'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:281:23 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:282:13 Unresolved reference 'extractCookiesFromHeaders'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:286:24 Unresolved reference 'parseNpConfig'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:287:47 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:287:54 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:295:45 Unresolved reference 'length'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:296:41 Unresolved reference 'optJSONObject'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:305:78 Argument type mismatch: actual type is 'Any', but 'String' was expected.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:313:13 Unresolved reference 'publishSubtitlesFromText'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:317:15 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:317:22 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:328:61 Unresolved reference 'take'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:339:59 Argument type mismatch: actual type is 'Any', but 'String' was expected.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:350:29 Unresolved reference 'tryPowOnUrl'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:353:63 Unresolved reference 'take'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:359:30 None of the following candidates is applicable:
+
+fun <T : Comparable<T>, R : ClosedRange<T>, Iterable<T>> R.contains(element: T?): Boolean:
+  Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T : Comparable<T>, R : ClosedRange<T>, Iterable<T>> R.contains(element: T?): Boolean
+
+fun <T : Comparable<T>, R : OpenEndRange<T>, Iterable<T>> R.contains(element: T?): Boolean:
+  Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T : Comparable<T>, R : OpenEndRange<T>, Iterable<T>> R.contains(element: T?): Boolean
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:362:35 Cannot infer type for type parameter 'K'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:362:35 Cannot infer type for type parameter 'V'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:369:23 Argument type mismatch: actual type is 'Any', but 'String' was expected.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:374:32 Unresolved reference 'qualityValue'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:377:114 Unresolved reference 'take'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:403:36 Unresolved reference 'subtitleUrlLanguage'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:404:33 Unresolved reference 'subtitleUrlQueryLanguage'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:412:21 Unresolved reference 'explicitSubtitleLanguage'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:415:17 Unresolved reference 'explicitSubtitleLanguage'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:422:45 Unresolved reference 'explicitSubtitleLanguage'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:435:28 Unresolved reference 'subtitleUrlLanguage'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:436:20 Unresolved reference 'explicitSubtitleLanguage'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:442:35 Assignment type mismatch: actual type is 'Any', but 'String' was expected.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:443:37 Argument type mismatch: actual type is 'Any', but 'String' was expected.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:449:29 Unresolved reference 'absoluteUrl'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:456:17 Unresolved reference 'isDirectMedia'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:458:21 Unresolved reference 'extractSubtitlesFromManifest'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:472:44 Unresolved reference 'qualityValue'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:480:13 Unresolved reference 'extractSubtitlesFromPlayerPage'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:517:13 Unresolved reference 'isDirectMedia'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:519:20 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:519:34 Unresolved reference 'getPageData'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:520:26 Unresolved reference 'secureData'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:521:23 Unresolved reference 'objectField'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:523:13 Unresolved reference 'objectField'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:526:13 Unresolved reference 'publishSubtitlesFromText'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:527:13 Unresolved reference 'publishSubtitlesFromText'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:527:43 Unresolved reference 'document'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:529:27 Unresolved reference 'sourceItems'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:530:37 Unresolved reference 'objectField'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:531:39 Unresolved reference 'objectField'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:532:37 Unresolved reference 'arrayField'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:548:43 Operator call 'component1()' is ambiguous for destructuring of type '??? (Unresolved name: next)'. Applicable candidates:
+fun <T> Array<out T>.component1(): T
+fun ByteArray.component1(): Byte
+fun ShortArray.component1(): Short
+fun IntArray.component1(): Int
+fun LongArray.component1(): Long
+fun FloatArray.component1(): Float
+fun DoubleArray.component1(): Double
+fun BooleanArray.component1(): Boolean
+fun CharArray.component1(): Char
+fun <T> List<T>.component1(): T
+fun <K, V> Map.Entry<K, V>.component1(): K
+fun UIntArray.component1(): UInt
+fun ULongArray.component1(): ULong
+fun UByteArray.component1(): UByte
+fun UShortArray.component1(): UShort
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:548:43 Operator call 'component2()' is ambiguous for destructuring of type '??? (Unresolved name: next)'. Applicable candidates:
+fun <T> Array<out T>.component2(): T
+fun ByteArray.component2(): Byte
+fun ShortArray.component2(): Short
+fun IntArray.component2(): Int
+fun LongArray.component2(): Long
+fun FloatArray.component2(): Float
+fun DoubleArray.component2(): Double
+fun BooleanArray.component2(): Boolean
+fun CharArray.component2(): Char
+fun <T> List<T>.component2(): T
+fun <K, V> Map.Entry<K, V>.component2(): V
+fun UIntArray.component2(): UInt
+fun ULongArray.component2(): ULong
+fun UByteArray.component2(): UByte
+fun UShortArray.component2(): UShort
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:548:51 Method 'iterator()' is ambiguous for this expression. Applicable candidates:
+fun <T> Enumeration<T>.iterator(): Iterator<T>
+fun <T> Iterator<T>.iterator(): Iterator<T>
+fun <K, V> Map<out K, V>.iterator(): Iterator<Map.Entry<K, V>>
+fun <K, V> MutableMap<K, V>.iterator(): MutableIterator<MutableMap.MutableEntry<K, V>>
+fun CharSequence.iterator(): CharIterator
+fun BufferedInputStream.iterator(): ByteIterator
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:549:17 Unresolved reference 'publishSubtitlesFromText'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:549:49 Unresolved reference 'raw'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:550:34 Unresolved reference 'extractCandidates'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:550:59 Unresolved reference 'raw'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:551:53 Cannot infer type for value parameter 'candidate'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:556:65 Unresolved reference 'quality'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:556:73 Cannot infer type for type parameter 'C'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:556:73 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:556:159 Cannot infer type for type parameter 'C'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:556:159 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:556:159 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <C : CharSequence, R, R> C.ifBlank(defaultValue: () -> R): R
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:558:35 Method 'iterator()' is ambiguous for this expression. Applicable candidates:
+fun <T> Enumeration<T>.iterator(): Iterator<T>
+fun <T> Iterator<T>.iterator(): Iterator<T>
+fun <K, V> Map<out K, V>.iterator(): Iterator<Map.Entry<K, V>>
+fun <K, V> MutableMap<K, V>.iterator(): MutableIterator<MutableMap.MutableEntry<K, V>>
+fun CharSequence.iterator(): CharIterator
+fun BufferedInputStream.iterator(): ByteIterator
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:559:62 Unresolved reference 'quality'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:563:34 Unresolved reference 'extractCandidates'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:563:57 Unresolved reference 'document'.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:564:57 Cannot infer type for value parameter 'candidate'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:570:101 Cannot infer type for type parameter 'C'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:570:101 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:570:101 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <C : CharSequence, R, R> C.ifBlank(defaultValue: () -> R): R
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:572:31 Method 'iterator()' is ambiguous for this expression. Applicable candidates:
+fun <T> Enumeration<T>.iterator(): Iterator<T>
+fun <T> Iterator<T>.iterator(): Iterator<T>
+fun <K, V> Map<out K, V>.iterator(): Iterator<Map.Entry<K, V>>
+fun <K, V> MutableMap<K, V>.iterator(): MutableIterator<MutableMap.MutableEntry<K, V>>
+fun CharSequence.iterator(): CharIterator
+fun BufferedInputStream.iterator(): ByteIterator
+e: file:///home/runner/work/Kayra/Kayra/AsyaWatch/src/main/kotlin/com/Kayracs3/AsyaWatch.kt:575:17 Unresolved reference 'looksLikePlayer'.
+
+> Task :AsyaWatch:compileDebugKotlin FAILED
+
+> Task :AsyaLuna:compileDebugKotlin
+w: file:///home/runner/work/Kayra/Kayra/AsyaLuna/src/main/kotlin/com/Kayracs3/AsyaLuna.kt:888:44 'constructor(lang: String, url: String): SubtitleFile' is deprecated. Use newSubtitleFile method.
+
+> Task :AsyaFilmIzle:compileDebugKotlin
+> Task :CineStream:compileDebugKotlin
+w: file:///home/runner/work/Kayra/Kayra/CineStream/src/main/kotlin/com/Kayracs3/CineStreamExtractors.kt:1829:29 Expression is unused.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':AsyaWatch:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.btapi.BuildToolsApiCompilationWork
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+* Exception is:
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':AsyaWatch:compileDebugKotlin'.
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:130)
+	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:293)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:128)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing org.jetbrains.kotlin.compilerRunner.btapi.BuildToolsApiCompilationWork
+	at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:287)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:130)
+	at org.gradle.internal.Factories$1.create(Factories.java:31)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocks(DefaultWorkerLeaseService.java:339)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocks(DefaultWorkerLeaseService.java:322)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLock(DefaultWorkerLeaseService.java:327)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:126)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:92)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForAll(DefaultAsyncWorkTracker.java:78)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForCompletion(DefaultAsyncWorkTracker.java:66)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:252)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:29)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:26)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:47)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:229)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:212)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:195)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:162)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:75)
+	at org.gradle.internal.Either$Right.fold(Either.java:175)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:105)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:54)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:61)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:61)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilation error. See log for more details
+	at org.jetbrains.kotlin.gradle.tasks.TasksUtilsKt.throwExceptionIfCompilationFailed(tasksUtils.kt:21)
+	at org.jetbrains.kotlin.compilerRunner.btapi.BuildToolsApiCompilationWork.execute(BuildToolsApiCompilationWork.kt:320)
+	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:63)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:66)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:62)
+	at org.gradle.internal.classloader.ClassLoaderUtils.executeInClassloader(ClassLoaderUtils.java:100)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.lambda$execute$0(NoIsolationWorkerFactory.java:62)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:44)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:41)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:209)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:166)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.workers.internal.AbstractWorker.executeWrappedInBuildOperation(AbstractWorker.java:41)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.execute(NoIsolationWorkerFactory.java:59)
+	at org.gradle.workers.internal.DefaultWorkerExecutor.lambda$submitWork$0(DefaultWorkerExecutor.java:174)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runExecution(DefaultConditionalExecutionQueue.java:195)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.access$700(DefaultConditionalExecutionQueue.java:128)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner$1.run(DefaultConditionalExecutionQueue.java:170)
+	at org.gradle.internal.Factories$1.create(Factories.java:31)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:267)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:131)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:136)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:165)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:134)
+	... 2 more
+
+
+BUILD FAILED in 50s
+69 actionable tasks: 32 executed, 37 up-to-date
