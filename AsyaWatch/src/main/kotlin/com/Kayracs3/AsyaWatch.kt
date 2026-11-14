@@ -1535,7 +1535,7 @@ class AsyaWatch : MainAPI() {
     }
 
     // =====================================================================
-    // FourPichive — özel extractor + wrapper çözümleme
+    // FourPichive — özel extractor + çok stratejili wrapper çözümleme
     // =====================================================================
 
     private fun findNpConfigMaster(html: String): String? {
@@ -1581,20 +1581,17 @@ class AsyaWatch : MainAPI() {
             "media", "link"
         ).joinToString("|") { Regex.escape(it) }
 
-        val jsonPattern = Regex(
+        Regex(
             """(?i)"(?:$jsonKeys)"\s*:\s*"(https?://[^"\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"\s<>]*)?)""""
-        )
-        jsonPattern.find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
+        ).find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
 
-        val jsPattern = Regex(
+        Regex(
             """(?i)\b(?:master|file|src|source|video|videoUrl|video_url|stream_url|streamUrl|hls)\s*[:=]\s*["'](https?://[^"'\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"'\s<>]*)?)["']"""
-        )
-        jsPattern.find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
+        ).find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
 
-        val sourcesPattern = Regex(
+        Regex(
             """(?i)"sources"\s*:\s*\[\s*\{[^{}]*?"(?:src|file)"\s*:\s*"(https?://[^"\s<>]+\.(?:m3u8|mp4|mpd)(?:\?[^"\s<>]*)?)""""
-        )
-        sourcesPattern.find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
+        ).find(cleaned)?.groupValues?.getOrNull(1)?.let { return it }
 
         Regex("""(?i)https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""")
             .find(cleaned)?.value?.let { return it }
@@ -1602,6 +1599,7 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
+    /** ExoPlayer için video (medya) başlıkları. */
     private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
         return mapOf(
             "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
@@ -1618,61 +1616,182 @@ class AsyaWatch : MainAPI() {
         )
     }
 
+    /** nm.php gibi wrapper'ları tarayıcı adres çubuğundan açıyormuş gibi çağırmak için. */
+    private fun browserLikeHeadersForWrapper(referer: String): Map<String, String> {
+        return mapOf(
+            "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language" to (siteHeaders["Accept-Language"] ?: ""),
+            "Referer" to referer,
+            "Origin" to fourPichiveOrigin,
+            "Sec-Fetch-Dest" to "document",
+            "Sec-Fetch-Mode" to "navigate",
+            "Sec-Fetch-Site" to "same-origin",
+            "Upgrade-Insecure-Requests" to "1"
+        )
+    }
+
+    /** Minimal başlık seti — bazı API'ler Sec-Fetch-* başlıklarını reddeder. */
+    private fun minimalHeaders(referer: String): Map<String, String> {
+        return mapOf(
+            "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
+            "Accept" to "*/*",
+            "Referer" to referer
+        )
+    }
+
+    private fun bodyLooksLikeMedia(body: String): String? {
+        val trimmed = body.trim().trim('"', '\'')
+        if (trimmed.length in 15..3000) {
+            if (isDirectMedia(trimmed) ||
+                Regex("""(?i)^https?://[^\s"'<>]+$""").matches(trimmed)
+            ) {
+                return trimmed
+            }
+            // JSON: {"url": "..."} veya {"file": "..."} benzeri
+            val embedded = Regex(
+                """(?i)"(?:url|file|src|master|hls|stream|media|link)"\s*:\s*"(https?://[^"\s<>]+)""""
+            ).find(body)?.groupValues?.getOrNull(1)
+            if (!embedded.isNullOrBlank()) return embedded
+        }
+        // Body içinde .m3u8 / .mp4
+        if (body.contains(".m3u8", true) || body.contains(".mp4", true)) {
+            findVideoUrlInPlayerHtml(body)?.let { return it }
+        }
+        return null
+    }
+
     /**
-     * nm.php gibi wrapper endpoint'leri kendi `app` istemcimizle (çerezlerimizle)
-     * çağırıp 302 yönlendirmesini takip eder ve gerçek medya URL'sini döner.
+     * nm.php gibi wrapper endpoint'leri çözmek için çok stratejili yaklaşım.
+     * Sırayla:
+     * 1) Redirect takip etmeden 3xx Location kontrolü
+     * 2) GET + wrapper headers (document)
+     * 3) GET + minimal headers
+     * 4) POST (v gövdede)
+     * Her adımda HTTP kodu ve response body loglanır.
      */
     private suspend fun resolveMediaUrl(candidateUrl: String, referer: String): String? {
-        return try {
+        // 1) Redirect takip etmeden kontrol
+        runCatching {
             val response = app.get(
                 candidateUrl,
-                headers = browserLikeHeaders(referer),
+                headers = browserLikeHeadersForWrapper(referer),
+                referer = referer,
+                allowRedirects = false
+            )
+            if (response.code in 300..399) {
+                val location = response.headers["Location"]
+                    ?: response.headers["location"]
+                if (!location.isNullOrBlank()) {
+                    val absolute = absoluteUrl(location, candidateUrl)
+                    if (absolute != null && (isDirectMedia(absolute) || looksLikePlayer(absolute))) {
+                        Log.d("AsyaWatch", "Wrapper redirect → ${absolute.take(120)}")
+                        return absolute
+                    }
+                    Log.d("AsyaWatch", "Wrapper redirect (medya değil): ${location.take(120)}")
+                }
+            }
+        }.onFailure {
+            Log.w("AsyaWatch", "Redirect kontrol hatası: ${it.message}")
+        }
+
+        // 2) GET + wrapper headers (takip et)
+        runCatching {
+            val response = app.get(
+                candidateUrl,
+                headers = browserLikeHeadersForWrapper(referer),
                 referer = referer,
                 allowRedirects = true
             )
-            if (!response.isSuccessful) {
-                Log.w("AsyaWatch", "Wrapper HTTP ${response.code}: ${candidateUrl.take(80)}")
-                return null
-            }
-
-            // 1) Redirect zinciri sonunda medya URL'si mi?
             val finalUrl = response.url
             if (finalUrl != candidateUrl && isDirectMedia(finalUrl)) {
-                Log.d("AsyaWatch", "Wrapper redirect → ${finalUrl.take(100)}")
+                Log.d("AsyaWatch", "Wrapper GET redirect → ${finalUrl.take(120)}")
                 return finalUrl
             }
-
-            // 2) Body doğrudan medya URL'si mi? (bazı servisler text/plain döner)
-            val body = response.text
-            val trimmed = body.trim()
-            if (trimmed.length in 20..2000 && isDirectMedia(trimmed)) {
-                Log.d("AsyaWatch", "Wrapper body → ${trimmed.take(100)}")
-                return trimmed
-            }
-
-            // 3) Body HTML/JSON ise içinde gömülü medya URL'si ara
-            if (body.contains(".m3u8", true) || body.contains(".mp4", true) || body.contains(".mpd", true)) {
-                findVideoUrlInPlayerHtml(body)?.let { embedded ->
-                    if (isDirectMedia(embedded)) {
-                        Log.d("AsyaWatch", "Wrapper embedded → ${embedded.take(100)}")
-                        return embedded
-                    }
+            if (response.isSuccessful) {
+                bodyLooksLikeMedia(response.text)?.let {
+                    Log.d("AsyaWatch", "Wrapper GET body → ${it.take(120)}")
+                    return it
                 }
+            } else {
+                val snippet = response.text.take(200).replace("\n", " ")
+                Log.w("AsyaWatch", "Wrapper GET HTTP ${response.code} [${candidateUrl.take(80)}] body=${snippet}")
             }
-
-            null
-        } catch (e: Exception) {
-            Log.e("AsyaWatch", "Wrapper çözümleme hatası: ${e.message}")
-            null
+        }.onFailure {
+            Log.w("AsyaWatch", "Wrapper GET hata: ${it.message}")
         }
+
+        // 3) GET + minimal headers
+        runCatching {
+            val response = app.get(
+                candidateUrl,
+                headers = minimalHeaders(referer),
+                referer = referer,
+                allowRedirects = true
+            )
+            val finalUrl = response.url
+            if (finalUrl != candidateUrl && isDirectMedia(finalUrl)) {
+                Log.d("AsyaWatch", "Wrapper minimal redirect → ${finalUrl.take(120)}")
+                return finalUrl
+            }
+            if (response.isSuccessful) {
+                bodyLooksLikeMedia(response.text)?.let {
+                    Log.d("AsyaWatch", "Wrapper minimal body → ${it.take(120)}")
+                    return it
+                }
+            } else {
+                val snippet = response.text.take(200).replace("\n", " ")
+                Log.w("AsyaWatch", "Wrapper minimal HTTP ${response.code} [${candidateUrl.take(80)}] body=${snippet}")
+            }
+        }.onFailure {
+            Log.w("AsyaWatch", "Wrapper minimal hata: ${it.message}")
+        }
+
+        // 4) POST (v parametresini gövdeye koy)
+        runCatching {
+            val vParam = runCatching {
+                URI(candidateUrl).rawQuery?.split('&')
+                    ?.map { it.split('=', limit = 2) }
+                    ?.firstOrNull { it.size == 2 && it[0] == "v" }
+                    ?.getOrNull(1)
+            }.getOrNull()
+
+            val formData = if (!vParam.isNullOrBlank()) mapOf("v" to vParam) else emptyMap()
+
+            val postHeaders = browserLikeHeadersForWrapper(referer) + mapOf(
+                "Content-Type" to "application/x-www-form-urlencoded",
+                "X-Requested-With" to "XMLHttpRequest"
+            )
+            val response = app.post(
+                candidateUrl,
+                headers = postHeaders,
+                referer = referer,
+                data = formData,
+                allowRedirects = true
+            )
+            val finalUrl = response.url
+            if (finalUrl != candidateUrl && isDirectMedia(finalUrl)) {
+                Log.d("AsyaWatch", "Wrapper POST redirect → ${finalUrl.take(120)}")
+                return finalUrl
+            }
+            if (response.isSuccessful) {
+                bodyLooksLikeMedia(response.text)?.let {
+                    Log.d("AsyaWatch", "Wrapper POST body → ${it.take(120)}")
+                    return it
+                }
+            } else {
+                val snippet = response.text.take(200).replace("\n", " ")
+                Log.w("AsyaWatch", "Wrapper POST HTTP ${response.code} [${candidateUrl.take(80)}] body=${snippet}")
+            }
+        }.onFailure {
+            Log.w("AsyaWatch", "Wrapper POST hata: ${it.message}")
+        }
+
+        return null
     }
 
     /**
      * FourPichive iframe'i için özel extractor.
-     * 1) iframe sayfasını çeker
-     * 2) HTML'den video URL adayını bulur
-     * 3) Aday bir wrapper ise (nm.php gibi) kendisi çözümler
-     * 4) ExtractorLink'e tam headers set ederek ExoPlayer'a verir
      */
     private suspend fun extractFourPichive(
         iframeUrl: String,
@@ -1716,12 +1835,11 @@ class AsyaWatch : MainAPI() {
             return false
         }
 
-        // Wrapper URL'leri (nm.php, /redirect, /play vs.) kendimiz çözelim
         if (!isDirectMedia(videoUrl)) {
             Log.d("AsyaWatch", "FourPichive wrapper çözümleniyor: ${videoUrl.take(100)}")
             val resolved = resolveMediaUrl(videoUrl, iframeUrl)
             if (resolved != null && resolved != videoUrl) {
-                Log.d("AsyaWatch", "FourPichive çözümlenen medya URL: ${resolved.take(100)}")
+                Log.d("AsyaWatch", "FourPichive çözümlenen medya URL: ${resolved.take(120)}")
                 videoUrl = resolved
             } else {
                 Log.w("AsyaWatch", "FourPichive wrapper çözümlenemedi, orijinal URL + headers ile denenecek.")
@@ -1739,7 +1857,6 @@ class AsyaWatch : MainAPI() {
                 type = type
             ) {
                 this.referer = iframeUrl
-                // KRİTİK: ExoPlayer'a tam headers set ver, aksi halde nm.php 404 döner
                 this.headers = headers
                 this.quality = qualityValue("", videoUrl)
             }
