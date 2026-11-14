@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:15dba53e11ac5754a81e2c29fcae3fe1f83ce649 -->
+### Remove comment about general extractor for URL
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [15dba53](https://github.com/Kayracs3/Kayra/commit/15dba53e11ac5754a81e2c29fcae3fe1f83ce649)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:fce5375802d1d0d448a527faf78dc0bf56156f84 -->
 ### Restore missing AsyaWatch loadLinks continuation
 
