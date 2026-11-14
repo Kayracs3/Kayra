@@ -43,7 +43,7 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=asyawatch.com&sz=%size%",
-        "fileHash": "sha256-8f7d452876a1f35223235b64767ca976580726a57f178bda87c57cb635878f3c",
+        "fileHash": "sha256-5a2e33156858d28f2f77954b1368b685093169b190dee51e6fd82b53aea8a3db",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 78765,
@@ -56,7 +56,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 26,
+        "version": 27,
         "internalName": "AsyaWatch",
         "description": "AsyaWatch \u2014 Asya filmleri ve dizileri sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaWatch.cs3",
@@ -605,10 +605,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=jetfilmizle.wiki&sz=%size%",
-        "fileHash": "sha256-6b09f958f5c4317aa16dd80ddfcfdc1d6108d089622e8e39df73a10c09ef9079",
+        "fileHash": "sha256-13b6defaca210fc28d9c255fc556d90dfba6a9de3f81093d527cd22139fd4f07",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 36955,
+        "fileSize": 81516,
         "status": 1,
         "language": "tr",
         "authors": [
