@@ -2,6 +2,23 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:100b9f68b6e8cc6b4b047503063cadf48f758366 -->
+### Bump version from 30 to 31
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [100b9f6](https://github.com/Kayracs3/Kayra/commit/100b9f68b6e8cc6b4b047503063cadf48f758366)
+
+## 2026-11-14
+
+<!-- kayra-commit:e4a19fd76c0f9db914857c4b9b85a99366c3b16e -->
+### Update AsyaWatch.kt
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [e4a19fd](https://github.com/Kayracs3/Kayra/commit/e4a19fd76c0f9db914857c4b9b85a99366c3b16e)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:831084f1e1fde017979b8a1faefa182ecdb3f4ca -->
 ### Refactor media URL extraction logic and comments
 
