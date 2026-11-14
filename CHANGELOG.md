@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-14
+
+<!-- kayra-commit:31efdbbe952d604132f0e0e5607a53e0c3969229 -->
+### Enhance data extraction for video streams
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [31efdbb](https://github.com/Kayracs3/Kayra/commit/31efdbbe952d604132f0e0e5607a53e0c3969229)
+
+
 ## 2026-11-12
 
 <!-- kayra-commit:98039cdcafe93c76f814c6e56fe27e81034b394d -->
