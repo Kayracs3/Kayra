@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:e430ae23db827193e2a57304f1fa96fa71c9b755 -->
+### Refactor stream endpoint detection and loadLinks logic
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [e430ae2](https://github.com/Kayracs3/Kayra/commit/e430ae23db827193e2a57304f1fa96fa71c9b755)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:8aed62d7c896ad086c63d60cad53e6f7ce503a9a -->
 ### Update print statement from 'Hello' to 'Goodbye'
 
