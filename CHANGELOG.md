@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:0ced67e12397e481ee75a680295318d0238b1351 -->
+### Correct DiziPal RM-K JSON parsing escapes
+
+- Etkilenen alanlar: DiziPal
+- Commit: [0ced67e](https://github.com/Kayracs3/Kayra/commit/0ced67e12397e481ee75a680295318d0238b1351)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:21c76d620a7d7d11f5b9be8990bbc761bd54fe94 -->
 ### Add DiziPal RM-K encrypted player config support
 
