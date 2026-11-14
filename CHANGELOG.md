@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:8ddc31213a4370e397a30f348c46cbf0b5745b46 -->
+### Bump version from 26 to 27
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [8ddc312](https://github.com/Kayracs3/Kayra/commit/8ddc31213a4370e397a30f348c46cbf0b5745b46)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:e430ae23db827193e2a57304f1fa96fa71c9b755 -->
 ### Refactor stream endpoint detection and loadLinks logic
 
