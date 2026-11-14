@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:180379f60f70f24980ea7b8135e744f93ed77f3f -->
+### Remove unused token extraction and URL resolution functions
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [180379f](https://github.com/Kayracs3/Kayra/commit/180379f60f70f24980ea7b8135e744f93ed77f3f)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:33cdfcf9a74bbf2a13776f2d0f193409d6dcd478 -->
 ### Update version from 27 to 28
 
