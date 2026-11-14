@@ -2,6 +2,15 @@
 
 ## 2026-11-14
 
+<!-- kayra-commit:c180d735b252b2498ac1373ba34620d5a0e9e8df -->
+### Enhance M3U8 resolution and token extraction
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [c180d73](https://github.com/Kayracs3/Kayra/commit/c180d735b252b2498ac1373ba34620d5a0e9e8df)
+
+
+## 2026-11-14
+
 <!-- kayra-commit:c9eb4869185884c9a27f9df30f46065144e36662 -->
 ### Refactor stream resolution logic and add pichiveOrigin
 
