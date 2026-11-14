@@ -43,10 +43,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=asyawatch.com&sz=%size%",
-        "fileHash": "sha256-d0a5aa3be7d1bd6b71cc726909ed2aa14c932d6c844fc0f85a4d72faf4c66a91",
+        "fileHash": "sha256-d2bf95fad24fc7d0d40a358c221cb5c0d33706e135a260377db7a4e05cedb16d",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 72420,
+        "fileSize": 70342,
         "status": 1,
         "language": "tr",
         "authors": [
