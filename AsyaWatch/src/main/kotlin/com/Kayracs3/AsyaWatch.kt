@@ -1541,11 +1541,9 @@ class AsyaWatch : MainAPI() {
     /**
      * Iframe HTML'i window.NP_CONFIG = {...} bloğu barındırıyor. Bu blokta
      * "sources":[{"master":"https://four.pichive.online/nm.php?v=<token>"}]
-     * şeklinde video stream URL'si DÜZ METİN olarak duruyor. Regexle
-     * endpoint aramaya gerek yok — doğrudan bu alanı okuyoruz.
+     * şeklinde video stream URL'si DÜZ METİN olarak duruyor.
      */
     private fun findNpConfigMaster(html: String): String? {
-        // "master":"https://..." veya "master": "https://..."
         Regex("""(?i)"master"\s*:\s*"([^"]{20,})"""")
             .find(html)?.let { match ->
                 val raw = match.groupValues[1]
@@ -1556,7 +1554,6 @@ class AsyaWatch : MainAPI() {
                     return raw
                 }
             }
-        // Kaçışlı: "master":"https:\/\/..."
         val unescaped = html.replace("\\/", "/")
         Regex("""(?i)"master"\s*:\s*"([^"]{20,})"""")
             .find(unescaped)?.let { match ->
@@ -1565,6 +1562,84 @@ class AsyaWatch : MainAPI() {
                     return raw
                 }
             }
+        return null
+    }
+
+    /**
+     * Göreceli URL çözücü. base URL'nin path'ini dikkate alır.
+     */
+    private fun resolveRelativeUrl(relative: String, base: String): String? {
+        return runCatching {
+            val baseUri = URI(base)
+            val scheme = baseUri.scheme ?: "https"
+            val authority = baseUri.authority ?: return@runCatching null
+            val origin = "$scheme://$authority"
+            when {
+                relative.startsWith("http://", true) || relative.startsWith("https://", true) -> relative
+                relative.startsWith("//") -> "$scheme:$relative"
+                relative.startsWith("/") -> origin + relative
+                else -> {
+                    val basePath = baseUri.path.orEmpty()
+                    val lastSlash = basePath.lastIndexOf('/')
+                    val dir = if (lastSlash >= 0) basePath.substring(0, lastSlash + 1) else "/"
+                    origin + dir + relative
+                }
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * Master playlist (ana liste) ise içindeki alt medya playlist URL'sini
+     * döndürür. Medya playlist ise kendisini döndürür.
+     */
+    private suspend fun resolveMasterPlaylist(
+        masterUrl: String,
+        headers: Map<String, String>,
+        referer: String,
+        depth: Int = 0
+    ): String? {
+        if (depth > 2) return null
+        val response = runCatching {
+            app.get(masterUrl, headers = headers, referer = referer, allowRedirects = true)
+        }.getOrNull() ?: return null
+        if (!response.isSuccessful) return null
+        val body = response.text
+        if (!body.trimStart().startsWith("#EXTM3U")) return null
+
+        val lines = body.lines()
+        val hasStreamInf = lines.any { it.trim().startsWith("#EXT-X-STREAM-INF", ignoreCase = true) }
+        if (!hasStreamInf) {
+            return masterUrl
+        }
+
+        var nextIsUrl = false
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) {
+                nextIsUrl = true
+                continue
+            }
+            if (nextIsUrl && trimmed.isNotBlank() && !trimmed.startsWith("#")) {
+                val absolute = resolveRelativeUrl(trimmed, masterUrl) ?: continue
+                val subResponse = runCatching {
+                    app.get(absolute, headers = headers, referer = referer, allowRedirects = true)
+                }.getOrNull() ?: return absolute
+                if (subResponse.isSuccessful) {
+                    val subBody = subResponse.text
+                    if (subBody.trimStart().startsWith("#EXTM3U")) {
+                        val subHasStreamInf = subBody.lines().any {
+                            it.trim().startsWith("#EXT-X-STREAM-INF", ignoreCase = true)
+                        }
+                        if (!subHasStreamInf) {
+                            return absolute
+                        }
+                        val nested = resolveMasterPlaylist(absolute, headers, referer, depth + 1)
+                        if (nested != null) return nested
+                    }
+                }
+                return absolute
+            }
+        }
         return null
     }
 
@@ -1592,16 +1667,20 @@ class AsyaWatch : MainAPI() {
         }
         val finalBase = iframeResponse.url.takeIf { it.isNotBlank() } ?: iframeUrl
 
-        // 0) NP_CONFIG master — en güvenilir yol
+        // 0) NP_CONFIG master + master playlist çözümü
         findNpConfigMaster(html)?.let {
             Log.d("AsyaWatch", "FourPichive NP_CONFIG master bulundu: ${it.take(140)}...")
-            return it
+            val resolved = resolveMasterPlaylist(it, iframeHeaders, iframeUrl)
+            val finalUrl = resolved ?: it
+            Log.d("AsyaWatch", "FourPichive master çözüldü: ${finalUrl.take(140)}...")
+            return finalUrl
         }
 
-        // 1) Doğrudan endpoint (nl.php / nm.php / m.php / p.php / src.php)
+        // 1) Doğrudan endpoint
         findStreamEndpoint(html, finalBase)?.let {
             Log.d("AsyaWatch", "FourPichive endpoint bulundu (statik): ${it.take(140)}...")
-            return it
+            val resolved = resolveMasterPlaylist(it, iframeHeaders, iframeUrl)
+            return resolved ?: it
         }
 
         // 2) Packed JS
@@ -1613,11 +1692,13 @@ class AsyaWatch : MainAPI() {
             if (!unpacked.isNullOrBlank()) {
                 findNpConfigMaster(unpacked)?.let {
                     Log.d("AsyaWatch", "FourPichive NP_CONFIG master (unpacked): ${it.take(140)}...")
-                    return it
+                    val resolved = resolveMasterPlaylist(it, iframeHeaders, iframeUrl)
+                    return resolved ?: it
                 }
                 findStreamEndpoint(unpacked, finalBase)?.let {
                     Log.d("AsyaWatch", "FourPichive endpoint bulundu (unpacked): ${it.take(140)}...")
-                    return it
+                    val resolved = resolveMasterPlaylist(it, iframeHeaders, iframeUrl)
+                    return resolved ?: it
                 }
             }
         }
@@ -1632,15 +1713,18 @@ class AsyaWatch : MainAPI() {
             val body = callResponse.text
             if (body.trimStart().startsWith("#EXTM3U")) {
                 Log.d("AsyaWatch", "FourPichive inline API m3u8: $call")
-                return call
+                val resolved = resolveMasterPlaylist(call, iframeHeaders, iframeUrl)
+                return resolved ?: call
             }
             findNpConfigMaster(body)?.let {
                 Log.d("AsyaWatch", "FourPichive NP_CONFIG master (inline API): ${it.take(140)}...")
-                return it
+                val resolved = resolveMasterPlaylist(it, iframeHeaders, iframeUrl)
+                return resolved ?: it
             }
             findStreamEndpoint(body, call)?.let {
                 Log.d("AsyaWatch", "FourPichive endpoint bulundu (inline API): ${it.take(140)}...")
-                return it
+                val resolved = resolveMasterPlaylist(it, iframeHeaders, iframeUrl)
+                return resolved ?: it
             }
         }
 
@@ -1658,7 +1742,8 @@ class AsyaWatch : MainAPI() {
                 }.getOrNull() ?: continue
                 if (testResp.isSuccessful && testResp.text.trimStart().startsWith("#EXTM3U")) {
                     Log.d("AsyaWatch", "FourPichive subtitle-token→video başarı: $testUrl")
-                    return testUrl
+                    val resolved = resolveMasterPlaylist(testUrl, iframeHeaders, iframeUrl)
+                    return resolved ?: testUrl
                 }
             }
         }
@@ -1667,7 +1752,8 @@ class AsyaWatch : MainAPI() {
         Regex("""(?i)(?:https?:)?//[^"'<>\s]+?\.m3u8(?:\?[^"'<>\s]*)?""")
             .find(html)?.let {
                 Log.d("AsyaWatch", "FourPichive m3u8 fallback: ${it.value.take(140)}...")
-                return absoluteUrl(it.value, finalBase)
+                val resolved = resolveMasterPlaylist(it.value, iframeHeaders, iframeUrl)
+                return resolved ?: absoluteUrl(it.value, finalBase)
             }
 
         Log.w(
@@ -1708,9 +1794,6 @@ class AsyaWatch : MainAPI() {
         return result.take(10).toList()
     }
 
-    /**
-     * Endpoint araması (NP_CONFIG bulunamazsa yedek). nm.php dahil.
-     */
     private fun findStreamEndpoint(text: String, base: String): String? {
         Regex(
             """(?i)(?:https?:)?//[^"'<>\s]{0,200}?(?:four\.pichive\.online|pichive\.online)/(?:nl|nm|m|p|src|video|player|stream)\.php\?v=[A-Za-z0-9_\-]{20,}"""
@@ -1870,12 +1953,10 @@ class AsyaWatch : MainAPI() {
             val candidate = absoluteUrl(raw, referer) ?: return
             if (!seenCandidates.add(candidate)) return
 
-            // HTML gömülü yanlış URL'leri atla
             if (candidate.startsWith("<", true) || candidate.contains("<!doctype", true)) {
                 return
             }
 
-            // Bare domain (path yok) → 403, boşuna istek atma
             val candidatePath = runCatching { URI(candidate).path.orEmpty() }.getOrDefault("")
             if (candidatePath.isBlank() || candidatePath == "/") {
                 return
@@ -1919,7 +2000,6 @@ class AsyaWatch : MainAPI() {
             val isFourPichive = candidateHost == "four.pichive.online" ||
                 candidateHost?.endsWith(".four.pichive.online") == true
 
-            // ---- FourPichive özel çıkarıcı ----
             if (isFourPichive) {
                 val streamUrl = extractFourPichiveStream(candidate, referer)
                 if (!streamUrl.isNullOrBlank() && emittedUrls.add(streamUrl)) {
@@ -1951,29 +2031,6 @@ class AsyaWatch : MainAPI() {
                     found = true
                     Log.d("AsyaWatch", "FourPichive M3U8 verildi: ${streamUrl.take(140)}...")
                     return
-                }
-
-                // Fallback: aynı v= token'ı pichive.online üzerinde dene
-                val vToken = runCatching {
-                    URI(candidate).rawQuery.orEmpty()
-                        .split('&')
-                        .firstOrNull { it.startsWith("v=") }
-                        ?.substringAfter("v=", "")
-                        .orEmpty()
-                }.getOrDefault("")
-
-                if (vToken.isNotBlank()) {
-                    val pichiveUrl = "https://pichive.online/iframe.php?v=$vToken"
-                    Log.d("AsyaWatch", "FourPichive fallback: pichive.online → $pichiveUrl")
-                    try {
-                        loadExtractor(pichiveUrl, referer, emitSubtitle) { link ->
-                            if (emittedUrls.add(link.url)) callback(link)
-                            found = true
-                        }
-                    } catch (e: Exception) {
-                        Log.w("AsyaWatch", "pichive.online fallback hatası: ${e.message}")
-                    }
-                    if (found) return
                 }
 
                 Log.w("AsyaWatch", "FourPichive stream bulunamadı, genel extractor denenecek.")
