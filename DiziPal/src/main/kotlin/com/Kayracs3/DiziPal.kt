@@ -1089,11 +1089,11 @@ class DiziPal : MainAPI() {
     }
 
     private fun decryptRmKPlayer(payload: String): String? {
-        val ciphertext = Regex("""["']ciphertext["']\\s*:\\s*["']([^"']+)["']""")
+        val ciphertext = Regex("""["']ciphertext["']\s*:\s*["']([^"']+)["']""")
             .find(payload)?.groupValues?.getOrNull(1) ?: return null
-        val ivHex = Regex("""["']iv["']\\s*:\\s*["']([^"']+)["']""")
+        val ivHex = Regex("""["']iv["']\s*:\s*["']([^"']+)["']""")
             .find(payload)?.groupValues?.getOrNull(1) ?: return null
-        val saltHex = Regex("""["']salt["']\\s*:\\s*["']([^"']+)["']""")
+        val saltHex = Regex("""["']salt["']\s*:\s*["']([^"']+)["']""")
             .find(payload)?.groupValues?.getOrNull(1) ?: return null
 
         fun hexToBytes(hex: String): ByteArray? {
@@ -1114,7 +1114,7 @@ class DiziPal : MainAPI() {
 
         return runCatching {
             val encryptedBytes = Base64.decode(
-                ciphertext.replace("\\\\/", "/"),
+                ciphertext.replace("\\/", "/"),
                 Base64.DEFAULT
             )
             val password = (
@@ -1132,7 +1132,7 @@ class DiziPal : MainAPI() {
                 IvParameterSpec(iv)
             )
             val decoded = String(cipher.doFinal(encryptedBytes), Charsets.UTF_8)
-                .replace("\\\\/", "/")
+                .replace("\\/", "/")
                 .trim()
 
             when {
