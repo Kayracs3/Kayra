@@ -594,7 +594,6 @@ class Flix : MainAPI() {
                             ) {
                                 this.referer = "$mainUrl/"       // ANA SAYFA
                                 this.headers = headers
-                                this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
@@ -670,7 +669,6 @@ class Flix : MainAPI() {
                             ) {
                                 this.referer = "$mainUrl/"
                                 this.headers = headers
-                                if (isHls) this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
