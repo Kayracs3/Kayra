@@ -104,9 +104,6 @@ class AsyaWatch : MainAPI() {
     private data class SourceItem(val raw: String, val quality: String)
 
     @Volatile private var rateLimitedUntil = 0L
-    @Volatile private var lastPosterFallbackAt = 0L
-    private val posterFallbackCache = ConcurrentHashMap<String, String>()
-    private val noPosterSentinel = "__NO_ASYAWATCH_POSTER__"
     private val powCache = ConcurrentHashMap<String, Pair<Long, String>>()
 
     private fun isRateLimitResponse(code: Int, body: String): Boolean {
@@ -122,15 +119,6 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun isCoolingDown(): Boolean = System.currentTimeMillis() < rateLimitedUntil
-
-    private fun titleFromUrl(url: String): String {
-        val path = runCatching { URI(url).path.orEmpty() }.getOrDefault(url.substringBefore('?'))
-        val slug = path.trimEnd('/').substringAfterLast('/').substringBeforeLast('.', missingDelimiterValue = path.substringAfterLast('/'))
-        return slug.replace(Regex("""[-_+]+"""), " ")
-            .replace(Regex("""\s+"""), " ")
-            .trim()
-            .ifBlank { "AsyaWatch içeriği" }
-    }
 
     private fun field(obj: JSONObject?, vararg keys: String): String? {
         if (obj == null) return null
@@ -204,31 +192,14 @@ class AsyaWatch : MainAPI() {
         var value = raw?.trim().orEmpty()
         if (value.isBlank()) return null
         value = value
-            .replace("\\/", "/")
-            .replace("&amp;", "&")
-            .replace("\\u0026", "&")
-            .replace("\\u003d", "=")
-            .trim()
-            .trim('"', '\'')
+            .replace("\\/", "/").replace("&amp;", "&")
+            .replace("\\u0026", "&").replace("\\u003d", "=")
+            .trim().trim('"', '\'')
 
-        if (Regex("""(?i)^(?:[a-z0-9-]+\.)*macellan\.online(?=[:/?#]|$)""").containsMatchIn(value)) {
-            value = "https://$value"
-        }
-
-        val macellanPosterPath = Regex(
-            """(?i)^/?images/\d+/\d+/\d+/{1,2}tt\d+-poster-\d+\.(?:jpe?g|png|webp)(?:[?#].*)?$"""
-        )
-        if (!value.startsWith("http://", true) && !value.startsWith("https://", true) &&
-            macellanPosterPath.matches(value)
-        ) {
-            value = "https://file.macellan.online/${value.trimStart('/')}"
-        }
-
-        if (value.startsWith("https%3A%2F%2F", true)) {
+        if (value.startsWith("https%3A%2F%2F", true))
             value = value.replaceFirst("https%3A%2F%2F", "https://", true)
-        } else if (value.startsWith("http%3A%2F%2F", true)) {
+        else if (value.startsWith("http%3A%2F%2F", true))
             value = value.replaceFirst("http%3A%2F%2F", "http://", true)
-        }
         return absoluteUrl(value)
     }
 
@@ -236,51 +207,28 @@ class AsyaWatch : MainAPI() {
         if (value == null || depth > 5) return null
         val imageKeys = listOf(
             "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
-            "object_poster", "objectPoster", "poster_image", "posterImage",
-            "poster", "img", "p", "sq", "wide", "poster_path", "posterPath", "image_url", "imageUrl",
-            "image_path", "imagePath", "thumbnail_url", "thumbnailUrl",
-            "thumbnail_path", "thumbnailPath", "thumbnail", "cover_url", "coverUrl",
-            "cover_image", "coverImage", "cover", "image", "thumb", "picture", "photo", "src"
+            "poster", "img", "p", "sq", "wide", "image_url", "imageUrl",
+            "thumbnail", "cover_url", "cover", "image", "thumb", "photo", "src"
         )
-
         if (value is JSONObject) {
             for (key in imageKeys) {
                 val candidate = value.opt(key)
-                if (candidate is String) {
-                    imageUrl(candidate)?.let { return it }
-                } else if (candidate is JSONObject || candidate is JSONArray) {
+                if (candidate is String) imageUrl(candidate)?.let { return it }
+                else if (candidate is JSONObject || candidate is JSONArray)
                     imageFromJson(candidate, depth + 1)?.let { return it }
-                }
-            }
-            val keys = value.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                val child = value.opt(key) ?: continue
-                val normalizedKey = key.lowercase()
-                val isImageField = listOf("poster", "image", "thumbnail", "thumb", "cover", "picture", "photo")
-                    .any { normalizedKey.contains(it) }
-                if (isImageField && child is String) {
-                    imageUrl(child)?.let { return it }
-                }
-                if (child is JSONObject || child is JSONArray) {
-                    imageFromJson(child, depth + 1)?.let { return it }
-                }
             }
         } else if (value is JSONArray) {
-            for (index in 0 until value.length()) {
+            for (index in 0 until value.length())
                 imageFromJson(value.opt(index), depth + 1)?.let { return it }
-            }
-        } else if (value is String) {
-            return imageUrl(value)
-        }
+        } else if (value is String) return imageUrl(value)
         return null
     }
 
     private fun imageFromElement(element: org.jsoup.nodes.Element, base: String): String? {
         val attributes = listOf(
-            "data-poster", "data-cover", "data-thumbnail", "data-thumb",
-            "data-original", "data-original-src", "data-lazy-src", "data-src",
-            "data-srcset", "srcset", "content", "href", "src"
+            "data-poster", "data-cover", "data-thumbnail", "data-original",
+            "data-original-src", "data-lazy-src", "data-src", "data-srcset",
+            "srcset", "content", "href", "src"
         )
         for (attribute in attributes) {
             val raw = element.attr(attribute).trim()
@@ -312,131 +260,6 @@ class AsyaWatch : MainAPI() {
         return parseObject(decodeBase64Text(raw)) ?: parseObject(raw)
     }
 
-    private fun nextFlightPayloads(document: Document): List<String> {
-        val result = ArrayList<String>()
-        val marker = "self.__next_f.push([1,"
-        for (script in document.select("script")) {
-            val source = script.data().ifBlank { script.html() }
-            var position = 0
-            while (position < source.length) {
-                val markerIndex = source.indexOf(marker, position)
-                if (markerIndex < 0) break
-
-                var quoteStart = markerIndex + marker.length
-                while (quoteStart < source.length && source[quoteStart].isWhitespace()) quoteStart++
-                if (quoteStart >= source.length || source[quoteStart] != '"') {
-                    position = quoteStart + 1
-                    continue
-                }
-
-                var quoteEnd = quoteStart + 1
-                var escaped = false
-                while (quoteEnd < source.length) {
-                    val char = source[quoteEnd]
-                    if (escaped) {
-                        escaped = false
-                    } else if (char == '\\') {
-                        escaped = true
-                    } else if (char == '"') {
-                        break
-                    }
-                    quoteEnd++
-                }
-
-                if (quoteEnd < source.length) {
-                    val literal = source.substring(quoteStart, quoteEnd + 1)
-                    val decoded = runCatching {
-                        JSONArray("[$literal]").optString(0)
-                    }.getOrNull()
-                    if (!decoded.isNullOrBlank()) result.add(decoded)
-                    position = quoteEnd + 1
-                } else {
-                    break
-                }
-            }
-        }
-        return result
-    }
-
-    private fun jsonObjectAfterKey(source: String, key: String): JSONObject? {
-        val token = "\"$key\""
-        var searchFrom = 0
-        while (searchFrom < source.length) {
-            val keyIndex = source.indexOf(token, searchFrom)
-            if (keyIndex < 0) return null
-
-            val colon = source.indexOf(':', keyIndex + token.length)
-            if (colon < 0) return null
-            var start = colon + 1
-            while (start < source.length && source[start].isWhitespace()) start++
-            if (start >= source.length || source[start] != '{') {
-                searchFrom = keyIndex + token.length
-                continue
-            }
-
-            var depth = 0
-            var inString = false
-            var escaped = false
-            var end = start
-            while (end < source.length) {
-                val char = source[end]
-                if (inString) {
-                    if (escaped) {
-                        escaped = false
-                    } else if (char == '\\') {
-                        escaped = true
-                    } else if (char == '"') {
-                        inString = false
-                    }
-                } else {
-                    when (char) {
-                        '"' -> inString = true
-                        '{' -> depth++
-                        '}' -> {
-                            depth--
-                            if (depth == 0) {
-                                return runCatching {
-                                    JSONObject(source.substring(start, end + 1))
-                                }.getOrNull()
-                            }
-                        }
-                    }
-                }
-                end++
-            }
-            return null
-        }
-        return null
-    }
-
-    private fun nextFlightObject(document: Document, key: String): JSONObject? {
-        for (payload in nextFlightPayloads(document)) {
-            jsonObjectAfterKey(payload, key)?.let { return it }
-        }
-        return null
-    }
-
-    private fun mergeDetailObjects(vararg sources: JSONObject?): JSONObject {
-        val merged = JSONObject()
-        for (source in sources) {
-            if (source == null) continue
-            val keys = source.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                val value = source.opt(key) ?: continue
-                val current = merged.opt(key)
-                val shouldFill = !merged.has(key) ||
-                    current == null ||
-                    current == JSONObject.NULL ||
-                    (current is String && current.isBlank()) ||
-                    (current is JSONArray && current.length() == 0 &&
-                        value is JSONArray && value.length() > 0)
-                if (shouldFill) merged.put(key, value)
-            }
-        }
-        return merged
-    }
-
     private suspend fun getPageData(url: String): PageData {
         if (isCoolingDown()) return PageData(Jsoup.parse("", url), null, isRateLimited = true)
 
@@ -457,30 +280,17 @@ class AsyaWatch : MainAPI() {
     }
 
     private suspend fun postJson(url: String): JSONObject? {
-        val endpoint = url.substringBefore('?').removePrefix(mainUrl)
-        if (isCoolingDown()) {
-            Log.w("AsyaWatch", "API isteği soğuma süresi nedeniyle atlandı: " + endpoint)
-            return null
-        }
+        if (isCoolingDown()) return null
         val response = runCatching {
             app.post(url, headers = apiHeaders, referer = "$mainUrl/")
-        }.onFailure {
-            Log.e("AsyaWatch", "API bağlantı hatası: " + endpoint + " (" + it.javaClass.simpleName + ": " + it.message + ")")
         }.getOrNull() ?: return null
         val body = response.text
         if (isRateLimitResponse(response.code, body)) {
             noteRateLimit()
             return null
         }
-        if (!response.isSuccessful) {
-            Log.e("AsyaWatch", "API HTTP " + response.code + " - " + endpoint)
-            return null
-        }
-        val decoded = decodeApiResponse(body)
-        if (decoded != null) {
-            Log.d("AsyaWatch", "API yanıtı - " + endpoint)
-        }
-        return decoded
+        if (!response.isSuccessful) return null
+        return decodeApiResponse(body)
     }
 
     private fun searchResponseFrom(item: JSONObject, forceSeries: Boolean = false): SearchResponse? {
@@ -488,20 +298,15 @@ class AsyaWatch : MainAPI() {
         val url = absoluteUrl(rawUrl) ?: return null
         val originalTitle = field(item, "original_title", "object_name", "title", "name", "t") ?: return null
         val cultureTitle = field(item, "culture_title", "cultureTitle")
-        val title = if (!cultureTitle.isNullOrBlank() && !cultureTitle.equals(originalTitle, true)) {
-            "$originalTitle - $cultureTitle"
-        } else originalTitle
+        val title = if (!cultureTitle.isNullOrBlank() && !cultureTitle.equals(originalTitle, true))
+            "$originalTitle - $cultureTitle" else originalTitle
         val poster = imageFromJson(item)
-            ?: imageUrl(field(
-                item,
-                "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
-                "poster", "img", "p", "sq", "wide", "image_url", "imageUrl", "thumbnail", "thumbnail_url", "cover"
-            ))
-        val score = scoreFrom(field(item, "imdb_point", "imdbPoint", "score", "rating", "im", "sc"))
+            ?: imageUrl(field(item, "poster_url", "poster", "img", "image_url", "thumbnail", "cover"))
+        val score = scoreFrom(field(item, "imdb_point", "score", "rating", "sc"))
         val type = field(item, "used_type", "type", "content_type", "kind").orEmpty()
         val isSeries = when {
             type.contains("movie", true) || type.contains("film", true) -> false
-            type.contains("series", true) || type.contains("dizi", true) || type.contains("tv", true) -> true
+            type.contains("series", true) || type.contains("dizi", true) -> true
             else -> forceSeries || url.contains("/dizi/", true)
         }
 
@@ -519,30 +324,17 @@ class AsyaWatch : MainAPI() {
     }
 
     private suspend fun getExploreJson(url: String): JSONObject? {
-        val endpoint = url.substringBefore('?').removePrefix(mainUrl)
         if (isCoolingDown()) return null
-
         val response = runCatching {
             app.get(url, headers = apiHeaders, referer = "$mainUrl/", allowRedirects = true)
         }.getOrNull() ?: return null
-
         val body = response.text
         if (isRateLimitResponse(response.code, body)) {
             noteRateLimit()
             return null
         }
         if (!response.isSuccessful) return null
-
-        val root = parseObject(body) ?: return null
-        if (!root.optBoolean("ok", true)) return null
-
-        val result = root.optJSONObject("result")
-        val items = result?.optJSONArray("items")
-        if (items != null) {
-            Log.d("AsyaWatch", "Keşfet - " + endpoint + "; kayıt=" + items.length() +
-                "; sayfa=" + result.optInt("page", 1) + "/" + result.optInt("pages", 1))
-        }
-        return root
+        return parseObject(body)
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
@@ -566,12 +358,12 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        val completedResults = fillMissingPosters(results)
         val totalPages = resultNode?.optInt("pages", -1) ?: -1
         val hasNext = if (totalPages >= 0) page < totalPages
-            else completedResults.size >= (resultNode?.optInt("pageSize", 42) ?: 42)
+            else results.size >= 42
 
-        return newHomePageResponse(request, completedResults, hasNext = hasNext)
+        Log.d("AsyaWatch", "Ana sayfa: ${request.name} - ${results.size} sonuç")
+        return newHomePageResponse(request, results, hasNext = hasNext)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -579,115 +371,14 @@ class AsyaWatch : MainAPI() {
         val root = postJson("$mainUrl/api/bg/searchcontent?searchterm=$encoded") ?: return emptyList()
         val items = arrayField(root, "result") ?: return emptyList()
         val results = ArrayList<SearchResponse>()
-        val seen = HashSet<String>()
         for (index in 0 until items.length()) {
             val item = items.optJSONObject(index) ?: continue
-            val response = searchResponseFrom(item) ?: continue
-            if (seen.add(response.url)) results.add(response)
+            searchResponseFrom(item)?.let { results.add(it) }
         }
-        return fillMissingPosters(results)
+        return results
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
-
-    private fun detailTitle(content: JSONObject?, document: Document, pageUrl: String): String {
-        val original = field(content, "original_title", "originalTitle", "title", "t", "name")
-        val culture = field(content, "culture_title", "cultureTitle")
-        if (!original.isNullOrBlank() && !original.contains("Error 1015", true)) {
-            return if (!culture.isNullOrBlank() && !culture.equals(original, true)) {
-                "$original - $culture"
-            } else original
-        }
-        return document.selectFirst("h1")?.text()?.trim()
-            ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
-            ?: titleFromUrl(pageUrl)
-    }
-
-    private fun detailPoster(content: JSONObject?, document: Document): String? {
-        imageFromJson(content)?.let { return it }
-
-        for (selector in listOf(
-            "meta[property=og:image]", "meta[name=twitter:image]",
-            "meta[property=og:image:secure_url]", "link[rel=image_src]"
-        )) {
-            document.selectFirst(selector)?.let { el ->
-                imageFromElement(el, mainUrl)?.let { return it }
-            }
-        }
-
-        for (selector in listOf(
-            ".poster img", ".movie-poster img", ".drama-poster img",
-            "img[class*=poster]", "img[data-poster]"
-        )) {
-            for (el in document.select(selector)) {
-                imageFromElement(el, mainUrl)?.let { return it }
-            }
-        }
-        return null
-    }
-
-    private suspend fun fillMissingPosters(items: List<SearchResponse>): List<SearchResponse> {
-        if (items.none { it.posterUrl.isNullOrBlank() }) return items
-        for (item in items) {
-            if (!item.posterUrl.isNullOrBlank()) continue
-            val cached = posterFallbackCache[item.url]
-            if (cached != null) {
-                if (cached != noPosterSentinel) item.posterUrl = cached
-                continue
-            }
-            if (isCoolingDown()) continue
-            val page = runCatching { getPageData(item.url) }.getOrNull() ?: continue
-            if (page.isRateLimited) continue
-            val poster = detailPoster(objectField(page.secureData, "contentItem"), page.document)
-            posterFallbackCache[item.url] = poster ?: noPosterSentinel
-            if (!poster.isNullOrBlank()) item.posterUrl = poster
-        }
-        return items
-    }
-
-    private fun detailYear(content: JSONObject?, document: Document): Int? {
-        field(content, "release_year", "year", "y")?.toIntOrNull()?.let { return it }
-        return Regex("""\b(?:19|20)\d{2}\b""").find(document.text())?.value?.toIntOrNull()
-    }
-
-    private fun detailTags(content: JSONObject?): List<String>? {
-        val genreArray = arrayField(content, "g", "genres", "categories")
-        if (genreArray != null) {
-            val values = (0 until genreArray.length()).mapNotNull {
-                genreArray.optString(it).trim().takeIf(String::isNotBlank)
-            }.distinct()
-            if (values.isNotEmpty()) return values
-        }
-        val raw = field(content, "categories", "tags", "genres", "g") ?: return null
-        return raw.removePrefix("[").removeSuffix("]").split(',', '|')
-            .map { it.trim().trim('"', '\'') }
-            .filter { it.isNotBlank() && !it.equals("null", true) }
-            .distinct().takeIf { it.isNotEmpty() }
-    }
-
-    private fun detailActors(related: JSONObject?): List<Actor> {
-        val rows = arrayField(related, "cast", "casts")
-            ?: arrayField(objectField(related, "getMovieCastsById"), "result")
-            ?: return emptyList()
-        val actors = ArrayList<Actor>()
-        val seen = HashSet<String>()
-        for (index in 0 until rows.length()) {
-            val item = rows.optJSONObject(index) ?: continue
-            val actorName = field(item, "name", "actor_name") ?: continue
-            if (seen.add(actorName)) {
-                actors.add(Actor(actorName, imageUrl(field(item, "cast_image", "image", "poster", "ph"))))
-            }
-        }
-        return actors
-    }
-
-    private fun detailTrailer(related: JSONObject?): String? {
-        val rows = arrayField(objectField(related, "getContentTrailers"), "result") ?: return null
-        for (i in 0 until rows.length()) {
-            field(rows.optJSONObject(i), "raw_url", "url")?.let { return absoluteUrl(it) }
-        }
-        return null
-    }
 
     private fun parseEpisodesFromDocument(document: Document, poster: String?, pageUrl: String): List<Episode> {
         val result = LinkedHashMap<String, Episode>()
@@ -719,21 +410,12 @@ class AsyaWatch : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val page = getPageData(url)
         val root = page.secureData
-        val flightDrama = nextFlightObject(page.document, "drama")
-        val flightFilm = nextFlightObject(page.document, "film")
-        val legacyContent = objectField(root, "contentItem")
-        val content = mergeDetailObjects(flightDrama, flightFilm, legacyContent)
-        val related = objectField(root, "RelatedResults") ?: content
-
+        val content = mergeDetailObjects(root)
         val title = detailTitle(content, page.document, url)
         val poster = detailPoster(content, page.document)
         val description = field(content, "syn", "description", "plot", "overview")
-            ?: page.document.selectFirst("meta[name=description]")?.attr("content")
-        val year = detailYear(content, page.document)
-        val score = scoreFrom(field(content, "imdb_point", "score", "rating", "sc"))
-        val tags = detailTags(content)
-        val actors = detailActors(content).ifEmpty { detailActors(related) }
-        val trailer = detailTrailer(related)
+        val year = field(content, "release_year", "year")?.toIntOrNull()
+        val score = scoreFrom(field(content, "imdb_point", "score", "rating"))
         val episodes = parseEpisodesFromDocument(page.document, poster, url)
         val isSeries = url.contains("/dizi/", true) || episodes.isNotEmpty()
 
@@ -744,98 +426,91 @@ class AsyaWatch : MainAPI() {
                 posterUrl = poster
                 plot = description
                 this.year = year
-                this.tags = tags
                 this.score = score
-                addActors(actors)
-                addTrailer(trailer)
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, url) {
                 posterUrl = poster
                 plot = description
                 this.year = year
-                this.tags = tags
                 this.score = score
-                addActors(actors)
-                addTrailer(trailer)
             }
         }
+    }
+
+    private fun mergeDetailObjects(root: JSONObject?): JSONObject {
+        val merged = JSONObject()
+        objectField(root, "contentItem")?.let { source ->
+            val keys = source.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                merged.put(key, source.opt(key))
+            }
+        }
+        return merged
+    }
+
+    private fun detailTitle(content: JSONObject?, document: Document, pageUrl: String): String {
+        field(content, "original_title", "title", "name")?.let { return it }
+        return document.selectFirst("h1")?.text()?.trim()
+            ?: document.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
+            ?: pageUrl.substringAfterLast('/')
+    }
+
+    private fun detailPoster(content: JSONObject?, document: Document): String? {
+        imageFromJson(content)?.let { return it }
+        for (selector in listOf("meta[property=og:image]", ".poster img", "img[class*=poster]")) {
+            document.selectFirst(selector)?.let { imageFromElement(it, mainUrl)?.let { url -> return url } }
+        }
+        return null
     }
 
     private fun looksLikePlayer(url: String): Boolean {
         val value = url.lowercase()
         return Regex("""\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(value) ||
-            listOf(
-                "embed", "player", "video", "stream", "watch", "iframe", "hls",
-                "filemoon", "vidmoly", "youtube", "youtu.be", "vimeo", "dood",
-                "streamwish", "voe.sx", "ok.ru", "sibnet", "mixdrop", "uqload",
-                "mp4upload", "asianload", "googlevideo", "/e/",
-                "four.pichive.online", "pichive.online", "nm.php", "iframe.php"
-            ).any { value.contains(it) }
+            listOf("iframe", "player", "four.pichive.online", "pichive.online", "nm.php", "iframe.php")
+                .any { value.contains(it) }
     }
 
-    // =====================================================================
-    // ⭐ GENİŞLETİLMİŞ extractCandidates — 27 adaya geri dön
-    // =====================================================================
     private fun extractCandidates(raw: String, base: String): List<String> {
         val result = LinkedHashSet<String>()
-        val normalized = raw.replace("\\/", "/")
-            .replace("\\u0026", "&")
-            .replace("&amp;", "&")
-            .replace("\\u003d", "=")
+        val normalized = raw.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&")
 
         val document = runCatching { Jsoup.parse(normalized, base) }.getOrNull()
-        val attributes = listOf(
-            "src", "data-src", "data-lazy-src", "data-url", "data-embed",
-            "data-player", "data-video", "data-file", "data-iframe", "href",
-            "data-stream", "data-source", "data-hls", "data-m3u8"
-        )
 
-        // 1. iframe, video, source, embed etiketlerinden
+        // 1. iframe, video, source etiketleri
         document?.select("iframe, video, source, embed")?.forEach { element ->
-            for (attribute in attributes) {
-                val candidate = absoluteUrl(element.attr(attribute), base) ?: continue
-                result.add(candidate)
+            for (attr in listOf("src", "data-src", "data-lazy-src", "data-url", "data-embed", "href")) {
+                absoluteUrl(element.attr(attr), base)?.let { result.add(it) }
             }
         }
 
-        // 2. data-* attribute'lu tüm element'lerden
-        document?.select(
-            "[data-src], [data-lazy-src], [data-url], [data-embed], [data-player], " +
-            "[data-video], [data-file], [data-iframe], [data-stream], [data-source], " +
-            "[data-hls], [data-m3u8]"
-        )?.forEach { element ->
-            for (attribute in attributes) {
-                val candidate = absoluteUrl(element.attr(attribute), base) ?: continue
-                if (looksLikePlayer(candidate)) result.add(candidate)
-            }
-        }
-
-        // 3. Ham string içinde tüm URL'leri yakala (regex - çok önemli!)
+        // 2. Ham stringdeki URL'ler
         Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+""").findAll(normalized).forEach { match ->
-            val candidate = absoluteUrl(match.value.trimEnd('\\', ')', ']', ',', ';'), base)
+            val candidate = absoluteUrl(match.value.trimEnd('\\', ')', ']', ',', ';', '"'), base)
                 ?: return@forEach
             if (looksLikePlayer(candidate)) result.add(candidate)
         }
 
-        // 4. JSON içindeki "url", "src", "file", "master" alanları
-        Regex("""(?i)(?:src|url|file|source|stream|hls|m3u8|master|iframe)\s*[:=]\s*["']([^"']+)["']""")
+        // 3. JSON alanları
+        Regex("""(?i)(?:src|url|file|source|stream|iframe|master)\s*[:=]\s*["']([^"']+)["']""")
             .findAll(normalized).forEach { match ->
-                val candidate = absoluteUrl(match.groupValues[1], base) ?: return@forEach
-                if (looksLikePlayer(candidate)) result.add(candidate)
+                absoluteUrl(match.groupValues[1], base)?.let {
+                    if (looksLikePlayer(it)) result.add(it)
+                }
             }
 
-        // 5. Script tag'lerinin içeriğini ayrıca tara (JS ile oluşturulan URL'ler)
+        // 4. Script içeriklerinden
         document?.select("script")?.forEach { script ->
             val scriptContent = script.data().ifBlank { script.html() }
             if (scriptContent.isBlank()) return@forEach
-            val normalizedScript = scriptContent.replace("\\/", "/").replace("\\u0026", "&")
-
-            Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+""").findAll(normalizedScript).forEach { match ->
-                val candidate = absoluteUrl(match.value.trimEnd('\\', ')', ']', ',', ';', '"'), base)
-                    ?: return@forEach
-                if (looksLikePlayer(candidate)) result.add(candidate)
-            }
+            Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+""")
+                .findAll(scriptContent.replace("\\/", "/"))
+                .forEach { match ->
+                    absoluteUrl(match.value.trimEnd('\\', ')', ']', ',', ';', '"'), base)?.let {
+                        if (looksLikePlayer(it)) result.add(it)
+                    }
+                }
         }
 
         return result.toList()
@@ -844,8 +519,7 @@ class AsyaWatch : MainAPI() {
     private fun isDirectMedia(url: String): Boolean =
         Regex("""(?i)\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(url)
 
-    private fun isNmPhpUrl(url: String): Boolean =
-        url.contains("/nm.php", true)
+    private fun isNmPhpUrl(url: String): Boolean = url.contains("/nm.php", true)
 
     private fun qualityValue(label: String, url: String): Int {
         val q = Regex("""(?i)(2160|1080|720|480|360|240|4k)""")
@@ -858,6 +532,49 @@ class AsyaWatch : MainAPI() {
             "360" -> Qualities.P360.value
             "240" -> Qualities.P240.value
             else -> Qualities.Unknown.value
+        }
+    }
+
+    // =====================================================================
+    // TEŞHİS: NP_CONFIG tam logla
+    // =====================================================================
+    private fun logNpConfig(npConfig: JSONObject?) {
+        if (npConfig == null) {
+            Log.d("AsyaWatch", "📋 NP_CONFIG null")
+            return
+        }
+        val pretty = runCatching { npConfig.toString(2) }.getOrNull() ?: npConfig.toString()
+        Log.d("AsyaWatch", "📋 NP_CONFIG tam: ${pretty.take(3000)}")
+
+        val keys = npConfig.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = npConfig.opt(key)
+            if (value != null && value != JSONObject.NULL) {
+                Log.d("AsyaWatch", "   NP_CONFIG.$key = ${value.toString().take(200)}")
+            }
+        }
+    }
+
+    // =====================================================================
+    // TEŞHİS: HTML'de PoW ile ilgili JS satırlarını logla
+    // =====================================================================
+    private fun logPowJs(html: String) {
+        val patterns = listOf(
+            "salt", "nonce", "difficulty", "0xFFF", "0xfff", "4095", "65535",
+            "SHA-256", "SHA256", "sha256", "MD5", "md5",
+            "substring", "substr", "slice", "toLowerCase", "toString(16)",
+            "& 0xFFF", "& 4095", "& 0xFF", "& 255", "& 0xFFFF",
+            "leading", "zero", "hash", "proof", "work"
+        )
+        for (pattern in patterns) {
+            val idx = html.indexOf(pattern, ignoreCase = true)
+            if (idx >= 0) {
+                val start = maxOf(0, idx - 100)
+                val end = minOf(html.length, idx + 200)
+                val context = html.substring(start, end).replace("\n", " ").replace(Regex("\\s+"), " ")
+                Log.d("AsyaWatch", "🔍 '$pattern' → ...$context...")
+            }
         }
     }
 
@@ -886,8 +603,7 @@ class AsyaWatch : MainAPI() {
             if ((value and 0xFFF) == 0) {
                 val result = i.toLong() to label
                 powCache[cacheKey] = result
-                if (powCache.size > 32) powCache.keys.firstOrNull { it != cacheKey }?.let(powCache::remove)
-                Log.d("AsyaWatch", "PoW bulundu: n=$i ($label)")
+                Log.d("AsyaWatch", "PoW bulundu: n=$i ($label) salt=$powSalt")
                 return result
             }
         }
@@ -956,8 +672,7 @@ class AsyaWatch : MainAPI() {
             val label = "$alg-$variantName"
 
             val correctUrl = if (vToken.isNotBlank())
-                "$baseUrl?v=$vToken&p=$powValue"
-            else nmUrl
+                "$baseUrl?v=$vToken&p=$powValue" else nmUrl
 
             val headers = browserLikeHeaders(iframeUrl) + buildMap {
                 put("X-PoW", powValue.toString())
@@ -969,9 +684,9 @@ class AsyaWatch : MainAPI() {
             }.getOrNull()
 
             if (directResp != null) {
-                Log.d("AsyaWatch", "PoW [$label] (direct): HTTP ${directResp.code}")
+                Log.d("AsyaWatch", "PoW [$label] (direct): HTTP ${directResp.code}, bodyLen=${directResp.text.length}")
                 if (directResp.code == 200 && directResp.text.startsWith("#EXTM3U")) {
-                    Log.d("AsyaWatch", "✔ PoW BAŞARILI (direct)")
+                    Log.d("AsyaWatch", "✔ PoW BAŞARILI (direct) → M3U8")
                     return correctUrl
                 }
             }
@@ -990,7 +705,7 @@ class AsyaWatch : MainAPI() {
                 if (wvResp.code == 200) {
                     val body = wvResp.text.trim()
                     if (body.startsWith("#EXTM3U")) {
-                        Log.d("AsyaWatch", "✔ PoW BAŞARILI (WebView)")
+                        Log.d("AsyaWatch", "✔ PoW BAŞARILI (WebView) → M3U8")
                         return correctUrl
                     }
                 }
@@ -1005,16 +720,8 @@ class AsyaWatch : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        Log.d("AsyaWatch", "🔥 FourPichive extractor başladı: ${iframeUrl.take(100)}")
+        Log.d("AsyaWatch", "🔥 FourPichive: ${iframeUrl.take(100)}")
         val headers = browserLikeHeaders(iframeUrl)
-
-        runCatching {
-            app.get(
-                "https://four.pichive.online/",
-                headers = browserLikeHeaders("https://four.pichive.online/"),
-                interceptor = fourPichiveResolver
-            )
-        }
 
         val response = runCatching {
             app.get(
@@ -1023,10 +730,7 @@ class AsyaWatch : MainAPI() {
                 referer = referer,
                 allowRedirects = true
             )
-        }.getOrNull() ?: run {
-            Log.e("AsyaWatch", "iframe isteği başarısız")
-            return false
-        }
+        }.getOrNull() ?: return false
 
         if (!response.isSuccessful) {
             Log.e("AsyaWatch", "iframe HTTP ${response.code}")
@@ -1036,16 +740,23 @@ class AsyaWatch : MainAPI() {
         val html = response.text
         if (html.isBlank()) return false
 
-        Log.d("AsyaWatch", "iframe HTML: ${html.length}, NP_CONFIG: ${html.contains("NP_CONFIG")}")
+        Log.d("AsyaWatch", "iframe HTML: ${html.length} bytes, NP_CONFIG: ${html.contains("NP_CONFIG")}")
 
         val cookies = extractCookiesFromHeaders(response.headers)
         val npConfig = parseNpConfig(html)
+
+        // ⭐⭐ TEŞHİS ÇIKTILARI — KRİTİK ⭐⭐
+        logNpConfig(npConfig)
+        logPowJs(html)
+        // ⭐⭐ TEŞHİS ÇIKTILARI — KRİTİK ⭐⭐
+
         val npId = npConfig?.optString("id")?.takeIf { it.isNotBlank() && it != "null" }
         val npSalt = npConfig?.optString("salt")?.takeIf { it.isNotBlank() && it != "null" }
             ?: npConfig?.optString("s")?.takeIf { it.isNotBlank() && it != "null" }
+            ?: npConfig?.optString("secret")?.takeIf { it.isNotBlank() && it != "null" }
 
         if (npSalt != null && npSalt != powSalt) {
-            Log.d("AsyaWatch", "Salt güncellendi: $powSalt → $npSalt")
+            Log.d("AsyaWatch", "⚠ Salt güncellendi: $powSalt → $npSalt")
             powSalt = npSalt
             powCache.clear()
         }
@@ -1053,22 +764,20 @@ class AsyaWatch : MainAPI() {
         Log.d("AsyaWatch", "NP_CONFIG: id=$npId, salt=${npSalt ?: "(varsayılan $powSalt)"}")
 
         val localSeenSubs = HashSet<String>()
-        runCatching {
-            npConfig?.optJSONArray("subtitles")?.let { subsArray ->
-                for (i in 0 until subsArray.length()) {
-                    val sub = subsArray.optJSONObject(i) ?: continue
-                    val label = sub.optString("label", "Altyazı")
-                    val url = sub.optString("url")
-                    if (url.isNotBlank()) {
-                        val subtitle = SubtitleFile(lang = label, url = url)
-                        val subHeaders = siteHeaders.toMutableMap()
-                        subHeaders["Referer"] = iframeUrl
-                        subHeaders["Origin"] = fourPichiveOrigin
-                        subHeaders["Accept"] = "text/vtt, text/plain, */*"
-                        if (!cookies.isNullOrBlank()) subHeaders["Cookie"] = cookies
-                        subtitle.headers = subHeaders
-                        if (localSeenSubs.add(url)) subtitleCallback(subtitle)
-                    }
+        npConfig?.optJSONArray("subtitles")?.let { subsArray ->
+            for (i in 0 until subsArray.length()) {
+                val sub = subsArray.optJSONObject(i) ?: continue
+                val label = sub.optString("label", "Altyazı")
+                val url = sub.optString("url")
+                if (url.isNotBlank()) {
+                    val subtitle = SubtitleFile(lang = label, url = url)
+                    val subHeaders = siteHeaders.toMutableMap()
+                    subHeaders["Referer"] = iframeUrl
+                    subHeaders["Origin"] = fourPichiveOrigin
+                    subHeaders["Accept"] = "text/vtt, text/plain, */*"
+                    if (!cookies.isNullOrBlank()) subHeaders["Cookie"] = cookies
+                    subtitle.headers = subHeaders
+                    if (localSeenSubs.add(url)) subtitleCallback(subtitle)
                 }
             }
         }
@@ -1089,17 +798,11 @@ class AsyaWatch : MainAPI() {
         var finalUrl = masterUrl
         if (html.contains("NP_GATE") && npId != null) {
             Log.d("AsyaWatch", "NP_GATE PoW deneniyor...")
-            val powResult = tryPowOnUrl(masterUrl, iframeUrl, npId, cookies)
-            if (powResult != null) {
-                finalUrl = powResult
-                Log.d("AsyaWatch", "✔ PoW BAŞARILI")
-            } else {
-                Log.w("AsyaWatch", "PoW başarısız, fallback URL verilecek")
-            }
+            tryPowOnUrl(masterUrl, iframeUrl, npId, cookies)?.let { finalUrl = it }
         }
 
-        val isHls = finalUrl.contains(".m3u8", true) || isNmPhpUrl(finalUrl)
-        val type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+        val type = if (finalUrl.contains(".m3u8", true) || isNmPhpUrl(finalUrl))
+            ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
 
         val linkHeaders = headers.toMutableMap()
         if (!cookies.isNullOrBlank()) linkHeaders["Cookie"] = cookies
@@ -1111,7 +814,7 @@ class AsyaWatch : MainAPI() {
                 this.quality = qualityValue("", finalUrl)
             }
         )
-        Log.d("AsyaWatch", "✔ URL verildi: ${finalUrl.take(100)}")
+        Log.d("AsyaWatch", "✔ URL verildi")
         return true
     }
 
@@ -1128,9 +831,8 @@ class AsyaWatch : MainAPI() {
 
         val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
             val lang = subtitle.lang
-            if (lang == "Türkçe" || lang == "English") {
+            if (lang == "Türkçe" || lang == "English")
                 chosenSubtitles.putIfAbsent(lang, subtitle)
-            }
         }
 
         suspend fun processCandidate(raw: String, referer: String, quality: String) {
@@ -1139,8 +841,9 @@ class AsyaWatch : MainAPI() {
 
             if (isDirectMedia(candidate) && !isNmPhpUrl(candidate)) {
                 if (emittedUrls.add(candidate)) {
-                    val type = if (candidate.contains(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                    callback(newExtractorLink(source = name, name = "$name ${quality.ifBlank { "Kaynak" }}", url = candidate, type = type) {
+                    val type = if (candidate.contains(".m3u8", true))
+                        ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    callback(newExtractorLink(source = name, name = name, url = candidate, type = type) {
                         this.referer = referer
                         this.quality = qualityValue(quality, candidate)
                     })
@@ -1150,17 +853,12 @@ class AsyaWatch : MainAPI() {
             }
 
             val host = runCatching { URI(candidate).host?.lowercase() }.getOrNull()
-            val isFourPichive = host == "four.pichive.online" || host?.endsWith(".four.pichive.online") == true ||
-                host == "pichive.online" || host?.endsWith(".pichive.online") == true
-
-            if (isFourPichive) {
-                Log.d("AsyaWatch", "→ FourPichive extractor: ${candidate.take(100)}")
-                val ok = runCatching {
+            if (host == "four.pichive.online" || host?.endsWith(".four.pichive.online") == true) {
+                runCatching {
                     extractFourPichive(candidate, referer, emitSubtitle) { link ->
                         if (emittedUrls.add(link.url)) { callback(link); found = true }
                     }
-                }.getOrDefault(false)
-                if (!ok) Log.w("AsyaWatch", "FourPichive başarısız")
+                }
                 return
             }
 
@@ -1169,29 +867,22 @@ class AsyaWatch : MainAPI() {
                     if (emittedUrls.add(link.url)) callback(link)
                     found = true
                 }
-            }.onFailure {
-                Log.w("AsyaWatch", "loadExtractor hata: ${candidate.take(80)} → ${it.message}")
             }
         }
-
-        if (isDirectMedia(data) && !isNmPhpUrl(data)) processCandidate(data, "$mainUrl/", "")
 
         val page = runCatching { getPageData(data) }.getOrNull()
         if (page != null) {
             val pageCandidates = extractCandidates(page.document.html(), data)
-            val hosts = pageCandidates.mapNotNull { runCatching { URI(it).host?.lowercase() }.getOrNull() }.distinct()
-            Log.d("AsyaWatch", "Sayfa adayları: ${pageCandidates.size}; hostlar: $hosts")
-
-            // FourPichive'leri ÖNCE işle
-            val fourPichiveCandidates = pageCandidates.filter { 
+            val fourPichiveFirst = pageCandidates.filter {
                 val h = runCatching { URI(it).host?.lowercase() }.getOrNull()
-                h == "four.pichive.online" || h?.endsWith(".four.pichive.online") == true ||
-                h == "pichive.online" || h?.endsWith(".pichive.online") == true
+                h == "four.pichive.online" || h?.endsWith(".four.pichive.online") == true
             }
-            val others = pageCandidates.filter { it !in fourPichiveCandidates }
+            val others = pageCandidates.filter { it !in fourPichiveFirst }
 
-            for (candidate in fourPichiveCandidates) processCandidate(candidate, data, "")
-            for (candidate in others) processCandidate(candidate, data, "")
+            Log.d("AsyaWatch", "Sayfa adayları: ${pageCandidates.size} (4p=${fourPichiveFirst.size})")
+
+            for (c in fourPichiveFirst) processCandidate(c, data, "")
+            for (c in others) processCandidate(c, data, "")
         }
 
         chosenSubtitles.values.forEach { subtitleCallback(it) }
