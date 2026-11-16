@@ -27,6 +27,8 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.network.WebViewResolver
+import com.lagradost.nicehttp.Requests
 import okhttp3.Headers
 import org.json.JSONArray
 import org.json.JSONObject
@@ -83,7 +85,18 @@ class AsyaWatch : MainAPI() {
     )
 
     private val fourPichiveOrigin = "https://four.pichive.online"
-    private val powSalt = "Tu6UwcgeK8"
+
+    // =====================================================================
+    // DEĞİŞİKLİK 1: WebViewResolver ile cf_clearance alınacak Requests nesnesi
+    // =====================================================================
+    private val fourPichiveRequests = Requests(
+        interceptor = WebViewResolver(
+            Regex("https://(four\\.)?pichive\\.online/.*")
+        )
+    )
+
+    // powSalt artık var (NP_CONFIG'den güncellenebilir)
+    @Volatile private var powSalt = "Tu6UwcgeK8"
 
     private data class PageData(
         val document: Document,
@@ -1546,7 +1559,7 @@ class AsyaWatch : MainAPI() {
     // =====================================================================
 
     private fun solvePow(id: String, algorithm: String, variant: String): Pair<Long, String>? {
-        val cacheKey = "$id|$algorithm|$variant"
+        val cacheKey = "$id|$algorithm|$variant|$powSalt"
         powCache[cacheKey]?.let {
             Log.d("AsyaWatch", "PoW cache hit: $cacheKey → n=${it.first}")
             return it
@@ -1578,19 +1591,15 @@ class AsyaWatch : MainAPI() {
                 if (powCache.size > 32) {
                     powCache.keys.firstOrNull { it != cacheKey }?.let(powCache::remove)
                 }
-                Log.d("AsyaWatch", "PoW bulundu: n=$i ($label), iter=$i")
+                Log.d("AsyaWatch", "PoW bulundu: n=$i ($label), iter=$i, salt=$powSalt")
                 return result
             }
         }
 
-        Log.e("AsyaWatch", "PoW çözülemedi: $label ($maxIter iter)")
+        Log.e("AsyaWatch", "PoW çözülemedi: $label ($maxIter iter), salt=$powSalt")
         return null
     }
 
-    /**
-     * iframe'den Set-Cookie başlıklarını çıkarır → nm.php ve ExoPlayer'a iletilir.
-     * OkHttp Headers tipini doğrudan kabul eder.
-     */
     private fun extractCookiesFromHeaders(headers: Headers?): String? {
         if (headers == null) return null
         val cookieValues = mutableListOf<String>()
@@ -1605,11 +1614,9 @@ class AsyaWatch : MainAPI() {
         return cookieValues.joinToString("; ").takeIf { it.isNotBlank() }
     }
 
-    /**
-     * Sadece 4 istek yapar (SHA-1/SHA-256 × wordBE/wordLE).
-     * Her istekte çerez + X-PoW header + v.nonce query aynı anda gönderilir.
-     * 429 gelirse derhal durur.
-     */
+    // =====================================================================
+    // DEĞİŞİKLİK 2: tryPowOnUrl — 4 PoW formatı + WebViewResolver
+    // =====================================================================
     private suspend fun tryPowOnUrl(
         nmUrl: String,
         iframeUrl: String,
@@ -1630,41 +1637,49 @@ class AsyaWatch : MainAPI() {
 
         val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
         val vToken = vMatch?.groupValues?.get(1) ?: ""
+        val baseUrl = nmUrl.substringBefore('?')
 
         for ((alg, variantName, solution) in variants) {
             val (powValue, _) = solution ?: continue
             val label = "$alg-$variantName"
 
-            val newUrl = if (vToken.isNotBlank()) {
-                nmUrl.replace(vToken, "$vToken.$powValue")
-            } else nmUrl
-
-            val headers = browserLikeHeaders(iframeUrl) + buildMap {
-                put("X-PoW", powValue.toString())
-                if (!cookies.isNullOrBlank()) put("Cookie", cookies)
+            // DEĞİŞİKLİK: 4 farklı URL formatı dene
+            val urlFormats = mutableListOf<String>()
+            if (vToken.isNotBlank()) {
+                urlFormats.add("$baseUrl?v=$vToken.$powValue")           // v=xxx.1765 (mevcut)
+                urlFormats.add("$baseUrl?v=$vToken&n=$powValue")         // &n=
+                urlFormats.add("$baseUrl?v=$vToken&pow=$powValue")       // &pow=
+                urlFormats.add("$baseUrl?v=$vToken&nonce=$powValue")     // &nonce=
+                urlFormats.add("$baseUrl?v=$vToken&solution=$powValue")  // &solution=
             }
 
-            val resp = runCatching {
-                app.get(newUrl, headers = headers, referer = iframeUrl)
-            }.getOrNull() ?: continue
-
-            Log.d("AsyaWatch", "PoW [$label] n=$powValue: HTTP ${resp.code}, bodyLen=${resp.text.length}")
-
-            if (resp.code == 429) {
-                noteRateLimit()
-                Log.w("AsyaWatch", "429 alındı, PoW denemesi durduruluyor")
-                return null
-            }
-
-            if (resp.isSuccessful && resp.text.isNotBlank()) {
-                bodyLooksLikeMedia(resp.text)?.let {
-                    Log.d("AsyaWatch", "PoW BAŞARILI [$label] → ${it.take(120)}")
-                    return it
+            for (newUrl in urlFormats) {
+                val headers = browserLikeHeaders(iframeUrl) + buildMap {
+                    put("X-PoW", powValue.toString())
+                    put("X-N", powValue.toString())
+                    put("X-Nonce", powValue.toString())
+                    if (!cookies.isNullOrBlank()) put("Cookie", cookies)
                 }
-            }
 
-            if (resp.code != 404 && resp.text.isNotBlank()) {
-                Log.d("AsyaWatch", "PoW [$label] body: ${resp.text.take(400).replace("\n", " ")}")
+                // WebViewResolver ile istek → cf_clearance otomatik alınır
+                val resp = runCatching {
+                    fourPichiveRequests.get(newUrl, headers = headers, referer = iframeUrl)
+                }.getOrNull() ?: continue
+
+                Log.d("AsyaWatch", "PoW [$label] ${newUrl.substringAfterLast('?').take(60)}: HTTP ${resp.code}, bodyLen=${resp.text.length}")
+
+                if (resp.code == 429) {
+                    noteRateLimit()
+                    Log.w("AsyaWatch", "429 alındı, PoW denemesi durduruluyor")
+                    return null
+                }
+
+                if (resp.isSuccessful && resp.text.isNotBlank()) {
+                    bodyLooksLikeMedia(resp.text)?.let {
+                        Log.d("AsyaWatch", "PoW BAŞARILI [$label] → ${it.take(120)}")
+                        return it
+                    }
+                }
             }
         }
 
@@ -1712,14 +1727,9 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    /**
-     * FourPichive iframe'i için özel extractor.
-     * 1) iframe HTML al
-     * 2) NP_CONFIG parse et
-     * 3) Set-Cookie yakala
-     * 4) PoW'u dene (4 varyant, tek istekte çerez+header+query)
-     * 5) Başarısızsa ham URL + çerez ile ExoPlayer'a ver
-     */
+    // =====================================================================
+    // DEĞİŞİKLİK 3: extractFourPichive — WebViewResolver + salt okuma
+    // =====================================================================
     private suspend fun extractFourPichive(
         iframeUrl: String,
         referer: String,
@@ -1727,8 +1737,9 @@ class AsyaWatch : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val headers = browserLikeHeaders(iframeUrl)
+        // DEĞİŞİKLİK: WebViewResolver kullan (cf_clearance için)
         val response = runCatching {
-            app.get(iframeUrl, headers = headers, referer = referer, allowRedirects = true)
+            fourPichiveRequests.get(iframeUrl, headers = headers, referer = referer, allowRedirects = true)
         }.getOrNull() ?: return false
 
         if (!response.isSuccessful) {
@@ -1739,15 +1750,26 @@ class AsyaWatch : MainAPI() {
         val html = response.text
         if (html.isBlank()) return false
 
-        // === Çerezleri yakala ===
+        // Çerezleri yakala
         val cookies = runCatching {
             extractCookiesFromHeaders(response.headers)
         }.getOrNull()
-        Log.d("AsyaWatch", "iframe Set-Cookie: ${cookies?.take(200) ?: "yok"}")
+        Log.d("AsyaWatch", "iframe Set-Cookie: ${cookies?.take(300) ?: "yok"}")
 
         val npConfig = parseNpConfig(html)
         val npId = npConfig?.optString("id")?.takeIf { it.isNotBlank() }
-        Log.d("AsyaWatch", "NP_CONFIG: id=$npId, sources=${npConfig?.optJSONArray("sources")?.length() ?: 0}")
+
+        // DEĞİŞİKLİK: NP_CONFIG içinden salt oku
+        val npSalt = npConfig?.optString("salt")
+            ?.takeIf { it.isNotBlank() && it != "null" }
+            ?: npConfig?.optString("s")
+                ?.takeIf { it.isNotBlank() && it != "null" }
+        if (npSalt != null && npSalt != powSalt) {
+            Log.d("AsyaWatch", "Salt güncellendi: $powSalt → $npSalt")
+            powSalt = npSalt
+            powCache.clear() // Salt değişti, cache geçersiz
+        }
+        Log.d("AsyaWatch", "NP_CONFIG: id=$npId, salt=${npSalt ?: "(varsayılan $powSalt)"}, sources=${npConfig?.optJSONArray("sources")?.length() ?: 0}")
 
         // Altyazılar
         val localSeenSubs = HashSet<String>()
@@ -1791,7 +1813,7 @@ class AsyaWatch : MainAPI() {
 
         var finalUrl = masterUrl
         if (html.contains("NP_GATE") && npId != null) {
-            Log.d("AsyaWatch", "NP_GATE PoW deneniyor (id=$npId, 4 varyant)...")
+            Log.d("AsyaWatch", "NP_GATE PoW deneniyor (id=$npId, 4 varyant × 5 format)...")
             val powResult = tryPowOnUrl(masterUrl, iframeUrl, npId, cookies)
             if (powResult != null) {
                 finalUrl = powResult
