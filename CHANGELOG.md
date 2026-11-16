@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:71c65a4e2564c56e5c1b977d2a1f7ff5d53d9467 -->
+### Refactor stream header handling and extraction logic
+
+- Etkilenen alanlar: Flix
+- Commit: [71c65a4](https://github.com/Kayracs3/Kayra/commit/71c65a4e2564c56e5c1b977d2a1f7ff5d53d9467)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:dd71df24133b5ea4dc52be77298f02e2fcc4906f -->
 ### Fix InatBoxYedek proxy size constant scope
 
