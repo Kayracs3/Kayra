@@ -1611,12 +1611,13 @@ class AsyaWatch : MainAPI() {
         return cookieValues.joinToString("; ").takeIf { it.isNotBlank() }
     }
 
+    // ⭐ KRİTİK: Accept-Encoding YOK! OkHttp otomatik gzip/br decode yapacak.
     private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
         return mapOf(
             "User-Agent" to chromeUserAgent,
             "Accept" to "*/*",
             "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding" to "gzip, deflate, br, zstd",
+            // Accept-Encoding SATIRI KALDIRILDI - OkHttp otomatik ekler ve decode eder
             "Referer" to iframeUrl,
             "Origin" to fourPichiveOrigin,
             "Sec-Fetch-Dest" to "empty",
@@ -1649,9 +1650,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    // =====================================================================
-    // KRİTİK: &p=<pow> formatı + fallback WebViewResolver
-    // =====================================================================
     private suspend fun tryPowOnUrl(
         nmUrl: String,
         iframeUrl: String,
@@ -1687,7 +1685,7 @@ class AsyaWatch : MainAPI() {
                 if (!cookies.isNullOrBlank()) put("Cookie", cookies)
             }
 
-            // 1. DENEME: app.get (daha önce 404 veriyordu ama artık doğru format)
+            // 1. DENEME: app.get
             val directResp = runCatching {
                 app.get(correctUrl, headers = headers, referer = iframeUrl)
             }.getOrNull()
@@ -1706,7 +1704,7 @@ class AsyaWatch : MainAPI() {
                 }
             }
 
-            // 2. DENEME: WebViewResolver (cf_clearance için)
+            // 2. DENEME: WebViewResolver
             val wvResp = runCatching {
                 app.get(
                     correctUrl,
@@ -1731,11 +1729,8 @@ class AsyaWatch : MainAPI() {
                         Log.d("AsyaWatch", "✔ PoW BAŞARILI (WebView) → $it")
                         return it
                     }
-                    // WebView 200 döndürdü ama içerik tanınmadı → yine de URL'yi ver
-                    if (wvResp.code == 200) {
-                        Log.d("AsyaWatch", "✔ PoW WebView 200, URL verilecek (içerik: ${body.take(50)})")
-                        return correctUrl
-                    }
+                    Log.d("AsyaWatch", "✔ PoW WebView 200, URL verilecek (içerik: ${body.take(50)})")
+                    return correctUrl
                 }
             }
         }
@@ -1749,9 +1744,6 @@ class AsyaWatch : MainAPI() {
         return parseObject(match.groupValues[1].trim())
     }
 
-    // =====================================================================
-    // KRİTİK DÜZELTME: iframe.php için app.get (WebViewResolver DEĞİL!)
-    // =====================================================================
     private suspend fun extractFourPichive(
         iframeUrl: String,
         referer: String,
@@ -1760,7 +1752,6 @@ class AsyaWatch : MainAPI() {
     ): Boolean {
         val headers = browserLikeHeaders(iframeUrl)
 
-        // ⭐ iframe.php için app.get kullan (WebViewResolver HTML vermiyor!)
         val response = runCatching {
             app.get(
                 iframeUrl,
