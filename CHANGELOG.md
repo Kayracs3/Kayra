@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:c4380d96dd8f59549df5ce5e48826f265ad5793b -->
+### Refactor PoW and URL handling logic
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [c4380d9](https://github.com/Kayracs3/Kayra/commit/c4380d96dd8f59549df5ce5e48826f265ad5793b)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:c229bcdaae045a378e0b1c6b077270ea8936ba08 -->
 ### Bump version from 34 to 35
 
