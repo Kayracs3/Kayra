@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:686e5d8ecf1d633e8efe6ee80c42be046e36ca02 -->
+### Stream backup HLS segments for low-memory Android TV
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [686e5d8](https://github.com/Kayracs3/Kayra/commit/686e5d8ecf1d633e8efe6ee80c42be046e36ca02)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:5f5c8f2ae7c32e8b9bd5dd75730083f9bba1ed21 -->
 ### Update mainUrl to new domain
 
