@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:f9afc7d486fecf465e848e795c5124d841c66226 -->
+### Tighten HLS segment detection for low-memory playback
+
+- Etkilenen alanlar: InatBox, SinezyTo
+- Commit: [f9afc7d](https://github.com/Kayracs3/Kayra/commit/f9afc7d486fecf465e848e795c5124d841c66226)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:aa96c059b56aa7ded5043ea21f99d4e86ad5ec9f -->
 ### Stream HLS media segments to reduce playback memory
 
