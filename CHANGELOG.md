@@ -2,6 +2,23 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:3c9a6179fad6521d06df9bd9d03f50e5787633e2 -->
+### Increment version from 37 to 38
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [3c9a617](https://github.com/Kayracs3/Kayra/commit/3c9a6179fad6521d06df9bd9d03f50e5787633e2)
+
+## 2026-11-17
+
+<!-- kayra-commit:f6deb2196fa828f965bcb8ae6d3dc6a7afebee57 -->
+### Refactor AsyaWatch class and improve functionality
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [f6deb21](https://github.com/Kayracs3/Kayra/commit/f6deb2196fa828f965bcb8ae6d3dc6a7afebee57)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:000baf2b49c23dd6dc84ceb40e05a14c62c32f28 -->
 ### Implement extractFourPichive function
 
