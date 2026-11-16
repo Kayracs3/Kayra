@@ -28,7 +28,6 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.network.WebViewResolver
-import com.lagradost.nicehttp.Requests
 import okhttp3.Headers
 import org.json.JSONArray
 import org.json.JSONObject
@@ -86,16 +85,11 @@ class AsyaWatch : MainAPI() {
 
     private val fourPichiveOrigin = "https://four.pichive.online"
 
-    // =====================================================================
-    // DEĞİŞİKLİK 1: WebViewResolver ile cf_clearance alınacak Requests nesnesi
-    // =====================================================================
-    private val fourPichiveRequests = Requests(
-        interceptor = WebViewResolver(
-            Regex("https://(four\\.)?pichive\\.online/.*")
-        )
+    // WebViewResolver → cf_clearance için. Requests yerine app.get(...) içinde interceptor olarak kullanılır.
+    private val fourPichiveResolver = WebViewResolver(
+        Regex("https://(four\\.)?pichive\\.online/.*")
     )
 
-    // powSalt artık var (NP_CONFIG'den güncellenebilir)
     @Volatile private var powSalt = "Tu6UwcgeK8"
 
     private data class PageData(
@@ -1554,10 +1548,6 @@ class AsyaWatch : MainAPI() {
         }
     }
 
-    // =====================================================================
-    // NP_GATE PoW çözücü (SHA-1 + SHA-256)
-    // =====================================================================
-
     private fun solvePow(id: String, algorithm: String, variant: String): Pair<Long, String>? {
         val cacheKey = "$id|$algorithm|$variant|$powSalt"
         powCache[cacheKey]?.let {
@@ -1614,9 +1604,6 @@ class AsyaWatch : MainAPI() {
         return cookieValues.joinToString("; ").takeIf { it.isNotBlank() }
     }
 
-    // =====================================================================
-    // DEĞİŞİKLİK 2: tryPowOnUrl — 4 PoW formatı + WebViewResolver
-    // =====================================================================
     private suspend fun tryPowOnUrl(
         nmUrl: String,
         iframeUrl: String,
@@ -1643,14 +1630,13 @@ class AsyaWatch : MainAPI() {
             val (powValue, _) = solution ?: continue
             val label = "$alg-$variantName"
 
-            // DEĞİŞİKLİK: 4 farklı URL formatı dene
             val urlFormats = mutableListOf<String>()
             if (vToken.isNotBlank()) {
-                urlFormats.add("$baseUrl?v=$vToken.$powValue")           // v=xxx.1765 (mevcut)
-                urlFormats.add("$baseUrl?v=$vToken&n=$powValue")         // &n=
-                urlFormats.add("$baseUrl?v=$vToken&pow=$powValue")       // &pow=
-                urlFormats.add("$baseUrl?v=$vToken&nonce=$powValue")     // &nonce=
-                urlFormats.add("$baseUrl?v=$vToken&solution=$powValue")  // &solution=
+                urlFormats.add("$baseUrl?v=$vToken.$powValue")
+                urlFormats.add("$baseUrl?v=$vToken&n=$powValue")
+                urlFormats.add("$baseUrl?v=$vToken&pow=$powValue")
+                urlFormats.add("$baseUrl?v=$vToken&nonce=$powValue")
+                urlFormats.add("$baseUrl?v=$vToken&solution=$powValue")
             }
 
             for (newUrl in urlFormats) {
@@ -1661,9 +1647,13 @@ class AsyaWatch : MainAPI() {
                     if (!cookies.isNullOrBlank()) put("Cookie", cookies)
                 }
 
-                // WebViewResolver ile istek → cf_clearance otomatik alınır
                 val resp = runCatching {
-                    fourPichiveRequests.get(newUrl, headers = headers, referer = iframeUrl)
+                    app.get(
+                        newUrl,
+                        headers = headers,
+                        referer = iframeUrl,
+                        interceptor = fourPichiveResolver
+                    )
                 }.getOrNull() ?: continue
 
                 Log.d("AsyaWatch", "PoW [$label] ${newUrl.substringAfterLast('?').take(60)}: HTTP ${resp.code}, bodyLen=${resp.text.length}")
@@ -1727,9 +1717,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    // =====================================================================
-    // DEĞİŞİKLİK 3: extractFourPichive — WebViewResolver + salt okuma
-    // =====================================================================
     private suspend fun extractFourPichive(
         iframeUrl: String,
         referer: String,
@@ -1737,9 +1724,14 @@ class AsyaWatch : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val headers = browserLikeHeaders(iframeUrl)
-        // DEĞİŞİKLİK: WebViewResolver kullan (cf_clearance için)
         val response = runCatching {
-            fourPichiveRequests.get(iframeUrl, headers = headers, referer = referer, allowRedirects = true)
+            app.get(
+                iframeUrl,
+                headers = headers,
+                referer = referer,
+                allowRedirects = true,
+                interceptor = fourPichiveResolver
+            )
         }.getOrNull() ?: return false
 
         if (!response.isSuccessful) {
@@ -1750,7 +1742,6 @@ class AsyaWatch : MainAPI() {
         val html = response.text
         if (html.isBlank()) return false
 
-        // Çerezleri yakala
         val cookies = runCatching {
             extractCookiesFromHeaders(response.headers)
         }.getOrNull()
@@ -1759,7 +1750,6 @@ class AsyaWatch : MainAPI() {
         val npConfig = parseNpConfig(html)
         val npId = npConfig?.optString("id")?.takeIf { it.isNotBlank() }
 
-        // DEĞİŞİKLİK: NP_CONFIG içinden salt oku
         val npSalt = npConfig?.optString("salt")
             ?.takeIf { it.isNotBlank() && it != "null" }
             ?: npConfig?.optString("s")
@@ -1767,11 +1757,10 @@ class AsyaWatch : MainAPI() {
         if (npSalt != null && npSalt != powSalt) {
             Log.d("AsyaWatch", "Salt güncellendi: $powSalt → $npSalt")
             powSalt = npSalt
-            powCache.clear() // Salt değişti, cache geçersiz
+            powCache.clear()
         }
         Log.d("AsyaWatch", "NP_CONFIG: id=$npId, salt=${npSalt ?: "(varsayılan $powSalt)"}, sources=${npConfig?.optJSONArray("sources")?.length() ?: 0}")
 
-        // Altyazılar
         val localSeenSubs = HashSet<String>()
         runCatching {
             val subsArray = npConfig?.optJSONArray("subtitles")
@@ -1844,10 +1833,6 @@ class AsyaWatch : MainAPI() {
         Log.d("AsyaWatch", "FourPichive URL verildi (type=$type, cookie=${!cookies.isNullOrBlank()}): ${finalUrl.take(120)}")
         return true
     }
-
-    // =====================================================================
-    // loadLinks
-    // =====================================================================
 
     override suspend fun loadLinks(
         data: String,
