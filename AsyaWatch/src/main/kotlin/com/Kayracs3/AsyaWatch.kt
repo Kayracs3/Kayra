@@ -86,28 +86,19 @@ class AsyaWatch : MainAPI() {
         Regex("https://(four\\.)?pichive\\.online/.*")
     )
 
-    // ⭐ Gerçek salt (String.fromCharCode(108,95,71,110,108,119,84,102,100,51))
     private val powSalt = "l_GnlwTfd3"
+    @Volatile private var diagnosticDone = false
 
-    private data class PageData(
-        val document: Document,
-        val secureData: JSONObject?
-    )
+    private data class PageData(val document: Document, val secureData: JSONObject?)
 
     @Volatile private var rateLimitedUntil = 0L
     private val powCache = ConcurrentHashMap<String, Long>()
 
     private fun isRateLimitResponse(code: Int, body: String): Boolean {
         val lower = body.lowercase()
-        return code == 1015 || code == 429 ||
-            lower.contains("error 1015") ||
-            lower.contains("you are being rate limited")
+        return code == 1015 || code == 429 || lower.contains("error 1015") || lower.contains("you are being rate limited")
     }
-
-    private fun noteRateLimit() {
-        rateLimitedUntil = maxOf(rateLimitedUntil, System.currentTimeMillis() + 5 * 60 * 1000L)
-    }
-
+    private fun noteRateLimit() { rateLimitedUntil = maxOf(rateLimitedUntil, System.currentTimeMillis() + 5 * 60 * 1000L) }
     private fun isCoolingDown(): Boolean = System.currentTimeMillis() < rateLimitedUntil
 
     private fun field(obj: JSONObject?, vararg keys: String): String? {
@@ -120,361 +111,239 @@ class AsyaWatch : MainAPI() {
         }
         return null
     }
-
     private fun objectField(obj: JSONObject?, vararg keys: String): JSONObject? {
         if (obj == null) return null
         for (key in keys) obj.optJSONObject(key)?.let { return it }
         return null
     }
-
     private fun arrayField(obj: JSONObject?, vararg keys: String): JSONArray? {
         if (obj == null) return null
         for (key in keys) obj.optJSONArray(key)?.let { return it }
         return null
     }
-
-    private fun parseObject(raw: String?): JSONObject? =
-        if (raw.isNullOrBlank()) null else runCatching { JSONObject(raw) }.getOrNull()
+    private fun parseObject(raw: String?): JSONObject? = if (raw.isNullOrBlank()) null else runCatching { JSONObject(raw) }.getOrNull()
 
     private fun decodeBase64Text(raw: String): String? {
         val value = raw.trim().removeSurrounding("\"")
         if (value.isBlank()) return null
-        return runCatching {
-            val decoded = base64Decode(value)
-            String(decoded.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)
-        }.getOrNull()
+        return runCatching { String(base64Decode(value).toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8) }.getOrNull()
     }
 
     private fun decodeApiResponse(raw: String): JSONObject? {
         val envelope = parseObject(raw) ?: return null
-        val encodedResponse = field(envelope, "response") ?: return envelope
-        val decoded = decodeBase64Text(encodedResponse)
-        return parseObject(decoded) ?: envelope
+        val encoded = field(envelope, "response") ?: return envelope
+        return parseObject(decodeBase64Text(encoded) ?: "") ?: envelope
     }
 
     private fun absoluteUrl(raw: String?, base: String = mainUrl): String? {
         var value = raw?.trim().orEmpty()
         if (value.isBlank()) return null
         value = value.replace("\\/", "/").replace("&amp;", "&").trim()
-        if (value.startsWith("javascript:", true) ||
-            value.startsWith("data:", true) ||
-            value.startsWith("about:", true)
-        ) return null
-
+        if (value.startsWith("javascript:", true) || value.startsWith("data:", true) || value.startsWith("about:", true)) return null
         val absolute = when {
             value.startsWith("https://", true) || value.startsWith("http://", true) -> value
             value.startsWith("//") -> "https:$value"
             value.startsWith("/") -> {
-                val origin = runCatching {
-                    val uri = URI(base)
-                    "${uri.scheme}://${uri.authority}"
-                }.getOrDefault(mainUrl)
+                val origin = runCatching { val u = URI(base); "${u.scheme}://${u.authority}" }.getOrDefault(mainUrl)
                 origin + value
             }
             else -> base.trimEnd('/') + "/" + value.trimStart('/')
         }
-        return absolute.takeIf {
-            it.startsWith("https://", true) || it.startsWith("http://", true)
-        }
+        return absolute.takeIf { it.startsWith("https://", true) || it.startsWith("http://", true) }
     }
 
     private fun imageUrl(raw: String?): String? {
-        var value = raw?.trim().orEmpty()
-        if (value.isBlank()) return null
-        value = value
-            .replace("\\/", "/").replace("&amp;", "&")
-            .replace("\\u0026", "&").replace("\\u003d", "=")
-            .trim().trim('"', '\'')
-
-        if (value.startsWith("https%3A%2F%2F", true))
-            value = value.replaceFirst("https%3A%2F%2F", "https://", true)
-        else if (value.startsWith("http%3A%2F%2F", true))
-            value = value.replaceFirst("http%3A%2F%2F", "http://", true)
-        return absoluteUrl(value)
+        var v = raw?.trim().orEmpty(); if (v.isBlank()) return null
+        v = v.replace("\\/", "/").replace("&amp;", "&").replace("\\u0026", "&").replace("\\u003d", "=").trim().trim('"', '\'')
+        if (v.startsWith("https%3A%2F%2F", true)) v = v.replaceFirst("https%3A%2F%2F", "https://", true)
+        else if (v.startsWith("http%3A%2F%2F", true)) v = v.replaceFirst("http%3A%2F%2F", "http://", true)
+        return absoluteUrl(v)
     }
 
     private fun imageFromJson(value: Any?, depth: Int = 0): String? {
         if (value == null || depth > 5) return null
-        val imageKeys = listOf(
-            "poster_url", "posterUrl", "object_poster_url", "objectPosterUrl",
-            "poster", "img", "p", "sq", "wide", "image_url", "imageUrl",
-            "thumbnail", "cover_url", "cover", "image", "thumb", "photo", "src"
-        )
+        val keys = listOf("poster_url","posterUrl","poster","img","p","sq","wide","image_url","imageUrl","thumbnail","cover_url","cover","image","thumb","photo","src")
         if (value is JSONObject) {
-            for (key in imageKeys) {
-                val candidate = value.opt(key)
-                if (candidate is String) imageUrl(candidate)?.let { return it }
-                else if (candidate is JSONObject || candidate is JSONArray)
-                    imageFromJson(candidate, depth + 1)?.let { return it }
+            for (k in keys) {
+                val c = value.opt(k)
+                if (c is String) imageUrl(c)?.let { return it }
+                else if (c is JSONObject || c is JSONArray) imageFromJson(c, depth + 1)?.let { return it }
             }
         } else if (value is JSONArray) {
-            for (index in 0 until value.length())
-                imageFromJson(value.opt(index), depth + 1)?.let { return it }
+            for (i in 0 until value.length()) imageFromJson(value.opt(i), depth + 1)?.let { return it }
         } else if (value is String) return imageUrl(value)
         return null
     }
 
-    private fun imageFromElement(element: org.jsoup.nodes.Element, base: String): String? {
-        val attributes = listOf(
-            "data-poster", "data-cover", "data-thumbnail", "data-original",
-            "data-original-src", "data-lazy-src", "data-src", "data-srcset",
-            "srcset", "content", "href", "src"
-        )
-        for (attribute in attributes) {
-            val raw = element.attr(attribute).trim()
-            if (raw.isBlank()) continue
-            val first = raw.split(',').firstOrNull()?.trim()?.substringBefore(' ') ?: raw
-            imageUrl(first)?.let { return it }
+    private fun imageFromElement(el: org.jsoup.nodes.Element, base: String): String? {
+        for (a in listOf("data-poster","data-cover","data-original","data-src","src")) {
+            val raw = el.attr(a).trim()
+            if (raw.isNotBlank()) imageUrl(raw.split(',').firstOrNull()?.trim()?.substringBefore(' ') ?: raw)?.let { return it }
         }
-        val style = element.attr("style")
-        val cssUrl = Regex("""(?i)url\(['"]?([^)'"]+)""").find(style)?.groupValues?.getOrNull(1)
-        return imageUrl(cssUrl)
+        return null
     }
 
     private fun pageSecureData(document: Document): JSONObject? {
-        val script = document.selectFirst("script#__NEXT_DATA__")?.data()
-            ?.takeIf { it.isNotBlank() }
-            ?: document.selectFirst("script#__NEXT_DATA__")?.html()?.takeIf { it.isNotBlank() }
-            ?: return null
-        val pageProps = objectField(parseObject(script)?.optJSONObject("props"), "pageProps")
-            ?: return null
+        val script = document.selectFirst("script#__NEXT_DATA__")?.data()?.takeIf { it.isNotBlank() }
+            ?: document.selectFirst("script#__NEXT_DATA__")?.html()?.takeIf { it.isNotBlank() } ?: return null
+        val pageProps = objectField(parseObject(script)?.optJSONObject("props"), "pageProps") ?: return null
         val secure = pageProps.opt("secureData")
         if (secure is JSONObject) return secure
         val raw = secure?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        return parseObject(decodeBase64Text(raw)) ?: parseObject(raw)
+        return parseObject(decodeBase64Text(raw) ?: "") ?: parseObject(raw)
     }
 
     private suspend fun getPageData(url: String): PageData {
         if (isCoolingDown()) return PageData(Jsoup.parse("", url), null)
-
-        val response = app.get(
-            url,
-            headers = siteHeaders,
-            referer = "$mainUrl/",
-            allowRedirects = true
-        )
-        val body = response.text
-        if (isRateLimitResponse(response.code, body)) {
-            noteRateLimit()
-            return PageData(Jsoup.parse(body, url), null)
-        }
-
-        val document = response.document
-        return PageData(document, pageSecureData(document))
+        val resp = app.get(url, headers = siteHeaders, referer = "$mainUrl/", allowRedirects = true)
+        if (isRateLimitResponse(resp.code, resp.text)) { noteRateLimit(); return PageData(Jsoup.parse(resp.text, url), null) }
+        return PageData(resp.document, pageSecureData(resp.document))
     }
 
     private suspend fun postJson(url: String): JSONObject? {
         if (isCoolingDown()) return null
-        val response = runCatching {
-            app.post(url, headers = apiHeaders, referer = "$mainUrl/")
-        }.getOrNull() ?: return null
-        val body = response.text
-        if (isRateLimitResponse(response.code, body)) {
-            noteRateLimit()
-            return null
-        }
-        if (!response.isSuccessful) return null
-        return decodeApiResponse(body)
+        val resp = runCatching { app.post(url, headers = apiHeaders, referer = "$mainUrl/") }.getOrNull() ?: return null
+        if (isRateLimitResponse(resp.code, resp.text)) { noteRateLimit(); return null }
+        if (!resp.isSuccessful) return null
+        return decodeApiResponse(resp.text)
     }
 
     private fun searchResponseFrom(item: JSONObject, forceSeries: Boolean = false): SearchResponse? {
-        val rawUrl = field(item, "used_slug", "slug", "url", "u", "href", "path") ?: return null
+        val rawUrl = field(item, "used_slug","slug","url","u","href","path") ?: return null
         val url = absoluteUrl(rawUrl) ?: return null
-        val originalTitle = field(item, "original_title", "object_name", "title", "name", "t") ?: return null
-        val cultureTitle = field(item, "culture_title", "cultureTitle")
-        val title = if (!cultureTitle.isNullOrBlank() && !cultureTitle.equals(originalTitle, true))
-            "$originalTitle - $cultureTitle" else originalTitle
+        val orig = field(item, "original_title","object_name","title","name","t") ?: return null
+        val cul = field(item, "culture_title","cultureTitle")
+        val title = if (!cul.isNullOrBlank() && !cul.equals(orig, true)) "$orig - $cul" else orig
         val poster = imageFromJson(item)
-            ?: imageUrl(field(item, "poster_url", "poster", "img", "image_url", "thumbnail", "cover"))
-        val type = field(item, "used_type", "type", "content_type", "kind").orEmpty()
+        val type = field(item, "used_type","type","content_type","kind").orEmpty()
         val isSeries = when {
             type.contains("movie", true) || type.contains("film", true) -> false
             type.contains("series", true) || type.contains("dizi", true) -> true
             else -> forceSeries || url.contains("/dizi/", true)
         }
-
-        return if (isSeries) {
-            newTvSeriesSearchResponse(title, url, TvType.TvSeries) { posterUrl = poster }
-        } else {
-            newMovieSearchResponse(title, url, TvType.Movie) { posterUrl = poster }
-        }
+        return if (isSeries) newTvSeriesSearchResponse(title, url, TvType.TvSeries) { posterUrl = poster }
+        else newMovieSearchResponse(title, url, TvType.Movie) { posterUrl = poster }
     }
 
     private suspend fun getExploreJson(url: String): JSONObject? {
         if (isCoolingDown()) return null
-        val response = runCatching {
-            app.get(url, headers = apiHeaders, referer = "$mainUrl/", allowRedirects = true)
-        }.getOrNull() ?: return null
-        val body = response.text
-        if (isRateLimitResponse(response.code, body)) {
-            noteRateLimit()
-            return null
-        }
-        if (!response.isSuccessful) return null
-        return parseObject(body)
+        val resp = runCatching { app.get(url, headers = apiHeaders, referer = "$mainUrl/", allowRedirects = true) }.getOrNull() ?: return null
+        if (isRateLimitResponse(resp.code, resp.text)) { noteRateLimit(); return null }
+        if (!resp.isSuccessful) return null
+        return parseObject(resp.text)
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
         val isSeries = request.name.contains("Dizi", true)
         val kind = if (isSeries) "dizi" else "film"
-        val category = URLEncoder.encode(request.data.trim(), "UTF-8")
-        val endpointUrl = "$mainUrl/api/asya/kesfet?kind=$kind&ulke=&tur=$category&sirala=yeni&page=$page"
-
-        val root = getExploreJson(endpointUrl)
+        val cat = URLEncoder.encode(request.data.trim(), "UTF-8")
+        val root = getExploreJson("$mainUrl/api/asya/kesfet?kind=$kind&ulke=&tur=$cat&sirala=yeni&page=$page")
             ?: return newHomePageResponse(request, emptyList(), hasNext = false)
-        val resultNode = root.optJSONObject("result")
-        val items = resultNode?.optJSONArray("items")
+        val rn = root.optJSONObject("result")
+        val items = rn?.optJSONArray("items")
         val results = ArrayList<SearchResponse>()
         val seen = HashSet<String>()
-
-        if (items != null) {
-            for (index in 0 until items.length()) {
-                val item = items.optJSONObject(index) ?: continue
-                val response = searchResponseFrom(item, isSeries) ?: continue
-                if (seen.add(response.url)) results.add(response)
-            }
+        if (items != null) for (i in 0 until items.length()) {
+            val it = items.optJSONObject(i) ?: continue
+            searchResponseFrom(it, isSeries)?.let { r -> if (seen.add(r.url)) results.add(r) }
         }
-
-        val totalPages = resultNode?.optInt("pages", -1) ?: -1
-        val hasNext = if (totalPages >= 0) page < totalPages else results.size >= 42
-
+        val tp = rn?.optInt("pages", -1) ?: -1
+        val hasNext = if (tp >= 0) page < tp else results.size >= 42
         return newHomePageResponse(request, results, hasNext = hasNext)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val encoded = URLEncoder.encode(query.trim(), "UTF-8")
-        val root = postJson("$mainUrl/api/bg/searchcontent?searchterm=$encoded") ?: return emptyList()
+        val enc = URLEncoder.encode(query.trim(), "UTF-8")
+        val root = postJson("$mainUrl/api/bg/searchcontent?searchterm=$enc") ?: return emptyList()
         val items = arrayField(root, "result") ?: return emptyList()
         val results = ArrayList<SearchResponse>()
-        for (index in 0 until items.length()) {
-            val item = items.optJSONObject(index) ?: continue
-            searchResponseFrom(item)?.let { results.add(it) }
+        for (i in 0 until items.length()) {
+            val it = items.optJSONObject(i) ?: continue
+            searchResponseFrom(it)?.let { results.add(it) }
         }
         return results
     }
-
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
-    private fun parseEpisodesFromDocument(document: Document, poster: String?, pageUrl: String): List<Episode> {
-        val result = LinkedHashMap<String, Episode>()
-        val pagePath = runCatching { URI(pageUrl).path.orEmpty() }
-            .getOrDefault(pageUrl.substringBefore('?')).trimEnd('/')
-        val pageSeason = Regex("""(?i)/sezon-(\d+)""")
-            .find(pagePath)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
-
-        for (element in document.select(".eps a[href*='/bolum-'], .elist a.er[href*='/bolum-']")) {
-            if (element.attr("aria-disabled").equals("true", true) || element.hasClass("fut")) continue
-            val rawUrl = element.attr("href").trim()
-            val number = Regex("""(?i)/bolum-(\d+)""")
-                .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-            val season = Regex("""(?i)/sezon-(\d+)""")
-                .find(rawUrl)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: pageSeason
-            val label = element.selectFirst(".tx b, .t1")?.text()?.trim()
-            val absolute = absoluteUrl(rawUrl, pageUrl) ?: continue
-            if (result.containsKey(absolute)) continue
-            result[absolute] = newEpisode(absolute) {
-                name = label?.takeIf { it.isNotBlank() } ?: "Bölüm $number"
+    private fun parseEpisodesFromDocument(doc: Document, poster: String?, pageUrl: String): List<Episode> {
+        val res = LinkedHashMap<String, Episode>()
+        val pagePath = runCatching { URI(pageUrl).path.orEmpty() }.getOrDefault(pageUrl.substringBefore('?')).trimEnd('/')
+        val pageSeason = Regex("""(?i)/sezon-(\d+)""").find(pagePath)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+        for (el in doc.select(".eps a[href*='/bolum-'], .elist a.er[href*='/bolum-']")) {
+            if (el.attr("aria-disabled").equals("true", true) || el.hasClass("fut")) continue
+            val raw = el.attr("href").trim()
+            val num = Regex("""(?i)/bolum-(\d+)""").find(raw)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
+            val season = Regex("""(?i)/sezon-(\d+)""").find(raw)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: pageSeason
+            val label = el.selectFirst(".tx b, .t1")?.text()?.trim()
+            val abs = absoluteUrl(raw, pageUrl) ?: continue
+            if (res.containsKey(abs)) continue
+            res[abs] = newEpisode(abs) {
+                name = label?.takeIf { it.isNotBlank() } ?: "Bölüm $num"
                 this.season = season
-                episode = number
+                episode = num
                 posterUrl = poster
             }
         }
-        return result.values.sortedWith(compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 })
+        return res.values.sortedWith(compareBy<Episode> { it.season ?: 0 }.thenBy { it.episode ?: 0 })
     }
 
     override suspend fun load(url: String): LoadResponse {
         val page = getPageData(url)
         val content = objectField(page.secureData, "contentItem") ?: JSONObject()
-        val title = field(content, "original_title", "title", "name")
+        val title = field(content, "original_title","title","name")
             ?: page.document.selectFirst("h1")?.text()?.trim()
             ?: url.substringAfterLast('/')
-        val poster = imageFromJson(content) ?: page.document.selectFirst("meta[property=og:image]")
-            ?.let { imageFromElement(it, mainUrl) }
-        val description = field(content, "syn", "description", "plot", "overview")
-        val year = field(content, "release_year", "year")?.toIntOrNull()
-        val episodes = parseEpisodesFromDocument(page.document, poster, url)
-        val isSeries = url.contains("/dizi/", true) || episodes.isNotEmpty()
-
-        Log.d("AsyaWatch", "Detay: $title; bölüm=${episodes.size}")
-
-        return if (isSeries) {
-            newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-                posterUrl = poster; plot = description; this.year = year
-            }
-        } else {
-            newMovieLoadResponse(title, url, TvType.Movie, url) {
-                posterUrl = poster; plot = description; this.year = year
-            }
+        val poster = imageFromJson(content) ?: page.document.selectFirst("meta[property=og:image]")?.let { imageFromElement(it, mainUrl) }
+        val desc = field(content, "syn","description","plot","overview")
+        val year = field(content, "release_year","year")?.toIntOrNull()
+        val eps = parseEpisodesFromDocument(page.document, poster, url)
+        val isSeries = url.contains("/dizi/", true) || eps.isNotEmpty()
+        return if (isSeries) newTvSeriesLoadResponse(title, url, TvType.TvSeries, eps) {
+            posterUrl = poster; plot = desc; this.year = year
+        } else newMovieLoadResponse(title, url, TvType.Movie, url) {
+            posterUrl = poster; plot = desc; this.year = year
         }
     }
 
     private fun looksLikePlayer(url: String): Boolean {
-        val value = url.lowercase()
-        return Regex("""\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(value) ||
-            listOf("iframe", "player", "four.pichive.online", "pichive.online", "nm.php", "iframe.php")
-                .any { value.contains(it) }
+        val v = url.lowercase()
+        return Regex("""\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(v) ||
+            listOf("iframe","player","four.pichive.online","pichive.online","nm.php","iframe.php").any { v.contains(it) }
     }
 
     private fun extractCandidates(raw: String, base: String): List<String> {
-        val result = LinkedHashSet<String>()
-        val normalized = raw.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&")
-        val document = runCatching { Jsoup.parse(normalized, base) }.getOrNull()
-
-        document?.select("iframe, video, source, embed")?.forEach { element ->
-            for (attr in listOf("src", "data-src", "data-url", "data-embed", "href")) {
-                absoluteUrl(element.attr(attr), base)?.let { result.add(it) }
-            }
+        val res = LinkedHashSet<String>()
+        val norm = raw.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&")
+        val doc = runCatching { Jsoup.parse(norm, base) }.getOrNull()
+        doc?.select("iframe, video, source, embed")?.forEach { el ->
+            for (a in listOf("src","data-src","data-url","data-embed","href")) absoluteUrl(el.attr(a), base)?.let { res.add(it) }
         }
-
-        Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+""").findAll(normalized).forEach { match ->
-            val candidate = absoluteUrl(match.value.trimEnd('\\', ')', ']', ',', ';', '"'), base)
-                ?: return@forEach
-            if (looksLikePlayer(candidate)) result.add(candidate)
+        Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+""").findAll(norm).forEach { m ->
+            absoluteUrl(m.value.trimEnd('\\', ')', ']', ',', ';', '"'), base)?.let { if (looksLikePlayer(it)) res.add(it) }
         }
-
-        return result.toList()
+        return res.toList()
     }
 
-    private fun isDirectMedia(url: String): Boolean =
-        Regex("""(?i)\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(url)
-
+    private fun isDirectMedia(url: String): Boolean = Regex("""(?i)\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(url)
     private fun isNmPhpUrl(url: String): Boolean = url.contains("/nm.php", true)
-
     private fun isRootOrigin(url: String): Boolean {
-        val path = runCatching { URI(url).path.orEmpty() }.getOrDefault("")
-        return path.isBlank() || path == "/"
+        val p = runCatching { URI(url).path.orEmpty() }.getOrDefault("")
+        return p.isBlank() || p == "/"
     }
 
-    // =====================================================================
-    // PoW çözücü: SHA-256(n + "|" + salt + "|" + input), words[7] >>> 20 === 0
-    // =====================================================================
     private fun solvePow(input: String): Long? {
-        powCache[input]?.let {
-            Log.d("AsyaWatch", "PoW cache hit: ${input.take(20)}... → n=$it")
-            return it
-        }
-
+        powCache[input]?.let { return it }
         val digest = MessageDigest.getInstance("SHA-256")
         val suffix = "|$powSalt|$input"
-        val maxIter = 5_000_000L
-        val start = System.currentTimeMillis()
-
-        for (i in 0L until maxIter) {
+        for (i in 0L until 5_000_000L) {
             val hash = digest.digest("$i$suffix".toByteArray(Charsets.UTF_8))
-            val word7: Int = ((hash[28].toInt() and 0xFF) shl 24) or
-                              ((hash[29].toInt() and 0xFF) shl 16) or
-                              ((hash[30].toInt() and 0xFF) shl 8) or
-                              (hash[31].toInt() and 0xFF)
-
+            val word7 = ((hash[28].toInt() and 0xFF) shl 24) or ((hash[29].toInt() and 0xFF) shl 16) or
+                        ((hash[30].toInt() and 0xFF) shl 8) or (hash[31].toInt() and 0xFF)
             if ((word7 ushr 20) == 0) {
-                val elapsed = System.currentTimeMillis() - start
-                Log.d("AsyaWatch", "✔✔✔ PoW BULUNDU: input=${input.take(20)}..., n=$i (word7=$word7, ${elapsed}ms)")
                 powCache[input] = i
                 return i
             }
         }
-
-        Log.e("AsyaWatch", "✘ PoW bulunamadı: ${input.take(20)}...")
         return null
     }
 
@@ -495,213 +364,273 @@ class AsyaWatch : MainAPI() {
     )
 
     private fun parseNpConfig(html: String): JSONObject? {
-        val regex = Regex("""window\.NP_CONFIG\s*=\s*(\{.+?\});\s*(?:window\.|</script>|$)""", RegexOption.DOT_MATCHES_ALL)
-        val match = regex.find(html) ?: return null
-        return parseObject(match.groupValues[1].trim())
+        val re = Regex("""window\.NP_CONFIG\s*=\s*(\{.+?\});\s*(?:window\.|</script>|$)""", RegexOption.DOT_MATCHES_ALL)
+        val m = re.find(html) ?: return null
+        return parseObject(m.groupValues[1].trim())
     }
 
     // =====================================================================
-    // ⭐⭐⭐ HEM id HEM vToken dene — hangisi 200 dönerse kabul et ⭐⭐⭐
+    // ⭐⭐⭐ TEŞHİS: np.js'nin tamamını ve NP_GATE çağrısını logla ⭐⭐⭐
     // =====================================================================
-    private suspend fun tryPowOnUrl(nmUrl: String, iframeUrl: String, npId: String?): String? {
-        val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
-        val vToken: String = vMatch?.groupValues?.getOrNull(1) ?: run {
-            Log.e("AsyaWatch", "✘ nm.php URL'de v= token yok!")
-            return null
+    private suspend fun diagnoseNpJs(iframeUrl: String) {
+        if (diagnosticDone) return
+        diagnosticDone = true
+
+        val base = "https://four.pichive.online"
+        Log.d("AsyaWatch", "═══════════════════════════════════════")
+        Log.d("AsyaWatch", "🔬 NP.JS TEŞHİS BAŞLIYOR")
+        Log.d("AsyaWatch", "═══════════════════════════════════════")
+
+        // np.js dosyasını çek
+        val npJsUrl = "$base/assets/np/np.js?v=11.to6jix"
+        val js = runCatching {
+            app.get(npJsUrl, headers = siteHeaders, referer = base).text
+        }.getOrNull() ?: run {
+            Log.e("AsyaWatch", "np.js yüklenemedi")
+            return
         }
 
-        // Denenecek input adayları (önce id sonra vToken)
-        val inputs = mutableListOf<Pair<String, String>>()  // label to value
-        if (!npId.isNullOrBlank()) inputs.add("id" to npId)
-        inputs.add("vToken" to vToken)
+        Log.d("AsyaWatch", "📜 np.js uzunluk: ${js.length} byte")
 
+        // NP_GATE çağrılarını bul (function tanımından SONRA)
+        val funcDefEnd = js.indexOf("NP_GATE=function", ignoreCase = true)
+        val searchStart = if (funcDefEnd >= 0) funcDefEnd + 30 else 0
+
+        // Tüm "NP_GATE" referanslarını bul
+        var searchFrom = 0
+        var foundCount = 0
+        while (foundCount < 10) {
+            val idx = js.indexOf("NP_GATE", searchFrom)
+            if (idx < 0) break
+            // Function definition mı yoksa çağrı mı?
+            val isDefinition = idx + 7 < js.length && js[idx + 7] == '='
+            if (!isDefinition) {
+                val start = maxOf(0, idx - 300)
+                val end = minOf(js.length, idx + 500)
+                val context = js.substring(start, end).replace(Regex("\\s+"), " ")
+                Log.d("AsyaWatch", "🎯 NP_GATE çağrı @${idx}: ...$context...")
+                foundCount++
+            }
+            searchFrom = idx + 7
+        }
+        if (foundCount == 0) Log.w("AsyaWatch", "NP_GATE çağrısı bulunamadı")
+
+        // "p=" veya "&p" veya "searchParams" geçen yerleri logla
+        for (kw in listOf("&p=", "params", "searchParams", "URLSearchParams", "location.search", "&pow=", "nonce=")) {
+            val i = js.indexOf(kw, searchStart)
+            if (i >= 0) {
+                val s = maxOf(0, i - 250)
+                val e = minOf(js.length, i + 400)
+                val ctx = js.substring(s, e).replace(Regex("\\s+"), " ")
+                Log.d("AsyaWatch", "🔍 '$kw' @${i}: ...$ctx...")
+            }
+        }
+
+        // "sha256" veya "SHA-256" veya "digest" araması
+        for (kw in listOf("sha256", "SHA-256", "SHA256", "digest", "hash")) {
+            val i = js.indexOf(kw, searchStart)
+            if (i >= 0) {
+                val s = maxOf(0, i - 200)
+                val e = minOf(js.length, i + 300)
+                val ctx = js.substring(s, e).replace(Regex("\\s+"), " ")
+                Log.d("AsyaWatch", "🔍 '$kw' @${i}: ...$ctx...")
+            }
+        }
+
+        // HTML içindeki inline NP_GATE tanımını da logla
+        Log.d("AsyaWatch", "─────────────────────────────────────")
+        Log.d("AsyaWatch", "✅ TEŞHİS TAMAM — yukarıdaki NP_GATE çağrısına bak")
+        Log.d("AsyaWatch", "═══════════════════════════════════════")
+    }
+
+    private suspend fun tryAllPowVariants(nmUrl: String, iframeUrl: String, npId: String?): String? {
+        val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
+        val vToken = vMatch?.groupValues?.getOrNull(1) ?: return null
         val baseUrl = nmUrl.substringBefore('?')
         val headers = browserHeaders(iframeUrl)
+        val masterFullUrl = nmUrl
 
-        for ((label, input) in inputs) {
-            Log.d("AsyaWatch", "🎫 Deneniyor: input=$label (${input.length} char)")
+        // ⭐ TÜM adayları dene
+        val candidates = mutableListOf<Pair<String, String>>()
+        if (!npId.isNullOrBlank()) candidates.add("id" to npId)
+        candidates.add("vToken" to vToken)
+        candidates.add("fullMasterUrl" to masterFullUrl)
+        if (!npId.isNullOrBlank()) {
+            candidates.add("id|vToken" to "$npId|$vToken")
+            candidates.add("vToken|id" to "$vToken|$npId")
+        }
 
+        Log.d("AsyaWatch", "🎫 TÜM ADAYLAR: ${candidates.size} input deneniyor")
+
+        // ⭐ ÖNCELİK 1: PoW'suz nm.php dene
+        Log.d("AsyaWatch", "🧪 PoW'suz nm.php dene: $nmUrl")
+        val noPowResp = runCatching {
+            app.get(nmUrl, headers = headers, referer = iframeUrl)
+        }.getOrNull()
+        if (noPowResp != null) {
+            Log.d("AsyaWatch", "PoW'suz HTTP: ${noPowResp.code}, bodyLen=${noPowResp.text.length}")
+            if (noPowResp.code == 200 && noPowResp.text.trim().startsWith("#EXTM3U")) {
+                Log.d("AsyaWatch", "🎉🎉🎉 PoW GEREKMİYOR! nm.php?v= direkt M3U8 döndürüyor!")
+                return nmUrl
+            }
+            if (noPowResp.code == 200) {
+                Log.d("AsyaWatch", "PoW'suz 200 ama M3U8 değil: ${noPowResp.text.take(100)}")
+            }
+        }
+
+        // ⭐ ÖNCELİK 2: p=0, p=1 dene (JS bug olabilir)
+        for (testP in listOf("0", "1")) {
+            val testUrl = "$baseUrl?v=$vToken&p=$testP"
+            Log.d("AsyaWatch", "🧪 Test p=$testP: ${testUrl.take(80)}...")
+            val resp = runCatching {
+                app.get(testUrl, headers = headers, referer = iframeUrl)
+            }.getOrNull()
+            if (resp != null) {
+                Log.d("AsyaWatch", "p=$testP HTTP: ${resp.code}, bodyLen=${resp.text.length}")
+                if (resp.code == 200 && resp.text.trim().startsWith("#EXTM3U")) {
+                    Log.d("AsyaWatch", "🎉🎉🎉 p=$testP ÇALIŞTI!")
+                    return testUrl
+                }
+            }
+        }
+
+        // ⭐ ÖNCELİK 3: Tüm PoW adayları
+        for ((label, input) in candidates) {
+            Log.d("AsyaWatch", "🎫 PoW input=$label (${input.length} char)")
             val powValue = solvePow(input) ?: continue
             val correctUrl = "$baseUrl?v=$vToken&p=$powValue"
-            Log.d("AsyaWatch", "🎯 $label → p=$powValue, URL: ${correctUrl.take(80)}...")
 
-            // 1. Direct
             val directResp = runCatching {
                 app.get(correctUrl, headers = headers, referer = iframeUrl)
             }.getOrNull()
-
             if (directResp != null) {
                 Log.d("AsyaWatch", "PoW ($label/direct): HTTP ${directResp.code}, bodyLen=${directResp.text.length}")
-                if (directResp.code == 200 && directResp.text.startsWith("#EXTM3U")) {
-                    Log.d("AsyaWatch", "✔✔✔ BAŞARILI! ($label/direct) → M3U8 (${directResp.text.length} byte)")
+                if (directResp.code == 200 && directResp.text.trim().startsWith("#EXTM3U")) {
+                    Log.d("AsyaWatch", "🎉🎉🎉 BAŞARILI! input=$label, p=$powValue")
                     return correctUrl
                 }
             }
 
-            // 2. WebViewResolver
             val wvResp = runCatching {
                 app.get(correctUrl, headers = headers, referer = iframeUrl, interceptor = fourPichiveResolver)
             }.getOrNull()
-
             if (wvResp != null) {
                 Log.d("AsyaWatch", "PoW ($label/WebView): HTTP ${wvResp.code}, bodyLen=${wvResp.text.length}")
                 if (wvResp.code == 200 && wvResp.text.trim().startsWith("#EXTM3U")) {
-                    Log.d("AsyaWatch", "✔✔✔ BAŞARILI! ($label/WebView) → M3U8 (${wvResp.text.length} byte)")
+                    Log.d("AsyaWatch", "🎉🎉🎉 BAŞARILI (WebView)! input=$label, p=$powValue")
                     return correctUrl
                 }
             }
         }
-
-        Log.e("AsyaWatch", "✘ Hem id hem vToken denendi, ikisi de 404")
         return null
     }
 
     private suspend fun extractFourPichive(
-        iframeUrl: String,
-        referer: String,
+        iframeUrl: String, referer: String,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         if (isRootOrigin(iframeUrl)) return false
-        Log.d("AsyaWatch", "🔥 FourPichive: ${iframeUrl.take(100)}")
+        Log.d("AsyaWatch", "🔥 FourPichive: ${iframeUrl.take(80)}")
 
-        val response = runCatching {
+        val resp = runCatching {
             app.get(iframeUrl, headers = browserHeaders(iframeUrl), referer = referer, allowRedirects = true)
         }.getOrNull() ?: return false
+        if (!resp.isSuccessful) { Log.e("AsyaWatch", "iframe HTTP ${resp.code}"); return false }
 
-        if (!response.isSuccessful) {
-            Log.e("AsyaWatch", "iframe HTTP ${response.code}")
-            return false
-        }
-
-        val html = response.text
+        val html = resp.text
         if (html.isBlank()) return false
         Log.d("AsyaWatch", "iframe HTML: ${html.length} bytes")
 
-        val npConfig = parseNpConfig(html)
-        if (npConfig == null) {
-            Log.e("AsyaWatch", "NP_CONFIG bulunamadı")
-            return false
-        }
+        // ⭐ NP_GATE çağrısı için teşhis
+        diagnoseNpJs(iframeUrl)
 
-        val npId: String? = npConfig.optString("id")?.takeIf { it.isNotBlank() && it != "null" }
+        val npConfig = parseNpConfig(html) ?: return false
+        val npId = npConfig.optString("id")?.takeIf { it.isNotBlank() && it != "null" }
         Log.d("AsyaWatch", "NP_CONFIG id=$npId")
 
         // Altyazılar
-        val localSeenSubs = HashSet<String>()
+        val seen = HashSet<String>()
         npConfig.optJSONArray("subtitles")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val sub = arr.optJSONObject(i) ?: continue
                 val label = sub.optString("label", "Altyazı")
-                val url = sub.optString("url")
-                if (url.isNotBlank()) {
-                    val subtitle = SubtitleFile(lang = label, url = url)
-                    subtitle.headers = siteHeaders + mapOf(
+                val u = sub.optString("url")
+                if (u.isNotBlank()) {
+                    val s = SubtitleFile(lang = label, url = u)
+                    s.headers = siteHeaders + mapOf(
                         "Referer" to iframeUrl,
                         "Origin" to "https://four.pichive.online",
                         "Accept" to "text/vtt, text/plain, */*"
                     )
-                    if (localSeenSubs.add(url)) subtitleCallback(subtitle)
+                    if (seen.add(u)) subtitleCallback(s)
                 }
             }
         }
 
-        val masterUrl: String? = npConfig.optJSONArray("sources")?.optJSONObject(0)?.optString("master")
-            ?.takeIf { it.isNotBlank() && it != "null" }
-
-        if (masterUrl.isNullOrBlank()) {
-            Log.e("AsyaWatch", "master URL yok")
-            return false
-        }
-
+        val masterUrl = npConfig.optJSONArray("sources")?.optJSONObject(0)?.optString("master")
+            ?.takeIf { it.isNotBlank() && it != "null" } ?: return false
         Log.d("AsyaWatch", "master: ${masterUrl.take(100)}")
 
-        val finalUrl: String? = if (html.contains("NP_GATE")) {
-            tryPowOnUrl(masterUrl, iframeUrl, npId)
-        } else {
-            masterUrl
-        }
+        val finalUrl = if (html.contains("NP_GATE")) {
+            tryAllPowVariants(masterUrl, iframeUrl, npId)
+        } else masterUrl
 
-        if (finalUrl == null) {
-            Log.e("AsyaWatch", "PoW başarısız")
-            return false
-        }
+        if (finalUrl == null) { Log.e("AsyaWatch", "✘ Tüm PoW varyantları başarısız"); return false }
 
-        val type = if (finalUrl.contains(".m3u8", true) || isNmPhpUrl(finalUrl))
-            ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-
-        callback(
-            newExtractorLink(source = name, name = "$name FourPichive", url = finalUrl, type = type) {
-                this.referer = iframeUrl
-                this.headers = browserHeaders(iframeUrl)
-                this.quality = Qualities.Unknown.value
-            }
-        )
-        Log.d("AsyaWatch", "✔✔✔ Extractor verildi")
+        val type = if (finalUrl.contains(".m3u8", true) || isNmPhpUrl(finalUrl)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+        callback(newExtractorLink(source = name, name = "$name FourPichive", url = finalUrl, type = type) {
+            this.referer = iframeUrl
+            this.headers = browserHeaders(iframeUrl)
+            this.quality = Qualities.Unknown.value
+        })
         return true
     }
 
     override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
+        data: String, isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         var found = false
-        val emittedUrls = HashSet<String>()
-        val seenCandidates = HashSet<String>()
-        val chosenSubtitles = LinkedHashMap<String, SubtitleFile>()
+        val emitted = HashSet<String>()
+        val seenC = HashSet<String>()
+        val subs = LinkedHashMap<String, SubtitleFile>()
 
-        val emitSubtitle: (SubtitleFile) -> Unit = { subtitle ->
-            val lang: String = subtitle.lang
-            if (lang == "Türkçe" || lang == "English" || lang == "İngilizce Forced")
-                chosenSubtitles.putIfAbsent(lang, subtitle)
+        val emitSub: (SubtitleFile) -> Unit = { s ->
+            val l = s.lang
+            if (l == "Türkçe" || l == "English" || l == "İngilizce Forced") subs.putIfAbsent(l, s)
         }
 
-        suspend fun processCandidate(raw: String, referer: String) {
-            val candidate: String = absoluteUrl(raw, referer) ?: return
-            if (!seenCandidates.add(candidate)) return
-            if (isRootOrigin(candidate)) return
-
-            if (isDirectMedia(candidate) && !isNmPhpUrl(candidate)) {
-                if (emittedUrls.add(candidate)) {
-                    val type = if (candidate.contains(".m3u8", true))
-                        ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                    callback(newExtractorLink(source = name, name = name, url = candidate, type = type) {
-                        this.referer = referer
-                        this.quality = Qualities.Unknown.value
+        suspend fun process(raw: String, ref: String) {
+            val c = absoluteUrl(raw, ref) ?: return
+            if (!seenC.add(c)) return
+            if (isRootOrigin(c)) return
+            if (isDirectMedia(c) && !isNmPhpUrl(c)) {
+                if (emitted.add(c)) {
+                    val t = if (c.contains(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    callback(newExtractorLink(source = name, name = name, url = c, type = t) {
+                        referer = ref; quality = Qualities.Unknown.value
                     })
                     found = true
                 }
                 return
             }
-
-            val host: String? = runCatching { URI(candidate).host?.lowercase() }.getOrNull()
+            val host = runCatching { URI(c).host?.lowercase() }.getOrNull()
             if (host == "four.pichive.online" || host?.endsWith(".four.pichive.online") == true) {
-                runCatching {
-                    extractFourPichive(candidate, referer, emitSubtitle) { link ->
-                        if (emittedUrls.add(link.url)) { callback(link); found = true }
-                    }
-                }
+                runCatching { extractFourPichive(c, ref, emitSub) { link -> if (emitted.add(link.url)) { callback(link); found = true } } }
                 return
             }
-
-            runCatching {
-                loadExtractor(candidate, referer, emitSubtitle) { link ->
-                    if (emittedUrls.add(link.url)) callback(link)
-                    found = true
-                }
-            }
+            runCatching { loadExtractor(c, ref, emitSub) { link -> if (emitted.add(link.url)) callback(link); found = true } }
         }
 
         val page = runCatching { getPageData(data) }.getOrNull()
         if (page != null) {
-            val pageCandidates = extractCandidates(page.document.html(), data)
-            Log.d("AsyaWatch", "Sayfa adayları: ${pageCandidates.size}")
-            for (c in pageCandidates) processCandidate(c, data)
+            val cands = extractCandidates(page.document.html(), data)
+            Log.d("AsyaWatch", "Sayfa adayları: ${cands.size}")
+            for (c in cands) process(c, data)
         }
-
-        chosenSubtitles.values.forEach { subtitleCallback(it) }
+        subs.values.forEach { subtitleCallback(it) }
         return found
     }
 }
