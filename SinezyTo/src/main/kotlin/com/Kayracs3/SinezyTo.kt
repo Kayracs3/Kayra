@@ -12,6 +12,8 @@ import java.net.URI
 import java.net.URLEncoder
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
+import java.io.PushbackInputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -27,7 +29,11 @@ import okhttp3.Request
  * FirePlayer manifest proxy: rewrite all HLS resources to localhost and preserve signed queries/headers.
  */
 private object SinezyHlsProxy {
-    private data class Target(val url: String, val inheritedQuery: String?)
+    private data class Target(
+        val url: String,
+        val inheritedQuery: String?,
+        @Volatile var lastAccessedAt: Long = System.currentTimeMillis()
+    )
     private data class Mapping(
         val sourceUrl: String,
         val iframeUrl: String,
@@ -45,8 +51,13 @@ private object SinezyHlsProxy {
 
     private const val MAX_MAPPING_AGE_MS = 6 * 60 * 60 * 1000L
     private const val MAX_HEADER_BYTES = 32 * 1024
+    private const val MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+    private const val MAX_TARGETS_PER_MAPPING = 2048
+    private const val MAX_TARGET_IDLE_MS = 30 * 60 * 1000L
+    private const val STREAM_BUFFER_BYTES = 32 * 1024
+    private const val PREFIX_BYTES = 64
     private val mappings = ConcurrentHashMap<String, Mapping>()
-    private val executor = Executors.newCachedThreadPool { runnable ->
+    private val executor = Executors.newFixedThreadPool(6) { runnable ->
         Thread(runnable, "SinezyHlsProxy").apply { isDaemon = true }
     }
     private val client by lazy {
@@ -150,6 +161,7 @@ private object SinezyHlsProxy {
                     if (target == null) {
                         writeResponse(output, 404, "text/plain; charset=utf-8", "HLS resource not found".toByteArray())
                     } else {
+                        target.lastAccessedAt = System.currentTimeMillis()
                         serveTarget(output, mapping, mappingId, target, clientHeaders)
                     }
                 }
@@ -206,37 +218,131 @@ private object SinezyHlsProxy {
         output: BufferedOutputStream, mapping: Mapping, mappingId: String, target: Target,
         clientHeaders: Map<String, String>
     ) {
-        val response = fetchTarget(mapping, target, clientHeaders)
-        if (response == null || response.code !in 200..299) {
-            val status = response?.code ?: 502
-            Log.w(
-                "SinezyHlsProxy",
-                "Nested resource failed: HTTP $status, path=${runCatching { URI(target.url).path }.getOrNull().orEmpty()}"
-            )
-            writeResponse(output, status, "text/plain; charset=utf-8", "Upstream media resource unavailable".toByteArray())
-            return
+        var lastCode = 502
+        val candidateUrls = mutableListOf(target.url)
+        val inherited = target.inheritedQuery
+        if (!inherited.isNullOrBlank()) {
+            val uri = runCatching { URI(target.url) }.getOrNull()
+            if (uri != null && uri.rawQuery.isNullOrBlank()) candidateUrls += target.url + "?" + inherited
         }
-        val text = String(response.bytes, StandardCharsets.UTF_8)
-        if (text.trimStart('\uFEFF', ' ', '\t', '\r', '\n').startsWith("#EXTM3U")) {
-            val rewritten = rewriteManifest(text, response.finalUrl, mapping, mappingId)
-            writeResponse(
-                output, 200, "application/vnd.apple.mpegurl", rewritten.toByteArray(StandardCharsets.UTF_8),
-                mapOf("Cache-Control" to "no-cache, no-store, must-revalidate")
-            )
-            return
-        }
-        val contentType = response.contentType.ifBlank {
-            when {
-                target.url.contains(".m4s", true) -> "video/iso.segment"
-                target.url.contains(".ts", true) -> "video/mp2t"
-                target.url.contains(".aac", true) -> "audio/aac"
-                else -> "application/octet-stream"
+
+        for (candidateUrl in candidateUrls) {
+            for ((profileName, headers) in headerProfiles(mapping)) {
+                val request = runCatching {
+                    val builder = Request.Builder().url(candidateUrl).get()
+                    headers.forEach { (key, value) ->
+                        if (value.isNotBlank() && !key.equals("Host", true) && !key.equals("Content-Length", true)) {
+                            builder.header(key, value)
+                        }
+                    }
+                    clientHeaders["range"]?.takeIf { it.isNotBlank() }?.let { builder.header("Range", it) }
+                    clientHeaders["if-range"]?.takeIf { it.isNotBlank() }?.let { builder.header("If-Range", it) }
+                    builder.build()
+                }.getOrNull() ?: continue
+
+                val response = runCatching { client.newCall(request).execute() }.getOrNull() ?: continue
+                response.use {
+                    if (response.code !in 200..299) {
+                        lastCode = response.code
+                        if (response.code !in setOf(401, 403, 404, 405, 429)) {
+                            writeResponse(output, response.code, "text/plain; charset=utf-8",
+                                "Upstream media resource unavailable".toByteArray())
+                            return
+                        }
+                        continue
+                    }
+
+                    mapping.preferredHeaders = headers
+                    if (profileName != "preferred") {
+                        Log.d("SinezyHlsProxy", "Header profile selected for media: " + profileName)
+                    }
+                    val body = response.body
+                    if (body == null) {
+                        writeResponse(output, 502, "text/plain; charset=utf-8", "Empty upstream response".toByteArray())
+                        return
+                    }
+
+                    val input = PushbackInputStream(body.byteStream(), PREFIX_BYTES)
+                    val prefix = ByteArray(PREFIX_BYTES)
+                    val prefixLength = input.read(prefix)
+                    if (prefixLength > 0) input.unread(prefix, 0, prefixLength)
+                    val prefixText = if (prefixLength > 0) String(prefix, 0, prefixLength, StandardCharsets.UTF_8) else ""
+
+                    if (prefixText.trimStart('\uFEFF', ' ', '\t', '\r', '\n').startsWith("#EXTM3U")) {
+                        val manifestBytes = readLimited(input, MAX_MANIFEST_BYTES)
+                        if (manifestBytes == null) {
+                            writeResponse(output, 502, "text/plain; charset=utf-8", "HLS manifest exceeds size limit".toByteArray())
+                            return
+                        }
+                        val manifest = String(manifestBytes, StandardCharsets.UTF_8)
+                        val rewritten = rewriteManifest(manifest, response.request.url.toString(), mapping, mappingId)
+                        writeResponse(
+                            output, 200, "application/vnd.apple.mpegurl", rewritten.toByteArray(StandardCharsets.UTF_8),
+                            mapOf("Cache-Control" to "no-cache, no-store, must-revalidate")
+                        )
+                    } else {
+                        val contentType = response.header("Content-Type").orEmpty().ifBlank {
+                            when {
+                                candidateUrl.contains(".m4s", true) -> "video/iso.segment"
+                                candidateUrl.contains(".ts", true) -> "video/mp2t"
+                                candidateUrl.contains(".aac", true) -> "audio/aac"
+                                else -> "application/octet-stream"
+                            }
+                        }
+                        writeStreamingResponse(
+                            output, response.code, contentType, input, body.contentLength(),
+                            response.header("Content-Range"), response.header("Accept-Ranges")
+                        )
+                    }
+                    return
+                }
             }
         }
-        val responseHeaders = mutableMapOf<String, String>()
-        response.contentRange?.let { responseHeaders["Content-Range"] = it }
-        response.acceptRanges?.let { responseHeaders["Accept-Ranges"] = it }
-        writeResponse(output, response.code, contentType, response.bytes, responseHeaders)
+        Log.w("SinezyHlsProxy", "Media resource failed after header profiles: " + target.url.take(180))
+        writeResponse(output, lastCode, "text/plain; charset=utf-8", "Upstream media resource unavailable".toByteArray())
+    }
+
+    private fun readLimited(input: PushbackInputStream, maxBytes: Int): ByteArray? {
+        val result = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            if (result.size() + count > maxBytes) return null
+            result.write(buffer, 0, count)
+        }
+        return result.toByteArray()
+    }
+
+    private fun writeStreamingResponse(
+        output: BufferedOutputStream,
+        code: Int,
+        contentType: String,
+        input: PushbackInputStream,
+        contentLength: Long,
+        contentRange: String?,
+        acceptRanges: String?
+    ) {
+        val reason = when (code) {
+            200 -> "OK"
+            206 -> "Partial Content"
+            403 -> "Forbidden"
+            404 -> "Not Found"
+            416 -> "Range Not Satisfiable"
+            else -> "OK"
+        }
+        val header = buildString {
+            append("HTTP/1.1 ").append(code).append(' ').append(reason).append("\r\n")
+            append("Content-Type: ").append(contentType).append("\r\n")
+            if (contentLength >= 0) append("Content-Length: ").append(contentLength).append("\r\n")
+            contentRange?.let { append("Content-Range: ").append(it).append("\r\n") }
+            acceptRanges?.let { append("Accept-Ranges: ").append(it).append("\r\n") }
+            append("Cache-Control: no-store\r\n")
+            append("Connection: close\r\n\r\n")
+        }
+        output.write(header.toByteArray(StandardCharsets.ISO_8859_1))
+        input.copyTo(output, STREAM_BUFFER_BYTES)
+        output.flush()
     }
 
     private fun rewriteManifest(body: String, baseUrl: String, mapping: Mapping, mappingId: String): String {
@@ -274,7 +380,18 @@ private object SinezyHlsProxy {
                 }
             }
         }
+        cleanupTargets(mapping)
         return lines.joinToString("\n")
+    }
+
+    private fun cleanupTargets(mapping: Mapping) {
+        val now = System.currentTimeMillis()
+        mapping.targets.entries.removeIf { now - it.value.lastAccessedAt > MAX_TARGET_IDLE_MS }
+        val excess = mapping.targets.size - MAX_TARGETS_PER_MAPPING
+        if (excess > 0) {
+            mapping.targets.entries.sortedBy { it.value.lastAccessedAt }
+                .take(excess).forEach { mapping.targets.remove(it.key, it.value) }
+        }
     }
 
     private fun fetchTarget(mapping: Mapping, target: Target, clientHeaders: Map<String, String>): Upstream? {

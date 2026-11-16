@@ -57,6 +57,11 @@ import javax.crypto.spec.SecretKeySpec
 
 private object InatHlsProxy {
 
+    private data class Target(
+        val url: String,
+        @Volatile var lastAccessedAt: Long = System.currentTimeMillis()
+    )
+
     private data class Mapping(
         val refreshUrl: String,
         val initialUrl: String,
@@ -66,15 +71,18 @@ private object InatHlsProxy {
         val image: String,
         val signature: String,
         val createdAt: Long,
-        val targets: MutableMap<String, String> = ConcurrentHashMap(),
+        val targets: MutableMap<String, Target> = ConcurrentHashMap(),
         @Volatile var currentUrl: String = initialUrl
     )
 
     private const val MAX_MAPPING_AGE_MS = 6 * 60 * 60 * 1000L
     private const val MAX_REQUEST_HEADER_BYTES = 32 * 1024
+    private const val MAX_TARGETS_PER_MAPPING = 2048
+    private const val MAX_TARGET_IDLE_MS = 30 * 60 * 1000L
+    private const val STREAM_BUFFER_BYTES = 32 * 1024
 
     private val mappings = ConcurrentHashMap<String, Mapping>()
-    private val executor = Executors.newCachedThreadPool { runnable ->
+    private val executor = Executors.newFixedThreadPool(6) { runnable ->
         Thread(runnable, "InatHlsProxy").apply { isDaemon = true }
     }
 
@@ -189,16 +197,24 @@ private object InatHlsProxy {
                     return
                 }
 
+                val clientHeaders = requestHeaders.drop(1).mapNotNull { line ->
+                    val colon = line.indexOf(':')
+                    if (colon <= 0) null else {
+                        line.substring(0, colon).trim().lowercase(Locale.ROOT) to line.substring(colon + 1).trim()
+                    }
+                }.toMap()
+
                 if (resourcePath == "index.m3u8") {
                     serveFreshManifest(output, mapping, mappingId)
                 } else {
                     val token = resourcePath.removePrefix("resource/")
                     val target = mapping.targets[token]
-                    if (target.isNullOrBlank()) {
+                    if (target == null) {
                         writeResponse(output, 404, "text/plain; charset=utf-8", "Resource not found".toByteArray())
                         return
                     }
-                    serveTarget(output, mapping, mappingId, target)
+                    target.lastAccessedAt = System.currentTimeMillis()
+                    serveTarget(output, mapping, mappingId, target.url, clientHeaders)
                 }
             } catch (e: Exception) {
                 Log.w("InatHlsProxy", "Client failed: ${e.message}")
@@ -439,7 +455,7 @@ private object InatHlsProxy {
             }.getOrDefault(target)
 
             val token = UUID.randomUUID().toString().replace("-", "")
-            mapping.targets[token] = absolute
+            mapping.targets[token] = Target(absolute)
             return "/hls/$mappingId/resource/$token"
         }
 
@@ -461,70 +477,62 @@ private object InatHlsProxy {
             }
         }
 
+        cleanupTargets(mapping)
         return lines.joinToString("\n")
+    }
+
+    private fun cleanupTargets(mapping: Mapping) {
+        val now = System.currentTimeMillis()
+        mapping.targets.entries.removeIf { now - it.value.lastAccessedAt > MAX_TARGET_IDLE_MS }
+        val excess = mapping.targets.size - MAX_TARGETS_PER_MAPPING
+        if (excess > 0) {
+            mapping.targets.entries.sortedBy { it.value.lastAccessedAt }
+                .take(excess).forEach { mapping.targets.remove(it.key, it.value) }
+        }
     }
 
     private fun serveTarget(
         output: BufferedOutputStream,
         mapping: Mapping,
         mappingId: String,
-        target: String
+        target: String,
+        clientHeaders: Map<String, String>
     ) {
         val isPlaylist = target.contains(".m3u8", ignoreCase = true) ||
             target.contains("/hls/", ignoreCase = true) ||
             target.contains("/playlist", ignoreCase = true)
 
-        val response = InatBox.httpGetBlocking(
-            url = target,
-            headers = mapping.headers,
-            referer = mapping.headers["Referer"]
-        )
+        if (!isPlaylist) {
+            val fallbackType = when {
+                target.contains(".aac", true) -> "audio/aac"
+                target.contains(".m4s", true) -> "video/iso.segment"
+                target.contains(".ts", true) -> "video/mp2t"
+                else -> "application/octet-stream"
+            }
+            val status = InatBox.streamMediaBlocking(
+                url = target, headers = mapping.headers, referer = mapping.headers["Referer"],
+                range = clientHeaders["range"], output = output, fallbackContentType = fallbackType
+            )
+            if (status == null) {
+                writeResponse(output, 502, "text/plain; charset=utf-8", "Upstream media stream failed".toByteArray())
+            } else if (status !in 200..299) {
+                writeResponse(output, status, "text/plain; charset=utf-8", "Upstream media resource unavailable".toByteArray())
+            }
+            return
+        }
 
+        val response = InatBox.httpGetBlocking(
+            url = target, headers = mapping.headers, referer = mapping.headers["Referer"]
+        )
         if (response == null || response.first !in 200..299) {
             val code = response?.first ?: 502
-            writeResponse(
-                output,
-                code,
-                "text/plain; charset=utf-8",
-                "Upstream resource failed".toByteArray()
-            )
+            writeResponse(output, code, "text/plain; charset=utf-8", "Upstream resource failed".toByteArray())
             return
         }
-
-        if (isPlaylist) {
-            val rewritten = rewriteManifest(
-                body = response.second,
-                baseUrl = target,
-                mapping = mapping,
-                mappingId = mappingId
-            )
-            writeResponse(
-                output,
-                200,
-                "application/vnd.apple.mpegurl",
-                rewritten.toByteArray(StandardCharsets.UTF_8),
-                extraHeaders = mapOf(
-                    "Cache-Control" to "no-cache, no-store, must-revalidate",
-                    "Pragma" to "no-cache"
-                )
-            )
-            return
-        }
-
-        val bodyBytes = response.third ?: response.second.toByteArray(StandardCharsets.ISO_8859_1)
-        val contentType = when {
-            target.contains(".aac", true) -> "audio/aac"
-            target.contains(".m4s", true) -> "video/iso.segment"
-            target.contains(".ts", true) -> "video/mp2t"
-            else -> "application/octet-stream"
-        }
-
+        val rewritten = rewriteManifest(body = response.second, baseUrl = target, mapping = mapping, mappingId = mappingId)
         writeResponse(
-            output,
-            200,
-            contentType,
-            bodyBytes,
-            extraHeaders = mapOf("Cache-Control" to "no-store")
+            output, 200, "application/vnd.apple.mpegurl", rewritten.toByteArray(StandardCharsets.UTF_8),
+            extraHeaders = mapOf("Cache-Control" to "no-cache, no-store, must-revalidate", "Pragma" to "no-cache")
         )
     }
 
@@ -712,6 +720,45 @@ class InatBox : MainAPI() {
                 }
             } catch (e: Exception) {
                 Log.w("InatBox", "Proxy GET failed: ${e.message}")
+                null
+            }
+        }
+
+        internal fun streamMediaBlocking(
+            url: String, headers: Map<String, String>, referer: String?, range: String?,
+            output: BufferedOutputStream, fallbackContentType: String
+        ): Int? {
+            return try {
+                val builder = Request.Builder().url(url).get()
+                headers.forEach { (key, value) ->
+                    if (value.isNotBlank() && !key.equals("Host", true) && !key.equals("Content-Length", true)) {
+                        builder.header(key, value)
+                    }
+                }
+                if (!referer.isNullOrBlank() && headers["Referer"].isNullOrBlank()) builder.header("Referer", referer)
+                range?.takeIf { it.isNotBlank() }?.let { builder.header("Range", it) }
+
+                proxyHttpClient.newCall(builder.build()).execute().use { response ->
+                    if (!response.isSuccessful) return response.code
+                    val body = response.body ?: return response.code
+                    val contentType = response.header("Content-Type")?.takeIf { it.isNotBlank() } ?: fallbackContentType
+                    val length = body.contentLength()
+                    val header = buildString {
+                        val reason = if (response.code == 206) "Partial Content" else "OK"
+                        append("HTTP/1.1 ").append(response.code).append(' ').append(reason).append("\r\n")
+                        append("Content-Type: ").append(contentType).append("\r\n")
+                        if (length >= 0) append("Content-Length: ").append(length).append("\r\n")
+                        response.header("Content-Range")?.let { append("Content-Range: ").append(it).append("\r\n") }
+                        response.header("Accept-Ranges")?.let { append("Accept-Ranges: ").append(it).append("\r\n") }
+                        append("Cache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n")
+                    }
+                    output.write(header.toByteArray(StandardCharsets.ISO_8859_1))
+                    body.byteStream().copyTo(output, 32 * 1024)
+                    output.flush()
+                    response.code
+                }
+            } catch (e: Exception) {
+                Log.w("InatHlsProxy", "Streaming request failed: " + e.message)
                 null
             }
         }
