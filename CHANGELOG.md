@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:2e0368259a5f78f78ab782887273856a424909f0 -->
+### Update mainUrl to new DiziLife URL
+
+- Etkilenen alanlar: DiziLife
+- Commit: [2e03682](https://github.com/Kayracs3/Kayra/commit/2e0368259a5f78f78ab782887273856a424909f0)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:6627d724d8471980b82fe1335ec1b70323630b60 -->
 ### Refactor stream header and URL extraction logic
 
