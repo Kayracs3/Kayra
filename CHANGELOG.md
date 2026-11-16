@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:881e2495d7eaee465bfcb2f9870e6c8d40902cc0 -->
+### Bound provider caches and scraping concurrency for Android TV
+
+- Etkilenen alanlar: AsyaWatch, CineStream, InatBox, InatBoxYedek, SinemaCX
+- Commit: [881e249](https://github.com/Kayracs3/Kayra/commit/881e2495d7eaee465bfcb2f9870e6c8d40902cc0)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:a504354df0041cb386279c179838e15f6a602802 -->
 ### Remove unsupported ExtractorLink isLive assignments
 
