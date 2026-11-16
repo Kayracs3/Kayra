@@ -38,6 +38,8 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
+import java.io.PushbackInputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -48,8 +50,10 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
@@ -57,6 +61,11 @@ import javax.crypto.spec.SecretKeySpec
 
 
 private object InatBoxYedekHlsProxy {
+
+    private data class Target(
+        val url: String,
+        @Volatile var lastAccessedAt: Long = System.currentTimeMillis()
+    )
 
     private data class Mapping(
         val refreshUrl: String,
@@ -67,17 +76,26 @@ private object InatBoxYedekHlsProxy {
         val image: String,
         val signature: String,
         val createdAt: Long,
-        val targets: MutableMap<String, String> = ConcurrentHashMap(),
+        val targets: MutableMap<String, Target> = ConcurrentHashMap(),
         @Volatile var currentUrl: String = initialUrl
     )
 
     private const val MAX_MAPPING_AGE_MS = 6 * 60 * 60 * 1000L
     private const val MAX_REQUEST_HEADER_BYTES = 32 * 1024
+    private const val MAX_TARGETS_PER_MAPPING = 2048
+    private const val MAX_TARGET_IDLE_MS = 30 * 60 * 1000L
+    private const val MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+    private const val STREAM_BUFFER_BYTES = 32 * 1024
 
     private val mappings = ConcurrentHashMap<String, Mapping>()
-    private val executor = Executors.newCachedThreadPool { runnable ->
-        Thread(runnable, "InatBoxYedekHlsProxy").apply { isDaemon = true }
-    }
+    private val executor = ThreadPoolExecutor(
+        4, 4, 0L, TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue(12),
+        { runnable ->
+            Thread(runnable, "InatBoxYedekHlsProxy").apply { isDaemon = true }
+        },
+        ThreadPoolExecutor.CallerRunsPolicy()
+    )
 
     @Volatile
     private var serverSocket: ServerSocket? = null
@@ -190,16 +208,24 @@ private object InatBoxYedekHlsProxy {
                     return
                 }
 
+                val clientHeaders = requestHeaders.drop(1).mapNotNull { line ->
+                    val colon = line.indexOf(':')
+                    if (colon <= 0) null else {
+                        line.substring(0, colon).trim().lowercase(Locale.ROOT) to line.substring(colon + 1).trim()
+                    }
+                }.toMap()
+
                 if (resourcePath == "index.m3u8") {
                     serveFreshManifest(output, mapping, mappingId)
                 } else {
                     val token = resourcePath.removePrefix("resource/")
                     val target = mapping.targets[token]
-                    if (target.isNullOrBlank()) {
+                    if (target == null) {
                         writeResponse(output, 404, "text/plain; charset=utf-8", "Resource not found".toByteArray())
                         return
                     }
-                    serveTarget(output, mapping, mappingId, target)
+                    target.lastAccessedAt = System.currentTimeMillis()
+                    serveTarget(output, mapping, mappingId, target.url, clientHeaders)
                 }
             } catch (e: Exception) {
                 Log.w("InatBoxYedekHlsProxy", "Client failed: ${e.message}")
@@ -440,7 +466,7 @@ private object InatBoxYedekHlsProxy {
             }.getOrDefault(target)
 
             val token = UUID.randomUUID().toString().replace("-", "")
-            mapping.targets[token] = absolute
+            mapping.targets[token] = Target(absolute)
             return "/hls/$mappingId/resource/$token"
         }
 
@@ -462,116 +488,69 @@ private object InatBoxYedekHlsProxy {
             }
         }
 
+        cleanupTargets(mapping)
         return lines.joinToString("\n")
+    }
+
+    private fun cleanupTargets(mapping: Mapping) {
+        val now = System.currentTimeMillis()
+        mapping.targets.entries.removeIf { now - it.value.lastAccessedAt > MAX_TARGET_IDLE_MS }
+        val excess = mapping.targets.size - MAX_TARGETS_PER_MAPPING
+        if (excess > 0) {
+            mapping.targets.entries.sortedBy { it.value.lastAccessedAt }
+                .take(excess).forEach { mapping.targets.remove(it.key, it.value) }
+        }
     }
 
     private fun serveTarget(
         output: BufferedOutputStream,
         mapping: Mapping,
         mappingId: String,
-        target: String
+        target: String,
+        clientHeaders: Map<String, String>
     ) {
-        // Do not identify every URL under /hls/ as a playlist: many providers also
-        // serve TS segments beneath that path. Detect playlists from the payload,
-        // using the URL only as a guard against an HTML error page on a .m3u8 URL.
         val targetPath = runCatching { URI(target).path.orEmpty() }
             .getOrDefault(target.substringBefore('?').substringBefore('#'))
-        val urlLooksLikePlaylist = targetPath.endsWith(".m3u8", ignoreCase = true) ||
-            targetPath.substringAfterLast('/').equals("playlist", ignoreCase = true)
-
-        val response = InatBoxYedek.httpGetBlocking(
-            url = target,
-            headers = mapping.headers,
-            referer = mapping.headers["Referer"]
-        )
-
-        if (response == null || response.first !in 200..299) {
-            val code = response?.first ?: 502
-            Log.w(
-                "InatBoxYedekHlsProxy",
-                "Upstream resource HTTP $code for ${mapping.name}"
-            )
-            writeResponse(
-                output,
-                502,
-                "text/plain; charset=utf-8",
-                "Upstream resource failed".toByteArray()
-            )
-            return
-        }
-
-        val responseText = response.second.trimStart()
-        val isHlsPlaylist = responseText.startsWith("#EXTM3U", ignoreCase = false)
-
-        if (isHlsPlaylist) {
-            val rewritten = rewriteManifest(
-                body = response.second,
-                baseUrl = target,
-                mapping = mapping,
-                mappingId = mappingId
-            )
-            writeResponse(
-                output,
-                200,
-                "application/vnd.apple.mpegurl",
-                rewritten.toByteArray(StandardCharsets.UTF_8),
-                extraHeaders = mapOf(
-                    "Cache-Control" to "no-cache, no-store, must-revalidate",
-                    "Pragma" to "no-cache"
-                )
-            )
-            return
-        }
-
-        // Some CDN edges return an HTML/JSON block with HTTP 200. Do not hand that
-        // body to ExoPlayer as TS media, as it looks like a successful URL but yields
-        // malformed MPEG-TS data and intermittent playback.
-        val prefix = responseText.take(512).lowercase(Locale.ROOT)
-        val errorPayload = prefix.startsWith("<!doctype html") ||
-            prefix.startsWith("<html") ||
-            prefix.startsWith("access denied") ||
-            prefix.startsWith("cloudflare") ||
-            (prefix.startsWith("{") &&
-                (prefix.contains("\"error\"") ||
-                    prefix.contains("\"message\"") ||
-                    prefix.contains("\"success\":false")))
-
-        if (urlLooksLikePlaylist || errorPayload) {
-            val compactPrefix = responseText.take(96).replace(Regex("\\s+"), " ")
-            Log.w(
-                "InatBoxYedekHlsProxy",
-                if (urlLooksLikePlaylist) {
-                    "Playlist URL returned non-HLS payload for ${mapping.name}; prefix=$compactPrefix"
-                } else {
-                    "Upstream media returned an error payload for ${mapping.name}; prefix=$compactPrefix"
-                }
-            )
-            writeResponse(
-                output,
-                502,
-                "text/plain; charset=utf-8",
-                "Upstream did not return playable media".toByteArray()
-            )
-            return
-        }
-
-        val bodyBytes = response.third ?: response.second.toByteArray(StandardCharsets.ISO_8859_1)
-        val hasTsSync = bodyBytes.size > 188 &&
-            bodyBytes[0] == 0x47.toByte() &&
-            (bodyBytes.size <= 376 || bodyBytes[188] == 0x47.toByte())
-        val contentType = when {
+        val fallbackType = when {
             targetPath.contains(".aac", true) -> "audio/aac"
             targetPath.contains(".m4s", true) -> "video/iso.segment"
-            targetPath.contains(".ts", true) || hasTsSync -> "video/mp2t"
+            targetPath.contains(".ts", true) -> "video/mp2t"
             else -> "application/octet-stream"
         }
 
+        val result = InatBoxYedek.streamMediaBlocking(
+            url = target,
+            headers = mapping.headers,
+            referer = mapping.headers["Referer"],
+            range = clientHeaders["range"],
+            output = output,
+            fallbackContentType = fallbackType
+        )
+        if (result == null) {
+            writeResponse(output, 502, "text/plain; charset=utf-8", "Upstream media stream failed".toByteArray())
+            return
+        }
+        if (result.code !in 200..299) {
+            writeResponse(output, result.code, "text/plain; charset=utf-8", "Upstream media resource unavailable".toByteArray())
+            return
+        }
+
+        val manifest = result.manifest ?: return
+        val rewritten = rewriteManifest(
+            body = manifest,
+            baseUrl = target,
+            mapping = mapping,
+            mappingId = mappingId
+        )
         writeResponse(
             output,
             200,
-            contentType,
-            bodyBytes,
-            extraHeaders = mapOf("Cache-Control" to "no-store")
+            "application/vnd.apple.mpegurl",
+            rewritten.toByteArray(StandardCharsets.UTF_8),
+            extraHeaders = mapOf(
+                "Cache-Control" to "no-cache, no-store, must-revalidate",
+                "Pragma" to "no-cache"
+            )
         )
     }
 
@@ -761,6 +740,109 @@ class InatBoxYedek : MainAPI() {
                 Log.w("InatBoxYedek", "Proxy GET failed: ${e.message}")
                 null
             }
+        }
+
+        internal data class MediaStreamResult(val code: Int, val manifest: String? = null)
+
+        internal fun streamMediaBlocking(
+            url: String,
+            headers: Map<String, String>,
+            referer: String?,
+            range: String?,
+            output: BufferedOutputStream,
+            fallbackContentType: String
+        ): MediaStreamResult? {
+            return try {
+                val builder = Request.Builder().url(url).get()
+                headers.forEach { (key, value) ->
+                    if (value.isNotBlank() &&
+                        !key.equals("Host", true) &&
+                        !key.equals("Content-Length", true)
+                    ) builder.header(key, value)
+                }
+                if (!referer.isNullOrBlank() && headers["Referer"].isNullOrBlank()) {
+                    builder.header("Referer", referer)
+                }
+                range?.takeIf { it.isNotBlank() }?.let { builder.header("Range", it) }
+
+                proxyHttpClient.newCall(builder.build()).execute().use { response ->
+                    if (!response.isSuccessful) return MediaStreamResult(response.code)
+                    val body = response.body ?: return MediaStreamResult(502)
+                    val input = PushbackInputStream(body.byteStream(), 512)
+                    val prefix = ByteArray(512)
+                    var prefixLength = 0
+                    while (prefixLength < prefix.size) {
+                        val count = input.read(prefix, prefixLength, prefix.size - prefixLength)
+                        if (count <= 0) break
+                        prefixLength += count
+                        val peek = String(prefix, 0, prefixLength, StandardCharsets.UTF_8)
+                        if (peek.trimStart('\uFEFF', ' ', '\t', '\r', '\n').startsWith("#EXTM3U") ||
+                            peek.contains('\n')
+                        ) break
+                    }
+                    if (prefixLength > 0) input.unread(prefix, 0, prefixLength)
+                    val prefixText = if (prefixLength > 0) {
+                        String(prefix, 0, prefixLength, StandardCharsets.UTF_8)
+                            .trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+                    } else ""
+
+                    if (prefixText.startsWith("#EXTM3U")) {
+                        val manifestBytes = readLimited(input, MAX_MANIFEST_BYTES)
+                            ?: return MediaStreamResult(502)
+                        return MediaStreamResult(200, String(manifestBytes, StandardCharsets.UTF_8))
+                    }
+
+                    val compactPrefix = prefixText.take(512).lowercase(Locale.ROOT)
+                    val errorPayload = compactPrefix.startsWith("<!doctype html") ||
+                        compactPrefix.startsWith("<html") ||
+                        compactPrefix.startsWith("access denied") ||
+                        compactPrefix.startsWith("cloudflare") ||
+                        (compactPrefix.startsWith("{") &&
+                            (compactPrefix.contains("\"error\"") ||
+                                compactPrefix.contains("\"message\"") ||
+                                compactPrefix.contains("\"success\":false"))
+                        )
+                    if (errorPayload) return MediaStreamResult(502)
+
+                    val hasTsSync = prefixLength > 188 &&
+                        prefix[0] == 0x47.toByte() &&
+                        (prefixLength <= 376 || prefix[188] == 0x47.toByte())
+                    val contentType = response.header("Content-Type")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: if (hasTsSync) "video/mp2t" else fallbackContentType
+                    val length = body.contentLength()
+                    val reason = if (response.code == 206) "Partial Content" else "OK"
+                    val header = buildString {
+                        append("HTTP/1.1 ").append(response.code).append(' ').append(reason).append("\r\n")
+                        append("Content-Type: ").append(contentType).append("\r\n")
+                        if (length >= 0) append("Content-Length: ").append(length).append("\r\n")
+                        response.header("Content-Range")?.let { append("Content-Range: ").append(it).append("\r\n") }
+                        response.header("Accept-Ranges")?.let { append("Accept-Ranges: ").append(it).append("\r\n") }
+                        append("Cache-Control: no-store\r\n")
+                        append("Access-Control-Allow-Origin: *\r\n")
+                        append("Connection: close\r\n\r\n")
+                    }
+                    output.write(header.toByteArray(StandardCharsets.ISO_8859_1))
+                    input.copyTo(output, STREAM_BUFFER_BYTES)
+                    output.flush()
+                    MediaStreamResult(response.code)
+                }
+            } catch (e: Exception) {
+                Log.w("InatBoxYedek", "Streaming request failed: " + e.message)
+                null
+            }
+        }
+
+        private fun readLimited(input: PushbackInputStream, maxBytes: Int): ByteArray? {
+            val buffer = ByteArrayOutputStream()
+            val chunk = ByteArray(8 * 1024)
+            while (true) {
+                val count = input.read(chunk)
+                if (count < 0) break
+                if (buffer.size() + count > maxBytes) return null
+                buffer.write(chunk, 0, count)
+            }
+            return buffer.toByteArray()
         }
 
         private class ProxyResult(val value: String) : Exception()
