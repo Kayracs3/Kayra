@@ -560,10 +560,10 @@
     },
     {
         "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
-        "fileHash": "sha256-ef416d7c686bab7cd0c44f6bc7abb00bcf1d2fb6ccf95d10bc4755be175978bb",
+        "fileHash": "sha256-087203438e09ff4884130818275185894baf77c4695488882e02ae6dd6f4d063",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 86708,
+        "fileSize": 90198,
         "status": 3,
         "language": "tr",
         "authors": [
@@ -575,7 +575,7 @@
             "TvSeries",
             "Live"
         ],
-        "version": 18,
+        "version": 19,
         "internalName": "InatBox",
         "description": "\u0130natBox cloudstream eklentisidir. Sevdi\u011finiz yay\u0131n platformlar\u0131n\u0131 ve canl\u0131 ma\u00e7lar\u0131 burada bulabilirsiniz.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBox.cs3",
@@ -753,10 +753,10 @@
     },
     {
         "iconUrl": "https://sinezy.si/favicon.ico",
-        "fileHash": "sha256-876049f44ffe22bfaaadf4db3095b56d6f27fa89b5018047d4215ccccb9bc514",
+        "fileHash": "sha256-8fc7b8abb634652df7dd36160a5fc1a7ba6db976b84eecc97723e207092dbd6e",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 76508,
+        "fileSize": 80435,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -766,7 +766,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "SinezyTo",
         "description": "Sinezy.to film ve dizi sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinezyTo.cs3",
