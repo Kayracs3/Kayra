@@ -28,7 +28,6 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.network.WebViewResolver
-import okhttp3.Headers
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -103,15 +102,6 @@ class AsyaWatch : MainAPI() {
 
     @Volatile private var rateLimitedUntil = 0L
     private val powCache = ConcurrentHashMap<String, Pair<Long, String>>()
-
-    // =====================================================================
-    // ⭐ KRİTİK: Cookie ekleme helper'ı — smart cast sorununu tamamen çözer
-    // =====================================================================
-    private fun applyCookieHeader(headers: MutableMap<String, String>, cookies: String?) {
-        val c: String = cookies ?: return
-        if (c.isBlank()) return
-        headers["Cookie"] = c
-    }
 
     private fun isRateLimitResponse(code: Int, body: String): Boolean {
         val lower = body.lowercase()
@@ -606,20 +596,6 @@ class AsyaWatch : MainAPI() {
         return null
     }
 
-    private fun extractCookiesFromHeaders(headers: Headers?): String? {
-        if (headers == null) return null
-        val cookies = mutableListOf<String>()
-        for (name in headers.names()) {
-            if (name.equals("Set-Cookie", true)) {
-                for (v in headers.values(name)) {
-                    val part = v.substringBefore(';').trim()
-                    if (part.isNotBlank()) cookies.add(part)
-                }
-            }
-        }
-        return cookies.joinToString("; ").takeIf { it.isNotBlank() }
-    }
-
     private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
         return mapOf(
             "User-Agent" to chromeUserAgent,
@@ -644,11 +620,11 @@ class AsyaWatch : MainAPI() {
         return parseObject(match.groupValues[1].trim())
     }
 
+    // ⭐ Cookie parametresini KALDIRDIK — artık derleme hatası imkansız
     private suspend fun tryPowOnUrl(
         nmUrl: String,
         iframeUrl: String,
-        id: String,
-        cookies: String?
+        id: String
     ): String? {
         val variants = listOf(
             Triple("SHA-256", "wordBE", solvePow(id, "SHA-256", "wordBE")),
@@ -670,11 +646,7 @@ class AsyaWatch : MainAPI() {
             val correctUrl = if (vToken.isNotBlank())
                 "$baseUrl?v=$vToken&p=$powValue" else nmUrl
 
-            // ⭐ KRİTİK: MutableMap olarak oluştur, helper ile cookie ekle
-            val headers = mutableMapOf<String, String>()
-            headers.putAll(browserLikeHeaders(iframeUrl))
-            headers["X-PoW"] = powValue.toString()
-            applyCookieHeader(headers, cookies)
+            val headers = browserLikeHeaders(iframeUrl) + mapOf("X-PoW" to powValue.toString())
 
             val directResp = runCatching {
                 app.get(correctUrl, headers = headers, referer = iframeUrl)
@@ -739,10 +711,9 @@ class AsyaWatch : MainAPI() {
 
         Log.d("AsyaWatch", "iframe HTML: ${html.length} bytes, NP_CONFIG: ${html.contains("NP_CONFIG")}")
 
-        val cookies = extractCookiesFromHeaders(response.headers)
         val npConfig = parseNpConfig(html)
 
-        // ⭐⭐ TEŞHİS ⭐⭐
+        // TEŞHİS
         logNpConfig(npConfig)
         logPowJs(html)
 
@@ -767,14 +738,11 @@ class AsyaWatch : MainAPI() {
                 val url = sub.optString("url")
                 if (url.isNotBlank()) {
                     val subtitle = SubtitleFile(lang = label, url = url)
-                    // ⭐ MutableMap + helper
-                    val subHeaders = mutableMapOf<String, String>()
-                    subHeaders.putAll(siteHeaders)
-                    subHeaders["Referer"] = iframeUrl
-                    subHeaders["Origin"] = fourPichiveOrigin
-                    subHeaders["Accept"] = "text/vtt, text/plain, */*"
-                    applyCookieHeader(subHeaders, cookies)
-                    subtitle.headers = subHeaders
+                    subtitle.headers = siteHeaders + mapOf(
+                        "Referer" to iframeUrl,
+                        "Origin" to fourPichiveOrigin,
+                        "Accept" to "text/vtt, text/plain, */*"
+                    )
                     if (localSeenSubs.add(url)) subtitleCallback(subtitle)
                 }
             }
@@ -796,21 +764,16 @@ class AsyaWatch : MainAPI() {
         var finalUrl = masterUrl
         if (html.contains("NP_GATE") && npId != null) {
             Log.d("AsyaWatch", "NP_GATE PoW deneniyor...")
-            tryPowOnUrl(masterUrl, iframeUrl, npId, cookies)?.let { finalUrl = it }
+            tryPowOnUrl(masterUrl, iframeUrl, npId)?.let { finalUrl = it }
         }
 
         val type = if (finalUrl.contains(".m3u8", true) || isNmPhpUrl(finalUrl))
             ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
 
-        // ⭐ MutableMap + helper
-        val linkHeaders = mutableMapOf<String, String>()
-        linkHeaders.putAll(headers)
-        applyCookieHeader(linkHeaders, cookies)
-
         callback(
             newExtractorLink(source = name, name = "$name FourPichive", url = finalUrl, type = type) {
                 this.referer = iframeUrl
-                this.headers = linkHeaders
+                this.headers = headers
                 this.quality = qualityValue("", finalUrl)
             }
         )
