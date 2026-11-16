@@ -241,17 +241,19 @@ private object SinezyHlsProxy {
                 }.getOrNull() ?: continue
 
                 val response = runCatching { client.newCall(request).execute() }.getOrNull() ?: continue
-                response.use {
-                    if (response.code !in 200..299) {
-                        lastCode = response.code
-                        if (response.code !in setOf(401, 403, 404, 405, 429)) {
-                            writeResponse(output, response.code, "text/plain; charset=utf-8",
-                                "Upstream media resource unavailable".toByteArray())
-                            return
-                        }
-                        continue
+                if (response.code !in 200..299) {
+                    lastCode = response.code
+                    val code = response.code
+                    response.close()
+                    if (code !in setOf(401, 403, 404, 405, 429)) {
+                        writeResponse(output, code, "text/plain; charset=utf-8",
+                            "Upstream media resource unavailable".toByteArray())
+                        return
                     }
+                    continue
+                }
 
+                response.use {
                     mapping.preferredHeaders = headers
                     if (profileName != "preferred") {
                         Log.d("SinezyHlsProxy", "Header profile selected for media: " + profileName)
@@ -264,7 +266,16 @@ private object SinezyHlsProxy {
 
                     val input = PushbackInputStream(body.byteStream(), PREFIX_BYTES)
                     val prefix = ByteArray(PREFIX_BYTES)
-                    val prefixLength = input.read(prefix)
+                    var prefixLength = 0
+                    while (prefixLength < prefix.size) {
+                        val count = input.read(prefix, prefixLength, prefix.size - prefixLength)
+                        if (count <= 0) break
+                        prefixLength += count
+                        val peek = String(prefix, 0, prefixLength, StandardCharsets.UTF_8)
+                        if (peek.trimStart('\uFEFF', ' ', '\t', '\r', '\n').startsWith("#EXTM3U") || peek.contains('\n')) {
+                            break
+                        }
+                    }
                     if (prefixLength > 0) input.unread(prefix, 0, prefixLength)
                     val prefixText = if (prefixLength > 0) String(prefix, 0, prefixLength, StandardCharsets.UTF_8) else ""
 

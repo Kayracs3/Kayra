@@ -79,7 +79,6 @@ private object InatHlsProxy {
     private const val MAX_REQUEST_HEADER_BYTES = 32 * 1024
     private const val MAX_TARGETS_PER_MAPPING = 2048
     private const val MAX_TARGET_IDLE_MS = 30 * 60 * 1000L
-    private const val STREAM_BUFFER_BYTES = 32 * 1024
 
     private val mappings = ConcurrentHashMap<String, Mapping>()
     private val executor = Executors.newFixedThreadPool(6) { runnable ->
@@ -499,7 +498,7 @@ private object InatHlsProxy {
         clientHeaders: Map<String, String>
     ) {
         val isPlaylist = target.contains(".m3u8", ignoreCase = true) ||
-            target.contains("/hls/", ignoreCase = true) ||
+            target.contains(".m3u", ignoreCase = true) ||
             target.contains("/playlist", ignoreCase = true)
 
         if (!isPlaylist) {
