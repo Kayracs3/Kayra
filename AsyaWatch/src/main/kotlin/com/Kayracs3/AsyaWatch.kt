@@ -65,9 +65,6 @@ class AsyaWatch : MainAPI() {
         "romantik" to "Romantik Dizi"
     )
 
-    // =====================================================================
-    // KRİTİK: Tarayıcı ile BİREBİR eşleşen User-Agent ve Chrome kimliği
-    // =====================================================================
     private val chromeUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 
@@ -1614,9 +1611,6 @@ class AsyaWatch : MainAPI() {
         return cookieValues.joinToString("; ").takeIf { it.isNotBlank() }
     }
 
-    // =====================================================================
-    // KRİTİK DÜZELTME: Tarayıcı ile birebir aynı header'lar
-    // =====================================================================
     private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
         return mapOf(
             "User-Agent" to chromeUserAgent,
@@ -1656,7 +1650,7 @@ class AsyaWatch : MainAPI() {
     }
 
     // =====================================================================
-    // KRİTİK DÜZELTME: &p=<pow> formatı (tarayıcıdan doğrulandı)
+    // KRİTİK: &p=<pow> formatı + fallback WebViewResolver
     // =====================================================================
     private suspend fun tryPowOnUrl(
         nmUrl: String,
@@ -1684,55 +1678,63 @@ class AsyaWatch : MainAPI() {
             val (powValue, _) = solution ?: continue
             val label = "$alg-$variantName"
 
-            val urlFormats = mutableListOf<String>()
-            if (vToken.isNotBlank()) {
-                // DOĞRU FORMAT: &p= (tarayıcıdan doğrulandı)
-                urlFormats.add("$baseUrl?v=$vToken&p=$powValue")
-                // Fallback'ler
-                urlFormats.add("$baseUrl?v=$vToken.$powValue")
-                urlFormats.add("$baseUrl?v=$vToken&n=$powValue")
-                urlFormats.add("$baseUrl?v=$vToken&pow=$powValue")
+            val correctUrl = if (vToken.isNotBlank())
+                "$baseUrl?v=$vToken&p=$powValue"
+            else nmUrl
+
+            val headers = browserLikeHeaders(iframeUrl) + buildMap {
+                put("X-PoW", powValue.toString())
+                if (!cookies.isNullOrBlank()) put("Cookie", cookies)
             }
 
-            for (newUrl in urlFormats) {
-                val headers = browserLikeHeaders(iframeUrl) + buildMap {
-                    put("X-PoW", powValue.toString())
-                    put("X-N", powValue.toString())
-                    if (!cookies.isNullOrBlank()) put("Cookie", cookies)
-                }
+            // 1. DENEME: app.get (daha önce 404 veriyordu ama artık doğru format)
+            val directResp = runCatching {
+                app.get(correctUrl, headers = headers, referer = iframeUrl)
+            }.getOrNull()
 
-                val resp = runCatching {
-                    app.get(
-                        newUrl,
-                        headers = headers,
-                        referer = iframeUrl,
-                        interceptor = fourPichiveResolver
-                    )
-                }.getOrNull() ?: continue
-
+            if (directResp != null) {
                 Log.d(
                     "AsyaWatch",
-                    "PoW [$label] ${newUrl.substringAfterLast("&").take(40)}: HTTP ${resp.code}, bodyLen=${resp.text.length}"
+                    "PoW [$label] (direct) p=$powValue: HTTP ${directResp.code}, bodyLen=${directResp.text.length}"
                 )
-
-                if (resp.code == 429) {
-                    noteRateLimit()
-                    Log.w("AsyaWatch", "429 alındı, PoW denemesi durduruluyor")
-                    return null
+                if (directResp.code == 200 && directResp.text.startsWith("#EXTM3U")) {
+                    Log.d("AsyaWatch", "✔ PoW BAŞARILI (direct) → M3U8 (${directResp.text.length} byte)")
+                    return correctUrl
                 }
+                if (directResp.code == 404) {
+                    Log.d("AsyaWatch", "  → 404, WebViewResolver denenecek...")
+                }
+            }
 
-                if (resp.isSuccessful && resp.text.isNotBlank()) {
-                    val body = resp.text.trim()
+            // 2. DENEME: WebViewResolver (cf_clearance için)
+            val wvResp = runCatching {
+                app.get(
+                    correctUrl,
+                    headers = headers,
+                    referer = iframeUrl,
+                    interceptor = fourPichiveResolver
+                )
+            }.getOrNull()
 
-                    // nm.php M3U8 içeriği döndürüyor → URL'yi doğrudan döndür
+            if (wvResp != null) {
+                Log.d(
+                    "AsyaWatch",
+                    "PoW [$label] (WebView) p=$powValue: HTTP ${wvResp.code}, bodyLen=${wvResp.text.length}"
+                )
+                if (wvResp.code == 200) {
+                    val body = wvResp.text.trim()
                     if (body.startsWith("#EXTM3U")) {
-                        Log.d("AsyaWatch", "PoW BAŞARILI [$label] → M3U8 içeriği (${body.length} byte), URL: ${newUrl.takeLast(40)}")
-                        return newUrl
+                        Log.d("AsyaWatch", "✔ PoW BAŞARILI (WebView) → M3U8 (${body.length} byte)")
+                        return correctUrl
                     }
-
                     bodyLooksLikeMedia(body)?.let {
-                        Log.d("AsyaWatch", "PoW BAŞARILI [$label] → $it")
+                        Log.d("AsyaWatch", "✔ PoW BAŞARILI (WebView) → $it")
                         return it
+                    }
+                    // WebView 200 döndürdü ama içerik tanınmadı → yine de URL'yi ver
+                    if (wvResp.code == 200) {
+                        Log.d("AsyaWatch", "✔ PoW WebView 200, URL verilecek (içerik: ${body.take(50)})")
+                        return correctUrl
                     }
                 }
             }
@@ -1747,6 +1749,9 @@ class AsyaWatch : MainAPI() {
         return parseObject(match.groupValues[1].trim())
     }
 
+    // =====================================================================
+    // KRİTİK DÜZELTME: iframe.php için app.get (WebViewResolver DEĞİL!)
+    // =====================================================================
     private suspend fun extractFourPichive(
         iframeUrl: String,
         referer: String,
@@ -1754,13 +1759,14 @@ class AsyaWatch : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val headers = browserLikeHeaders(iframeUrl)
+
+        // ⭐ iframe.php için app.get kullan (WebViewResolver HTML vermiyor!)
         val response = runCatching {
             app.get(
                 iframeUrl,
                 headers = headers,
                 referer = referer,
-                allowRedirects = true,
-                interceptor = fourPichiveResolver
+                allowRedirects = true
             )
         }.getOrNull() ?: return false
 
@@ -1770,7 +1776,12 @@ class AsyaWatch : MainAPI() {
         }
 
         val html = response.text
-        if (html.isBlank()) return false
+        if (html.isBlank()) {
+            Log.e("AsyaWatch", "FourPichive iframe boş yanıt")
+            return false
+        }
+
+        Log.d("AsyaWatch", "iframe HTML uzunluğu: ${html.length}, NP_CONFIG içeriyor: ${html.contains("NP_CONFIG")}")
 
         val cookies = runCatching {
             extractCookiesFromHeaders(response.headers)
@@ -1788,6 +1799,10 @@ class AsyaWatch : MainAPI() {
             powCache.clear()
         }
         Log.d("AsyaWatch", "NP_CONFIG: id=$npId, salt=${npSalt ?: "(varsayılan $powSalt)"}, sources=${npConfig?.optJSONArray("sources")?.length() ?: 0}")
+
+        if (npConfig == null) {
+            Log.e("AsyaWatch", "NP_CONFIG bulunamadı! HTML başı: ${html.take(200)}")
+        }
 
         val localSeenSubs = HashSet<String>()
         runCatching {
@@ -1840,7 +1855,6 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        // nm.php M3U8 içeriği döndürür (uzantısı .m3u8 olmasa bile)
         val isHls = finalUrl.contains(".m3u8", true) || isNmPhpUrl(finalUrl)
         val type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
 
