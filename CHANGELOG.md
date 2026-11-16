@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:6627d724d8471980b82fe1335ec1b70323630b60 -->
+### Refactor stream header and URL extraction logic
+
+- Etkilenen alanlar: Flix
+- Commit: [6627d72](https://github.com/Kayracs3/Kayra/commit/6627d724d8471980b82fe1335ec1b70323630b60)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:9f9ebb99548ee9ad5eaaf93b710d238f1e5f207b -->
 ### Increment versions for Android TV memory updates
 
