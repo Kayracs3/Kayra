@@ -23,6 +23,7 @@ abstract class NeonMainAPI : MainAPI() {
     )
 
     private val documentCache = ConcurrentHashMap<String, CachedDocument>()
+    private val maxCachedDocuments = 4
 
     protected suspend fun neonCachedDocument(
         url: String,
@@ -51,11 +52,21 @@ abstract class NeonMainAPI : MainAPI() {
                 documentCache.remove(cacheKey)
                 null
             } else {
-                response.document.also {
-                    documentCache[cacheKey] = CachedDocument(
-                        fetchedAt = System.currentTimeMillis(),
-                        document = it
-                    )
+                response.document.also { document ->
+                    synchronized(documentCache) {
+                        val fetchedAt = System.currentTimeMillis()
+                        documentCache.entries.removeIf {
+                            fetchedAt - it.value.fetchedAt > neonCacheTtlMs
+                        }
+                        documentCache[cacheKey] = CachedDocument(
+                            fetchedAt = fetchedAt,
+                            document = document
+                        )
+                        while (documentCache.size > maxCachedDocuments) {
+                            val oldest = documentCache.entries.minByOrNull { it.value.fetchedAt } ?: break
+                            documentCache.remove(oldest.key, oldest.value)
+                        }
+                    }
                 }
             }
         }.getOrNull()

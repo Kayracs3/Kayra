@@ -554,10 +554,10 @@ fun getKisskhTitle(str: String?): String? {
 
 
 suspend fun <A, B> Iterable<A>.safeAmap(
-    concurrency: Int = 7,
+    concurrency: Int = 4,
     f: suspend (A) -> B?
 ): List<B> = supervisorScope {
-    val semaphore = Semaphore(concurrency)
+    val semaphore = Semaphore(concurrency.coerceIn(1, 5))
     map { item ->
         async<B?>(Dispatchers.IO) {
             semaphore.withPermit {
@@ -576,10 +576,10 @@ suspend fun <A, B> Iterable<A>.safeAmap(
 }
 
 suspend fun runLimitedAsync(
-    concurrency: Int = 7,
+    concurrency: Int = 4,
     vararg tasks: suspend () -> Unit
 ) = supervisorScope {
-    val semaphore = Semaphore(concurrency)
+    val semaphore = Semaphore(concurrency.coerceIn(1, 5))
     tasks.map { task ->
         async<Unit>(Dispatchers.IO) {
             semaphore.withPermit {

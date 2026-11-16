@@ -776,6 +776,9 @@ class AsyaWatch : MainAPI() {
                 detailPoster(objectField(page.secureData, "contentItem", "content_item"), page.document)
             }.getOrNull()
             posterFallbackCache[item.url] = poster ?: noPosterSentinel
+            if (posterFallbackCache.size > 300) {
+                posterFallbackCache.keys.firstOrNull { it != item.url }?.let(posterFallbackCache::remove)
+            }
             if (!poster.isNullOrBlank()) item.posterUrl = poster
         }
         return items
@@ -1572,6 +1575,9 @@ class AsyaWatch : MainAPI() {
             if ((value and 0xFFF) == 0) {
                 val result = i.toLong() to label
                 powCache[cacheKey] = result
+                if (powCache.size > 32) {
+                    powCache.keys.firstOrNull { it != cacheKey }?.let(powCache::remove)
+                }
                 Log.d("AsyaWatch", "PoW bulundu: n=$i ($label), iter=$i")
                 return result
             }

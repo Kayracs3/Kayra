@@ -602,11 +602,49 @@ class InatBoxYedek : MainAPI() {
 
     private val tabCache = ConcurrentHashMap<String, Pair<Long, List<SearchResponse>>>()
     private val urlToSearchResponse = ConcurrentHashMap<String, SearchResponse>()
+    private val catalogCacheLock = Any()
+
+    private fun rememberCatalog(url: String, fetchedAt: Long, items: List<SearchResponse>) {
+        synchronized(catalogCacheLock) {
+            if (items.isNotEmpty() && items.size <= MAX_CACHED_CATALOG_ITEMS) {
+                tabCache[url] = Pair(fetchedAt, items)
+            } else {
+                tabCache.remove(url)
+            }
+
+            val now = System.currentTimeMillis()
+            tabCache.entries.removeIf {
+                now - it.value.first > MAX_CATALOG_CACHE_AGE_MS
+            }
+
+            var totalItems = tabCache.values.sumOf { it.second.size }
+            if (tabCache.size > MAX_CACHED_CATALOGS || totalItems > MAX_CACHED_CATALOG_ITEMS) {
+                val oldest = tabCache.entries.sortedBy { it.value.first }
+                for (entry in oldest) {
+                    if (tabCache.size <= MAX_CACHED_CATALOGS && totalItems <= MAX_CACHED_CATALOG_ITEMS) break
+                    if (tabCache.remove(entry.key, entry.value)) {
+                        totalItems -= entry.value.second.size
+                    }
+                }
+            }
+
+            urlToSearchResponse.clear()
+            tabCache.values.sortedByDescending { it.first }.forEach { cached ->
+                for (item in cached.second) {
+                    if (urlToSearchResponse.size >= MAX_CACHED_CATALOG_ITEMS) break
+                    urlToSearchResponse.putIfAbsent(item.url, item)
+                }
+            }
+        }
+    }
 
     companion object {
         private const val PROXY_MAX_MANIFEST_BYTES = 2 * 1024 * 1024
         private const val PROXY_STREAM_BUFFER_BYTES = 32 * 1024
         private const val CACHE_TTL_MS = 60 * 1000L
+        private const val MAX_CACHED_CATALOGS = 16
+        private const val MAX_CACHED_CATALOG_ITEMS = 2500
+        private const val MAX_CATALOG_CACHE_AGE_MS = 30 * 60 * 1000L
         private const val HMK = "x7kkk0qmqz63kj68tla5i7u26192v7zqnnddhjgm"
         private const val LEGACY_AES_KEY = "ywevqtjrurkwtqgz"
         private val SECURE_RANDOM = SecureRandom()
@@ -989,8 +1027,7 @@ class InatBoxYedek : MainAPI() {
                 // Only replace the last known-good catalog with a non-empty response.
                 // Some live-TV endpoints intermittently answer with an empty/unknown
                 // payload while channels are still available on the source app.
-                tabCache[url] = Pair(System.currentTimeMillis(), parsedResults)
-                parsedResults.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
+                rememberCatalog(url, System.currentTimeMillis(), parsedResults)
                 parsedResults
             } else {
                 val previous = cached?.second.orEmpty()
@@ -1162,15 +1199,14 @@ class InatBoxYedek : MainAPI() {
         for (url in keyUrls) {
             val cached = tabCache[url]
             if (cached != null && now - cached.first < cacheDuration && cached.second.isNotEmpty()) {
-                cached.second.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
+                rememberCatalog(url, cached.first, cached.second)
                 continue
             }
             try {
                 val res = makeInatPostRequest(url) ?: continue
                 val items = getSearchResponseList(res, url)
                 if (items.isNotEmpty()) {
-                    tabCache[url] = Pair(now, items)
-                    items.forEach { urlToSearchResponse.putIfAbsent(it.url, it) }
+                    rememberCatalog(url, now, items)
                 }
             } catch (e: Exception) {
                 Log.e("InatBoxYedek", "Search preload error for $url: ${e.message}")
@@ -1180,7 +1216,10 @@ class InatBoxYedek : MainAPI() {
         val matchingResults = mutableListOf<SearchResponse>()
         val regex = Regex(Regex.escape(query), RegexOption.IGNORE_CASE)
 
-        for ((_, searchResponse) in urlToSearchResponse) {
+        val searchSnapshot = synchronized(catalogCacheLock) {
+            urlToSearchResponse.values.toList()
+        }
+        for (searchResponse in searchSnapshot) {
             if (
                 regex.containsMatchIn(searchResponse.name) ||
                 searchResponse.name

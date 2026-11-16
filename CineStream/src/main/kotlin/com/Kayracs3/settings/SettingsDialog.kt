@@ -998,7 +998,7 @@ internal object SettingsDialog {
         pending: MutableMap<String, Any?>
     ): View {
         val theme = SettingsTheme
-        var currentVal = pending[Settings.CONCURRENCY_KEY] as? Int ?: Settings.getConcurrency()
+        var currentVal = (pending[Settings.CONCURRENCY_KEY] as? Int ?: Settings.getConcurrency()).coerceIn(1, 5)
 
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1042,7 +1042,7 @@ internal object SettingsDialog {
             })
             addView(valText)
             addView(SettingsWidgets.pillBtn(context, " + ", theme.TEXT_PRIMARY, Color.parseColor("#1A1E28"), Color.parseColor("#2E2850")) {
-                if (currentVal < 50) {
+                if (currentVal < 5) {
                     currentVal++
                     pending[Settings.CONCURRENCY_KEY] = currentVal
                     valText.text = currentVal.toString()
