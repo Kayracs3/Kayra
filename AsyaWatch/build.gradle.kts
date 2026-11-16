@@ -1,4 +1,4 @@
-version = 35
+version = 36
 
 cloudstream {
     description = "AsyaWatch — Asya filmleri ve dizileri sağlayıcısı"
