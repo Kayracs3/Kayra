@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:83ac8d02e55688da6e8b1c6c3f0ef65ca4e6dd24 -->
+### Refactor cookie handling and clean up comments
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [83ac8d0](https://github.com/Kayracs3/Kayra/commit/83ac8d02e55688da6e8b1c6c3f0ef65ca4e6dd24)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:51b157f558a25869b84f0b474350df12f7c30a41 -->
 ### Update print statement from 'Hello' to 'Goodbye'
 
