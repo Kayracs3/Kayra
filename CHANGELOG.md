@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-16
+
+<!-- kayra-commit:aa96c059b56aa7ded5043ea21f99d4e86ad5ec9f -->
+### Stream HLS media segments to reduce playback memory
+
+- Etkilenen alanlar: InatBox, SinezyTo
+- Commit: [aa96c05](https://github.com/Kayracs3/Kayra/commit/aa96c059b56aa7ded5043ea21f99d4e86ad5ec9f)
+
+
 ## 2026-11-14
 
 <!-- kayra-commit:e6786f20441581a70cf42321cd0bc78fa19e0651 -->
