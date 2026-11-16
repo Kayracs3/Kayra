@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:a1a92450f3f8a6bcc3d2d512abbccd6532c30c21 -->
+### Refactor cookie handling and related headers
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [a1a9245](https://github.com/Kayracs3/Kayra/commit/a1a92450f3f8a6bcc3d2d512abbccd6532c30c21)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:7aa3fa413741c9a7279b04b6af75d3a9dfbbc2e4 -->
 ### Implement cookie header helper function
 
