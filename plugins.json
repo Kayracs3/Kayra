@@ -43,7 +43,7 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=asyawatch.com&sz=%size%",
-        "fileHash": "sha256-31b4545051cadd3095af878347bc62d1322b4835ed361f76dd9993616c6bed7f",
+        "fileHash": "sha256-df609f1a1a5c9a54fe3157f6c6ac7911fe27eba298cfb6ff79f14b9714d3b1c0",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 78106,
@@ -56,7 +56,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 31,
+        "version": 32,
         "internalName": "AsyaWatch",
         "description": "AsyaWatch \u2014 Asya filmleri ve dizileri sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaWatch.cs3",
@@ -64,7 +64,7 @@
     },
     {
         "iconUrl": "https://raw.githubusercontent.com/Kayracs3/Kayra/master/CineStream/icon.png",
-        "fileHash": "sha256-9dd96f3fc647787ffc0c387f0a30ed1b44e3183d2248adb6c8f2f0945f78dc5d",
+        "fileHash": "sha256-762d3394087e86319c28b275633ea5fb43a5c90f648c0642399c0db42200596b",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 689288,
@@ -80,7 +80,7 @@
             "Anime",
             "Torrent"
         ],
-        "version": 487,
+        "version": 488,
         "internalName": "CineStream",
         "description": "One stop solution for Movies, Series, Anime, AsianDrama and Torrents",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/CineStream.cs3",
@@ -499,7 +499,7 @@
     },
     {
         "iconUrl": "https://fixbettv84.com/favicon.ico",
-        "fileHash": "sha256-dd865c0e6bc2d6f015373937274fe6c5aca135ff5ca307f53dbc6b246915760d",
+        "fileHash": "sha256-2a35b8d4e9e2157c47064a276ece94acacb35b215513a625f54ac90a602ec598",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 38961,
@@ -512,7 +512,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "Flix",
         "description": "Flix otomatik sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Flix.cs3",
@@ -560,7 +560,7 @@
     },
     {
         "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
-        "fileHash": "sha256-6dab343ab6228e56f5b139d42443cb70f3536c021169d5612affe555ad4efafd",
+        "fileHash": "sha256-148b40d12f3e46a6eaf045b1844a5d1696c0c5f8fdd676f927d2dbe3c606699e",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 91425,
@@ -575,7 +575,7 @@
             "TvSeries",
             "Live"
         ],
-        "version": 19,
+        "version": 20,
         "internalName": "InatBox",
         "description": "\u0130natBox cloudstream eklentisidir. Sevdi\u011finiz yay\u0131n platformlar\u0131n\u0131 ve canl\u0131 ma\u00e7lar\u0131 burada bulabilirsiniz.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBox.cs3",
@@ -583,7 +583,7 @@
     },
     {
         "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
-        "fileHash": "sha256-097cb0cb4b58cb6434a7870249d9b18c30a8550c76abfa6aa884a16f8c8d9ced",
+        "fileHash": "sha256-5157f451ccae14ba0458b0081a9be12c0b05df008a0edf2edc13629524b756e3",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 98491,
@@ -597,7 +597,7 @@
             "TvSeries",
             "Live"
         ],
-        "version": 7,
+        "version": 8,
         "internalName": "InatBoxYedek",
         "description": "\u0130natBoxYedek: InatBox ana eklentisinden ayr\u0131, test ve yedek ama\u00e7l\u0131 sa\u011flay\u0131c\u0131.",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBoxYedek.cs3",
@@ -733,10 +733,10 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=sinemacc.com&sz=%size%",
-        "fileHash": "sha256-250b71c0f6f25aaaa5b87c1ada18dd4b2a230995137c3b122a304481a42ff472",
+        "fileHash": "sha256-fc4ad1e32d84680bfb324a4968f3b37a263b3733b0140a1e2ffd1db072977253",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 56705,
+        "fileSize": 56707,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -745,7 +745,7 @@
         "tvTypes": [
             "Movie"
         ],
-        "version": 23,
+        "version": 24,
         "internalName": "SinemaCX",
         "description": "Sinema CC - T\u00fcrk\u00e7e dublaj ve altyaz\u0131l\u0131 film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/SinemaCX.cs3",
