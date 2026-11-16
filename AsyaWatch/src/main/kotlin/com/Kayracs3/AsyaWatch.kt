@@ -65,14 +65,22 @@ class AsyaWatch : MainAPI() {
         "romantik" to "Romantik Dizi"
     )
 
+    // =====================================================================
+    // KRİTİK: Tarayıcı ile BİREBİR eşleşen User-Agent ve Chrome kimliği
+    // =====================================================================
+    private val chromeUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+
+    private val chromeUaBrand = "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+
     private val siteHeaders = mapOf(
-        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+        "User-Agent" to chromeUserAgent,
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
     )
 
     private val apiHeaders = mapOf(
-        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+        "User-Agent" to chromeUserAgent,
         "Accept" to "application/json, text/plain, */*",
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
         "X-Requested-With" to "XMLHttpRequest",
@@ -85,7 +93,6 @@ class AsyaWatch : MainAPI() {
 
     private val fourPichiveOrigin = "https://four.pichive.online"
 
-    // WebViewResolver → cf_clearance için. Requests yerine app.get(...) içinde interceptor olarak kullanılır.
     private val fourPichiveResolver = WebViewResolver(
         Regex("https://(four\\.)?pichive\\.online/.*")
     )
@@ -1089,7 +1096,7 @@ class AsyaWatch : MainAPI() {
                 "filemoon", "vidmoly", "youtube", "youtu.be", "vimeo", "dood",
                 "streamwish", "voe.sx", "ok.ru", "sibnet", "mixdrop", "uqload",
                 "mp4upload", "asianload", "googlevideo", "/e/",
-                "four.pichive.online", "pichive.online"
+                "four.pichive.online", "pichive.online", "nm.php"
             ).any { value.contains(it) }
     }
 
@@ -1534,6 +1541,9 @@ class AsyaWatch : MainAPI() {
     private fun isDirectMedia(url: String): Boolean =
         Regex("""(?i)\.(m3u8|mp4|m4v|mpd)(?:[?#].*)?$""").containsMatchIn(url)
 
+    private fun isNmPhpUrl(url: String): Boolean =
+        url.contains("/nm.php", true) || url.contains("nm.php?", true)
+
     private fun qualityValue(label: String, url: String): Int {
         val quality = Regex("""(?i)(2160|1080|720|480|360|240|4k)""")
             .find("$label $url")?.value?.lowercase() ?: return Qualities.Unknown.value
@@ -1604,6 +1614,50 @@ class AsyaWatch : MainAPI() {
         return cookieValues.joinToString("; ").takeIf { it.isNotBlank() }
     }
 
+    // =====================================================================
+    // KRİTİK DÜZELTME: Tarayıcı ile birebir aynı header'lar
+    // =====================================================================
+    private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
+        return mapOf(
+            "User-Agent" to chromeUserAgent,
+            "Accept" to "*/*",
+            "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding" to "gzip, deflate, br, zstd",
+            "Referer" to iframeUrl,
+            "Origin" to fourPichiveOrigin,
+            "Sec-Fetch-Dest" to "empty",
+            "Sec-Fetch-Mode" to "cors",
+            "Sec-Fetch-Site" to "same-origin",
+            "Sec-Fetch-Storage-Access" to "active",
+            "sec-ch-ua" to chromeUaBrand,
+            "sec-ch-ua-mobile" to "?0",
+            "sec-ch-ua-platform" to "\"Windows\"",
+            "Priority" to "u=1, i"
+        )
+    }
+
+    private fun bodyLooksLikeMedia(body: String): String? {
+        val trimmed = body.trim().trim('"', '\'')
+        if (trimmed.length in 15..3000) {
+            if (isDirectMedia(trimmed) ||
+                Regex("""(?i)^https?://[^\s"'<>]+$""").matches(trimmed)
+            ) {
+                return trimmed
+            }
+            Regex(
+                """(?i)"(?:url|file|src|master|hls|stream|media|link)"\s*:\s*"(https?://[^"\s<>]+)""""
+            ).find(body)?.groupValues?.getOrNull(1)?.let { return it }
+        }
+        if (body.contains(".m3u8", true) || body.contains(".mp4", true)) {
+            Regex("""(?i)https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""")
+                .find(body)?.value?.let { return it }
+        }
+        return null
+    }
+
+    // =====================================================================
+    // KRİTİK DÜZELTME: &p=<pow> formatı (tarayıcıdan doğrulandı)
+    // =====================================================================
     private suspend fun tryPowOnUrl(
         nmUrl: String,
         iframeUrl: String,
@@ -1632,18 +1686,18 @@ class AsyaWatch : MainAPI() {
 
             val urlFormats = mutableListOf<String>()
             if (vToken.isNotBlank()) {
+                // DOĞRU FORMAT: &p= (tarayıcıdan doğrulandı)
+                urlFormats.add("$baseUrl?v=$vToken&p=$powValue")
+                // Fallback'ler
                 urlFormats.add("$baseUrl?v=$vToken.$powValue")
                 urlFormats.add("$baseUrl?v=$vToken&n=$powValue")
                 urlFormats.add("$baseUrl?v=$vToken&pow=$powValue")
-                urlFormats.add("$baseUrl?v=$vToken&nonce=$powValue")
-                urlFormats.add("$baseUrl?v=$vToken&solution=$powValue")
             }
 
             for (newUrl in urlFormats) {
                 val headers = browserLikeHeaders(iframeUrl) + buildMap {
                     put("X-PoW", powValue.toString())
                     put("X-N", powValue.toString())
-                    put("X-Nonce", powValue.toString())
                     if (!cookies.isNullOrBlank()) put("Cookie", cookies)
                 }
 
@@ -1656,7 +1710,10 @@ class AsyaWatch : MainAPI() {
                     )
                 }.getOrNull() ?: continue
 
-                Log.d("AsyaWatch", "PoW [$label] ${newUrl.substringAfterLast('?').take(60)}: HTTP ${resp.code}, bodyLen=${resp.text.length}")
+                Log.d(
+                    "AsyaWatch",
+                    "PoW [$label] ${newUrl.substringAfterLast("&").take(40)}: HTTP ${resp.code}, bodyLen=${resp.text.length}"
+                )
 
                 if (resp.code == 429) {
                     noteRateLimit()
@@ -1665,8 +1722,16 @@ class AsyaWatch : MainAPI() {
                 }
 
                 if (resp.isSuccessful && resp.text.isNotBlank()) {
-                    bodyLooksLikeMedia(resp.text)?.let {
-                        Log.d("AsyaWatch", "PoW BAŞARILI [$label] → ${it.take(120)}")
+                    val body = resp.text.trim()
+
+                    // nm.php M3U8 içeriği döndürüyor → URL'yi doğrudan döndür
+                    if (body.startsWith("#EXTM3U")) {
+                        Log.d("AsyaWatch", "PoW BAŞARILI [$label] → M3U8 içeriği (${body.length} byte), URL: ${newUrl.takeLast(40)}")
+                        return newUrl
+                    }
+
+                    bodyLooksLikeMedia(body)?.let {
+                        Log.d("AsyaWatch", "PoW BAŞARILI [$label] → $it")
                         return it
                     }
                 }
@@ -1680,41 +1745,6 @@ class AsyaWatch : MainAPI() {
         val regex = Regex("""window\.NP_CONFIG\s*=\s*(\{.+?\});\s*(?:window\.|</script>|$)""", RegexOption.DOT_MATCHES_ALL)
         val match = regex.find(html) ?: return null
         return parseObject(match.groupValues[1].trim())
-    }
-
-    private fun browserLikeHeaders(iframeUrl: String): Map<String, String> {
-        return mapOf(
-            "User-Agent" to (siteHeaders["User-Agent"] ?: ""),
-            "Accept" to "application/vnd.apple.mpegurl, application/x-mpegURL, video/*, */*",
-            "Accept-Language" to (siteHeaders["Accept-Language"] ?: ""),
-            "Accept-Encoding" to "identity",
-            "Referer" to iframeUrl,
-            "Origin" to fourPichiveOrigin,
-            "Sec-Fetch-Dest" to "video",
-            "Sec-Fetch-Mode" to "cors",
-            "Sec-Fetch-Site" to "same-origin",
-            "Sec-Fetch-Storage-Access" to "active",
-            "Priority" to "u=1, i"
-        )
-    }
-
-    private fun bodyLooksLikeMedia(body: String): String? {
-        val trimmed = body.trim().trim('"', '\'')
-        if (trimmed.length in 15..3000) {
-            if (isDirectMedia(trimmed) ||
-                Regex("""(?i)^https?://[^\s"'<>]+$""").matches(trimmed)
-            ) {
-                return trimmed
-            }
-            Regex(
-                """(?i)"(?:url|file|src|master|hls|stream|media|link)"\s*:\s*"(https?://[^"\s<>]+)""""
-            ).find(body)?.groupValues?.getOrNull(1)?.let { return it }
-        }
-        if (body.contains(".m3u8", true) || body.contains(".mp4", true)) {
-            Regex("""(?i)https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""")
-                .find(body)?.value?.let { return it }
-        }
-        return null
     }
 
     private suspend fun extractFourPichive(
@@ -1752,8 +1782,6 @@ class AsyaWatch : MainAPI() {
 
         val npSalt = npConfig?.optString("salt")
             ?.takeIf { it.isNotBlank() && it != "null" }
-            ?: npConfig?.optString("s")
-                ?.takeIf { it.isNotBlank() && it != "null" }
         if (npSalt != null && npSalt != powSalt) {
             Log.d("AsyaWatch", "Salt güncellendi: $powSalt → $npSalt")
             powSalt = npSalt
@@ -1802,7 +1830,7 @@ class AsyaWatch : MainAPI() {
 
         var finalUrl = masterUrl
         if (html.contains("NP_GATE") && npId != null) {
-            Log.d("AsyaWatch", "NP_GATE PoW deneniyor (id=$npId, 4 varyant × 5 format)...")
+            Log.d("AsyaWatch", "NP_GATE PoW deneniyor (id=$npId, format: &p=)...")
             val powResult = tryPowOnUrl(masterUrl, iframeUrl, npId, cookies)
             if (powResult != null) {
                 finalUrl = powResult
@@ -1812,7 +1840,8 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        val isHls = finalUrl.contains(".m3u8", true)
+        // nm.php M3U8 içeriği döndürür (uzantısı .m3u8 olmasa bile)
+        val isHls = finalUrl.contains(".m3u8", true) || isNmPhpUrl(finalUrl)
         val type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
 
         val linkHeaders = headers.toMutableMap()
@@ -1905,7 +1934,7 @@ class AsyaWatch : MainAPI() {
             val candidatePath = runCatching { URI(candidate).path.orEmpty() }.getOrDefault("")
             if (candidatePath.isBlank() || candidatePath == "/") return
 
-            if (isDirectMedia(candidate)) {
+            if (isDirectMedia(candidate) && !isNmPhpUrl(candidate)) {
                 if (candidate.contains(".m3u8", true)) {
                     extractSubtitlesFromManifest(
                         candidate, referer, seenSubtitleUrls, seenSubtitleManifests, emitSubtitle
@@ -1966,7 +1995,7 @@ class AsyaWatch : MainAPI() {
             }
         }
 
-        if (isDirectMedia(data)) processCandidate(data, "$mainUrl/", "")
+        if (isDirectMedia(data) && !isNmPhpUrl(data)) processCandidate(data, "$mainUrl/", "")
 
         val page = runCatching { getPageData(data) }.getOrNull()
         val root = page?.secureData
