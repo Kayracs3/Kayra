@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:a504354df0041cb386279c179838e15f6a602802 -->
+### Remove unsupported ExtractorLink isLive assignments
+
+- Etkilenen alanlar: Flix
+- Commit: [a504354](https://github.com/Kayracs3/Kayra/commit/a504354df0041cb386279c179838e15f6a602802)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:71c65a4e2564c56e5c1b977d2a1f7ff5d53d9467 -->
 ### Refactor stream header handling and extraction logic
 
