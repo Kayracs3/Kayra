@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:ba24dc5796377193fc7c6968f99f7cbaac0780e0 -->
+### Enhance stream URL extraction and link handling
+
+- Etkilenen alanlar: Flix
+- Commit: [ba24dc5](https://github.com/Kayracs3/Kayra/commit/ba24dc5796377193fc7c6968f99f7cbaac0780e0)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:25c2597b699cec7b0efb78e15cd9578b4dd6fa8b -->
 ### Fix Flix Kotlin compilation
 
