@@ -34,7 +34,6 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.net.URI
-import java.net.URLDecoder
 import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -101,7 +100,6 @@ class AsyaWatch : MainAPI() {
         val secureData: JSONObject?,
         val isRateLimited: Boolean = false
     )
-    private data class SourceItem(val raw: String, val quality: String)
 
     @Volatile private var rateLimitedUntil = 0L
     private val powCache = ConcurrentHashMap<String, Pair<Long, String>>()
@@ -359,8 +357,7 @@ class AsyaWatch : MainAPI() {
         }
 
         val totalPages = resultNode?.optInt("pages", -1) ?: -1
-        val hasNext = if (totalPages >= 0) page < totalPages
-            else results.size >= 42
+        val hasNext = if (totalPages >= 0) page < totalPages else results.size >= 42
 
         Log.d("AsyaWatch", "Ana sayfa: ${request.name} - ${results.size} sonuç")
         return newHomePageResponse(request, results, hasNext = hasNext)
@@ -478,21 +475,18 @@ class AsyaWatch : MainAPI() {
 
         val document = runCatching { Jsoup.parse(normalized, base) }.getOrNull()
 
-        // 1. iframe, video, source etiketleri
         document?.select("iframe, video, source, embed")?.forEach { element ->
             for (attr in listOf("src", "data-src", "data-lazy-src", "data-url", "data-embed", "href")) {
                 absoluteUrl(element.attr(attr), base)?.let { result.add(it) }
             }
         }
 
-        // 2. Ham stringdeki URL'ler
         Regex("""(?i)(?:https?:)?//[^"'<>\\\s]+""").findAll(normalized).forEach { match ->
             val candidate = absoluteUrl(match.value.trimEnd('\\', ')', ']', ',', ';', '"'), base)
                 ?: return@forEach
             if (looksLikePlayer(candidate)) result.add(candidate)
         }
 
-        // 3. JSON alanları
         Regex("""(?i)(?:src|url|file|source|stream|iframe|master)\s*[:=]\s*["']([^"']+)["']""")
             .findAll(normalized).forEach { match ->
                 absoluteUrl(match.groupValues[1], base)?.let {
@@ -500,7 +494,6 @@ class AsyaWatch : MainAPI() {
                 }
             }
 
-        // 4. Script içeriklerinden
         document?.select("script")?.forEach { script ->
             val scriptContent = script.data().ifBlank { script.html() }
             if (scriptContent.isBlank()) return@forEach
@@ -535,9 +528,6 @@ class AsyaWatch : MainAPI() {
         }
     }
 
-    // =====================================================================
-    // TEŞHİS: NP_CONFIG tam logla
-    // =====================================================================
     private fun logNpConfig(npConfig: JSONObject?) {
         if (npConfig == null) {
             Log.d("AsyaWatch", "📋 NP_CONFIG null")
@@ -556,9 +546,6 @@ class AsyaWatch : MainAPI() {
         }
     }
 
-    // =====================================================================
-    // TEŞHİS: HTML'de PoW ile ilgili JS satırlarını logla
-    // =====================================================================
     private fun logPowJs(html: String) {
         val patterns = listOf(
             "salt", "nonce", "difficulty", "0xFFF", "0xfff", "4095", "65535",
@@ -666,6 +653,7 @@ class AsyaWatch : MainAPI() {
         val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
         val vToken = vMatch?.groupValues?.get(1) ?: ""
         val baseUrl = nmUrl.substringBefore('?')
+        val safeCookies = cookies?.takeIf { it.isNotBlank() }
 
         for ((alg, variantName, solution) in variants) {
             val (powValue, _) = solution ?: continue
@@ -676,7 +664,7 @@ class AsyaWatch : MainAPI() {
 
             val headers = browserLikeHeaders(iframeUrl) + buildMap {
                 put("X-PoW", powValue.toString())
-                if (!cookies.isNullOrBlank()) put("Cookie", cookies)
+                safeCookies?.let { put("Cookie", it) }
             }
 
             val directResp = runCatching {
@@ -743,12 +731,13 @@ class AsyaWatch : MainAPI() {
         Log.d("AsyaWatch", "iframe HTML: ${html.length} bytes, NP_CONFIG: ${html.contains("NP_CONFIG")}")
 
         val cookies = extractCookiesFromHeaders(response.headers)
+        val safeCookies = cookies?.takeIf { it.isNotBlank() }
         val npConfig = parseNpConfig(html)
 
-        // ⭐⭐ TEŞHİS ÇIKTILARI — KRİTİK ⭐⭐
+        // ⭐⭐ TEŞHİS ÇIKTILARI ⭐⭐
         logNpConfig(npConfig)
         logPowJs(html)
-        // ⭐⭐ TEŞHİS ÇIKTILARI — KRİTİK ⭐⭐
+        // ⭐⭐ TEŞHİS ÇIKTILARI ⭐⭐
 
         val npId = npConfig?.optString("id")?.takeIf { it.isNotBlank() && it != "null" }
         val npSalt = npConfig?.optString("salt")?.takeIf { it.isNotBlank() && it != "null" }
@@ -775,7 +764,7 @@ class AsyaWatch : MainAPI() {
                     subHeaders["Referer"] = iframeUrl
                     subHeaders["Origin"] = fourPichiveOrigin
                     subHeaders["Accept"] = "text/vtt, text/plain, */*"
-                    if (!cookies.isNullOrBlank()) subHeaders["Cookie"] = cookies
+                    safeCookies?.let { subHeaders["Cookie"] = it }
                     subtitle.headers = subHeaders
                     if (localSeenSubs.add(url)) subtitleCallback(subtitle)
                 }
@@ -805,7 +794,7 @@ class AsyaWatch : MainAPI() {
             ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
 
         val linkHeaders = headers.toMutableMap()
-        if (!cookies.isNullOrBlank()) linkHeaders["Cookie"] = cookies
+        safeCookies?.let { linkHeaders["Cookie"] = it }
 
         callback(
             newExtractorLink(source = name, name = "$name FourPichive", url = finalUrl, type = type) {
