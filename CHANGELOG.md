@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:25c2597b699cec7b0efb78e15cd9578b4dd6fa8b -->
+### Fix Flix Kotlin compilation
+
+- Etkilenen alanlar: Flix
+- Commit: [25c2597](https://github.com/Kayracs3/Kayra/commit/25c2597b699cec7b0efb78e15cd9578b4dd6fa8b)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:0643ae10b09a191d23d6506fa012839cc6155534 -->
 ### Refactor stream headers and update link types
 
