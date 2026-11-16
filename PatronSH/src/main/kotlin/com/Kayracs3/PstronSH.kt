@@ -8,7 +8,7 @@ import java.net.URI
 import java.net.URLEncoder
 
 class PatronSaha : MainAPI() {
-    override var mainUrl = "https://patronsaha1.cfd"
+    override var mainUrl = "https://patronsaha2.cfd"
     override var name = "PatronSaha"
     override var lang = "tr"
     override val hasMainPage = true
