@@ -3,6 +3,7 @@ package com.Kayracs3
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import org.json.JSONObject
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
@@ -23,9 +24,6 @@ class Flix : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
-    // =================================================================
-    // KRİTİK: Tarayıcı isteğiyle BİREBİR eşleşen stream başlıkları
-    // =================================================================
     private fun buildStreamHeaders(
         streamUrl: String,
         pageUrl: String,
@@ -39,7 +37,6 @@ class Flix : MainAPI() {
             put("Accept", "*/*")
             put("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7")
             put("Origin", "https://fixbettv84.com")
-            // Tarayıcı ANA SAYFAYI referer gönderiyor (channel.html DEĞİL)
             put("Referer", "https://fixbettv84.com/")
             put(
                 "sec-ch-ua",
@@ -421,7 +418,7 @@ class Flix : MainAPI() {
     }
 
     // =================================================================
-    // STREAM URL ÇIKARIMI
+    // DEĞİŞİKLİK 1: domain.php'yi JSON olarak parse et
     // =================================================================
     private suspend fun extractBaseAndId(body: String, pageUrl: String): Pair<String, String>? {
         val cleaned = body
@@ -454,12 +451,35 @@ class Flix : MainAPI() {
 
         if (domainUrl != null) {
             runCatching {
-                val r = app.get(domainUrl!!, headers = pageHeaders, allowRedirects = true).text
-                Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
-                    .find(r)?.groupValues?.getOrNull(1)?.replace("\\/", "/")?.let {
-                        if (baseUrl == null) baseUrl = it
-                    }
-            }
+                val resp = app.get(
+                    domainUrl!!,
+                    headers = mapOf(
+                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+                        "Accept" to "application/json, text/plain, */*",
+                        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+                        "Referer" to "$mainUrl/",
+                        "Origin" to "https://fixbettv84.com"
+                    ),
+                    allowRedirects = true
+                )
+                val text = resp.text.trim()
+                Log.d("Flix", "domain.php yanıt: ${text.take(300)}")
+
+                // JSON parse (HTML'deki fetch(CONFIG.domainUrl).json() ile birebir)
+                val jsonBase = runCatching {
+                    JSONObject(text).optString("baseurl", "")
+                }.getOrNull()?.takeIf { it.startsWith("http", true) }
+
+                if (jsonBase != null) {
+                    baseUrl = jsonBase
+                } else {
+                    // JSON başarısızsa regex fallback
+                    Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
+                        .find(text)?.groupValues?.getOrNull(1)?.replace("\\/", "/")?.let {
+                            if (baseUrl == null) baseUrl = it
+                        }
+                }
+            }.onFailure { Log.w("Flix", "domain.php hatası: ${it.message}") }
         }
 
         val id = runCatching {
@@ -468,12 +488,18 @@ class Flix : MainAPI() {
                 ?.substringAfter("id=")
         }.getOrNull() ?: return null
 
+        // id zaten full URL ise direkt kullan (HTML'de destekleniyor)
+        if (id.startsWith("http://", true) || id.startsWith("https://", true)) {
+            Log.d("Flix", "id full URL: $id")
+            return "" to id
+        }
+
         val finalBase = baseUrl?.trimEnd('/') ?: return null
         return finalBase to id
     }
 
     // =================================================================
-    // ADAY M3U8'leri test et
+    // DEĞİŞİKLİK 2: Master playlist alt varyantlarını kontrol et
     // =================================================================
     private suspend fun resolveStreamUrl(
         baseUrl: String,
@@ -482,14 +508,14 @@ class Flix : MainAPI() {
         cookies: String?
     ): String? {
         val pathVariants = listOf(
-            "mono.m3u8",
             "index.m3u8",
             "master.m3u8",
             "playlist.m3u8",
             "stream.m3u8",
             "video.m3u8",
             "hd.m3u8",
-            "sd.m3u8"
+            "sd.m3u8",
+            "mono.m3u8"
         )
 
         var jpgOnlyFallback: String? = null
@@ -526,7 +552,60 @@ class Flix : MainAPI() {
                 "  $path → HLS ✓ (ts=$hasTs, mp4=$hasMp4, map=$hasMap, variant=$hasVariant, jpg=$hasJpg)"
             )
 
-            if (hasTs || hasMp4 || hasMap || hasVariant) {
+            // Master playlist ise alt varyantları kontrol et
+            if (hasVariant && !hasTs && !hasMp4 && !hasMap) {
+                Log.d("Flix", "  $path master playlist, alt varyantlar deneniyor...")
+
+                val lines = content.lines()
+                val variantUrls = mutableListOf<String>()
+                var i = 0
+                while (i < lines.size) {
+                    if (lines[i].trim().startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) {
+                        var j = i + 1
+                        while (j < lines.size && (lines[j].trim().startsWith("#") || lines[j].trim().isBlank())) j++
+                        if (j < lines.size) {
+                            val varUrl = fixUrl(lines[j].trim(), candidate)
+                            if (varUrl != null && varUrl != candidate) variantUrls.add(varUrl)
+                        }
+                    }
+                    i++
+                }
+
+                for (varUrl in variantUrls.take(5)) {
+                    val varTest = runCatching {
+                        app.get(
+                            varUrl,
+                            headers = buildStreamHeaders(varUrl, pageUrl, cookies),
+                            allowRedirects = true
+                        )
+                    }.getOrNull() ?: continue
+
+                    if (varTest.code !in 200..299) continue
+
+                    val varContent = varTest.text.trim()
+                    if (!varContent.startsWith("#EXTM3U")) continue
+
+                    val varHasTs = Regex("""(?im)^\s*[^\s#][^\n]*\.ts(?:\?|$)""").containsMatchIn(varContent)
+                    val varHasMp4 = Regex("""(?im)^\s*[^\s#][^\n]*\.(?:mp4|m4s)(?:\?|$)""").containsMatchIn(varContent)
+                    val varHasMap = varContent.contains("#EXT-X-MAP")
+                    val varHasJpg = varContent.contains(".jpg", ignoreCase = true)
+
+                    Log.d(
+                        "Flix",
+                        "    alt: ${varUrl.takeLast(80)} (ts=$varHasTs, mp4=$varHasMp4, map=$varHasMap, jpg=$varHasJpg)"
+                    )
+
+                    if (varHasTs || varHasMp4 || varHasMap) {
+                        Log.d("Flix", "✔ Alt varyant gerçek video: $varUrl")
+                        return varUrl
+                    }
+                    if (varHasJpg && jpgOnlyFallback == null) {
+                        jpgOnlyFallback = varUrl
+                    }
+                }
+            }
+
+            if (hasTs || hasMp4 || hasMap) {
                 Log.d("Flix", "✔ Gerçek video stream: $path")
                 return candidate
             }
@@ -545,7 +624,7 @@ class Flix : MainAPI() {
     }
 
     // =================================================================
-    // ANA LİNK ÇIKARMA
+    // DEĞİŞİKLİK 3: M3U8 tipi kullan + isLive = true
     // =================================================================
     override suspend fun loadLinks(
         data: String,
@@ -581,24 +660,31 @@ class Flix : MainAPI() {
                 if (baseId != null) {
                     val (baseUrl, id) = baseId
                     Log.d("Flix", "baseUrl=$baseUrl id=$id")
-                    val streamUrl = resolveStreamUrl(baseUrl, id, pageUrl, pageCookies)
+
+                    val streamUrl: String? = if (baseUrl.isBlank()) {
+                        id // id zaten full URL
+                    } else {
+                        resolveStreamUrl(baseUrl, id, pageUrl, pageCookies)
+                    }
+
                     if (streamUrl != null && emittedLinks.add(streamUrl)) {
                         val headers = buildStreamHeaders(streamUrl, pageUrl, pageCookies)
-                        // Referer ANA SAYFA, isLive true, VIDEO türü
+                        // M3U8 tipi → ExoPlayer HLS parser'ı kullanır
                         callback(
                             newExtractorLink(
                                 source = name,
                                 name = name,
                                 url = streamUrl,
-                                type = ExtractorLinkType.VIDEO   // M3U8 yerine VIDEO
+                                type = ExtractorLinkType.M3U8
                             ) {
-                                this.referer = "$mainUrl/"       // ANA SAYFA
+                                this.referer = "$mainUrl/"
                                 this.headers = headers
+                                this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
                         found = true
-                        Log.d("Flix", "✔ Extractor sunuldu: ${streamUrl.substringBefore('?')}")
+                        Log.d("Flix", "✔ M3U8 extractor sunuldu: ${streamUrl.substringBefore('?')}")
                     }
                 } else {
                     Log.w("Flix", "baseUrl/id çıkarılamadı")
@@ -665,10 +751,11 @@ class Flix : MainAPI() {
                                 source = name,
                                 name = name,
                                 url = clean,
-                                type = if (isHls) ExtractorLinkType.VIDEO else ExtractorLinkType.VIDEO
+                                type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                             ) {
                                 this.referer = "$mainUrl/"
                                 this.headers = headers
+                                if (isHls) this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
