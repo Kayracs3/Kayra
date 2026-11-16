@@ -604,6 +604,8 @@ class InatBoxYedek : MainAPI() {
     private val urlToSearchResponse = ConcurrentHashMap<String, SearchResponse>()
 
     companion object {
+        private const val PROXY_MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+        private const val PROXY_STREAM_BUFFER_BYTES = 32 * 1024
         private const val CACHE_TTL_MS = 60 * 1000L
         private const val HMK = "x7kkk0qmqz63kj68tla5i7u26192v7zqnnddhjgm"
         private const val LEGACY_AES_KEY = "ywevqtjrurkwtqgz"
@@ -787,7 +789,7 @@ class InatBoxYedek : MainAPI() {
                     } else ""
 
                     if (prefixText.startsWith("#EXTM3U")) {
-                        val manifestBytes = readLimited(input, MAX_MANIFEST_BYTES)
+                        val manifestBytes = readLimited(input, PROXY_MAX_MANIFEST_BYTES)
                             ?: return MediaStreamResult(502)
                         return MediaStreamResult(200, String(manifestBytes, StandardCharsets.UTF_8))
                     }
@@ -823,7 +825,7 @@ class InatBoxYedek : MainAPI() {
                         append("Connection: close\r\n\r\n")
                     }
                     output.write(header.toByteArray(StandardCharsets.ISO_8859_1))
-                    input.copyTo(output, STREAM_BUFFER_BYTES)
+                    input.copyTo(output, PROXY_STREAM_BUFFER_BYTES)
                     output.flush()
                     MediaStreamResult(response.code)
                 }
