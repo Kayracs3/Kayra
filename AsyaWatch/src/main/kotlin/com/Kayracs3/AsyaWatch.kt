@@ -86,7 +86,7 @@ class AsyaWatch : MainAPI() {
         Regex("https://(four\\.)?pichive\\.online/.*")
     )
 
-    // ⭐⭐⭐ GERÇEK SALT (String.fromCharCode(108,95,71,110,108,119,84,102,100,51))
+    // ⭐ Doğru salt (String.fromCharCode(108,95,71,110,108,119,84,102,100,51))
     private val powSalt = "l_GnlwTfd3"
 
     private data class PageData(
@@ -455,18 +455,19 @@ class AsyaWatch : MainAPI() {
     }
 
     // =====================================================================
-    // ⭐⭐⭐ GERÇEK PoW ÇÖZÜCÜ ⭐⭐⭐
-    // Formül: SHA-256(n + "|l_GnlwTfd3|" + id), words[7] >>> 20 === 0
+    // ⭐⭐⭐ DOĞRU PoW ÇÖZÜCÜ ⭐⭐⭐
+    // Formül: SHA-256(n + "|" + salt + "|" + vToken), words[7] >>> 20 === 0
+    // vToken = nm.php URL'deki v= parametresi (32 değil, ~570 karakter!)
     // =====================================================================
-    private fun solvePow(id: String): Long? {
-        powCache[id]?.let {
-            Log.d("AsyaWatch", "PoW cache hit: id=$id → n=$it")
+    private fun solvePow(vToken: String): Long? {
+        powCache[vToken]?.let {
+            Log.d("AsyaWatch", "PoW cache hit: vToken=${vToken.take(20)}... → n=$it")
             return it
         }
 
-        Log.d("AsyaWatch", "🔐 PoW başlıyor: id=$id, salt=$powSalt")
+        Log.d("AsyaWatch", "🔐 PoW başlıyor: vToken=${vToken.take(30)}... (${vToken.length} char), salt=$powSalt")
         val digest = MessageDigest.getInstance("SHA-256")
-        val suffix = "|$powSalt|$id"
+        val suffix = "|$powSalt|$vToken"
         val maxIter = 5_000_000L
         val startTime = System.currentTimeMillis()
 
@@ -474,23 +475,23 @@ class AsyaWatch : MainAPI() {
             val input = "$i$suffix"
             val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
 
-            // SHA-256 çıktısı 32 byte = 8 × 32-bit kelime
-            // words[7] = hash[28..31] (big-endian)
+            // SHA-256 = 32 byte = 8 × 32-bit kelime
+            // JS: _nwi(...)[7] = 8. kelime (big-endian, hash[28..31])
             val word7: Int = ((hash[28].toInt() and 0xFF) shl 24) or
                               ((hash[29].toInt() and 0xFF) shl 16) or
                               ((hash[30].toInt() and 0xFF) shl 8) or
                               (hash[31].toInt() and 0xFF)
 
-            // Check: (words[7] >>> 20) === 0  → üst 12 bit sıfır → word7 < 4096
+            // Check: (word7 >>> 20) === 0  → word7 < 4096
             if ((word7 ushr 20) == 0) {
                 val elapsed = System.currentTimeMillis() - startTime
                 Log.d("AsyaWatch", "✔✔✔ PoW BULUNDU: n=$i (word7=${word7}, iter=$i, ${elapsed}ms)")
-                powCache[id] = i
+                powCache[vToken] = i
                 return i
             }
         }
 
-        Log.e("AsyaWatch", "✘ PoW bulunamadı ($maxIter iterasyon denendi)")
+        Log.e("AsyaWatch", "✘ PoW bulunamadı ($maxIter iter)")
         return null
     }
 
@@ -516,44 +517,44 @@ class AsyaWatch : MainAPI() {
         return parseObject(match.groupValues[1].trim())
     }
 
-    private suspend fun tryPowOnUrl(nmUrl: String, iframeUrl: String, id: String): String? {
-        val powValue = solvePow(id)
-        if (powValue == null) {
-            Log.e("AsyaWatch", "PoW çözülemedi, URL verilemeyecek")
+    // =====================================================================
+    // ⭐⭐⭐ vToken üzerinden PoW — id DEĞİL ⭐⭐⭐
+    // =====================================================================
+    private suspend fun tryPowOnUrl(nmUrl: String, iframeUrl: String): String? {
+        // v token'ı URL'den çıkar
+        val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
+        val vToken: String = vMatch?.groupValues?.getOrNull(1) ?: run {
+            Log.e("AsyaWatch", "✘ nm.php URL'de v= token yok!")
             return null
         }
 
-        val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
-        val vToken: String = vMatch?.groupValues?.getOrNull(1) ?: ""
-        if (vToken.isEmpty()) {
-            Log.e("AsyaWatch", "nm.php URL'de v= token yok!")
-            return null
-        }
+        Log.d("AsyaWatch", "🎫 vToken=${vToken.take(40)}... (${vToken.length} char)")
+
+        // PoW'yi v token üzerinde çöz
+        val powValue = solvePow(vToken) ?: return null
 
         val baseUrl = nmUrl.substringBefore('?')
         val correctUrl = "$baseUrl?v=$vToken&p=$powValue"
 
-        Log.d("AsyaWatch", "🎯 Hedef URL: ${correctUrl.take(120)}...&p=$powValue")
+        Log.d("AsyaWatch", "🎯 Hedef URL: ${correctUrl.take(100)}...&p=$powValue")
 
-        val headers = browserHeaders(iframeUrl) + ("X-PoW" to powValue.toString())
+        // Browser X-PoW header göndermiyor — sadece normal headers
+        val headers = browserHeaders(iframeUrl)
 
-        // Direct dene
+        // 1. DENEME: Direct
         val directResp = runCatching {
             app.get(correctUrl, headers = headers, referer = iframeUrl)
         }.getOrNull()
 
         if (directResp != null) {
             Log.d("AsyaWatch", "PoW (direct): HTTP ${directResp.code}, bodyLen=${directResp.text.length}")
-            if (directResp.code == 200) {
-                if (directResp.text.startsWith("#EXTM3U")) {
-                    Log.d("AsyaWatch", "✔✔✔ BAŞARILI (direct) → M3U8! (${directResp.text.length} byte)")
-                    return correctUrl
-                }
-                Log.w("AsyaWatch", "200 ama M3U8 değil: ${directResp.text.take(100)}")
+            if (directResp.code == 200 && directResp.text.startsWith("#EXTM3U")) {
+                Log.d("AsyaWatch", "✔✔✔ BAŞARILI (direct) → M3U8! (${directResp.text.length} byte)")
+                return correctUrl
             }
         }
 
-        // WebViewResolver dene
+        // 2. DENEME: WebViewResolver
         Log.d("AsyaWatch", "Direct başarısız, WebViewResolver deneniyor...")
         val wvResp = runCatching {
             app.get(correctUrl, headers = headers, referer = iframeUrl, interceptor = fourPichiveResolver)
@@ -562,12 +563,12 @@ class AsyaWatch : MainAPI() {
         if (wvResp != null) {
             Log.d("AsyaWatch", "PoW (WebView): HTTP ${wvResp.code}, bodyLen=${wvResp.text.length}")
             if (wvResp.code == 200 && wvResp.text.trim().startsWith("#EXTM3U")) {
-                Log.d("AsyaWatch", "✔✔✔ BAŞARILI (WebView) → M3U8!")
+                Log.d("AsyaWatch", "✔✔✔ BAŞARILI (WebView) → M3U8! (${wvResp.text.length} byte)")
                 return correctUrl
             }
         }
 
-        Log.e("AsyaWatch", "✘ PoW çözüldü ama URL 404 döndürüyor")
+        Log.e("AsyaWatch", "✘ PoW çözüldü ama URL hâlâ 404")
         return null
     }
 
@@ -596,7 +597,6 @@ class AsyaWatch : MainAPI() {
         Log.d("AsyaWatch", "iframe HTML: ${html.length} bytes, NP_CONFIG: ${html.contains("NP_CONFIG")}")
 
         val npConfig = parseNpConfig(html)
-
         if (npConfig == null) {
             Log.e("AsyaWatch", "NP_CONFIG bulunamadı")
             return false
@@ -634,9 +634,9 @@ class AsyaWatch : MainAPI() {
 
         Log.d("AsyaWatch", "master: ${masterUrl.take(100)}")
 
-        // ⭐⭐⭐ PoW çöz ve URL al
-        var finalUrl: String? = if (html.contains("NP_GATE") && npId != null) {
-            tryPowOnUrl(masterUrl, iframeUrl, npId)
+        // ⭐⭐⭐ PoW çöz (vToken üzerinde)
+        var finalUrl: String? = if (html.contains("NP_GATE")) {
+            tryPowOnUrl(masterUrl, iframeUrl)
         } else {
             masterUrl
         }
