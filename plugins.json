@@ -233,7 +233,7 @@
     },
     {
         "iconUrl": "https://dizi82.life/favicon.ico",
-        "fileHash": "sha256-539cabc1feed1ab287941fd17cb8eedb2cc691e3ff556bf22d846673373f629d",
+        "fileHash": "sha256-7c8e2d0651392905ec1f921d640196354df6fea00354f3f5206501a0e6aa9086",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 50109,
@@ -499,10 +499,10 @@
     },
     {
         "iconUrl": "https://fixbettv84.com/favicon.ico",
-        "fileHash": "sha256-2a35b8d4e9e2157c47064a276ece94acacb35b215513a625f54ac90a602ec598",
+        "fileHash": "sha256-d8a8b7c5ddc67d064947949f878ad955307a0a70b25db95481c9eb00f3c71625",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 38961,
+        "fileSize": 38270,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -512,7 +512,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 2,
+        "version": 3,
         "internalName": "Flix",
         "description": "Flix otomatik sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Flix.cs3",
