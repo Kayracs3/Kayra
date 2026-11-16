@@ -23,6 +23,39 @@ class Flix : MainAPI() {
         "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.7,en;q=0.6"
     )
 
+    // =================================================================
+    // KRİTİK: Tarayıcıyla BİREBİR eşleşen stream başlıkları
+    // =================================================================
+    private fun buildStreamHeaders(
+        streamUrl: String,
+        pageUrl: String,
+        cookies: String?
+    ): Map<String, String> {
+        return buildMap {
+            // Tarayıcıdaki user-agent (log ile birebir)
+            put(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            )
+            put("Accept", "*/*")
+            put("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7")
+            put("Origin", "https://fixbettv84.com")
+            // Tarayıcı ana sayfayı referer gönderiyor (channel.html DEĞİL)
+            put("Referer", "https://fixbettv84.com/")
+            // Cloudflare/TLS parmak izi farkını kapatan kritik başlıklar
+            put(
+                "sec-ch-ua",
+                "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            )
+            put("sec-ch-ua-mobile", "?0")
+            put("sec-ch-ua-platform", "\"Windows\"")
+            put("sec-fetch-dest", "empty")
+            put("sec-fetch-mode", "cors")
+            put("sec-fetch-site", "cross-site")
+            if (!cookies.isNullOrBlank()) put("Cookie", cookies)
+        }
+    }
+
     private val channelLogos: Map<String, String> = mapOf(
         "trt 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-1-tr.png",
         "trt1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-1-tr.png",
@@ -30,17 +63,12 @@ class Flix : MainAPI() {
         "trt 3" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-3-tr.png",
         "trt haber" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-haber-tr.png",
         "trt spor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-spor-tr.png",
-        "trt spor yildiz" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-spor-yildiz-tr.png",
         "trt belgesel" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-belgesel-tr.png",
         "trt muzik" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-muzik-tr.png",
         "trt cocuk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-cocuk-tr.png",
-        "trt avaz" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-avaz-tr.png",
-        "trt kurdi" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-kurdi-tr.png",
-        "trt arabi" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-arabi-tr.png",
         "trt world" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/trt-world-tr.png",
         "atv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/atv-tr.png",
         "a haber" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/a-haber-tr.png",
-        "a para" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/a-para-tr.png",
         "a spor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/a-spor-tr.png",
         "show tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/show-tv-tr.png",
         "showtv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/show-tv-tr.png",
@@ -49,60 +77,42 @@ class Flix : MainAPI() {
         "now tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/now-tv-tr.png",
         "now" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/now-tv-tr.png",
         "fox" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/fox-tv-tr.png",
-        "fox tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/fox-tv-tr.png",
         "tv8" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tv8-tr.png",
-        "tv8,5" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tv8-5-tr.png",
         "kanal d" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/kanal-d-tr.png",
         "kanald" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/kanal-d-tr.png",
         "cnn turk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/cnn-turk-tr.png",
-        "cnnturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/cnn-turk-tr.png",
         "ntv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ntv-tr.png",
         "ntv spor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ntv-spor-tr.png",
         "haberturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/haberturk-tr.png",
         "beyaz tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/beyaz-tv-tr.png",
-        "beyaztv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/beyaz-tv-tr.png",
         "tv 100" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tv-100-tr.png",
         "tv100" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tv-100-tr.png",
         "teve2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/teve2-tr.png",
         "360" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/360-tr.png",
-        "360 tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/360-tr.png",
         "ulke tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ulke-tv-tr.png",
         "tvnet" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tvnet-tr.png",
         "haber global" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/haber-global-tr.png",
-        "haberglobal" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/haber-global-tr.png",
         "halk tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/halk-tv-tr.png",
-        "halktv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/halk-tv-tr.png",
         "tele 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tele1-tr.png",
-        "tele1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tele1-tr.png",
         "sozcu tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/sozcu-tv-tr.png",
-        "sozcutv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/sozcu-tv-tr.png",
         "krt" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/krt-tr.png",
-        "benguturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/benguturk-tr.png",
-        "ulusal kanal" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/ulusal-kanal-tr.png",
         "s sport" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/s-sport-tr.png",
         "ssport" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/s-sport-tr.png",
         "s sport 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/s-sport-2-tr.png",
-        "ssport2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/s-sport-2-tr.png",
         "tivibu spor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tivibu-spor-tr.png",
         "tivibuspor" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tivibu-spor-tr.png",
-        "tivibu spor 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tivibu-spor-2-tr.png",
         "bein sports 1" to "https://images.seeklogo.com/logo-png/48/1/bein-sports-1-logo-png_seeklogo-481583.png",
-        "beinsports 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-1-tr.png",
         "beinsports1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-1-tr.png",
         "bein sports 2" to "https://images.seeklogo.com/logo-png/48/1/bein-sports-2-logo-png_seeklogo-481584.png",
-        "beinsports 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-2-tr.png",
         "beinsports2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-2-tr.png",
         "bein sports 3" to "https://images.seeklogo.com/logo-png/48/1/bein-sports-3-logo-png_seeklogo-481585.png",
-        "beinsports 3" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/bein-sports-3-tr.png",
         "bein sports 4" to "https://static.cdnlogo.com/logos/b/213/bein-sports-4-logo.png",
         "bein sports max 1" to "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRLbroEld1w5Nr2og_90zc2yHN6a4foW4SBklnMI7Ft2g&s=10",
         "bein sports max 2" to "https://static.cdnlogo.com/logos/b/744/bein-sports-max-2-logo.png",
         "eurosport 1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/eurosport-1-tr.png",
         "eurosport 2" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/eurosport-2-tr.png",
         "minika cocuk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/minika-cocuk-tr.png",
-        "minikacocuk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/minika-cocuk-tr.png",
         "minika go" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/minika-go-tr.png",
-        "minikago" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/minika-go-tr.png",
         "disney channel" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/disney-channel-tr.png",
         "cartoon network" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/cartoon-network-tr.png",
         "nickelodeon" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/nickelodeon-tr.png",
@@ -110,7 +120,6 @@ class Flix : MainAPI() {
         "national geographic" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/nat-geo-tr.png",
         "nat geo wild" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/nat-geo-wild-tr.png",
         "discovery channel" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/discovery-channel-tr.png",
-        "discovery" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/discovery-channel-tr.png",
         "history" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/history-tr.png",
         "animal planet" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/animal-planet-tr.png",
         "tlc" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/tlc-tr.png",
@@ -121,9 +130,7 @@ class Flix : MainAPI() {
         "powerturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/powerturk-tr.png",
         "power turk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/powerturk-tr.png",
         "number one tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/number-one-tv-tr.png",
-        "nr1" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/number-one-tv-tr.png",
         "dream turk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/dream-turk-tr.png",
-        "dreamturk" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/dream-turk-tr.png",
         "kral tv" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/kral-tv-tr.png",
         "kral pop" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/kral-pop-tv-tr.png",
         "tv 24" to "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/turkey/24-tv-tr.png",
@@ -415,32 +422,10 @@ class Flix : MainAPI() {
         }
     }
 
-    // ================================================================
-    // YENİ: Dinamik stream başlık oluşturucu
-    // ================================================================
-    private fun buildStreamHeaders(
-        streamUrl: String,
-        pageUrl: String,
-        cookies: String?
-    ): Map<String, String> {
-        val pageOrigin = runCatching { URI(pageUrl) }.getOrNull()
-            ?.let { "${it.scheme}://${it.host}" }
-            ?: mainUrl
-
-        return buildMap {
-            put("User-Agent", USER_AGENT)
-            put("Accept", "*/*")
-            put("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7")
-            put("Origin", pageOrigin)
-            put("Referer", pageUrl)
-            if (!cookies.isNullOrBlank()) put("Cookie", cookies)
-        }
-    }
-
-    // ================================================================
-    // Geliştirilmiş stream URL çıkarımı
-    // ================================================================
-    private suspend fun extractStreamFromChannelPage(body: String, pageUrl: String): String? {
+    // =================================================================
+    // STREAM URL ÇIKARIMI — sadece baseUrl + id'yi bulur, path denemesi loadLinks'te
+    // =================================================================
+    private suspend fun extractBaseAndId(body: String, pageUrl: String): Pair<String, String>? {
         val cleaned = body
             .replace("\\/", "/")
             .replace("\\u002F", "/", true)
@@ -448,14 +433,6 @@ class Flix : MainAPI() {
             .replace("&quot;", "\"", true)
             .replace("\\u003D", "=", true)
 
-        // 1) Doğrudan m3u8 URL'si varsa
-        Regex("""(?i)(https?://[^\s"'<>]+\.m3u8[^\s"'<>]*)""")
-            .find(cleaned)?.groupValues?.getOrNull(1)?.let {
-                Log.d("Flix", "Direct m3u8 bulundu: ${it.substringBefore('?')}")
-                return it
-            }
-
-        // 2) Değişken arama
         var baseUrl: String? = null
         var domainUrl: String? = null
 
@@ -465,27 +442,24 @@ class Flix : MainAPI() {
             Regex("""baseurl\s*[:=]\s*['"]([^'"]+)['"]"""),
             Regex("""streamUrl\s*[:=]\s*['"]([^'"]+)['"]"""),
             Regex("""hlsUrl\s*[:=]\s*['"]([^'"]+)['"]"""),
-            Regex("""videoUrl\s*[:=]\s*['"]([^'"]+)['"]"""),
             Regex("""playlistUrl\s*[:=]\s*['"]([^'"]+)['"]""")
         )
         for (pattern in varPatterns) {
             pattern.find(cleaned)?.groupValues?.getOrNull(1)?.let { value ->
                 val normalized = value.replace("\\/", "/").trimEnd('/')
                 when {
-                    normalized.contains(".m3u8", true) -> return normalized
-                    Regex("(?i)domain", RegexOption.IGNORE_CASE).containsMatchIn(normalized) && domainUrl == null -> domainUrl = normalized
+                    normalized.contains("domain", true) && domainUrl == null -> domainUrl = normalized
                     normalized.startsWith("http", true) && baseUrl == null -> baseUrl = normalized
                 }
             }
         }
 
-        // 3) domainUrl varsa onu çek, içindeki baseurl'ü bul
-        if (domainUrl != null && domainUrl!!.startsWith("http", true)) {
+        if (domainUrl != null) {
             runCatching {
                 val r = app.get(domainUrl!!, headers = pageHeaders, allowRedirects = true).text
                 Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
                     .find(r)?.groupValues?.getOrNull(1)?.replace("\\/", "/")?.let {
-                        baseUrl = it
+                        if (baseUrl == null) baseUrl = it
                     }
             }
         }
@@ -496,61 +470,86 @@ class Flix : MainAPI() {
                 ?.substringAfter("id=")
         }.getOrNull() ?: return null
 
-        baseUrl = baseUrl?.trimEnd('/') ?: return null
-
-        // 4) Olası path varyasyonları
-        val candidates = listOf(
-            "$baseUrl/$id/mono.m3u8",
-            "$baseUrl/$id/index.m3u8",
-            "$baseUrl/$id/playlist.m3u8",
-            "$baseUrl/mono.m3u8",
-            "$baseUrl/index.m3u8"
-        )
-        Log.d("Flix", "Stream adayı: ${candidates.first()}")
-        return candidates.first()
+        val finalBase = baseUrl?.trimEnd('/') ?: return null
+        return finalBase to id
     }
 
-    // ================================================================
-    // HLS playable kontrolü — fail-open: sadece açıkça resim-only ise reddet
-    // ================================================================
-    private suspend fun isPlayableHls(
-        url: String,
-        referer: String,
+    // =================================================================
+    // ADAY M3U8'leri test et: JPG-only yerine TS/fMP4 içereni tercih et
+    // =================================================================
+    private suspend fun resolveStreamUrl(
+        baseUrl: String,
+        id: String,
+        pageUrl: String,
         cookies: String?
-    ): Boolean {
-        val headers = buildStreamHeaders(url, referer, cookies)
-        val response = runCatching {
-            app.get(url, headers = headers, allowRedirects = true)
-        }.getOrNull() ?: return false // ağ hatası → reddet ama gerçek sorun ağsa player da görecek
+    ): String? {
+        val pathVariants = listOf(
+            "mono.m3u8",
+            "index.m3u8",
+            "master.m3u8",
+            "playlist.m3u8",
+            "stream.m3u8",
+            "video.m3u8",
+            "hd.m3u8",
+            "sd.m3u8"
+        )
 
-        if (response.code !in 200..299) return false
+        var jpgOnlyFallback: String? = null
 
-        val body = response.text.trim()
-            .replace("\\/", "/")
-            .replace("\\u002F", "/", true)
-            .replace("\\u0026", "&", true)
+        for (path in pathVariants) {
+            val candidate = "$baseUrl/$id/$path"
+            val test = runCatching {
+                app.get(
+                    candidate,
+                    headers = buildStreamHeaders(candidate, pageUrl, cookies),
+                    allowRedirects = true
+                )
+            }.getOrNull() ?: continue
 
-        if (!body.startsWith("#EXTM3U")) return false
+            if (test.code !in 200..299) {
+                Log.d("Flix", "  $path → HTTP ${test.code}")
+                continue
+            }
 
-        val hasVariant = Regex("""(?im)^\s*#EXT-X-STREAM-INF\s*:""").containsMatchIn(body)
-        val hasMap = Regex("""(?i)#EXT-X-MAP:""").containsMatchIn(body)
-        val hasSegments = Regex("""(?im)^\s*#EXTINF\s*:""").containsMatchIn(body)
-        if (hasVariant || hasMap || hasSegments) return true
+            val content = test.text.trim()
+            if (!content.startsWith("#EXTM3U")) {
+                Log.d("Flix", "  $path → #EXTM3U değil")
+                continue
+            }
 
-        // Segment URI'lerine bak
-        val uris = body.lineSequence().map { it.trim() }
-            .filter { it.isNotBlank() && !it.startsWith("#") }.toList()
-        if (uris.isEmpty()) return false
-        // Sadece görüntü ise reddet, değilse kabul et
-        val onlyImages = uris.all {
-            Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)(?:[?#].*)?$""").containsMatchIn(it)
+            // TS / MP4 / fMP4 segment içeriyor mu?
+            val hasTs = Regex("""(?im)^\s*[^\s#][^\n]*\.ts(?:\?|$)""").containsMatchIn(content)
+            val hasMp4 = Regex("""(?im)^\s*[^\s#][^\n]*\.(?:mp4|m4s)(?:\?|$)""").containsMatchIn(content)
+            val hasMap = content.contains("#EXT-X-MAP")
+            val hasVariant = content.contains("#EXT-X-STREAM-INF")
+            val hasJpg = content.contains(".jpg", ignoreCase = true)
+
+            Log.d(
+                "Flix",
+                "  $path → HLS ✓ (ts=$hasTs, mp4=$hasMp4, map=$hasMap, variant=$hasVariant, jpg=$hasJpg)"
+            )
+
+            if (hasTs || hasMp4 || hasMap || hasVariant) {
+                Log.d("Flix", "✔ Gerçek video stream: $path")
+                return candidate
+            }
+
+            if (hasJpg && jpgOnlyFallback == null) {
+                jpgOnlyFallback = candidate
+            }
         }
-        return !onlyImages
+
+        if (jpgOnlyFallback != null) {
+            Log.w("Flix", "⚠ Sadece JPG-only stream bulundu, yine de dönüyorum: $jpgOnlyFallback")
+        } else {
+            Log.w("Flix", "✘ Hiçbir geçerli stream bulunamadı")
+        }
+        return jpgOnlyFallback
     }
 
-    // ================================================================
+    // =================================================================
     // ANA LİNK ÇIKARMA
-    // ================================================================
+    // =================================================================
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -581,47 +580,32 @@ class Flix : MainAPI() {
 
             // === CHANNEL.HTML → STREAM ===
             if (pageUrl.contains("channel.html", ignoreCase = true)) {
-                val streamUrlRaw = extractStreamFromChannelPage(responseBody, pageUrl)
-                if (streamUrlRaw != null) {
-                    val streamUrl = streamUrlRaw.replace("\\/", "/").trim()
-                    if (emittedLinks.add(streamUrl)) {
-                        // Doğrulama yapalım — doğru başlıklarla
-                        if (isPlayableHls(streamUrl, pageUrl, pageCookies)) {
-                            val headers = buildStreamHeaders(streamUrl, pageUrl, pageCookies)
-                            callback(
-                                newExtractorLink(
-                                    source = name,
-                                    name = name,
-                                    url = streamUrl,
-                                    type = ExtractorLinkType.M3U8
-                                ) {
-                                    // KRİTİK: referer = channel.html URL'si (mainUrl DEĞİL)
-                                    this.referer = pageUrl
-                                    this.headers = headers
-                                    quality = Qualities.Unknown.value
-                                }
-                            )
-                            found = true
-                            Log.d("Flix", "✔ Stream eklendi: ${streamUrl.substringBefore('?')}")
-                        } else {
-                            Log.w("Flix", "✘ Stream doğrulanamadı: ${streamUrl.substringBefore('?')}")
-                            // Yine de kullanıcıya sun — belki player başlıkları farklı bir şekilde halleder
-                            val headers = buildStreamHeaders(streamUrl, pageUrl, pageCookies)
-                            callback(
-                                newExtractorLink(
-                                    source = name,
-                                    name = name,
-                                    url = streamUrl,
-                                    type = ExtractorLinkType.M3U8
-                                ) {
-                                    this.referer = pageUrl
-                                    this.headers = headers
-                                    quality = Qualities.Unknown.value
-                                }
-                            )
-                            found = true
-                        }
+                val baseId = extractBaseAndId(responseBody, pageUrl)
+                if (baseId != null) {
+                    val (baseUrl, id) = baseId
+                    Log.d("Flix", "baseUrl=$baseUrl id=$id")
+                    val streamUrl = resolveStreamUrl(baseUrl, id, pageUrl, pageCookies)
+                    if (streamUrl != null && emittedLinks.add(streamUrl)) {
+                        // Referer OLARAK ANA SAYFA (log ile birebir)
+                        val headers = buildStreamHeaders(streamUrl, pageUrl, pageCookies)
+                        callback(
+                            newExtractorLink(
+                                source = name,
+                                name = name,
+                                url = streamUrl,
+                                type = ExtractorLinkType.M3U8
+                            ) {
+                                this.referer = "$mainUrl/"   // ANA SAYFA
+                                this.headers = headers
+                                this.isLive = true
+                                quality = Qualities.Unknown.value
+                            }
+                        )
+                        found = true
+                        Log.d("Flix", "✔ Extractor sunuldu: ${streamUrl.substringBefore('?')}")
                     }
+                } else {
+                    Log.w("Flix", "baseUrl/id çıkarılamadı")
                 }
             }
 
@@ -671,24 +655,25 @@ class Flix : MainAPI() {
                 }
 
             for (candidate in candidates.take(40)) {
-                val cleanCandidate = candidate.replace("\\/", "/").trim()
-                val path = runCatching { URI(cleanCandidate).path.orEmpty().lowercase() }.getOrDefault("")
+                val clean = candidate.replace("\\/", "/").trim()
+                val path = runCatching { URI(clean).path.orEmpty().lowercase() }.getOrDefault("")
                 val isHls = path.endsWith(".m3u8")
                 val isVideo = path.endsWith(".mp4")
                 val isDirect = isHls || isVideo
 
                 if (isDirect) {
-                    if (emittedLinks.add(cleanCandidate)) {
-                        val headers = buildStreamHeaders(cleanCandidate, pageUrl, pageCookies)
+                    if (emittedLinks.add(clean)) {
+                        val headers = buildStreamHeaders(clean, pageUrl, pageCookies)
                         callback(
                             newExtractorLink(
                                 source = name,
                                 name = name,
-                                url = cleanCandidate,
+                                url = clean,
                                 type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                             ) {
-                                this.referer = pageUrl
+                                this.referer = "$mainUrl/"
                                 this.headers = headers
+                                if (isHls) this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
@@ -697,9 +682,8 @@ class Flix : MainAPI() {
                     continue
                 }
 
-                // Harici player
                 runCatching {
-                    loadExtractor(cleanCandidate, pageUrl, subtitleCallback) { link ->
+                    loadExtractor(clean, pageUrl, subtitleCallback) { link ->
                         if (emittedLinks.add(link.url)) {
                             callback(link)
                             found = true
@@ -707,19 +691,15 @@ class Flix : MainAPI() {
                     }
                 }
 
-                if (depth < 2 && visitedPages.size < 8 &&
-                    !cleanCandidate.contains("channel.html", true)
-                ) {
-                    scanPage(cleanCandidate, pageUrl, depth + 1)
+                if (depth < 2 && visitedPages.size < 8 && !clean.contains("channel.html", true)) {
+                    scanPage(clean, pageUrl, depth + 1)
                 }
             }
         }
 
         scanPage(data, "$mainUrl/", 0)
 
-        if (!found) {
-            Log.w("Flix", "Bağlantı bulunamadı (taranan sayfa=${visitedPages.size})")
-        }
+        if (!found) Log.w("Flix", "Bağlantı bulunamadı (sayfa=${visitedPages.size})")
         return found
     }
 }
