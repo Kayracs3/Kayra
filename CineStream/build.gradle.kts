@@ -1,6 +1,6 @@
 import java.util.Properties
 
-version = 487
+version = 488
 
 dependencies {
     // CloudStream already provides coroutines at runtime. Compile against the
