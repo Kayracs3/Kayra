@@ -417,9 +417,6 @@ class Flix : MainAPI() {
         }
     }
 
-    // =================================================================
-    // DEĞİŞİKLİK 1: domain.php'yi JSON olarak parse et
-    // =================================================================
     private suspend fun extractBaseAndId(body: String, pageUrl: String): Pair<String, String>? {
         val cleaned = body
             .replace("\\/", "/")
@@ -465,7 +462,6 @@ class Flix : MainAPI() {
                 val text = resp.text.trim()
                 Log.d("Flix", "domain.php yanıt: ${text.take(300)}")
 
-                // JSON parse (HTML'deki fetch(CONFIG.domainUrl).json() ile birebir)
                 val jsonBase = runCatching {
                     JSONObject(text).optString("baseurl", "")
                 }.getOrNull()?.takeIf { it.startsWith("http", true) }
@@ -473,7 +469,6 @@ class Flix : MainAPI() {
                 if (jsonBase != null) {
                     baseUrl = jsonBase
                 } else {
-                    // JSON başarısızsa regex fallback
                     Regex("""["']?baseurl["']?\s*:\s*["']([^"']+)["']""")
                         .find(text)?.groupValues?.getOrNull(1)?.replace("\\/", "/")?.let {
                             if (baseUrl == null) baseUrl = it
@@ -488,7 +483,6 @@ class Flix : MainAPI() {
                 ?.substringAfter("id=")
         }.getOrNull() ?: return null
 
-        // id zaten full URL ise direkt kullan (HTML'de destekleniyor)
         if (id.startsWith("http://", true) || id.startsWith("https://", true)) {
             Log.d("Flix", "id full URL: $id")
             return "" to id
@@ -498,9 +492,6 @@ class Flix : MainAPI() {
         return finalBase to id
     }
 
-    // =================================================================
-    // DEĞİŞİKLİK 2: Master playlist alt varyantlarını kontrol et
-    // =================================================================
     private suspend fun resolveStreamUrl(
         baseUrl: String,
         id: String,
@@ -552,7 +543,6 @@ class Flix : MainAPI() {
                 "  $path → HLS ✓ (ts=$hasTs, mp4=$hasMp4, map=$hasMap, variant=$hasVariant, jpg=$hasJpg)"
             )
 
-            // Master playlist ise alt varyantları kontrol et
             if (hasVariant && !hasTs && !hasMp4 && !hasMap) {
                 Log.d("Flix", "  $path master playlist, alt varyantlar deneniyor...")
 
@@ -623,9 +613,6 @@ class Flix : MainAPI() {
         return jpgOnlyFallback
     }
 
-    // =================================================================
-    // DEĞİŞİKLİK 3: M3U8 tipi kullan + isLive = true
-    // =================================================================
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -654,7 +641,6 @@ class Flix : MainAPI() {
                     .takeIf { it.isNotBlank() }
             }.getOrNull()
 
-            // === CHANNEL.HTML → STREAM ===
             if (pageUrl.contains("channel.html", ignoreCase = true)) {
                 val baseId = extractBaseAndId(responseBody, pageUrl)
                 if (baseId != null) {
@@ -662,14 +648,13 @@ class Flix : MainAPI() {
                     Log.d("Flix", "baseUrl=$baseUrl id=$id")
 
                     val streamUrl: String? = if (baseUrl.isBlank()) {
-                        id // id zaten full URL
+                        id
                     } else {
                         resolveStreamUrl(baseUrl, id, pageUrl, pageCookies)
                     }
 
                     if (streamUrl != null && emittedLinks.add(streamUrl)) {
                         val headers = buildStreamHeaders(streamUrl, pageUrl, pageCookies)
-                        // M3U8 tipi → ExoPlayer HLS parser'ı kullanır
                         callback(
                             newExtractorLink(
                                 source = name,
@@ -679,7 +664,6 @@ class Flix : MainAPI() {
                             ) {
                                 this.referer = "$mainUrl/"
                                 this.headers = headers
-                                this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
@@ -691,7 +675,6 @@ class Flix : MainAPI() {
                 }
             }
 
-            // === ALTYAZILAR ===
             for (track in document.select("track[src], track[data-src], track[data-url]")) {
                 val raw = sequenceOf(track.attr("src"), track.attr("data-src"), track.attr("data-url"))
                     .firstOrNull { it.isNotBlank() } ?: continue
@@ -705,7 +688,6 @@ class Flix : MainAPI() {
                 }
             }
 
-            // === DİĞER ADAYLAR ===
             val candidates = linkedSetOf<String>()
             val selector = listOf(
                 "iframe", "video", "video source", "source",
@@ -755,7 +737,6 @@ class Flix : MainAPI() {
                             ) {
                                 this.referer = "$mainUrl/"
                                 this.headers = headers
-                                if (isHls) this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
