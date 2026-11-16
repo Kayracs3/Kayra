@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:dd71df24133b5ea4dc52be77298f02e2fcc4906f -->
+### Fix InatBoxYedek proxy size constant scope
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [dd71df2](https://github.com/Kayracs3/Kayra/commit/dd71df24133b5ea4dc52be77298f02e2fcc4906f)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:686e5d8ecf1d633e8efe6ee80c42be046e36ca02 -->
 ### Stream backup HLS segments for low-memory Android TV
 
