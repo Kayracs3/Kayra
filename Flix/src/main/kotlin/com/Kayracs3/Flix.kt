@@ -24,7 +24,7 @@ class Flix : MainAPI() {
     )
 
     // =================================================================
-    // KRİTİK: Tarayıcıyla BİREBİR eşleşen stream başlıkları
+    // KRİTİK: Tarayıcı isteğiyle BİREBİR eşleşen stream başlıkları
     // =================================================================
     private fun buildStreamHeaders(
         streamUrl: String,
@@ -32,7 +32,6 @@ class Flix : MainAPI() {
         cookies: String?
     ): Map<String, String> {
         return buildMap {
-            // Tarayıcıdaki user-agent (log ile birebir)
             put(
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
@@ -40,9 +39,8 @@ class Flix : MainAPI() {
             put("Accept", "*/*")
             put("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7")
             put("Origin", "https://fixbettv84.com")
-            // Tarayıcı ana sayfayı referer gönderiyor (channel.html DEĞİL)
+            // Tarayıcı ANA SAYFAYI referer gönderiyor (channel.html DEĞİL)
             put("Referer", "https://fixbettv84.com/")
-            // Cloudflare/TLS parmak izi farkını kapatan kritik başlıklar
             put(
                 "sec-ch-ua",
                 "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
@@ -423,7 +421,7 @@ class Flix : MainAPI() {
     }
 
     // =================================================================
-    // STREAM URL ÇIKARIMI — sadece baseUrl + id'yi bulur, path denemesi loadLinks'te
+    // STREAM URL ÇIKARIMI
     // =================================================================
     private suspend fun extractBaseAndId(body: String, pageUrl: String): Pair<String, String>? {
         val cleaned = body
@@ -475,7 +473,7 @@ class Flix : MainAPI() {
     }
 
     // =================================================================
-    // ADAY M3U8'leri test et: JPG-only yerine TS/fMP4 içereni tercih et
+    // ADAY M3U8'leri test et
     // =================================================================
     private suspend fun resolveStreamUrl(
         baseUrl: String,
@@ -517,7 +515,6 @@ class Flix : MainAPI() {
                 continue
             }
 
-            // TS / MP4 / fMP4 segment içeriyor mu?
             val hasTs = Regex("""(?im)^\s*[^\s#][^\n]*\.ts(?:\?|$)""").containsMatchIn(content)
             val hasMp4 = Regex("""(?im)^\s*[^\s#][^\n]*\.(?:mp4|m4s)(?:\?|$)""").containsMatchIn(content)
             val hasMap = content.contains("#EXT-X-MAP")
@@ -586,17 +583,18 @@ class Flix : MainAPI() {
                     Log.d("Flix", "baseUrl=$baseUrl id=$id")
                     val streamUrl = resolveStreamUrl(baseUrl, id, pageUrl, pageCookies)
                     if (streamUrl != null && emittedLinks.add(streamUrl)) {
-                        // Referer OLARAK ANA SAYFA (log ile birebir)
                         val headers = buildStreamHeaders(streamUrl, pageUrl, pageCookies)
+                        // Referer ANA SAYFA, isLive true, VIDEO türü
                         callback(
                             newExtractorLink(
                                 source = name,
                                 name = name,
                                 url = streamUrl,
-                                type = ExtractorLinkType.M3U8
+                                type = ExtractorLinkType.VIDEO   // M3U8 yerine VIDEO
                             ) {
-                                this.referer = "$mainUrl/"   // ANA SAYFA
+                                this.referer = "$mainUrl/"       // ANA SAYFA
                                 this.headers = headers
+                                this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
@@ -668,10 +666,11 @@ class Flix : MainAPI() {
                                 source = name,
                                 name = name,
                                 url = clean,
-                                type = if (isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                                type = if (isHls) ExtractorLinkType.VIDEO else ExtractorLinkType.VIDEO
                             ) {
                                 this.referer = "$mainUrl/"
                                 this.headers = headers
+                                if (isHls) this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
