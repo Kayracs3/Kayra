@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:9f9ebb99548ee9ad5eaaf93b710d238f1e5f207b -->
+### Increment versions for Android TV memory updates
+
+- Etkilenen alanlar: AsyaWatch, CineStream, Flix, InatBox, InatBoxYedek, SinemaCX
+- Commit: [9f9ebb9](https://github.com/Kayracs3/Kayra/commit/9f9ebb99548ee9ad5eaaf93b710d238f1e5f207b)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:881e2495d7eaee465bfcb2f9870e6c8d40902cc0 -->
 ### Bound provider caches and scraping concurrency for Android TV
 
