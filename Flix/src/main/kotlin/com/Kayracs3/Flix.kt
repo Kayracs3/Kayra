@@ -598,8 +598,6 @@ class Flix : MainAPI() {
                                     // KRİTİK: referer = channel.html URL'si (mainUrl DEĞİL)
                                     this.referer = pageUrl
                                     this.headers = headers
-                                    // KRİTİK: isLive = true → Cloudstream önizleme için ayrı fetch yapmasın
-                                    this.isLive = true
                                     quality = Qualities.Unknown.value
                                 }
                             )
@@ -618,7 +616,6 @@ class Flix : MainAPI() {
                                 ) {
                                     this.referer = pageUrl
                                     this.headers = headers
-                                    this.isLive = true
                                     quality = Qualities.Unknown.value
                                 }
                             )
@@ -692,7 +689,6 @@ class Flix : MainAPI() {
                             ) {
                                 this.referer = pageUrl
                                 this.headers = headers
-                                if (isHls) this.isLive = true
                                 quality = Qualities.Unknown.value
                             }
                         )
