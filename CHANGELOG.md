@@ -1,5 +1,22 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-17
+
+<!-- kayra-commit:464e67d4db505f86a2e6495e0c0f6ae790e6e26b -->
+### Bump version from 33 to 34
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [464e67d](https://github.com/Kayracs3/Kayra/commit/464e67d4db505f86a2e6495e0c0f6ae790e6e26b)
+
+## 2026-11-17
+
+<!-- kayra-commit:5a58ddf65240c6ba28c642f30607c733ef6212d6 -->
+### Update AsyaWatch.kt
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [5a58ddf](https://github.com/Kayracs3/Kayra/commit/5a58ddf65240c6ba28c642f30607c733ef6212d6)
+
+
 ## 2026-11-16
 
 <!-- kayra-commit:b1bd8431c53b7a2433f3f4b77315b87cd030e678 -->
