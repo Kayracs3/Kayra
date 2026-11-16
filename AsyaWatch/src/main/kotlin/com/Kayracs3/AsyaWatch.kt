@@ -104,6 +104,15 @@ class AsyaWatch : MainAPI() {
     @Volatile private var rateLimitedUntil = 0L
     private val powCache = ConcurrentHashMap<String, Pair<Long, String>>()
 
+    // =====================================================================
+    // ⭐ KRİTİK: Cookie ekleme helper'ı — smart cast sorununu tamamen çözer
+    // =====================================================================
+    private fun applyCookieHeader(headers: MutableMap<String, String>, cookies: String?) {
+        val c: String = cookies ?: return
+        if (c.isBlank()) return
+        headers["Cookie"] = c
+    }
+
     private fun isRateLimitResponse(code: Int, body: String): Boolean {
         val lower = body.lowercase()
         return code == 1015 || code == 429 ||
@@ -653,7 +662,6 @@ class AsyaWatch : MainAPI() {
         val vMatch = Regex("""[?&]v=([^&]+)""").find(nmUrl)
         val vToken = vMatch?.groupValues?.get(1) ?: ""
         val baseUrl = nmUrl.substringBefore('?')
-        val safeCookies = cookies?.takeIf { it.isNotBlank() }
 
         for ((alg, variantName, solution) in variants) {
             val (powValue, _) = solution ?: continue
@@ -662,10 +670,11 @@ class AsyaWatch : MainAPI() {
             val correctUrl = if (vToken.isNotBlank())
                 "$baseUrl?v=$vToken&p=$powValue" else nmUrl
 
-            val headers = browserLikeHeaders(iframeUrl) + buildMap {
-                put("X-PoW", powValue.toString())
-                safeCookies?.let { put("Cookie", it) }
-            }
+            // ⭐ KRİTİK: MutableMap olarak oluştur, helper ile cookie ekle
+            val headers = mutableMapOf<String, String>()
+            headers.putAll(browserLikeHeaders(iframeUrl))
+            headers["X-PoW"] = powValue.toString()
+            applyCookieHeader(headers, cookies)
 
             val directResp = runCatching {
                 app.get(correctUrl, headers = headers, referer = iframeUrl)
@@ -731,13 +740,11 @@ class AsyaWatch : MainAPI() {
         Log.d("AsyaWatch", "iframe HTML: ${html.length} bytes, NP_CONFIG: ${html.contains("NP_CONFIG")}")
 
         val cookies = extractCookiesFromHeaders(response.headers)
-        val safeCookies = cookies?.takeIf { it.isNotBlank() }
         val npConfig = parseNpConfig(html)
 
-        // ⭐⭐ TEŞHİS ÇIKTILARI ⭐⭐
+        // ⭐⭐ TEŞHİS ⭐⭐
         logNpConfig(npConfig)
         logPowJs(html)
-        // ⭐⭐ TEŞHİS ÇIKTILARI ⭐⭐
 
         val npId = npConfig?.optString("id")?.takeIf { it.isNotBlank() && it != "null" }
         val npSalt = npConfig?.optString("salt")?.takeIf { it.isNotBlank() && it != "null" }
@@ -760,11 +767,13 @@ class AsyaWatch : MainAPI() {
                 val url = sub.optString("url")
                 if (url.isNotBlank()) {
                     val subtitle = SubtitleFile(lang = label, url = url)
-                    val subHeaders = siteHeaders.toMutableMap()
+                    // ⭐ MutableMap + helper
+                    val subHeaders = mutableMapOf<String, String>()
+                    subHeaders.putAll(siteHeaders)
                     subHeaders["Referer"] = iframeUrl
                     subHeaders["Origin"] = fourPichiveOrigin
                     subHeaders["Accept"] = "text/vtt, text/plain, */*"
-                    safeCookies?.let { subHeaders["Cookie"] = it }
+                    applyCookieHeader(subHeaders, cookies)
                     subtitle.headers = subHeaders
                     if (localSeenSubs.add(url)) subtitleCallback(subtitle)
                 }
@@ -793,8 +802,10 @@ class AsyaWatch : MainAPI() {
         val type = if (finalUrl.contains(".m3u8", true) || isNmPhpUrl(finalUrl))
             ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
 
-        val linkHeaders = headers.toMutableMap()
-        safeCookies?.let { linkHeaders["Cookie"] = it }
+        // ⭐ MutableMap + helper
+        val linkHeaders = mutableMapOf<String, String>()
+        linkHeaders.putAll(headers)
+        applyCookieHeader(linkHeaders, cookies)
 
         callback(
             newExtractorLink(source = name, name = "$name FourPichive", url = finalUrl, type = type) {
