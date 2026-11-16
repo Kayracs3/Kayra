@@ -2,6 +2,15 @@
 
 ## 2026-11-16
 
+<!-- kayra-commit:5e233ca5d1ce08978dfc6d8474b80531bca5b25d -->
+### Fix Flix compile error
+
+- Etkilenen alanlar: Flix
+- Commit: [5e233ca](https://github.com/Kayracs3/Kayra/commit/5e233ca5d1ce08978dfc6d8474b80531bca5b25d)
+
+
+## 2026-11-16
+
 <!-- kayra-commit:2e0368259a5f78f78ab782887273856a424909f0 -->
 ### Update mainUrl to new DiziLife URL
 
