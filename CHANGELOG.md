@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:3bb96e9bc506a42a93269f444562647c27b8e357 -->
+### Fix AsyaWatch NP player HLS source handling
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [3bb96e9](https://github.com/Kayracs3/Kayra/commit/3bb96e9bc506a42a93269f444562647c27b8e357)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:e674c5f843d7067c9ba44745a3e50991f4b2c713 -->
 ### Use native headers for AsyaWatch WebView request
 
