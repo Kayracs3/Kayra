@@ -1,6 +1,7 @@
 package com.Kayracs3
 
 import android.util.Log
+import android.webkit.CookieManager
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -458,12 +459,25 @@ class AsyaWatch : MainAPI() {
             .filter { it.url.encodedPath.equals("/nsub.php", true) }
             .distinctBy { it.url.toString() }
 
+        // WebResourceRequest may omit Cookie from requestHeaders. Read the same
+        // WebView cookie store used by the iframe and attach it to ExoPlayer.
+        val webViewCookies = runCatching {
+            CookieManager.getInstance().getCookie(origin).orEmpty()
+        }.getOrDefault("")
+        val capturedCookie = capturedPlaylist?.header("Cookie").orEmpty()
+        val cookieHeader = webViewCookies.ifBlank { capturedCookie }
+        val playbackHeaders = if (cookieHeader.isNotBlank()) {
+            mediaHeaders + mapOf("Cookie" to cookieHeader)
+        } else {
+            mediaHeaders
+        }
+
         Log.d(
             "AsyaWatch",
-            "FourPichive gate hazır: koruma=${gate != null}, iframe çerezi=${iframeCookies.isNotBlank()}"
+            "FourPichive gate hazır: koruma=${gate != null}, iframe çerezi=${iframeCookies.isNotBlank()}, WebView çerezi=${cookieHeader.isNotBlank()}"
         )
 
-        val subtitleHeaders = mediaHeaders + ("Accept" to "text/vtt, text/plain, */*")
+        val subtitleHeaders = playbackHeaders + ("Accept" to "text/vtt, text/plain, */*")
         val seenSubs = HashSet<String>()
         val configuredSubs = npConfig.optJSONArray("subtitles")
 
@@ -499,6 +513,7 @@ class AsyaWatch : MainAPI() {
                         request.header(key)?.let { requestHeaders[key] = it }
                     }
                 }
+                if (cookieHeader.isNotBlank()) requestHeaders["Cookie"] = cookieHeader
                 requestHeaders["Accept"] = "text/vtt, text/plain, */*"
 
                 val subtitle = SubtitleFile(lang = label, url = subtitleUrl)
@@ -531,7 +546,7 @@ class AsyaWatch : MainAPI() {
 
         if (capturedPlaylist != null) {
             val finalUrl = capturedPlaylist.url.toString()
-            val capturedHeaders = LinkedHashMap(mediaHeaders)
+            val capturedHeaders = LinkedHashMap(playbackHeaders)
             capturedPlaylist.headers.names().forEach { key ->
                 if (key.equals("Cookie", true) ||
                     key.equals("User-Agent", true) ||
@@ -542,6 +557,7 @@ class AsyaWatch : MainAPI() {
                     capturedPlaylist.header(key)?.let { capturedHeaders[key] = it }
                 }
             }
+            if (cookieHeader.isNotBlank()) capturedHeaders["Cookie"] = cookieHeader
 
             callback(newExtractorLink(
                 source = name,
@@ -579,7 +595,7 @@ class AsyaWatch : MainAPI() {
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.referer = iframeUrl
-                    this.headers = mediaHeaders
+                    this.headers = playbackHeaders
                     this.quality = Qualities.Unknown.value
                 })
                 emitted = true
