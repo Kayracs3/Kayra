@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:4512b47ce13f08b19f4fd9af23c7b1a119a17045 -->
+### Use native WebView identity for FourPichive Cloudflare
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [4512b47](https://github.com/Kayracs3/Kayra/commit/4512b47ce13f08b19f4fd9af23c7b1a119a17045)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:76996e7b18a58e8fd38f8ee39030b22a48261378 -->
 ### Forward WebView session cookies to AsyaWatch playback
 
