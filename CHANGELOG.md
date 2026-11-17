@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:28a248fce25f466285e2e164c92d1cb097b80ea3 -->
+### Capture FourPichive browser playlist request in AsyaWatch
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [28a248f](https://github.com/Kayracs3/Kayra/commit/28a248fce25f466285e2e164c92d1cb097b80ea3)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:4085a4211b2b81fc2fc458dab01f07d062d8206e -->
 ### Align AsyaWatch FourPichive playlist and subtitle requests
 
