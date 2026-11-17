@@ -87,9 +87,11 @@ class AsyaWatch : MainAPI() {
         additionalUrls = listOf(
             Regex("""(?i)^https://four\.pichive\.online/nsub\.php(?:\?.*)?$""")
         ),
-        userAgent = fourPichiveUserAgent,
+        // Cloudflare's WebView flow requires its native, internally consistent UA.
+        // Spoofing a desktop Chrome UA here caused the cf.errors.css block page.
+        userAgent = null,
         useOkhttp = false,
-        timeout = 45_000L
+        timeout = 60_000L
     )
 
     private data class PageData(val document: Document, val secureData: JSONObject?)
