@@ -31,7 +31,6 @@ import org.jsoup.nodes.Document
 import java.net.URI
 import java.net.URLEncoder
 import java.security.MessageDigest
-import java.util.concurrent.ConcurrentHashMap
 
 class AsyaWatch : MainAPI() {
     override var mainUrl = "https://asyawatch.com"
@@ -61,7 +60,9 @@ class AsyaWatch : MainAPI() {
 
     private val chromeUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
-    private val chromeUaBrand = "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+    private val fourPichiveUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
     private val siteHeaders = mapOf(
         "User-Agent" to chromeUserAgent,
@@ -81,11 +82,9 @@ class AsyaWatch : MainAPI() {
     )
 
     private val fourPichiveResolver = WebViewResolver(Regex("https://(four\\.)?pichive\\.online/.*"))
-    private val powSalt = "l_GnlwTfd3"
 
     private data class PageData(val document: Document, val secureData: JSONObject?)
     @Volatile private var rateLimitedUntil = 0L
-    private val powCache = ConcurrentHashMap<String, Long>()
 
     private fun isRateLimitResponse(code: Int, body: String): Boolean {
         val l = body.lowercase()
@@ -322,35 +321,45 @@ class AsyaWatch : MainAPI() {
         return p.isBlank() || p == "/"
     }
 
-    // ⭐ PoW: SHA256(n|l_GnlwTfd3|gate.n)[7] >>> 20 === 0
-    private fun solvePow(input: String): Long? {
-        powCache[input]?.let { return it }
-        val digest = MessageDigest.getInstance("SHA-256")
-        val suffix = "|$powSalt|$input"
-        for (i in 0L until 5_000_000L) {
-            val hash = digest.digest("$i$suffix".toByteArray(Charsets.UTF_8))
-            val w7 = ((hash[28].toInt() and 0xFF) shl 24) or ((hash[29].toInt() and 0xFF) shl 16) or
-                     ((hash[30].toInt() and 0xFF) shl 8) or (hash[31].toInt() and 0xFF)
-            if ((w7 ushr 20) == 0) { powCache[input] = i; return i }
+    // Mirrors FourPichive's NP_GATE proof:
+    // SHA-256(challenge + salt + base36(nonce) + salt)[3] >>> (32 - bits) == 0.
+    private fun fourPichiveGateProof(config: JSONObject?): String? {
+        val gate = config?.optJSONObject("gate") ?: return null
+        val challenge = field(gate, "n")?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val bits = gate.optInt("b", 12).takeIf { it in 1..32 } ?: 12
+        val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull() ?: return null
+        val salt = "nEhC31vsdq"
+
+        for (nonce in 0L until 100_000_000L) {
+            val nonceText = nonce.toString(36)
+            val input = challenge + salt + nonceText + salt
+            val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
+            val fourthWord =
+                ((hash[12].toInt() and 0xff) shl 24) or
+                    ((hash[13].toInt() and 0xff) shl 16) or
+                    ((hash[14].toInt() and 0xff) shl 8) or
+                    (hash[15].toInt() and 0xff)
+            if ((fourthWord ushr (32 - bits)) == 0) return nonceText
         }
         return null
     }
 
-    private fun browserHeaders(iframeUrl: String): Map<String, String> = mapOf(
-        "User-Agent" to chromeUserAgent,
-        "Accept" to "*/*",
-        "Accept-Language" to "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer" to iframeUrl,
-        "Origin" to "https://four.pichive.online",
-        "Sec-Fetch-Dest" to "empty",
-        "Sec-Fetch-Mode" to "cors",
-        "Sec-Fetch-Site" to "same-origin",
-        "Sec-Fetch-Storage-Access" to "active",
-        "sec-ch-ua" to chromeUaBrand,
-        "sec-ch-ua-mobile" to "?0",
-        "sec-ch-ua-platform" to "\"Windows\"",
-        "Priority" to "u=1, i"
-    )
+    private fun appendQueryParameter(url: String, name: String, value: String): String {
+        val separator = if (url.contains("?")) "&" else "?"
+        return "$url$separator$name=$value"
+    }
+
+    private fun browserHeaders(iframeUrl: String): Map<String, String> {
+        val origin = runCatching {
+            URI(iframeUrl).let { "${it.scheme}://${it.authority}" }
+        }.getOrDefault("https://four.pichive.online")
+        return siteHeaders + mapOf(
+            "User-Agent" to fourPichiveUserAgent,
+            "Accept" to "*/*",
+            "Referer" to iframeUrl,
+            "Origin" to origin
+        )
+    }
 
     private fun parseNpConfig(html: String): JSONObject? {
         val re = Regex("""window\.NP_CONFIG\s*=\s*(\{.+?\});\s*(?:window\.|</script>|$)""", RegexOption.DOT_MATCHES_ALL)
@@ -361,140 +370,129 @@ class AsyaWatch : MainAPI() {
     // =====================================================================
     // ⭐⭐⭐ ANA DÜZELTME: NP_CONFIG'den "gate" alanını oku = PoW input
     // =====================================================================
-    private suspend fun extractFourPichive(iframeUrl: String, referer: String,
-        subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+    private suspend fun extractFourPichive(
+        iframeUrl: String,
+        referer: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
         if (isRootOrigin(iframeUrl)) return false
         Log.d("AsyaWatch", "🔥 FourPichive: ${iframeUrl.take(80)}")
 
-        val resp = runCatching { app.get(iframeUrl, headers = browserHeaders(iframeUrl), referer = referer, allowRedirects = true) }.getOrNull() ?: return false
-        if (!resp.isSuccessful) { Log.e("AsyaWatch", "iframe HTTP ${resp.code}"); return false }
+        // Use the browser identity already proven by the older Dizilla/Pichive path.
+        val playerHeaders = browserHeaders(iframeUrl)
+        val resp = runCatching {
+            app.get(iframeUrl, headers = playerHeaders, referer = referer, allowRedirects = true)
+        }.getOrNull() ?: return false
+        if (!resp.isSuccessful) {
+            Log.e("AsyaWatch", "iframe HTTP ${resp.code}")
+            return false
+        }
+
         val html = resp.text
         if (html.isBlank()) return false
         Log.d("AsyaWatch", "iframe HTML: ${html.length}b")
 
-        val npConfig = parseNpConfig(html) ?: run { Log.e("AsyaWatch", "NP_CONFIG yok"); return false }
+        val npConfig = parseNpConfig(html) ?: run {
+            Log.e("AsyaWatch", "NP_CONFIG yok")
+            return false
+        }
 
-        // ⭐ NP_CONFIG tam JSON logla
-        val fullJson = runCatching { npConfig.toString(2) }.getOrNull() ?: npConfig.toString()
-        Log.d("AsyaWatch", "═════════════════════════════════════")
-        Log.d("AsyaWatch", "📋 NP_CONFIG FULL (${fullJson.length}ch):")
-        Log.d("AsyaWatch", fullJson.take(4000))
-        Log.d("AsyaWatch", "═════════════════════════════════════")
+        val gate = npConfig.optJSONObject("gate")
+        val gateProof = if (gate != null) fourPichiveGateProof(npConfig) else null
+        if (gate != null && gateProof == null) {
+            Log.e("AsyaWatch", "FourPichive gate proof hesaplanamadı")
+            return false
+        }
 
-        // Altyazılar
+        val origin = runCatching {
+            URI(iframeUrl).let { "${it.scheme}://${it.authority}" }
+        }.getOrDefault("https://four.pichive.online")
+
+        // Cronet/ExoPlayer does not share NiceHttp's cookie jar. Forward iframe cookies.
+        val iframeCookies = resp.headers.values("Set-Cookie")
+            .mapNotNull { cookie ->
+                cookie.substringBefore(';').trim().takeIf {
+                    it.contains('=') && it.substringBefore('=').isNotBlank()
+                }
+            }
+            .distinct()
+            .joinToString("; ")
+
+        val mediaHeaders = playerHeaders + mapOf(
+            "Referer" to iframeUrl,
+            "Origin" to origin,
+            "Accept" to "*/*"
+        ) + if (iframeCookies.isBlank()) {
+            emptyMap()
+        } else {
+            mapOf("Cookie" to iframeCookies)
+        }
+
+        Log.d(
+            "AsyaWatch",
+            "FourPichive gate hazır: koruma=${gate != null}, iframe çerezi=${iframeCookies.isNotBlank()}"
+        )
+
+        val subtitleHeaders = mediaHeaders + ("Accept" to "text/vtt, text/plain, */*")
         val seenSubs = HashSet<String>()
         npConfig.optJSONArray("subtitles")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val sub = arr.optJSONObject(i) ?: continue
-                val label = sub.optString("label", "Altyazı")
-                val u = sub.optString("url")
-                if (u.isNotBlank()) {
-                    val s = SubtitleFile(lang = label, url = u)
-                    s.headers = siteHeaders + mapOf("Referer" to iframeUrl, "Origin" to "https://four.pichive.online", "Accept" to "text/vtt, text/plain, */*")
-                    if (seenSubs.add(u)) subtitleCallback(s)
+                val rawUrl = sub.optString("url").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                val subtitleUrl = if (gateProof != null) {
+                    appendQueryParameter(rawUrl, "p", gateProof)
+                } else {
+                    rawUrl
+                }
+                if (seenSubs.add(subtitleUrl)) {
+                    val subtitle = SubtitleFile(
+                        lang = sub.optString("label", "Altyazı"),
+                        url = subtitleUrl
+                    )
+                    subtitle.headers = subtitleHeaders
+                    subtitleCallback(subtitle)
                 }
             }
         }
 
-        val masterUrl = npConfig.optJSONArray("sources")?.optJSONObject(0)?.optString("master")?.takeIf { it.isNotBlank() && it != "null" } ?: run { Log.e("AsyaWatch", "master yok"); return false }
-        Log.d("AsyaWatch", "master: ${masterUrl.take(100)}")
-
-        val vMatch = Regex("""[?&]v=([^&]+)""").find(masterUrl)
-        val vToken = vMatch?.groupValues?.getOrNull(1) ?: run { Log.e("AsyaWatch", "v yok"); return false }
-        val baseUrl = masterUrl.substringBefore('?')
-        val headers = browserHeaders(iframeUrl)
-
-        // ⭐ GATE alanını kontrol et
-        val gateObj = npConfig.optJSONObject("gate")
-        val gateN = gateObj?.optString("n")?.takeIf { it.isNotBlank() && it != "null" }
-        val gateB = gateObj?.optInt("b", 12) ?: 12
-
-        Log.d("AsyaWatch", "🎯 gateObj=${gateObj != null}, gateN=${gateN?.take(50) ?: "yok"} (${gateN?.length ?: 0}ch), gateB=$gateB")
-
-        if (gateN != null) {
-            // Gate verisiyle başla; eski sürümde kullanılan ID/v token biçimlerini de
-            // kontrollü yedek olarak dene. Bazı FourPichive videoları aynı gate yapısını
-            // sunsa da farklı PoW girdisi bekleyebiliyor.
-            val npId = npConfig.optString("id").takeIf { it.isNotBlank() && it != "null" }
-            val powInputs = listOfNotNull(
-                "gate.n" to gateN,
-                npId?.let { "id" to it },
-                npId?.let { "idUpper" to it.uppercase() },
-                "vToken" to vToken,
-                npId?.let { "id|vToken" to "$it|$vToken" },
-                npId?.let { "vToken|id" to "$vToken|$it" },
-                "masterUrl" to masterUrl
-            ).distinctBy { it.second }
-
-            var resolvedUrl: String? = null
-            for ((label, input) in powInputs) {
-                val pow = solvePow(input) ?: continue
-                val candidateUrl = "$baseUrl?v=$vToken&p=$pow"
-                val directResp = runCatching {
-                    app.get(candidateUrl, headers = headers, referer = iframeUrl)
-                }.getOrNull()
-                Log.d("AsyaWatch", "  PoW[$label]=$pow → HTTP ${directResp?.code}, bodyLen=${directResp?.text?.length}")
-
-                if (directResp?.code == 200 && directResp.text.trimStart().startsWith("#EXTM3U")) {
-                    resolvedUrl = candidateUrl
-                    Log.d("AsyaWatch", "🎉 FourPichive başarılı: $label")
-                    break
-                }
-
-                // WebView yalnızca ana gate.n girdisi için denenir; başarısız olursa
-                // diğer girdiler normal HTTP ile kontrol edilir.
-                if (label == "gate.n") {
-                    val wvResp = runCatching {
-                        app.get(candidateUrl, headers = headers, referer = iframeUrl, interceptor = fourPichiveResolver)
-                    }.getOrNull()
-                    Log.d("AsyaWatch", "  WebView[gate.n]: HTTP ${wvResp?.code}, bodyLen=${wvResp?.text?.length}")
-                    if (wvResp?.code == 200 && wvResp.text.trimStart().startsWith("#EXTM3U")) {
-                        resolvedUrl = candidateUrl
-                        break
-                    }
-                }
-            }
-
-            if (resolvedUrl != null) {
-                callback(newExtractorLink(source = name, name = "$name FourPichive", url = resolvedUrl, type = ExtractorLinkType.M3U8) {
-                    this.referer = iframeUrl
-                    this.headers = headers
-                    this.quality = Qualities.Unknown.value
-                })
-                return true
-            }
-        } else {
-            Log.w("AsyaWatch", "⚠ gate.n YOK — PoW olmadan master URL dene")
-
-            // PoW'suz master
-            val testResp = runCatching { app.get(masterUrl, headers = headers, referer = iframeUrl) }.getOrNull()
-            Log.d("AsyaWatch", "  master direct: HTTP ${testResp?.code}, bodyLen=${testResp?.text?.length}")
-            if (testResp != null && testResp.code == 200 && testResp.text.trim().startsWith("#EXTM3U")) {
-                Log.d("AsyaWatch", "🎉 PoW'suz master çalıştı!")
-                callback(newExtractorLink(source = name, name = "$name FourPichive", url = masterUrl, type = ExtractorLinkType.M3U8) {
-                    this.referer = iframeUrl
-                    this.headers = headers
-                    this.quality = Qualities.Unknown.value
-                })
-                return true
-            }
-
-            // p=0 dene
-            val p0Url = "$baseUrl?v=$vToken&p=0"
-            val p0Resp = runCatching { app.get(p0Url, headers = headers, referer = iframeUrl) }.getOrNull()
-            Log.d("AsyaWatch", "  p=0: HTTP ${p0Resp?.code}, bodyLen=${p0Resp?.text?.length}")
-            if (p0Resp != null && p0Resp.code == 200 && p0Resp.text.trim().startsWith("#EXTM3U")) {
-                callback(newExtractorLink(source = name, name = "$name FourPichive", url = p0Url, type = ExtractorLinkType.M3U8) {
-                    this.referer = iframeUrl
-                    this.headers = headers
-                    this.quality = Qualities.Unknown.value
-                })
-                return true
-            }
+        val sourceRows = npConfig.optJSONArray("sources") ?: run {
+            Log.e("AsyaWatch", "sources yok")
+            return false
         }
 
-        Log.e("AsyaWatch", "✘ FourPichive başarısız")
-        return false
+        var emitted = false
+        for (i in 0 until sourceRows.length()) {
+            val source = sourceRows.optJSONObject(i) ?: continue
+            val rawMaster = field(source, "master", "url", "file", "src") ?: continue
+            val masterUrl = absoluteUrl(rawMaster, iframeUrl) ?: continue
+            val finalUrl = if (gateProof != null) {
+                appendQueryParameter(masterUrl, "p", gateProof)
+            } else {
+                masterUrl
+            }
+            val label = field(source, "title", "name", "kind")?.takeIf { it.isNotBlank() } ?: "HLS"
+
+            callback(newExtractorLink(
+                source = name,
+                name = "$name $label",
+                url = finalUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = iframeUrl
+                this.headers = mediaHeaders
+                this.quality = Qualities.Unknown.value
+            })
+            emitted = true
+
+            val safePath = runCatching {
+                URI(finalUrl).let { "${it.host}${it.path.orEmpty()}" }
+            }.getOrDefault("adres")
+            Log.d("AsyaWatch", "FourPichive HLS kaynağı verildi: $label ($safePath)")
+        }
+
+        if (!emitted) Log.e("AsyaWatch", "FourPichive kullanılabilir master bulamadı")
+        return emitted
     }
 
     override suspend fun loadLinks(data: String, isCasting: Boolean,
