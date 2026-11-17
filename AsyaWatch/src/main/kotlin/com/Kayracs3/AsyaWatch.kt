@@ -81,7 +81,15 @@ class AsyaWatch : MainAPI() {
         "Referer" to "$mainUrl/"
     )
 
-    private val fourPichiveResolver = WebViewResolver(Regex("https://(four\\.)?pichive\\.online/.*"))
+    private val fourPichiveResolver = WebViewResolver(
+        interceptUrl = Regex("""(?i)^https://four\\.pichive\\.online/nl\\.php(?:\\?.*)?$"""),
+        additionalUrls = listOf(
+            Regex("""(?i)^https://four\\.pichive\\.online/nsub\\.php(?:\\?.*)?$""")
+        ),
+        userAgent = fourPichiveUserAgent,
+        useOkhttp = false,
+        timeout = 45_000L
+    )
 
     private data class PageData(val document: Document, val secureData: JSONObject?)
     @Volatile private var rateLimitedUntil = 0L
@@ -430,26 +438,25 @@ class AsyaWatch : MainAPI() {
             mapOf("Cookie" to iframeCookies)
         }
 
-        // Reproduce the iframe's tracking/session request observed in the browser.
-        // It is separate from the playlist URL and does not alter the media token.
-        val iframeToken = runCatching {
-            URI(iframeUrl).rawQuery.orEmpty().split('&')
-                .firstOrNull { it.substringBefore('=') == "v" }
-                ?.substringAfter('=', "")
-                ?.takeIf { it.isNotBlank() }
-        }.getOrNull()
-        if (!iframeToken.isNullOrBlank()) {
-            val encodedSite = java.util.Base64.getEncoder()
-                .encodeToString(mainUrl.toByteArray(Charsets.UTF_8))
-            val trackUrl = "$origin/track.php?v=$iframeToken&h=${URLEncoder.encode(encodedSite, "UTF-8")}"
-            runCatching {
-                app.get(trackUrl, headers = mediaHeaders, referer = iframeUrl, allowRedirects = true)
-            }.onSuccess { track ->
-                Log.d("AsyaWatch", "FourPichive track HTTP ${track.code}")
-            }.onFailure { error ->
-                Log.w("AsyaWatch", "FourPichive track isteği başarısız: ${error.message}")
-            }
+        // Run the iframe in a short-lived WebView so its JavaScript creates the
+        // same playlist/subtitle requests seen in Chrome (nl.php and nsub.php).
+        // This also keeps the WebView-generated cookies and per-session tokens.
+        val webViewCapture = runCatching {
+            fourPichiveResolver.resolveUsingWebView(
+                url = iframeUrl,
+                referer = referer,
+                headers = playerHeaders
+            )
+        }.onFailure { error ->
+            Log.w("AsyaWatch", "FourPichive WebView yakalama başarısız: ${error.message}")
         }
+
+        val capturedPlaylist = webViewCapture.getOrNull()?.first?.takeIf {
+            it.url.encodedPath.equals("/nl.php", true)
+        }
+        val capturedSubtitleRequests = webViewCapture.getOrNull()?.second.orEmpty()
+            .filter { it.url.encodedPath.equals("/nsub.php", true) }
+            .distinctBy { it.url.toString() }
 
         Log.d(
             "AsyaWatch",
@@ -458,57 +465,122 @@ class AsyaWatch : MainAPI() {
 
         val subtitleHeaders = mediaHeaders + ("Accept" to "text/vtt, text/plain, */*")
         val seenSubs = HashSet<String>()
-        npConfig.optJSONArray("subtitles")?.let { arr ->
-            for (i in 0 until arr.length()) {
-                val sub = arr.optJSONObject(i) ?: continue
-                val rawUrl = sub.optString("url").takeIf { it.isNotBlank() && it != "null" } ?: continue
-                val subtitleUrl = if (gateProof != null) {
-                    appendQueryParameter(rawUrl, "p", gateProof)
-                } else {
-                    rawUrl
+        val configuredSubs = npConfig.optJSONArray("subtitles")
+
+        if (capturedSubtitleRequests.isNotEmpty()) {
+            capturedSubtitleRequests.forEachIndexed { index, request ->
+                val subtitleUrl = request.url.toString()
+                if (!seenSubs.add(subtitleUrl)) return@forEachIndexed
+
+                val token = request.url.queryParameter("v")
+                val matchingIndex = if (token == null || configuredSubs == null) null else {
+                    (0 until configuredSubs.length()).firstOrNull { subIndex ->
+                        val raw = configuredSubs.optJSONObject(subIndex)?.optString("url").orEmpty()
+                        runCatching {
+                            URI(raw).rawQuery.orEmpty().split('&')
+                                .firstOrNull { it.substringBefore('=') == "v" }
+                                ?.substringAfter('=', "")
+                        }.getOrNull() == token
+                    }
                 }
-                if (seenSubs.add(subtitleUrl)) {
-                    val subtitle = SubtitleFile(
-                        lang = sub.optString("label", "Altyazı"),
-                        url = subtitleUrl
-                    )
-                    subtitle.headers = subtitleHeaders
-                    subtitleCallback(subtitle)
+                val labelIndex = matchingIndex ?: index
+                val label = configuredSubs?.optJSONObject(labelIndex)
+                    ?.optString("label")?.takeIf { it.isNotBlank() && it != "null" }
+                    ?: "Altyazı ${index + 1}"
+
+                val requestHeaders = LinkedHashMap(subtitleHeaders)
+                request.headers.names().forEach { key ->
+                    if (key.equals("Cookie", true) ||
+                        key.equals("User-Agent", true) ||
+                        key.equals("Referer", true) ||
+                        key.equals("Origin", true) ||
+                        key.equals("Accept-Language", true)
+                    ) {
+                        request.header(key)?.let { requestHeaders[key] = it }
+                    }
+                }
+                requestHeaders["Accept"] = "text/vtt, text/plain, */*"
+
+                val subtitle = SubtitleFile(lang = label, url = subtitleUrl)
+                subtitle.headers = requestHeaders
+                subtitleCallback(subtitle)
+            }
+        } else {
+            configuredSubs?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val sub = arr.optJSONObject(i) ?: continue
+                    val rawUrl = sub.optString("url").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                    val subtitleUrl = if (gateProof != null) {
+                        appendQueryParameter(rawUrl, "p", gateProof)
+                    } else {
+                        rawUrl
+                    }
+                    if (seenSubs.add(subtitleUrl)) {
+                        val subtitle = SubtitleFile(
+                            lang = sub.optString("label", "Altyazı"),
+                            url = subtitleUrl
+                        )
+                        subtitle.headers = subtitleHeaders
+                        subtitleCallback(subtitle)
+                    }
                 }
             }
         }
 
-        val sourceRows = npConfig.optJSONArray("sources") ?: run {
-            Log.e("AsyaWatch", "sources yok")
-            return false
-        }
-
         var emitted = false
-        for (i in 0 until sourceRows.length()) {
-            val source = sourceRows.optJSONObject(i) ?: continue
-            val rawMaster = field(source, "master", "url", "file", "src") ?: continue
-            val masterUrl = absoluteUrl(rawMaster, iframeUrl) ?: continue
-            // Browser capture confirms nl.php?v=... is requested without p.
-            // The p proof is used by nsub.php subtitle requests only.
-            val finalUrl = masterUrl
-            val label = field(source, "title", "name", "kind")?.takeIf { it.isNotBlank() } ?: "HLS"
+
+        if (capturedPlaylist != null) {
+            val finalUrl = capturedPlaylist.url.toString()
+            val capturedHeaders = LinkedHashMap(mediaHeaders)
+            capturedPlaylist.headers.names().forEach { key ->
+                if (key.equals("Cookie", true) ||
+                    key.equals("User-Agent", true) ||
+                    key.equals("Referer", true) ||
+                    key.equals("Origin", true) ||
+                    key.equals("Accept-Language", true)
+                ) {
+                    capturedPlaylist.header(key)?.let { capturedHeaders[key] = it }
+                }
+            }
 
             callback(newExtractorLink(
                 source = name,
-                name = "$name $label",
+                name = "$name Orijinal",
                 url = finalUrl,
                 type = ExtractorLinkType.M3U8
             ) {
                 this.referer = iframeUrl
-                this.headers = mediaHeaders
+                this.headers = capturedHeaders
                 this.quality = Qualities.Unknown.value
             })
             emitted = true
+            Log.d("AsyaWatch", "FourPichive tarayıcı playlist'i yakalandı: nl.php; altyazı isteği=${capturedSubtitleRequests.size}")
+        } else {
+            Log.w("AsyaWatch", "FourPichive nl.php isteği yakalanamadı; NP_CONFIG kaynakları deneniyor")
+            val sourceRows = npConfig.optJSONArray("sources") ?: run {
+                Log.e("AsyaWatch", "sources yok ve nl.php yakalanamadı")
+                return false
+            }
 
-            val safePath = runCatching {
-                URI(finalUrl).let { "${it.host}${it.path.orEmpty()}" }
-            }.getOrDefault("adres")
-            Log.d("AsyaWatch", "FourPichive HLS kaynağı verildi: $label ($safePath)")
+            for (i in 0 until sourceRows.length()) {
+                val source = sourceRows.optJSONObject(i) ?: continue
+                val rawMaster = field(source, "master", "url", "file", "src") ?: continue
+                val masterUrl = absoluteUrl(rawMaster, iframeUrl) ?: continue
+                val label = field(source, "title", "name", "kind")?.takeIf { it.isNotBlank() } ?: "HLS"
+
+                callback(newExtractorLink(
+                    source = name,
+                    name = "$name $label",
+                    url = masterUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = iframeUrl
+                    this.headers = mediaHeaders
+                    this.quality = Qualities.Unknown.value
+                })
+                emitted = true
+                Log.w("AsyaWatch", "FourPichive yedek kaynak verildi: nm.php; WebView nl.php isteğini yakalayamadı")
+            }
         }
 
         if (!emitted) Log.e("AsyaWatch", "FourPichive kullanılabilir master bulamadı")
