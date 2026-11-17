@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:de5ba3517695a0f1374fbe9631af30dd1871f6aa -->
+### Skip known failing nm.php fallback in AsyaWatch
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [de5ba35](https://github.com/Kayracs3/Kayra/commit/de5ba3517695a0f1374fbe9631af30dd1871f6aa)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:006a1ccdaa250dc840fb22e4c823fa864bbadead -->
 ### Fix FourPichive WebView URL match regexes
 
