@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:1a6f9e79d158371972482940910614ca055077c4 -->
+### Restore FourPichive gate proof and browser session headers
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [1a6f9e7](https://github.com/Kayracs3/Kayra/commit/1a6f9e79d158371972482940910614ca055077c4)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:a971577c3d305084b1fa8434f0ac5a98f596f2f7 -->
 ### Improve AsyaWatch FourPichive fallback resolution
 
