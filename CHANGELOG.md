@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:e674c5f843d7067c9ba44745a3e50991f4b2c713 -->
+### Use native headers for AsyaWatch WebView request
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [e674c5f](https://github.com/Kayracs3/Kayra/commit/e674c5f843d7067c9ba44745a3e50991f4b2c713)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:dca5773a328fb34955a9013fe31959f5cec663c6 -->
 ### Fix AsyaWatch WebView native user agent
 
