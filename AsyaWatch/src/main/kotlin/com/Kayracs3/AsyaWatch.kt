@@ -566,6 +566,10 @@ class AsyaWatch : MainAPI() {
                 val source = sourceRows.optJSONObject(i) ?: continue
                 val rawMaster = field(source, "master", "url", "file", "src") ?: continue
                 val masterUrl = absoluteUrl(rawMaster, iframeUrl) ?: continue
+                if (masterUrl.contains("/nm.php", true)) {
+                    Log.w("AsyaWatch", "FourPichive nm.php yedeği atlandı: tarayıcı nl.php isteği yakalanamadı")
+                    continue
+                }
                 val label = field(source, "title", "name", "kind")?.takeIf { it.isNotBlank() } ?: "HLS"
 
                 callback(newExtractorLink(
