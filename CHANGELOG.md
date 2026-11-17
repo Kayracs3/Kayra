@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:4085a4211b2b81fc2fc458dab01f07d062d8206e -->
+### Align AsyaWatch FourPichive playlist and subtitle requests
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [4085a42](https://github.com/Kayracs3/Kayra/commit/4085a4211b2b81fc2fc458dab01f07d062d8206e)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:1a6f9e79d158371972482940910614ca055077c4 -->
 ### Restore FourPichive gate proof and browser session headers
 
