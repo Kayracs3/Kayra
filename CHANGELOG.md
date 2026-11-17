@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:76996e7b18a58e8fd38f8ee39030b22a48261378 -->
+### Forward WebView session cookies to AsyaWatch playback
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [76996e7](https://github.com/Kayracs3/Kayra/commit/76996e7b18a58e8fd38f8ee39030b22a48261378)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:de5ba3517695a0f1374fbe9631af30dd1871f6aa -->
 ### Skip known failing nm.php fallback in AsyaWatch
 
