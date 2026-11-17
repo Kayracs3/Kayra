@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:a78af6c4cb76916f0994ee4371cbdcc5cae6fc7e -->
+### Tighten AsyaWatch NP source URL handling
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [a78af6c](https://github.com/Kayracs3/Kayra/commit/a78af6c4cb76916f0994ee4371cbdcc5cae6fc7e)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:3bb96e9bc506a42a93269f444562647c27b8e357 -->
 ### Fix AsyaWatch NP player HLS source handling
 
