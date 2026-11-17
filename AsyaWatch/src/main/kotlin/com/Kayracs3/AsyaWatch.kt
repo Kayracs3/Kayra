@@ -1,7 +1,6 @@
 package com.Kayracs3
 
 import android.util.Log
-import android.webkit.CookieManager
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
@@ -24,7 +23,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.network.WebViewResolver
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -80,18 +78,6 @@ class AsyaWatch : MainAPI() {
         "Sec-Fetch-Dest" to "empty",
         "Origin" to mainUrl,
         "Referer" to "$mainUrl/"
-    )
-
-    private val fourPichiveResolver = WebViewResolver(
-        interceptUrl = Regex("""(?i)^https://four\.pichive\.online/nl\.php(?:\?.*)?$"""),
-        additionalUrls = listOf(
-            Regex("""(?i)^https://four\.pichive\.online/nsub\.php(?:\?.*)?$""")
-        ),
-        // Cloudflare's WebView flow requires its native, internally consistent UA.
-        // Spoofing a desktop Chrome UA here caused the cf.errors.css block page.
-        userAgent = null,
-        useOkhttp = false,
-        timeout = 60_000L
     )
 
     private data class PageData(val document: Document, val secureData: JSONObject?)
@@ -334,23 +320,23 @@ class AsyaWatch : MainAPI() {
 
     // Mirrors FourPichive's NP_GATE proof:
     // SHA-256(challenge + salt + base36(nonce) + salt)[3] >>> (32 - bits) == 0.
+    // Matches the inline NP_GATE function shipped with the current NP player:
+    // SHA-256("5h1vdRsV-2" + gate.n + "." + decimalNonce)[0] >>> 20 == 0.
     private fun fourPichiveGateProof(config: JSONObject?): String? {
         val gate = config?.optJSONObject("gate") ?: return null
         val challenge = field(gate, "n")?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        val bits = gate.optInt("b", 12).takeIf { it in 1..32 } ?: 12
         val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull() ?: return null
-        val salt = "nEhC31vsdq"
+        val salt = "5h1vdRsV-2"
 
         for (nonce in 0L until 100_000_000L) {
-            val nonceText = nonce.toString(36)
-            val input = challenge + salt + nonceText + salt
+            val input = salt + challenge + "." + nonce.toString()
             val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
-            val fourthWord =
-                ((hash[12].toInt() and 0xff) shl 24) or
-                    ((hash[13].toInt() and 0xff) shl 16) or
-                    ((hash[14].toInt() and 0xff) shl 8) or
-                    (hash[15].toInt() and 0xff)
-            if ((fourthWord ushr (32 - bits)) == 0) return nonceText
+            val firstWord =
+                ((hash[0].toInt() and 0xff) shl 24) or
+                    ((hash[1].toInt() and 0xff) shl 16) or
+                    ((hash[2].toInt() and 0xff) shl 8) or
+                    (hash[3].toInt() and 0xff)
+            if ((firstWord ushr 20) == 0) return nonce.toString()
         }
         return null
     }
@@ -441,172 +427,89 @@ class AsyaWatch : MainAPI() {
             mapOf("Cookie" to iframeCookies)
         }
 
-        // Run the iframe in a short-lived WebView so its JavaScript creates the
-        // same playlist/subtitle requests seen in Chrome (nl.php and nsub.php).
-        // This also keeps the WebView-generated cookies and per-session tokens.
-        val webViewCapture = runCatching {
-            fourPichiveResolver.resolveUsingWebView(
-                url = iframeUrl,
-                referer = referer,
-                // Let WebView send its native navigation headers; only the source-page referer is retained.
-                headers = emptyMap()
-            )
-        }.onFailure { error ->
-            Log.w("AsyaWatch", "FourPichive WebView yakalama başarısız: ${error.message}")
-        }
-
-        val capturedPlaylist = webViewCapture.getOrNull()?.first?.takeIf {
-            it.url.encodedPath.equals("/nl.php", true)
-        }
-        val capturedSubtitleRequests = webViewCapture.getOrNull()?.second.orEmpty()
-            .filter { it.url.encodedPath.equals("/nsub.php", true) }
-            .distinctBy { it.url.toString() }
-
-        // WebResourceRequest may omit Cookie from requestHeaders. Read the same
-        // WebView cookie store used by the iframe and attach it to ExoPlayer.
-        val webViewCookies = runCatching {
-            CookieManager.getInstance().getCookie(origin).orEmpty()
-        }.getOrDefault("")
-        val capturedCookie = capturedPlaylist?.header("Cookie").orEmpty()
-        val cookieHeader = webViewCookies.ifBlank { capturedCookie }
-        val playbackHeaders = if (cookieHeader.isNotBlank()) {
-            mediaHeaders + mapOf("Cookie" to cookieHeader)
-        } else {
-            mediaHeaders
-        }
-
         Log.d(
             "AsyaWatch",
-            "FourPichive gate hazır: koruma=${gate != null}, iframe çerezi=${iframeCookies.isNotBlank()}, WebView çerezi=${cookieHeader.isNotBlank()}"
+            "FourPichive NP_CONFIG hazır: gate=${gate != null}, proof=${gateProof != null}, iframe cookie=${iframeCookies.isNotBlank()}"
         )
 
-        val subtitleHeaders = playbackHeaders + ("Accept" to "text/vtt, text/plain, */*")
+        val subtitleHeaders = mediaHeaders + ("Accept" to "text/vtt, text/plain, */*")
         val seenSubs = HashSet<String>()
         val configuredSubs = npConfig.optJSONArray("subtitles")
 
-        if (capturedSubtitleRequests.isNotEmpty()) {
-            capturedSubtitleRequests.forEachIndexed { index, request ->
-                val subtitleUrl = request.url.toString()
-                if (!seenSubs.add(subtitleUrl)) return@forEachIndexed
-
-                val token = request.url.queryParameter("v")
-                val matchingIndex = if (token == null || configuredSubs == null) null else {
-                    (0 until configuredSubs.length()).firstOrNull { subIndex ->
-                        val raw = configuredSubs.optJSONObject(subIndex)?.optString("url").orEmpty()
-                        runCatching {
-                            URI(raw).rawQuery.orEmpty().split('&')
-                                .firstOrNull { it.substringBefore('=') == "v" }
-                                ?.substringAfter('=', "")
-                        }.getOrNull() == token
-                    }
+        configuredSubs?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val sub = arr.optJSONObject(i) ?: continue
+                val rawUrl = field(sub, "url") ?: continue
+                val subtitleUrl = if (gateProof != null) {
+                    appendQueryParameter(rawUrl, "p", gateProof)
+                } else {
+                    rawUrl
                 }
-                val labelIndex = matchingIndex ?: index
-                val label = configuredSubs?.optJSONObject(labelIndex)
-                    ?.optString("label")?.takeIf { it.isNotBlank() && it != "null" }
-                    ?: "Altyazı ${index + 1}"
+                if (!seenSubs.add(subtitleUrl)) continue
 
-                val requestHeaders = LinkedHashMap(subtitleHeaders)
-                request.headers.names().forEach { key ->
-                    if (key.equals("Cookie", true) ||
-                        key.equals("User-Agent", true) ||
-                        key.equals("Referer", true) ||
-                        key.equals("Origin", true) ||
-                        key.equals("Accept-Language", true)
-                    ) {
-                        request.header(key)?.let { requestHeaders[key] = it }
-                    }
-                }
-                if (cookieHeader.isNotBlank()) requestHeaders["Cookie"] = cookieHeader
-                requestHeaders["Accept"] = "text/vtt, text/plain, */*"
-
-                val subtitle = SubtitleFile(lang = label, url = subtitleUrl)
-                subtitle.headers = requestHeaders
+                val subtitle = SubtitleFile(
+                    lang = field(sub, "label") ?: "Altyazı",
+                    url = subtitleUrl
+                )
+                subtitle.headers = subtitleHeaders
                 subtitleCallback(subtitle)
-            }
-        } else {
-            configuredSubs?.let { arr ->
-                for (i in 0 until arr.length()) {
-                    val sub = arr.optJSONObject(i) ?: continue
-                    val rawUrl = sub.optString("url").takeIf { it.isNotBlank() && it != "null" } ?: continue
-                    val subtitleUrl = if (gateProof != null) {
-                        appendQueryParameter(rawUrl, "p", gateProof)
-                    } else {
-                        rawUrl
-                    }
-                    if (seenSubs.add(subtitleUrl)) {
-                        val subtitle = SubtitleFile(
-                            lang = sub.optString("label", "Altyazı"),
-                            url = subtitleUrl
-                        )
-                        subtitle.headers = subtitleHeaders
-                        subtitleCallback(subtitle)
-                    }
-                }
             }
         }
 
         var emitted = false
+        val sourceRows = npConfig.optJSONArray("sources")
+        if (sourceRows == null) {
+            Log.e("AsyaWatch", "FourPichive NP_CONFIG içinde sources bulunamadı")
+            return false
+        }
 
-        if (capturedPlaylist != null) {
-            val finalUrl = capturedPlaylist.url.toString()
-            val capturedHeaders = LinkedHashMap(playbackHeaders)
-            capturedPlaylist.headers.names().forEach { key ->
-                if (key.equals("Cookie", true) ||
-                    key.equals("User-Agent", true) ||
-                    key.equals("Referer", true) ||
-                    key.equals("Origin", true) ||
-                    key.equals("Accept-Language", true)
-                ) {
-                    capturedPlaylist.header(key)?.let { capturedHeaders[key] = it }
-                }
+        for (i in 0 until sourceRows.length()) {
+            val source = sourceRows.optJSONObject(i) ?: continue
+            val rawMaster = field(source, "master", "url", "file", "src") ?: continue
+            val masterUrl = absoluteUrl(rawMaster, iframeUrl) ?: continue
+            val masterUri = runCatching { URI(masterUrl) }.getOrNull() ?: continue
+            val masterHost = masterUri.host.orEmpty()
+            val masterPath = masterUri.path.orEmpty()
+
+            // The current NP player exposes its HLS master through nm.php.
+            // Keep support for the older nl.php endpoint and direct HLS manifests.
+            val isPichiveHost = masterHost.equals("four.pichive.online", true)
+            val isNpHlsEndpoint = isPichiveHost && (
+                masterPath.equals("/nm.php", true) ||
+                    masterPath.equals("/nl.php", true) ||
+                    Regex("""(?i)\\.m3u8$""").containsMatchIn(masterPath)
+                )
+            if (!isNpHlsEndpoint) {
+                Log.w("AsyaWatch", "FourPichive desteklenmeyen master yolu atlandı: ${masterPath.take(80)}")
+                continue
             }
-            if (cookieHeader.isNotBlank()) capturedHeaders["Cookie"] = cookieHeader
+
+            val finalMasterUrl = if (gateProof != null) {
+                appendQueryParameter(masterUrl, "p", gateProof)
+            } else {
+                masterUrl
+            }
+            val label = field(source, "title", "name", "kind")
+                ?.takeIf { it.isNotBlank() } ?: "Orijinal"
 
             callback(newExtractorLink(
                 source = name,
-                name = "$name Orijinal",
-                url = finalUrl,
+                name = "$name $label",
+                url = finalMasterUrl,
                 type = ExtractorLinkType.M3U8
             ) {
                 this.referer = iframeUrl
-                this.headers = capturedHeaders
+                this.headers = mediaHeaders
                 this.quality = Qualities.Unknown.value
             })
             emitted = true
-            Log.d("AsyaWatch", "FourPichive tarayıcı playlist'i yakalandı: nl.php; altyazı isteği=${capturedSubtitleRequests.size}")
-        } else {
-            Log.w("AsyaWatch", "FourPichive nl.php isteği yakalanamadı; NP_CONFIG kaynakları deneniyor")
-            val sourceRows = npConfig.optJSONArray("sources") ?: run {
-                Log.e("AsyaWatch", "sources yok ve nl.php yakalanamadı")
-                return false
-            }
-
-            for (i in 0 until sourceRows.length()) {
-                val source = sourceRows.optJSONObject(i) ?: continue
-                val rawMaster = field(source, "master", "url", "file", "src") ?: continue
-                val masterUrl = absoluteUrl(rawMaster, iframeUrl) ?: continue
-                if (masterUrl.contains("/nm.php", true)) {
-                    Log.w("AsyaWatch", "FourPichive nm.php yedeği atlandı: tarayıcı nl.php isteği yakalanamadı")
-                    continue
-                }
-                val label = field(source, "title", "name", "kind")?.takeIf { it.isNotBlank() } ?: "HLS"
-
-                callback(newExtractorLink(
-                    source = name,
-                    name = "$name $label",
-                    url = masterUrl,
-                    type = ExtractorLinkType.M3U8
-                ) {
-                    this.referer = iframeUrl
-                    this.headers = playbackHeaders
-                    this.quality = Qualities.Unknown.value
-                })
-                emitted = true
-                Log.w("AsyaWatch", "FourPichive yedek kaynak verildi: nm.php; WebView nl.php isteğini yakalayamadı")
-            }
+            Log.d(
+                "AsyaWatch",
+                "FourPichive NP HLS master eklendi: path=$masterPath; proof=${gateProof != null}"
+            )
         }
 
-        if (!emitted) Log.e("AsyaWatch", "FourPichive kullanılabilir master bulamadı")
+        if (!emitted) Log.e("AsyaWatch", "FourPichive kullanılabilir NP HLS master bulamadı")
         return emitted
     }
 
