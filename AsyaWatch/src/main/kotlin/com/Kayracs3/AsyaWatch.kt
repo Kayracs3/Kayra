@@ -345,6 +345,7 @@ class AsyaWatch : MainAPI() {
     }
 
     private fun appendQueryParameter(url: String, name: String, value: String): String {
+        if (Regex("""(?i)(?:[?&])${Regex.escape(name)}=""").containsMatchIn(url)) return url
         val separator = if (url.contains("?")) "&" else "?"
         return "$url$separator$name=$value"
     }
@@ -429,6 +430,27 @@ class AsyaWatch : MainAPI() {
             mapOf("Cookie" to iframeCookies)
         }
 
+        // Reproduce the iframe's tracking/session request observed in the browser.
+        // It is separate from the playlist URL and does not alter the media token.
+        val iframeToken = runCatching {
+            URI(iframeUrl).rawQuery.orEmpty().split('&')
+                .firstOrNull { it.substringBefore('=') == "v" }
+                ?.substringAfter('=', "")
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+        if (!iframeToken.isNullOrBlank()) {
+            val encodedSite = java.util.Base64.getEncoder()
+                .encodeToString(mainUrl.toByteArray(Charsets.UTF_8))
+            val trackUrl = "$origin/track.php?v=$iframeToken&h=${URLEncoder.encode(encodedSite, "UTF-8")}"
+            runCatching {
+                app.get(trackUrl, headers = mediaHeaders, referer = iframeUrl, allowRedirects = true)
+            }.onSuccess { track ->
+                Log.d("AsyaWatch", "FourPichive track HTTP ${track.code}")
+            }.onFailure { error ->
+                Log.w("AsyaWatch", "FourPichive track isteği başarısız: ${error.message}")
+            }
+        }
+
         Log.d(
             "AsyaWatch",
             "FourPichive gate hazır: koruma=${gate != null}, iframe çerezi=${iframeCookies.isNotBlank()}"
@@ -466,11 +488,9 @@ class AsyaWatch : MainAPI() {
             val source = sourceRows.optJSONObject(i) ?: continue
             val rawMaster = field(source, "master", "url", "file", "src") ?: continue
             val masterUrl = absoluteUrl(rawMaster, iframeUrl) ?: continue
-            val finalUrl = if (gateProof != null) {
-                appendQueryParameter(masterUrl, "p", gateProof)
-            } else {
-                masterUrl
-            }
+            // Browser capture confirms nl.php?v=... is requested without p.
+            // The p proof is used by nsub.php subtitle requests only.
+            val finalUrl = masterUrl
             val label = field(source, "title", "name", "kind")?.takeIf { it.isNotBlank() } ?: "HLS"
 
             callback(newExtractorLink(
