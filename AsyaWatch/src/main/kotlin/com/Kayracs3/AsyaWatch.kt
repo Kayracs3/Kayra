@@ -82,9 +82,9 @@ class AsyaWatch : MainAPI() {
     )
 
     private val fourPichiveResolver = WebViewResolver(
-        interceptUrl = Regex("""(?i)^https://four\\.pichive\\.online/nl\\.php(?:\\?.*)?$"""),
+        interceptUrl = Regex("""(?i)^https://four\.pichive\\.online/nl\\.php(?:\\?.*)?$"""),
         additionalUrls = listOf(
-            Regex("""(?i)^https://four\\.pichive\\.online/nsub\\.php(?:\\?.*)?$""")
+            Regex("""(?i)^https://four\.pichive\\.online/nsub\\.php(?:\\?.*)?$""")
         ),
         userAgent = fourPichiveUserAgent,
         useOkhttp = false,
