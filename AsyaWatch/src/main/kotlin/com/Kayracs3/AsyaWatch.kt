@@ -318,8 +318,6 @@ class AsyaWatch : MainAPI() {
         return p.isBlank() || p == "/"
     }
 
-    // Mirrors FourPichive's NP_GATE proof:
-    // SHA-256(challenge + salt + base36(nonce) + salt)[3] >>> (32 - bits) == 0.
     // Matches the inline NP_GATE function shipped with the current NP player:
     // SHA-256("5h1vdRsV-2" + gate.n + "." + decimalNonce)[0] >>> 20 == 0.
     private fun fourPichiveGateProof(config: JSONObject?): String? {
@@ -440,10 +438,11 @@ class AsyaWatch : MainAPI() {
             for (i in 0 until arr.length()) {
                 val sub = arr.optJSONObject(i) ?: continue
                 val rawUrl = field(sub, "url") ?: continue
+                val normalizedSubtitleUrl = absoluteUrl(rawUrl, iframeUrl) ?: continue
                 val subtitleUrl = if (gateProof != null) {
-                    appendQueryParameter(rawUrl, "p", gateProof)
+                    appendQueryParameter(normalizedSubtitleUrl, "p", gateProof)
                 } else {
-                    rawUrl
+                    normalizedSubtitleUrl
                 }
                 if (!seenSubs.add(subtitleUrl)) continue
 
@@ -477,7 +476,7 @@ class AsyaWatch : MainAPI() {
             val isNpHlsEndpoint = isPichiveHost && (
                 masterPath.equals("/nm.php", true) ||
                     masterPath.equals("/nl.php", true) ||
-                    Regex("""(?i)\\.m3u8$""").containsMatchIn(masterPath)
+                    masterPath.endsWith(".m3u8", ignoreCase = true)
                 )
             if (!isNpHlsEndpoint) {
                 Log.w("AsyaWatch", "FourPichive desteklenmeyen master yolu atlandı: ${masterPath.take(80)}")
