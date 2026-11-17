@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:1cdf2ef14fe41f68d38e0780e599e72ce64bca60 -->
+### Correct FourPichive WebView request match patterns
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [1cdf2ef](https://github.com/Kayracs3/Kayra/commit/1cdf2ef14fe41f68d38e0780e599e72ce64bca60)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:28a248fce25f466285e2e164c92d1cb097b80ea3 -->
 ### Capture FourPichive browser playlist request in AsyaWatch
 
