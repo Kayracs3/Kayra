@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:dca5773a328fb34955a9013fe31959f5cec663c6 -->
+### Fix AsyaWatch WebView native user agent
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [dca5773](https://github.com/Kayracs3/Kayra/commit/dca5773a328fb34955a9013fe31959f5cec663c6)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:4512b47ce13f08b19f4fd9af23c7b1a119a17045 -->
 ### Use native WebView identity for FourPichive Cloudflare
 
