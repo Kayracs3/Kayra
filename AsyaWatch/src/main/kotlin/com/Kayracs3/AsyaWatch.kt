@@ -448,8 +448,8 @@ class AsyaWatch : MainAPI() {
             fourPichiveResolver.resolveUsingWebView(
                 url = iframeUrl,
                 referer = referer,
-                // Do not forward the desktop Chrome UA; keep the Android WebView's native UA.
-                headers = playerHeaders - "User-Agent"
+                // Let WebView send its native navigation headers; only the source-page referer is retained.
+                headers = emptyMap()
             )
         }.onFailure { error ->
             Log.w("AsyaWatch", "FourPichive WebView yakalama başarısız: ${error.message}")
