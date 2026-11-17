@@ -412,31 +412,51 @@ class AsyaWatch : MainAPI() {
         Log.d("AsyaWatch", "🎯 gateObj=${gateObj != null}, gateN=${gateN?.take(50) ?: "yok"} (${gateN?.length ?: 0}ch), gateB=$gateB")
 
         if (gateN != null) {
-            // ⭐⭐⭐ DOĞRU FORMÜL: gate.n üzerinden PoW çöz
-            Log.d("AsyaWatch", "✔ gate.n ile PoW çözülüyor")
-            val pow = solvePow(gateN) ?: run { Log.e("AsyaWatch", "PoW çözülemedi"); return false }
-            val finalUrl = "$baseUrl?v=$vToken&p=$pow"
-            Log.d("AsyaWatch", "🎯 Hedef: ${finalUrl.take(100)}...&p=$pow")
+            // Gate verisiyle başla; eski sürümde kullanılan ID/v token biçimlerini de
+            // kontrollü yedek olarak dene. Bazı FourPichive videoları aynı gate yapısını
+            // sunsa da farklı PoW girdisi bekleyebiliyor.
+            val npId = npConfig.optString("id").takeIf { it.isNotBlank() && it != "null" }
+            val powInputs = listOfNotNull(
+                "gate.n" to gateN,
+                npId?.let { "id" to it },
+                npId?.let { "idUpper" to it.uppercase() },
+                "vToken" to vToken,
+                npId?.let { "id|vToken" to "$it|$vToken" },
+                npId?.let { "vToken|id" to "$vToken|$it" },
+                "masterUrl" to masterUrl
+            ).distinctBy { it.second }
 
-            // Direct
-            val directResp = runCatching { app.get(finalUrl, headers = headers, referer = iframeUrl) }.getOrNull()
-            Log.d("AsyaWatch", "  Direct: HTTP ${directResp?.code}, bodyLen=${directResp?.text?.length}")
-            if (directResp != null && directResp.code == 200 && directResp.text.startsWith("#EXTM3U")) {
-                Log.d("AsyaWatch", "🎉🎉🎉 BAŞARILI (direct)! bodyLen=${directResp.text.length}")
-                callback(newExtractorLink(source = name, name = "$name FourPichive", url = finalUrl, type = ExtractorLinkType.M3U8) {
-                    this.referer = iframeUrl
-                    this.headers = headers
-                    this.quality = Qualities.Unknown.value
-                })
-                return true
+            var resolvedUrl: String? = null
+            for ((label, input) in powInputs) {
+                val pow = solvePow(input) ?: continue
+                val candidateUrl = "$baseUrl?v=$vToken&p=$pow"
+                val directResp = runCatching {
+                    app.get(candidateUrl, headers = headers, referer = iframeUrl)
+                }.getOrNull()
+                Log.d("AsyaWatch", "  PoW[$label]=$pow → HTTP ${directResp?.code}, bodyLen=${directResp?.text?.length}")
+
+                if (directResp?.code == 200 && directResp.text.trimStart().startsWith("#EXTM3U")) {
+                    resolvedUrl = candidateUrl
+                    Log.d("AsyaWatch", "🎉 FourPichive başarılı: $label")
+                    break
+                }
+
+                // WebView yalnızca ana gate.n girdisi için denenir; başarısız olursa
+                // diğer girdiler normal HTTP ile kontrol edilir.
+                if (label == "gate.n") {
+                    val wvResp = runCatching {
+                        app.get(candidateUrl, headers = headers, referer = iframeUrl, interceptor = fourPichiveResolver)
+                    }.getOrNull()
+                    Log.d("AsyaWatch", "  WebView[gate.n]: HTTP ${wvResp?.code}, bodyLen=${wvResp?.text?.length}")
+                    if (wvResp?.code == 200 && wvResp.text.trimStart().startsWith("#EXTM3U")) {
+                        resolvedUrl = candidateUrl
+                        break
+                    }
+                }
             }
 
-            // WebView
-            val wvResp = runCatching { app.get(finalUrl, headers = headers, referer = iframeUrl, interceptor = fourPichiveResolver) }.getOrNull()
-            Log.d("AsyaWatch", "  WebView: HTTP ${wvResp?.code}, bodyLen=${wvResp?.text?.length}")
-            if (wvResp != null && wvResp.code == 200 && wvResp.text.trim().startsWith("#EXTM3U")) {
-                Log.d("AsyaWatch", "🎉🎉🎉 BAŞARILI (WebView)! bodyLen=${wvResp.text.length}")
-                callback(newExtractorLink(source = name, name = "$name FourPichive", url = finalUrl, type = ExtractorLinkType.M3U8) {
+            if (resolvedUrl != null) {
+                callback(newExtractorLink(source = name, name = "$name FourPichive", url = resolvedUrl, type = ExtractorLinkType.M3U8) {
                     this.referer = iframeUrl
                     this.headers = headers
                     this.quality = Qualities.Unknown.value
