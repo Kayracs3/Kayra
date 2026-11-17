@@ -2,6 +2,15 @@
 
 ## 2026-11-17
 
+<!-- kayra-commit:006a1ccdaa250dc840fb22e4c823fa864bbadead -->
+### Fix FourPichive WebView URL match regexes
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [006a1cc](https://github.com/Kayracs3/Kayra/commit/006a1ccdaa250dc840fb22e4c823fa864bbadead)
+
+
+## 2026-11-17
+
 <!-- kayra-commit:1cdf2ef14fe41f68d38e0780e599e72ce64bca60 -->
 ### Correct FourPichive WebView request match patterns
 
