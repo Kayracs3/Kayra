@@ -2,6 +2,15 @@
 
 ## 2026-11-18
 
+<!-- kayra-commit:646d73f9ef4e035d14bdcae38589f12ea8e64134 -->
+### Add INTERNET permission to AndroidManifest.xml
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [646d73f](https://github.com/Kayracs3/Kayra/commit/646d73f9ef4e035d14bdcae38589f12ea8e64134)
+
+
+## 2026-11-18
+
 <!-- kayra-commit:c6b1ea06422da60bc1b231c42d930326661ce774 -->
 ### Update iconUrl to use new favicon link
 
