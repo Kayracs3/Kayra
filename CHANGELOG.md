@@ -2,6 +2,15 @@
 
 ## 2026-11-18
 
+<!-- kayra-commit:96643da1f6f1985a89f7eeb4863b94a2e5ac5282 -->
+### Update version from 38 to 12
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [96643da](https://github.com/Kayracs3/Kayra/commit/96643da1f6f1985a89f7eeb4863b94a2e5ac5282)
+
+
+## 2026-11-18
+
 <!-- kayra-commit:a2ad58b7888be8319c213b9e55d5d02271a5ea93 -->
 ### Replace AsyaWatch with AsyaWatchProvider in plugin
 
