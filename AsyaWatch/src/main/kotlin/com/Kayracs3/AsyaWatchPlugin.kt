@@ -1,6 +1,7 @@
 package com.Kayracs3
 
 import android.content.Context
+import com.asyawatch.AsyaWatchProvider
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
 
@@ -8,6 +9,6 @@ import com.lagradost.cloudstream3.plugins.Plugin
 class AsyaWatchPlugin : Plugin() {
     override fun load(context: Context) {
         super.load(context)
-        registerMainAPI(AsyaWatch())
+        registerMainAPI(AsyaWatchProvider())
     }
 }
