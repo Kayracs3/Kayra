@@ -42,7 +42,7 @@
         "name": "AsyaLuna"
     },
     {
-        "iconUrl": "https://www.google.com/s2/favicons?domain=asyawatch.com&sz=%size%",
+        "iconUrl": "https://asyawatch.com/favicon.ico",
         "fileHash": "sha256-eec197af2a2eb5f43b2f44dcfd0e8889574108473b764a4ddcc4e4294b78dc08",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
