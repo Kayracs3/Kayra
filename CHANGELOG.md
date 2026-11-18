@@ -2,6 +2,15 @@
 
 ## 2026-11-18
 
+<!-- kayra-commit:c6b1ea06422da60bc1b231c42d930326661ce774 -->
+### Update iconUrl to use new favicon link
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [c6b1ea0](https://github.com/Kayracs3/Kayra/commit/c6b1ea06422da60bc1b231c42d930326661ce774)
+
+
+## 2026-11-18
+
 <!-- kayra-commit:6381e4721a24d6e75bd47696044d34c61e2f9a0a -->
 ### Update version from 12 to 39
 
