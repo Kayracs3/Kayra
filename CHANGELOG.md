@@ -2,6 +2,15 @@
 
 ## 2026-11-18
 
+<!-- kayra-commit:a2ad58b7888be8319c213b9e55d5d02271a5ea93 -->
+### Replace AsyaWatch with AsyaWatchProvider in plugin
+
+- Etkilenen alanlar: AsyaWatch
+- Commit: [a2ad58b](https://github.com/Kayracs3/Kayra/commit/a2ad58b7888be8319c213b9e55d5d02271a5ea93)
+
+
+## 2026-11-18
+
 <!-- kayra-commit:5f0bacef0ffe5c863cfdb7c4ae17822b8f0e3ee0 -->
 ### Update fmt.Println to print 'Goodbye World'
 
