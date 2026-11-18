@@ -43,7 +43,7 @@
     },
     {
         "iconUrl": "https://www.google.com/s2/favicons?domain=asyawatch.com&sz=%size%",
-        "fileHash": "sha256-35aa60553b99675a7e037432c3c3c38a6023af13a7e3fcfeee75342f8ba3f903",
+        "fileHash": "sha256-eec197af2a2eb5f43b2f44dcfd0e8889574108473b764a4ddcc4e4294b78dc08",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
         "fileSize": 51561,
@@ -56,7 +56,7 @@
             "Movie",
             "TvSeries"
         ],
-        "version": 12,
+        "version": 39,
         "internalName": "AsyaWatch",
         "description": "AsyaWatch \u2014 Asya filmleri ve dizileri sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/AsyaWatch.cs3",
