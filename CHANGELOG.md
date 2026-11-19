@@ -2,6 +2,15 @@
 
 ## 2026-11-19
 
+<!-- kayra-commit:3b1e660507dfef539321d772bd2b52c55d004cdf -->
+### Add repo-hosted default playlist for KayraLive
+
+- Etkilenen alanlar: KayraLive
+- Commit: [3b1e660](https://github.com/Kayracs3/Kayra/commit/3b1e660507dfef539321d772bd2b52c55d004cdf)
+
+
+## 2026-11-19
+
 <!-- kayra-commit:94bb6efd3bc0aab4d45939f47905a5b14d5be747 -->
 ### Add KayraLive authorized M3U playlist provider
 
