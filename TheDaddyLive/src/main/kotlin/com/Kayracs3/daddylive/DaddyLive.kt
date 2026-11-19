@@ -22,6 +22,7 @@ import com.lagradost.cloudstream3.newLiveStreamLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.M3u8Helper
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.sync.Mutex
@@ -78,10 +79,7 @@ class DaddyLive : MainAPI() {
             "uk", "usa", "us", "tr", "turkey", "de", "fr", "es"
         )
 
-        // Ölü/çalışmayan domainler — bunlara istek atılmayacak
         private val DEAD_DOMAINS = listOf("ksohls.ru")
-
-        // Önceliklendirilecek player domainleri (loglarda çalışma ihtimali en yüksek)
         private val PRIORITY_DOMAINS = listOf("optimserve.shop")
     }
 
@@ -260,24 +258,20 @@ class DaddyLive : MainAPI() {
 
         val playerUrls = linkedSetOf<String>()
 
-        // watch.php'deki 7 player butonunun data-url'leri
         document?.select("button.player-btn[data-url]")?.forEach { btn ->
             val u = btn.attr("data-url").trim()
             if (u.isNotBlank()) playerUrls.add(u)
         }
 
-        // iframe#playerFrame src (Player 1)
         document?.selectFirst("iframe#playerFrame[src]")?.attr("src")?.trim()
             ?.takeIf { it.isNotBlank() }?.let { playerUrls.add(it) }
 
-        // Yedek: butonlar yoksa klasör şablonları
         if (playerUrls.isEmpty()) {
             listOf("stream", "cast", "watch", "plus", "casting", "player", "hub").forEach { f ->
                 playerUrls.add("$base/$f/stream-$channelId.php")
             }
         }
 
-        // Öncelik: optimserve.shop → diğerleri; ölü domainleri at
         val sorted = playerUrls
             .filterNot { u -> DEAD_DOMAINS.any { u.contains(it) } }
             .sortedByDescending { u -> PRIORITY_DOMAINS.any { u.contains(it) } }
@@ -341,34 +335,58 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
         return runCatching { URI(base).resolve(raw).toString() }.getOrNull()
     }
 
-    // [FIX] suspend — newExtractorLink suspend olduğu için
+    /**
+     * [DÜZELTME 1] Origin başlığı eklendi. 403 hatasının asıl nedeni buydu.
+     * [DÜZELTME 2] M3u8Helper kullanılarak master playlist'in alt parçaları çözülüyor.
+     */
     private suspend fun emit(
         mediaUrl: String,
         pageUrl: String,
         callback: (ExtractorLink) -> Unit
     ) {
-        callback(
-            newExtractorLink(
-                source = name,
-                name = "DaddyLive",
-                url = mediaUrl,
-                type = ExtractorLinkType.M3U8
-            ) {
-                this.referer = pageUrl
-                this.quality = Qualities.Unknown.value
-                this.headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to pageUrl
-                )
-            }
+        // Origin başlığı için sayfanın kendi domainini kullan (örn: https://dembed.st)
+        val origin = runCatching {
+            val uri = URI(pageUrl)
+            "${uri.scheme}://${uri.host}"
+        }.getOrNull() ?: mainUrl
+
+        val commonHeaders = mapOf(
+            "User-Agent" to USER_AGENT,
+            "Referer" to pageUrl,
+            "Origin" to origin
         )
+
+        if (mediaUrl.contains(".m3u8", ignoreCase = true)) {
+            // Master playlist ise alt varyantları çöz, değilse doğrudan linki ilet
+            M3u8Helper.generateM3u8(
+                source = name,
+                streamUrl = mediaUrl,
+                referer = pageUrl,
+                headers = commonHeaders
+            ).forEach { m3u8Link ->
+                callback(m3u8Link)
+            }
+        } else {
+            // .mp4 gibi doğrudan medya linkleri için normal ExtractorLink
+            callback(
+                newExtractorLink(
+                    source = name,
+                    name = "DaddyLive",
+                    url = mediaUrl,
+                    type = ExtractorLinkType.VIDEO
+                ) {
+                    this.referer = pageUrl
+                    this.quality = Qualities.Unknown.value
+                    this.headers = commonHeaders
+                }
+            )
+        }
     }
 
     /** HTML içinden m3u8/mp4 linki çıkarır (video etiketi öncelikli). */
     private fun extractFromHtml(html: String, pageUrl: String): String? {
         val normalized = html.replace("\\/", "/").replace("&amp;", "&")
 
-        // 1) <video>/<source> etiketleri
         runCatching {
             val doc = org.jsoup.Jsoup.parse(normalized, pageUrl)
             doc.select("video source[src], video[src], source[src]").forEach { el ->
@@ -377,7 +395,6 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
             }
         }
 
-        // 2) Regex
         mediaRegex.findAll(normalized).forEach { m ->
             val raw = m.value.trimEnd(';', ')', ']')
             val abs = absoluteUrl(raw, pageUrl) ?: raw
@@ -394,27 +411,23 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
     ) {
         val ref = referer ?: "$mainUrl/"
 
-        // [FIX] Ölü domainleri atla
         if (deadDomains.any { url.contains(it) }) {
             Log.d(LOG_TAG, "Ölü domain atlandı: $url")
             return
         }
 
-        // 1) CloudflareKiller ile sayfayı çek (Turnstile'ı çözmeye çalış)
         val response = runCatching {
             app.get(url, headers = headers(ref), interceptor = CloudflareKiller())
         }.onFailure { Log.d(LOG_TAG, "CF isteği başarısız: $url (${it.message})") }
             .getOrNull()
 
         if (response != null && response.code in 200..299) {
-            // HTML içinde doğrudan akış var mı?
             extractFromHtml(response.text, url)?.let {
                 Log.d(LOG_TAG, "Doğrudan akış: $it")
                 emit(it, url, callback)
                 return
             }
 
-            // iframe'leri dene (yine CloudflareKiller ile)
             val iframes = response.document.select("iframe[src]")
                 .mapNotNull { absoluteUrl(it.attr("src"), url) }
                 .filterNot { u -> deadDomains.any { u.contains(it) } }
@@ -433,7 +446,6 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
                         emit(it, iframeUrl, callback)
                         return
                     }
-                    // iframe içinde başka iframe?
                     iframeResp.document.select("iframe[src]").forEach { nested ->
                         val nestedUrl = absoluteUrl(nested.attr("src"), iframeUrl) ?: return@forEach
                         if (deadDomains.any { nestedUrl.contains(it) }) return@forEach
@@ -455,7 +467,6 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
             Log.d(LOG_TAG, "CF sonrası HTTP ${response?.code}: $url")
         }
 
-        // 2) Son çare: WebViewResolver (30 sn timeout)
         Log.d(LOG_TAG, "WebView fallback: $url")
         val sniffed = runCatching {
             app.get(
