@@ -343,7 +343,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
         mediaUrl: String,
         pageUrl: String,
         callback: (ExtractorLink) -> Unit
-    ) {
+    ): Boolean {
         // Origin başlığı için sayfanın kendi domainini kullan (örn: https://dembed.st)
         val origin = runCatching {
             val uri = URI(pageUrl)
@@ -358,14 +358,18 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
 
         if (mediaUrl.contains(".m3u8", ignoreCase = true)) {
             // Master playlist ise alt varyantları çöz, değilse doğrudan linki ilet
-            M3u8Helper.generateM3u8(
+            val links = M3u8Helper.generateM3u8(
                 source = name,
                 streamUrl = mediaUrl,
                 referer = pageUrl,
                 headers = commonHeaders
-            ).forEach { m3u8Link ->
+            )
+            if (links.isEmpty()) return false
+
+            links.forEach { m3u8Link ->
                 callback(m3u8Link)
             }
+            return true
         } else {
             // .mp4 gibi doğrudan medya linkleri için normal ExtractorLink
             callback(
@@ -380,6 +384,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
                     this.headers = commonHeaders
                 }
             )
+            return true
         }
     }
 
@@ -424,8 +429,11 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
         if (response != null && response.code in 200..299) {
             extractFromHtml(response.text, url)?.let {
                 Log.d(LOG_TAG, "Doğrudan akış: $it")
-                emit(it, url, callback)
-                return
+                val emitted = runCatching { emit(it, url, callback) }
+                    .onFailure { Log.d(LOG_TAG, "Statik akış doğrulanamadı: $url (${it.message})") }
+                    .getOrDefault(false)
+                if (emitted) return
+                Log.d(LOG_TAG, "Statik medya URL'si oynatılabilir değil; dinamik oynatıcı isteği denenecek: $it")
             }
 
             val iframes = response.document.select("iframe[src]")
@@ -443,8 +451,11 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
                 if (iframeResp != null && iframeResp.code in 200..299) {
                     extractFromHtml(iframeResp.text, iframeUrl)?.let {
                         Log.d(LOG_TAG, "iframe içinden akış: $it")
-                        emit(it, iframeUrl, callback)
-                        return
+                        val emitted = runCatching { emit(it, iframeUrl, callback) }
+                            .onFailure { Log.d(LOG_TAG, "iframe akışı doğrulanamadı: $iframeUrl (${it.message})") }
+                            .getOrDefault(false)
+                        if (emitted) return
+                        Log.d(LOG_TAG, "iframe içindeki statik medya URL'si geçerli değil; devam ediliyor: $iframeUrl")
                     }
                     iframeResp.document.select("iframe[src]").forEach { nested ->
                         val nestedUrl = absoluteUrl(nested.attr("src"), iframeUrl) ?: return@forEach
@@ -456,8 +467,11 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
                         if (nestedResp != null && nestedResp.code in 200..299) {
                             extractFromHtml(nestedResp.text, nestedUrl)?.let {
                                 Log.d(LOG_TAG, "nested iframe akışı: $it")
-                                emit(it, nestedUrl, callback)
-                                return
+                                val emitted = runCatching { emit(it, nestedUrl, callback) }
+                                    .onFailure { Log.d(LOG_TAG, "nested iframe akışı doğrulanamadı: $nestedUrl (${it.message})") }
+                                    .getOrDefault(false)
+                                if (emitted) return
+                                Log.d(LOG_TAG, "nested iframe statik medya URL'si geçerli değil; devam ediliyor: $nestedUrl")
                             }
                         }
                     }
@@ -483,7 +497,10 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
 
         if (!sniffed.isNullOrBlank() && sniffed.contains(mediaCheck)) {
             Log.d(LOG_TAG, "WebView akışı: $sniffed")
-            emit(sniffed, url, callback)
+            val emitted = runCatching { emit(sniffed, url, callback) }
+                .onFailure { Log.d(LOG_TAG, "Yakalanan medya akışı doğrulanamadı: $url (${it.message})") }
+                .getOrDefault(false)
+            if (!emitted) Log.w(LOG_TAG, "Yakalanan medya URL'si geçerli playlist üretmedi: $sniffed")
         } else {
             Log.w(LOG_TAG, "Akış bulunamadı: $url")
         }
