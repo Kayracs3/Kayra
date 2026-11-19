@@ -2,6 +2,15 @@
 
 ## 2026-11-19
 
+<!-- kayra-commit:a7367f5e0bb942c7d6d58c5d1fcdbe70df8c247b -->
+### Keep KayraLive starter playlist empty until authorized channels are added
+
+- Etkilenen alanlar: KayraLive
+- Commit: [a7367f5](https://github.com/Kayracs3/Kayra/commit/a7367f5e0bb942c7d6d58c5d1fcdbe70df8c247b)
+
+
+## 2026-11-19
+
 <!-- kayra-commit:3b1e660507dfef539321d772bd2b52c55d004cdf -->
 ### Add repo-hosted default playlist for KayraLive
 
