@@ -1,4 +1,4 @@
-package com.neoncs3.daddylive
+package com.Kayracs3.daddylive
 
 import android.util.Log
 import com.fasterxml.jackson.annotation.JsonProperty
@@ -366,7 +366,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
         return runCatching { URI(base).resolve(raw).toString() }.getOrNull()
     }
 
-    private fun emitM3u8(
+    private suspend fun emitM3u8(
         mediaUrl: String,
         pageUrl: String,
         callback: (ExtractorLink) -> Unit
