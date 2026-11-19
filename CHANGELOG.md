@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-19
+
+<!-- kayra-commit:94bb6efd3bc0aab4d45939f47905a5b14d5be747 -->
+### Add KayraLive authorized M3U playlist provider
+
+- Etkilenen alanlar: KayraLive
+- Commit: [94bb6ef](https://github.com/Kayracs3/Kayra/commit/94bb6efd3bc0aab4d45939f47905a5b14d5be747)
+
+
 ## 2026-11-18
 
 <!-- kayra-commit:646d73f9ef4e035d14bdcae38589f12ea8e64134 -->
