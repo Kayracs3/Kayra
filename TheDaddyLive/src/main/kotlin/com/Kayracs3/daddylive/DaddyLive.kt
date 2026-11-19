@@ -45,6 +45,9 @@ data class DlIptvLogo(
     val url: String? = null
 )
 
+// ======================================================================
+// MainAPI
+// ======================================================================
 class DaddyLive : MainAPI() {
     override var mainUrl = "https://thedaddy.li"
     override var name = "DaddyLive 24/7"
@@ -74,6 +77,12 @@ class DaddyLive : MainAPI() {
             "hd", "fhd", "sd", "uhd", "4k", "tv", "live", "canli", "channel", "kanal",
             "uk", "usa", "us", "tr", "turkey", "de", "fr", "es"
         )
+
+        // Ölü/çalışmayan domainler — bunlara istek atılmayacak
+        private val DEAD_DOMAINS = listOf("ksohls.ru")
+
+        // Önceliklendirilecek player domainleri (loglarda çalışma ihtimali en yüksek)
+        private val PRIORITY_DOMAINS = listOf("optimserve.shop")
     }
 
     private fun requestHeaders(base: String): Map<String, String> = mapOf(
@@ -237,8 +246,6 @@ class DaddyLive : MainAPI() {
 
         val base = baseUrl()
 
-        // [YENİ] watch.php sayfasını CloudflareKiller ile çek ve oynatıcı URL'lerini
-        // doğrudan data-url attribute'larından al. Klasör tahmini yok.
         val response = runCatching {
             app.get(url, headers = requestHeaders(base), interceptor = CloudflareKiller())
         }.onFailure { Log.d(LOG_TAG, "watch.php çekilemedi: $url (${it.message})") }
@@ -253,24 +260,29 @@ class DaddyLive : MainAPI() {
 
         val playerUrls = linkedSetOf<String>()
 
-        // Player 1..7 butonlarındaki data-url'ler
+        // watch.php'deki 7 player butonunun data-url'leri
         document?.select("button.player-btn[data-url]")?.forEach { btn ->
             val u = btn.attr("data-url").trim()
             if (u.isNotBlank()) playerUrls.add(u)
         }
 
-        // iframe src (Player 1 genelde burada da var)
+        // iframe#playerFrame src (Player 1)
         document?.selectFirst("iframe#playerFrame[src]")?.attr("src")?.trim()
             ?.takeIf { it.isNotBlank() }?.let { playerUrls.add(it) }
 
-        // Butonlar yoksa klasör şablonlarına düş
+        // Yedek: butonlar yoksa klasör şablonları
         if (playerUrls.isEmpty()) {
             listOf("stream", "cast", "watch", "plus", "casting", "player", "hub").forEach { f ->
                 playerUrls.add("$base/$f/stream-$channelId.php")
             }
         }
 
-        val data = playerUrls.joinToString("\n")
+        // Öncelik: optimserve.shop → diğerleri; ölü domainleri at
+        val sorted = playerUrls
+            .filterNot { u -> DEAD_DOMAINS.any { u.contains(it) } }
+            .sortedByDescending { u -> PRIORITY_DOMAINS.any { u.contains(it) } }
+
+        val data = sorted.joinToString("\n")
         return newLiveStreamLoadResponse(title, url, data) { /* poster yok */ }
     }
 
@@ -315,6 +327,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
             RegexOption.IGNORE_CASE
         )
         private val mediaCheck = Regex("""(?i)\.(m3u8|mp4)""")
+        private val deadDomains = listOf("ksohls.ru")
     }
 
     private fun headers(referer: String): Map<String, String> = mapOf(
@@ -328,7 +341,12 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
         return runCatching { URI(base).resolve(raw).toString() }.getOrNull()
     }
 
-    private suspend fun emit(mediaUrl: String, pageUrl: String, callback: (ExtractorLink) -> Unit) {
+    // [FIX] suspend — newExtractorLink suspend olduğu için
+    private suspend fun emit(
+        mediaUrl: String,
+        pageUrl: String,
+        callback: (ExtractorLink) -> Unit
+    ) {
         callback(
             newExtractorLink(
                 source = name,
@@ -376,14 +394,20 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
     ) {
         val ref = referer ?: "$mainUrl/"
 
-        // 1) CloudflareKiller ile doğrudan çek (Turnstile'ı otomatik çözmeye çalışır)
+        // [FIX] Ölü domainleri atla
+        if (deadDomains.any { url.contains(it) }) {
+            Log.d(LOG_TAG, "Ölü domain atlandı: $url")
+            return
+        }
+
+        // 1) CloudflareKiller ile sayfayı çek (Turnstile'ı çözmeye çalış)
         val response = runCatching {
             app.get(url, headers = headers(ref), interceptor = CloudflareKiller())
         }.onFailure { Log.d(LOG_TAG, "CF isteği başarısız: $url (${it.message})") }
             .getOrNull()
 
         if (response != null && response.code in 200..299) {
-            // Doğrudan HTML içinde akış var mı?
+            // HTML içinde doğrudan akış var mı?
             extractFromHtml(response.text, url)?.let {
                 Log.d(LOG_TAG, "Doğrudan akış: $it")
                 emit(it, url, callback)
@@ -393,6 +417,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
             // iframe'leri dene (yine CloudflareKiller ile)
             val iframes = response.document.select("iframe[src]")
                 .mapNotNull { absoluteUrl(it.attr("src"), url) }
+                .filterNot { u -> deadDomains.any { u.contains(it) } }
                 .distinct()
 
             for (iframeUrl in iframes) {
@@ -411,6 +436,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
                     // iframe içinde başka iframe?
                     iframeResp.document.select("iframe[src]").forEach { nested ->
                         val nestedUrl = absoluteUrl(nested.attr("src"), iframeUrl) ?: return@forEach
+                        if (deadDomains.any { nestedUrl.contains(it) }) return@forEach
                         val nestedResp = runCatching {
                             app.get(nestedUrl, referer = iframeUrl, headers = headers(iframeUrl),
                                 interceptor = CloudflareKiller())
