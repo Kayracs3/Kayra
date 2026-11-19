@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-20
+
+<!-- kayra-commit:59e1d0e491aecade752e2e0e90c4af16977aae07 -->
+### Fix KayraLive Kotlin compilation errors
+
+- Etkilenen alanlar: KayraLive
+- Commit: [59e1d0e](https://github.com/Kayracs3/Kayra/commit/59e1d0e491aecade752e2e0e90c4af16977aae07)
+
+
 ## 2026-11-19
 
 <!-- kayra-commit:a7367f5e0bb942c7d6d58c5d1fcdbe70df8c247b -->
