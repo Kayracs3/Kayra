@@ -792,6 +792,25 @@
         "name": "SinezyTo"
     },
     {
+        "fileHash": "sha256-599f5f95185e0fa6520cf2fc0a478a34756e51b475f25422c1618fb9827ba4e5",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 27457,
+        "status": 3,
+        "language": "en",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 2,
+        "internalName": "TheDaddyLive",
+        "description": "DaddyLive 24/7 canl\u0131 TV kanallar\u0131 (thedaddy.li)",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/TheDaddyLive.cs3",
+        "name": "TheDaddyLive"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=trdiziizle.tv&sz=%size%",
         "fileHash": "sha256-8949875560ecddf65c25e2329cc1fcb2f429755013a64278a7ea09e1907ebce3",
         "apiVersion": 1,
