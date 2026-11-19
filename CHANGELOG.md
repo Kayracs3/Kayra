@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:e9b1702f48889b51840ab3a3217ddf569f45eadd -->
+### Refactor DaddyLive API and improve error handling
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [e9b1702](https://github.com/Kayracs3/Kayra/commit/e9b1702f48889b51840ab3a3217ddf569f45eadd)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:f789c3c731727f783901a667b6bb37a91704e81a -->
 ### Fix TheDaddyLive Kotlin compilation errors
 
