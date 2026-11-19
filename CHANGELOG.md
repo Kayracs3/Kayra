@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:f789c3c731727f783901a667b6bb37a91704e81a -->
+### Fix TheDaddyLive Kotlin compilation errors
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [f789c3c](https://github.com/Kayracs3/Kayra/commit/f789c3c731727f783901a667b6bb37a91704e81a)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:760c05a87554cbee3cfe2828539c534ccff8b6c8 -->
 ### Refactor DaddyLive.kt for package and logging updates
 
