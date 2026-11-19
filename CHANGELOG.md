@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:f5d367831d8900fdf21f3b917011f2800760ade3 -->
+### Fix TheDaddyLive missing coroutines compile dependency
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [f5d3678](https://github.com/Kayracs3/Kayra/commit/f5d367831d8900fdf21f3b917011f2800760ade3)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:a7f00c6c8f2319a6fa10a051b6bc04fb5fc3734c -->
 ### Add files via upload
 
