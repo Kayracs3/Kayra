@@ -1,5 +1,6 @@
-package com.Kayracs3.daddylive
+package com.neoncs3.daddylive
 
+import android.util.Log
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.ErrorLoadingException
 import com.lagradost.cloudstream3.HomePageList
@@ -31,6 +32,9 @@ private const val USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
+// [FIX 7] Loglama için ortak tag
+private const val LOG_TAG = "DaddyLive"
+
 // iptv-org API şemasının kullandığımız kısmı (https://iptv-org.github.io/api/)
 data class DlIptvChannel(
     val id: String? = null,
@@ -57,7 +61,11 @@ class DaddyLive : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
     override val hasMainPage = true
     override val hasDownloadSupport = false
-    override val instantLinkLoading = true
+
+    // [FIX 8] 7 oynatıcı sırayla denendiği için otomatik yükleme yerine
+    // kullanıcının "Oynat"a basmasını beklemek daha kontrollü.
+    // İstersen true yapabilirsin.
+    override val instantLinkLoading = false
     override val vpnStatus = VPNStatus.MightBeNeeded
 
     companion object {
@@ -147,7 +155,9 @@ class DaddyLive : MainAPI() {
             }
         }
         out
-    }.getOrDefault(emptyMap())
+    // [FIX 7] Hata logla, sessizce yutma
+    }.onFailure { Log.w(LOG_TAG, "Logo haritası oluşturulamadı", it) }
+        .getOrDefault(emptyMap())
 
     // ------------------------------------------------------------------ katalog
     private val cacheMutex = Mutex()
@@ -172,10 +182,25 @@ class DaddyLive : MainAPI() {
 
     private suspend fun fetchChannels(): List<LiveSearchResponse> {
         val base = baseUrl()
-        val document = app.get(
+        val response = app.get(
             "$base/24-7-channels.php",
             headers = requestHeaders(base)
-        ).document
+        )
+        val document = response.document
+
+        // [FIX 9] Cloudflare challenge tespiti -> kullanıcıya anlamlı hata göster
+        if (document.select("a.card").isEmpty()) {
+            val title = document.title()
+            val cfChallenge = title.contains("Just a moment", true) ||
+                title.contains("Attention Required", true) ||
+                response.code == 403 || response.code == 503
+            if (cfChallenge) {
+                throw ErrorLoadingException(
+                    "Cloudflare engeli tespit edildi (HTTP ${response.code}). " +
+                        "VPN veya Cloudstream 'Clone site' özelliğini deneyin."
+                )
+            }
+        }
 
         val cards = document.select(
             "div.grid > a, a.card, a[href*='watch.php?id=']"
@@ -190,15 +215,17 @@ class DaddyLive : MainAPI() {
             val channelId = channelIdRegex.find(href)?.groupValues?.getOrNull(1)
                 ?: continue
 
+            // [FIX 6] Sırasıyla: görünen başlık -> data-title -> img alt -> title
+            // attr -> "ID:" öncesi ham metin. "ID: 51" artık isim olarak dönmez.
             val channelName = card.selectFirst(
                 ".card__title, .card-title, .channel-title, .channel-name"
             )?.text()?.trim()?.takeIf { it.isNotBlank() }
+                ?: card.attr("data-title").trim().takeIf { it.isNotBlank() }
                 ?: card.selectFirst("img[alt]")?.attr("alt")?.trim()
                     ?.takeIf { it.isNotBlank() }
                 ?: card.attr("title").trim().takeIf { it.isNotBlank() }
-                ?: card.text().trim()
-
-            if (channelName.isBlank()) continue
+                ?: card.text().substringBefore("ID:").trim().takeIf { it.isNotBlank() }
+                ?: continue
 
             val channelUrl = card.absUrl("href").ifBlank {
                 "$base/${href.trimStart('/')}"
@@ -264,8 +291,10 @@ class DaddyLive : MainAPI() {
                 ?.takeIf { it.isNotBlank() }
         }.getOrNull() ?: "Channel $channelId"
 
-        // Oynatıcı klasörleri loadLinks içinde sırayla denenir.
-        val playerTemplate = "$base/{folder}/stream-$channelId.php"
+        // [FIX 1] data olarak SADECE göreli şablon döndürülür. Alan adı
+        // loadLinks() içinde o an çözümlenen base ile birleştirilir.
+        // Böylece domain değişse bile referer ve oynatıcı URL'si tutarlı olur.
+        val playerTemplate = "/{folder}/stream-$channelId.php"
         return newLiveStreamLoadResponse(title, url, playerTemplate) {
             this.posterUrl = known?.posterUrl
         }
@@ -292,13 +321,15 @@ class DaddyLive : MainAPI() {
         val extractor = DaddyLivePlayerExtractor()
         var emittedLinks = 0
         for (folder in playerFolders) {
-            val playerUrl = data.replace("{folder}", folder)
+            // [FIX 1] Güncel base + göreli şablon
+            val playerUrl = "$base" + data.replace("{folder}", folder)
             runCatching {
                 extractor.getUrl(playerUrl, "$base/", subtitleCallback) { link ->
                     callback(link)
                     emittedLinks++
                 }
-            }
+            // [FIX 7] Sessiz yutma yerine logla
+            }.onFailure { Log.d(LOG_TAG, "Klasör '$folder' başarısız: ${it.message}") }
             // İlk çalışan oynatıcıda dur
             if (emittedLinks > 0) break
         }
@@ -317,8 +348,9 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
     override val requiresReferer = false
 
     companion object {
+        // [FIX 4] Protokol-göreli URL'leri de yakala: "//cdn.example/stream.m3u8"
         private val m3u8Regex = Regex(
-            """https?://[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""",
+            """(?:https?:)?//[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""",
             RegexOption.IGNORE_CASE
         )
     }
@@ -329,25 +361,16 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
         "Accept" to "text/html,application/xhtml+xml,*/*;q=0.8"
     )
 
-    private fun originOf(url: String): String? = runCatching {
-        val uri = URI(url)
-        if (uri.scheme.isNullOrBlank() || uri.host.isNullOrBlank()) null
-        else "${uri.scheme}://${uri.host}"
-    }.getOrNull()
-
     private fun absoluteUrl(raw: String, base: String): String? {
         if (raw.isBlank()) return null
         return runCatching { URI(base).resolve(raw).toString() }.getOrNull()
     }
 
-    private suspend fun emitM3u8(
+    private fun emitM3u8(
         mediaUrl: String,
         pageUrl: String,
         callback: (ExtractorLink) -> Unit
     ) {
-        // CDN'ler Origin olarak genelde oynatıcı sayfasının adresini bekler
-        val origin = originOf(pageUrl) ?: originOf(mediaUrl) ?: mainUrl
-
         callback(
             newExtractorLink(
                 source = name,
@@ -357,10 +380,11 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
             ) {
                 this.referer = pageUrl
                 this.quality = Qualities.Unknown.value
+                // [FIX 3] "Origin" header'ı kaldırıldı: bazı CDN'ler katı
+                // Origin kontrolü yüzünden 403 döndürebiliyor. Referer yeterli.
                 this.headers = mapOf(
                     "User-Agent" to USER_AGENT,
-                    "Referer" to pageUrl,
-                    "Origin" to origin
+                    "Referer" to pageUrl
                 )
             }
         )
@@ -374,29 +398,42 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
     ) {
         val response = runCatching {
             app.get(url, headers = headers(referer ?: "$mainUrl/"))
-        }.getOrNull() ?: return
+        // [FIX 7] Logla
+        }.onFailure { Log.d(LOG_TAG, "Oynatıcı isteği başarısız: $url (${it.message})") }
+            .getOrNull() ?: return
 
         // Olmayan oynatıcı yolu iframe/WebView çözümlemesini tetiklemesin
-        if (response.code !in 200..299) return
+        if (response.code !in 200..299) {
+            Log.d(LOG_TAG, "Oynatıcı HTTP ${response.code}: $url")
+            return
+        }
 
         val document = response.document
         val normalizedHtml = response.text
             .replace("\\/", "/")
             .replace("&amp;", "&")
 
-        val directUrls = linkedSetOf<String>()
-        m3u8Regex.findAll(normalizedHtml).forEach {
-            directUrls.add(it.value.trimEnd(';', ')', ']'))
-        }
-
-        document.select("video source[src], video[src]").forEach { element ->
+        // [FIX 5] 1) Önce <video>/<source> etiketlerinden gelen kaynaklar
+        val videoSources = linkedSetOf<String>()
+        document.select("video source[src], video[src], source[src]").forEach { element ->
             val source = element.absUrl("src").ifBlank { element.attr("src") }
             if (source.contains(".m3u8", ignoreCase = true)) {
-                directUrls.add(source)
+                videoSources.add(source)
             }
         }
 
-        val direct = directUrls.firstOrNull()
+        // [FIX 5] 2) Sonra regex ile (protokol-göreli dahil) bulunanlar
+        val regexUrls = linkedSetOf<String>()
+        m3u8Regex.findAll(normalizedHtml).forEach { match ->
+            val raw = match.value.trimEnd(';', ')', ']')
+            val absolute = absoluteUrl(raw, url) ?: raw
+            if (absolute.startsWith("http", ignoreCase = true)) {
+                regexUrls.add(absolute)
+            }
+        }
+
+        // [FIX 5] Video etiketi kaynağı regex sonucundan önce gelir
+        val direct = videoSources.firstOrNull() ?: regexUrls.firstOrNull()
         if (direct != null) {
             emitM3u8(direct, url, callback)
             return
@@ -413,7 +450,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
                     callback(it)
                     emitted++
                 }
-            }
+            }.onFailure { Log.d(LOG_TAG, "loadExtractor başarısız: $iframeUrl") }
             if (emitted > 0) return
 
             // Kayıtlı extractor'u olmayan embed'ler (dembed dahil) için normal
@@ -428,7 +465,8 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
                         timeout = 8_000L
                     )
                 ).url
-            }.getOrNull()
+            }.onFailure { Log.d(LOG_TAG, "WebView sniff başarısız: $iframeUrl") }
+                .getOrNull()
 
             if (!sniffedUrl.isNullOrBlank() &&
                 sniffedUrl.contains(".m3u8", ignoreCase = true)
@@ -441,8 +479,12 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
 }
 
 /*
- * Plugin sınıfında şu kadarı yeterli (extractor'u ayrıca kaydetmek gerekmez,
- * loadLinks doğrudan çağırıyor):
+ * Plugin kayıt sınıfın zaten başka bir dosyadaysa bu bloğu sil.
+ * Tek dosya olarak dağıtacaksan aşağıdaki yorumu kaldır:
+ *
+ * import android.content.Context
+ * import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
+ * import com.lagradost.cloudstream3.plugins.Plugin
  *
  * @CloudstreamPlugin
  * class DaddyLivePlugin : Plugin() {
