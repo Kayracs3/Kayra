@@ -328,7 +328,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
         return runCatching { URI(base).resolve(raw).toString() }.getOrNull()
     }
 
-    private fun emit(mediaUrl: String, pageUrl: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun emit(mediaUrl: String, pageUrl: String, callback: (ExtractorLink) -> Unit) {
         callback(
             newExtractorLink(
                 source = name,
