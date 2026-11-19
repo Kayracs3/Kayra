@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:70a532bd7f217a9855e3915d2ed8cc9b3f394cd0 -->
+### Fix DaddyLive suspend extractor link emission
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [70a532b](https://github.com/Kayracs3/Kayra/commit/70a532bd7f217a9855e3915d2ed8cc9b3f394cd0)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:e9b1702f48889b51840ab3a3217ddf569f45eadd -->
 ### Refactor DaddyLive API and improve error handling
 
