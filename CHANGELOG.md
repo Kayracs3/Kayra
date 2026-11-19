@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:a3ccdd797a2e54a4169abb907d4e2700dd8cdc00 -->
+### Refactor player URL extraction and domain handling
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [a3ccdd7](https://github.com/Kayracs3/Kayra/commit/a3ccdd797a2e54a4169abb907d4e2700dd8cdc00)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:70a532bd7f217a9855e3915d2ed8cc9b3f394cd0 -->
 ### Fix DaddyLive suspend extractor link emission
 
