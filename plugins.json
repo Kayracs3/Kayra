@@ -625,6 +625,25 @@
         "name": "JetFilmizle"
     },
     {
+        "fileHash": "sha256-55f075c4d2aade702eb0878ec0a48456c0eb3fb9d91064218e6dfb9a8548bb57",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 19374,
+        "status": 3,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 3,
+        "internalName": "KayraLive",
+        "description": "Kullan\u0131c\u0131n\u0131n yetkili M3U/M3U8 listeleri i\u00e7in canl\u0131 TV sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/KayraLive.cs3",
+        "name": "KayraLive"
+    },
+    {
         "iconUrl": "https://tv.newtane.com/favicon.ico",
         "fileHash": "sha256-86ec634bb10b081fa60b2846572eeaa7eb27f8754bf44a679944e0fa08065bba",
         "apiVersion": 1,
