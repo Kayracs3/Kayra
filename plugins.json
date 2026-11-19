@@ -792,10 +792,10 @@
         "name": "SinezyTo"
     },
     {
-        "fileHash": "sha256-853a223d04790c0e7f362d3894d265d21a00e66fa6d573ac75c5fb26ead30b5a",
+        "fileHash": "sha256-2c03b6ae34db818a268a9947056344a32262297a1d0d29955087036b1d74425f",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 33220,
+        "fileSize": 34993,
         "status": 3,
         "language": "en",
         "authors": [
