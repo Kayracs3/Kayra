@@ -1,0 +1,6 @@
+#EXTM3U
+# KayraLive playlist
+# Add only HTTPS channels that you are authorized to access.
+# Format:
+#EXTINF:-1 tvg-name="Channel Name" group-title="News",Channel Name
+https://your-authorized-host.example/live/channel.m3u8

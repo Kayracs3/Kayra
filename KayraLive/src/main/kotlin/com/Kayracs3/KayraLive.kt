@@ -44,6 +44,8 @@ class KayraLive(private val context: Context) : MainAPI() {
     companion object {
         private const val PREFS_NAME = "kayra_live_playlist"
         private const val PLAYLIST_KEY = "playlist_url"
+        private const val DEFAULT_PLAYLIST_URL =
+            "https://raw.githubusercontent.com/Kayracs3/Kayra/master/KayraLive/channels.m3u"
         private const val CACHE_TTL_MS = 5 * 60 * 1000L
         private const val MAX_PLAYLIST_CHARS = 5 * 1024 * 1024
         private const val USER_AGENT =
@@ -82,7 +84,7 @@ class KayraLive(private val context: Context) : MainAPI() {
     }
 
     val configuredPlaylistUrl: String
-        get() = preferences.getString(PLAYLIST_KEY, "").orEmpty()
+        get() = preferences.getString(PLAYLIST_KEY, DEFAULT_PLAYLIST_URL).orEmpty()
 
     fun savePlaylistUrl(raw: String): Boolean {
         val value = raw.trim()
