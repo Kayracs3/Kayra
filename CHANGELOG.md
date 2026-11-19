@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:85c994e1a2bd5f4b4cffbd314d465acc26a084d4 -->
+### Fix DaddyLive fallback when an extracted HLS URL is invalid
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [85c994e](https://github.com/Kayracs3/Kayra/commit/85c994e1a2bd5f4b4cffbd314d465acc26a084d4)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:f36428080a9f9b8b0e9c510b2dd17c067113b78c -->
 ### Enhance media URL handling and extraction logic
 
