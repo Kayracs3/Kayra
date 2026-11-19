@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:f36428080a9f9b8b0e9c510b2dd17c067113b78c -->
+### Enhance media URL handling and extraction logic
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [f364280](https://github.com/Kayracs3/Kayra/commit/f36428080a9f9b8b0e9c510b2dd17c067113b78c)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:a3ccdd797a2e54a4169abb907d4e2700dd8cdc00 -->
 ### Refactor player URL extraction and domain handling
 
