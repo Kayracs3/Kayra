@@ -19,7 +19,7 @@ class KayraLivePlugin : Plugin() {
         openSettings = { settingsContext ->
             val input = EditText(settingsContext).apply {
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-                singleLine = true
+                maxLines = 1
                 hint = "https://ornek.site/kanallar.m3u"
                 setText(provider.configuredPlaylistUrl)
             }

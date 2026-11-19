@@ -1,4 +1,4 @@
-version = 2
+version = 3
 
 cloudstream {
     description = "Kullanıcının yetkili M3U/M3U8 listeleri için canlı TV sağlayıcısı"

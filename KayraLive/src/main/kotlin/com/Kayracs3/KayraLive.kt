@@ -7,8 +7,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.net.URI
 
 /**
@@ -37,7 +35,6 @@ class KayraLive(private val context: Context) : MainAPI() {
         val logo: String?
     )
 
-    private val cacheMutex = Mutex()
     @Volatile private var cachedChannels: List<Channel> = emptyList()
     @Volatile private var cacheTimestamp = 0L
 
@@ -109,53 +106,46 @@ class KayraLive(private val context: Context) : MainAPI() {
             return cachedChannels
         }
 
-        return cacheMutex.withLock {
-            val current = System.currentTimeMillis()
-            if (cachedChannels.isNotEmpty() && current - cacheTimestamp < CACHE_TTL_MS) {
-                return@withLock cachedChannels
-            }
+        val playlistUrl = safeHttpsUrl(configuredPlaylistUrl)
+            ?: throw ErrorLoadingException(
+                "Önce KayraLive eklenti ayarlarından yetkili M3U/M3U8 liste adresini ekleyin."
+            )
 
-            val playlistUrl = safeHttpsUrl(configuredPlaylistUrl)
-                ?: throw ErrorLoadingException(
-                    "Önce KayraLive eklenti ayarlarından yetkili M3U/M3U8 liste adresini ekleyin."
-                )
-
-            val response = runCatching {
-                app.get(
-                    playlistUrl,
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Accept" to "application/vnd.apple.mpegurl, audio/x-mpegurl, text/plain, */*"
-                    ),
-                    timeout = 20
-                )
-            }.getOrElse {
-                throw ErrorLoadingException("Kanal listesi indirilemedi: \${it.message}")
-            }
-
-            if (!response.isSuccessful) {
-                throw ErrorLoadingException("Kanal listesi HTTP \${response.code} döndürdü.")
-            }
-
-            val body = response.text
-            if (body.length > MAX_PLAYLIST_CHARS) {
-                throw ErrorLoadingException("M3U listesi 5 MB sınırını aşıyor.")
-            }
-            if (!body.trimStart().startsWith("#EXTM3U")) {
-                throw ErrorLoadingException("Kaynak geçerli bir M3U listesi değil.")
-            }
-
-            val parsed = parsePlaylist(body)
-            if (parsed.isEmpty()) {
-                throw ErrorLoadingException(
-                    "Listede HTTPS yayın adresi bulunamadı veya tüm kayıtlar güvenlik filtresinden geçti."
-                )
-            }
-
-            cachedChannels = parsed
-            cacheTimestamp = System.currentTimeMillis()
-            parsed
+        val response = runCatching {
+            app.get(
+                playlistUrl,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "application/vnd.apple.mpegurl, audio/x-mpegurl, text/plain, */*"
+                ),
+                timeout = 20
+            )
+        }.getOrElse {
+            throw ErrorLoadingException("Kanal listesi indirilemedi: ${it.message}")
         }
+
+        if (!response.isSuccessful) {
+            throw ErrorLoadingException("Kanal listesi HTTP ${response.code} döndürdü.")
+        }
+
+        val body = response.text
+        if (body.length > MAX_PLAYLIST_CHARS) {
+            throw ErrorLoadingException("M3U listesi 5 MB sınırını aşıyor.")
+        }
+        if (!body.trimStart().startsWith("#EXTM3U")) {
+            throw ErrorLoadingException("Kaynak geçerli bir M3U listesi değil.")
+        }
+
+        val parsed = parsePlaylist(body)
+        if (parsed.isEmpty()) {
+            throw ErrorLoadingException(
+                "Listede HTTPS yayın adresi bulunamadı veya tüm kayıtlar güvenlik filtresinden geçti."
+            )
+        }
+
+        cachedChannels = parsed
+        cacheTimestamp = System.currentTimeMillis()
+        return parsed
     }
 
     private fun parsePlaylist(body: String): List<Channel> {
