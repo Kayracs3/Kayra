@@ -2,6 +2,23 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:ed5bb8ecc64b7fedd6a259bd3bf17f4e7e7e2ef7 -->
+### Add files via upload
+
+- Etkilenen alanlar: DiziCaN
+- Commit: [ed5bb8e](https://github.com/Kayracs3/Kayra/commit/ed5bb8ecc64b7fedd6a259bd3bf17f4e7e7e2ef7)
+
+## 2026-11-20
+
+<!-- kayra-commit:0e96441d2826cd0010b33d5bb3594719b59c22d1 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [0e96441](https://github.com/Kayracs3/Kayra/commit/0e96441d2826cd0010b33d5bb3594719b59c22d1)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:85c994e1a2bd5f4b4cffbd314d465acc26a084d4 -->
 ### Fix DaddyLive fallback when an extracted HLS URL is invalid
 
