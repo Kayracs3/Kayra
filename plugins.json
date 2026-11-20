@@ -170,6 +170,28 @@
         "name": "DiziBox"
     },
     {
+        "iconUrl": "https://dizican.cc/favicon.ico",
+        "fileHash": "sha256-0cd59e497d9b3baf680118d1e448e5e9fc2dafae92801e804834f90e34ba5c68",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 45286,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "F0Rextasy",
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 18,
+        "internalName": "DiziCaN",
+        "description": "DiziCaN \u2014 T\u00fcrk\u00e7e altyaz\u0131l\u0131 Asya dizileri ve filmler",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziCaN.cs3",
+        "name": "DiziCaN"
+    },
+    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=dizidad.com&sz=%size%",
         "fileHash": "sha256-1c4a584f92dfb1b089a6dbbd0bce77bb6af20a89a1ce3227797bd0045ec3bdf8",
         "apiVersion": 1,
@@ -582,28 +604,6 @@
         "name": "InatBox"
     },
     {
-        "iconUrl": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh3vCp6N1K4bECoYRQD-cisJF2_6V_Hk01ZhDmoPR2JuM8O5qr4MqrPO1munM9cRlleBBSK6odYhLtDBWv4E3vhPhynlmS5hVVtJZShHoGA5REQ8_3v8SIlccTEqzVQu2UJyNYQdJNrKIfWy66RQeT0D-CcmFCbHPz5023H6p2v5fv4NVloZ5Rqo_yGrIY/s320/iNat-Box-App.png",
-        "fileHash": "sha256-5157f451ccae14ba0458b0081a9be12c0b05df008a0edf2edc13629524b756e3",
-        "apiVersion": 1,
-        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 98491,
-        "status": 3,
-        "language": "tr",
-        "authors": [
-            "Kayracs3"
-        ],
-        "tvTypes": [
-            "Movie",
-            "TvSeries",
-            "Live"
-        ],
-        "version": 8,
-        "internalName": "InatBoxYedek",
-        "description": "\u0130natBoxYedek: InatBox ana eklentisinden ayr\u0131, test ve yedek ama\u00e7l\u0131 sa\u011flay\u0131c\u0131.",
-        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/InatBoxYedek.cs3",
-        "name": "InatBoxYedek"
-    },
-    {
         "iconUrl": "https://www.google.com/s2/favicons?domain=jetfilmizle.wiki&sz=%size%",
         "fileHash": "sha256-13b6defaca210fc28d9c255fc556d90dfba6a9de3f81093d527cd22139fd4f07",
         "apiVersion": 1,
@@ -792,10 +792,10 @@
         "name": "SinezyTo"
     },
     {
-        "fileHash": "sha256-2c03b6ae34db818a268a9947056344a32262297a1d0d29955087036b1d74425f",
+        "fileHash": "sha256-9008257a76136d2da69dbb0c731aee6e0b19e8534e892dd5049c13e968a68299",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 34993,
+        "fileSize": 27458,
         "status": 3,
         "language": "en",
         "authors": [
