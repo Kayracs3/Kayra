@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:bac94fd68a12c51d6a5d8e2602797e052fac17b5 -->
+### Delete InatBoxYedek directory
+
+- Etkilenen alanlar: InatBoxYedek
+- Commit: [bac94fd](https://github.com/Kayracs3/Kayra/commit/bac94fd68a12c51d6a5d8e2602797e052fac17b5)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:ed5bb8ecc64b7fedd6a259bd3bf17f4e7e7e2ef7 -->
 ### Add files via upload
 
