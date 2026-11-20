@@ -748,6 +748,28 @@
           "your"
         ]
       }
+    },
+    "DiziCaN": {
+      "identityProfile": {
+        "title": "DiziCaN – Kore Dizileri İzle, Asya Dizileri İzle",
+        "h1": "Kore Dizileri İzle – Asya Dizileri İzle",
+        "siteName": "DiziCaN",
+        "description": "Kore dizileri izle ve Asya dizileri izle: yeni bölümler Türkçe altyazılı, Full HD ve ücretsiz olarak DiziCaN'da.",
+        "tokens": [
+          "altyaz",
+          "asya",
+          "bolumler",
+          "dizican",
+          "dizileri",
+          "full",
+          "izle",
+          "kore",
+          "olarak",
+          "turkce",
+          "ucretsiz",
+          "yeni"
+        ]
+      }
     }
   }
 }
