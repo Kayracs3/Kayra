@@ -425,7 +425,7 @@ class DaddyLivePlayerExtractor : ExtractorApi() {
                     headers = headers(url),
                     interceptor = WebViewResolver(
                         interceptUrl = Regex("""(?i)\.m3u8(?:\?|$)"""),
-                        timeout = 8_000L
+                        timeout = 30_000L
                     )
                 ).url
             }.getOrNull()
