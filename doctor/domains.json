@@ -703,6 +703,51 @@
         ]
       }
     },
-    "DiziBox": {}
+    "DiziBox": {},
+    "KayraLive": {
+      "identityProfile": {
+        "title": "GitHub - Kayracs3/Kayra · GitHub",
+        "h1": "",
+        "siteName": "GitHub",
+        "description": "Contribute to Kayracs3/Kayra development by creating an account on GitHub.",
+        "tokens": [
+          "account",
+          "contribute",
+          "creating",
+          "development",
+          "github",
+          "kayra",
+          "kayracs3"
+        ]
+      }
+    },
+    "TheDaddyLive": {
+      "identityProfile": {
+        "title": "HOME | DaddyLiveHD - Live Sports Streaming Free - DaddyLive.PK - DLHD",
+        "h1": "",
+        "siteName": "DaddyLiveHD - Live Sports Streaming Free - DaddyLive.PK - DLHD",
+        "description": "Today's live events schedule by category. Filter and search to find your stream.",
+        "tokens": [
+          "and",
+          "category",
+          "daddylive",
+          "daddylivehd",
+          "dlhd",
+          "events",
+          "filter",
+          "find",
+          "free",
+          "home",
+          "live",
+          "schedule",
+          "search",
+          "sports",
+          "stream",
+          "streaming",
+          "today",
+          "your"
+        ]
+      }
+    }
   }
 }
