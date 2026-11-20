@@ -2,6 +2,15 @@
 
 ## 2026-11-20
 
+<!-- kayra-commit:e11728fd03dc47e3a9dbde62189769c4c31c5241 -->
+### Increase DaddyLive WebView timeout to 30 seconds
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [e11728f](https://github.com/Kayracs3/Kayra/commit/e11728fd03dc47e3a9dbde62189769c4c31c5241)
+
+
+## 2026-11-20
+
 <!-- kayra-commit:a4a8d464e36caed00868803c061ed925101e211b -->
 ### Refactor DaddyLive class for improved functionality
 
