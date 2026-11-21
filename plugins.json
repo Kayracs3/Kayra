@@ -854,5 +854,24 @@
         "description": "Web Drama Turkey Kore, \u00c7in ve Asya dizileri sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/WebDramaTurkey.cs3",
         "name": "WebDramaTurkey"
+    },
+    {
+        "fileHash": "sha256-7d8a195d7826c02e04402c8b48d7dd0b86e1f24ae8ceba0b7c1f9732b83b4f5f",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Kayracs3/Kayra",
+        "fileSize": 21782,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "Kayracs3"
+        ],
+        "tvTypes": [
+            "Live"
+        ],
+        "version": 1,
+        "internalName": "Zuntar",
+        "description": "Canl\u0131 TV ve etkinlik sa\u011flay\u0131c\u0131s\u0131",
+        "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Zuntar.cs3",
+        "name": "Zuntar"
     }
 ]
