@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:105d7c5fbea177850a73fb4fd0f165f130160697 -->
+### Update EmbedResolver.kt
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [105d7c5](https://github.com/Kayracs3/Kayra/commit/105d7c5fbea177850a73fb4fd0f165f130160697)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:37c3f5112de6f5b27a3c49dc7c7b8c6ec0020916 -->
 ### Bump version from 4 to 5 in build.gradle.kts
 
