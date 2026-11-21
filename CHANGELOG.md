@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:cd8f6fee39ad4460ca3185640ea4f4be98af6dcc -->
+### Support average bandwidth in DaddyLive HLS variants
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [cd8f6fe](https://github.com/Kayracs3/Kayra/commit/cd8f6fee39ad4460ca3185640ea4f4be98af6dcc)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:f52030744495a5668449c2c34abd7a696263b7ec -->
 ### Add DaddyLive provider embed and HLS quality components
 
