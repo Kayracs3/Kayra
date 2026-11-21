@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:bd5d5d3ccdcf895aaf128e2a11aaa1ac712bb773 -->
+### Add new default playlist URL
+
+- Etkilenen alanlar: KayraLive
+- Commit: [bd5d5d3](https://github.com/Kayracs3/Kayra/commit/bd5d5d3ccdcf895aaf128e2a11aaa1ac712bb773)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:234f281e52213b57175ab2ac7fa5259b2abd763c -->
 ### Correct KayraLive default playlist documentation
 
