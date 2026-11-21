@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:0dbe0b61b5f0f7a3366e07b3e66097284cb5ce3b -->
+### Increase TOTAL_TIMEOUT_MS from 40s to 70s
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [0dbe0b6](https://github.com/Kayracs3/Kayra/commit/0dbe0b61b5f0f7a3366e07b3e66097284cb5ce3b)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:8448be291032660b286463327ee0aea540d3fca3 -->
 ### Add retry logic for iframe URL processing
 
