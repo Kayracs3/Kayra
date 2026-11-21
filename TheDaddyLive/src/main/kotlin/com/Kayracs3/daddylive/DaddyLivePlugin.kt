@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.plugins.Plugin
 class DaddyLivePlugin : Plugin() {
     override fun load(context: Context) {
         super.load(context)
-        registerMainAPI(DaddyLive())
-        registerExtractorAPI(DaddyLivePlayerExtractor())
+        registerMainAPI(DaddyLiveProvider())
+        registerExtractorAPI(EmbedResolver())
     }
 }

@@ -13,19 +13,12 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.VPNStatus
 import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newLiveSearchResponse
 import com.lagradost.cloudstream3.newLiveStreamLoadResponse
-import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.loadExtractor
-import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.net.URI
 
 private const val USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -50,7 +43,7 @@ data class DlIptvLogo(
  * HTML kataloğu okunur. Korumalı API'yi veya oynatıcı doğrulamasını atlatmaya
  * çalışmaz.
  */
-class DaddyLive : MainAPI() {
+class DaddyLiveProvider : MainAPI() {
     override var mainUrl = "https://thedaddy.li"
     override var name = "DaddyLive 24/7"
     override var lang = "en"
@@ -289,7 +282,7 @@ class DaddyLive : MainAPI() {
         )
 
         // Alan adı yedeklemesi nedeniyle loadExtractor'a güvenmeden doğrudan çağır
-        val extractor = DaddyLivePlayerExtractor()
+        val extractor = EmbedResolver()
         var emittedLinks = 0
         for (folder in playerFolders) {
             val playerUrl = data.replace("{folder}", folder)
@@ -305,150 +298,3 @@ class DaddyLive : MainAPI() {
         return emittedLinks > 0
     }
 }
-
-/**
- * DaddyLive oynatıcı sayfalarını çözer: önce doğrudan medya adresi arar, sonra
- * bilinen embed'leri CloudStream extractor'larına devreder, en son
- * WebViewResolver ile oynatıcının normal .m3u8 isteğini yakalar.
- */
-class DaddyLivePlayerExtractor : ExtractorApi() {
-    override val mainUrl = "https://thedaddy.li"
-    override val name = "DaddyLive Player"
-    override val requiresReferer = false
-
-    companion object {
-        private val m3u8Regex = Regex(
-            """https?://[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""",
-            RegexOption.IGNORE_CASE
-        )
-    }
-
-    private fun headers(referer: String): Map<String, String> = mapOf(
-        "User-Agent" to USER_AGENT,
-        "Referer" to referer,
-        "Accept" to "text/html,application/xhtml+xml,*/*;q=0.8"
-    )
-
-    private fun originOf(url: String): String? = runCatching {
-        val uri = URI(url)
-        if (uri.scheme.isNullOrBlank() || uri.host.isNullOrBlank()) null
-        else "${uri.scheme}://${uri.host}"
-    }.getOrNull()
-
-    private fun absoluteUrl(raw: String, base: String): String? {
-        if (raw.isBlank()) return null
-        return runCatching { URI(base).resolve(raw).toString() }.getOrNull()
-    }
-
-    private suspend fun emitM3u8(
-        mediaUrl: String,
-        pageUrl: String,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        // CDN'ler Origin olarak genelde oynatıcı sayfasının adresini bekler
-        val origin = originOf(pageUrl) ?: originOf(mediaUrl) ?: mainUrl
-
-        callback(
-            newExtractorLink(
-                source = name,
-                name = "DaddyLive",
-                url = mediaUrl,
-                type = ExtractorLinkType.M3U8
-            ) {
-                this.referer = pageUrl
-                this.quality = Qualities.Unknown.value
-                this.headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Referer" to pageUrl,
-                    "Origin" to origin
-                )
-            }
-        )
-    }
-
-    override suspend fun getUrl(
-        url: String,
-        referer: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        val response = runCatching {
-            app.get(url, headers = headers(referer ?: "$mainUrl/"))
-        }.getOrNull() ?: return
-
-        // Olmayan oynatıcı yolu iframe/WebView çözümlemesini tetiklemesin
-        if (response.code !in 200..299) return
-
-        val document = response.document
-        val normalizedHtml = response.text
-            .replace("\\/", "/")
-            .replace("&amp;", "&")
-
-        val directUrls = linkedSetOf<String>()
-        m3u8Regex.findAll(normalizedHtml).forEach {
-            directUrls.add(it.value.trimEnd(';', ')', ']'))
-        }
-
-        document.select("video source[src], video[src]").forEach { element ->
-            val source = element.absUrl("src").ifBlank { element.attr("src") }
-            if (source.contains(".m3u8", ignoreCase = true)) {
-                directUrls.add(source)
-            }
-        }
-
-        val direct = directUrls.firstOrNull()
-        if (direct != null) {
-            emitM3u8(direct, url, callback)
-            return
-        }
-
-        val iframeUrls = document.select("iframe[src]")
-            .mapNotNull { element -> absoluteUrl(element.attr("src"), url) }
-            .distinct()
-
-        for (iframeUrl in iframeUrls) {
-            var emitted = 0
-            runCatching {
-                loadExtractor(iframeUrl, url, subtitleCallback) {
-                    callback(it)
-                    emitted++
-                }
-            }
-            if (emitted > 0) return
-
-            // Kayıtlı extractor'u olmayan embed'ler (dembed dahil) için normal
-            // HLS isteğini gözlemle
-            val sniffedUrl = runCatching {
-                app.get(
-                    iframeUrl,
-                    referer = url,
-                    headers = headers(url),
-                    interceptor = WebViewResolver(
-                        interceptUrl = Regex("""(?i)\.m3u8(?:\?|$)"""),
-                        timeout = 30_000L
-                    )
-                ).url
-            }.getOrNull()
-
-            if (!sniffedUrl.isNullOrBlank() &&
-                sniffedUrl.contains(".m3u8", ignoreCase = true)
-            ) {
-                emitM3u8(sniffedUrl, iframeUrl, callback)
-                return
-            }
-        }
-    }
-}
-
-/*
- * Plugin sınıfında şu kadarı yeterli (extractor'u ayrıca kaydetmek gerekmez,
- * loadLinks doğrudan çağırıyor):
- *
- * @CloudstreamPlugin
- * class DaddyLivePlugin : Plugin() {
- *     override fun load(context: Context) {
- *         registerMainAPI(DaddyLive())
- *     }
- * }
- */
-
