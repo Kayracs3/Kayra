@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.M3u8Helper
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import java.net.URI
@@ -18,42 +19,41 @@ private const val RESOLVER_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-/**
- * Resolves publicly exposed DaddyLive player/embed pages.
- *
- * It checks ordinary page markup and script references first, delegates known
- * embeds to CloudStream extractors, and finally observes the player's normal
- * HLS request through WebViewResolver. It does not disable TLS verification
- * or bypass a protected API/login.
- */
 class EmbedResolver : ExtractorApi() {
     override val mainUrl = "https://thedaddy.li"
     override val name = "DaddyLive Embed Resolver"
     override val requiresReferer = false
 
     companion object {
+        private const val TAG = "DaddyLiveResolver"
+
         private val m3u8Regex = Regex(
-            """https?://[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""",
+            """(?:https?:)?//[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""",
             RegexOption.IGNORE_CASE
         )
         private val sourceFieldRegex = Regex(
-            """(?:streamUrl|file|source)\s*:\s*["'](https?:[^"']+\.m3u8[^"']*)""",
+            """(?:streamUrl|file|source|src)\s*[:=]\s*["']([^"']+\.m3u8[^"']*)["']""",
             RegexOption.IGNORE_CASE
         )
-        // Doğrulama (Turnstile / Cloudflare) isteyen sayfalarda boşuna beklememek için
+
+        // [FIX] Turnstile sadece LOG için kullanılıyor; m3u8 aramasını engellemez.
+        // (dembed.st gibi sayfalarda Turnstile script'i olsa bile m3u8 HTML'de olabilir.)
         private val blockMarkers = listOf(
             "challenges.cloudflare.com/turnstile",
             "cf-turnstile",
             "Just a moment..."
         )
+
         private const val WEBVIEW_TIMEOUT_MS = 20_000L
         private const val MAX_WEBVIEW_TRIES = 2
-        private const val TAG = "DaddyLiveResolver"
-        private const val PREFLIGHT_TIMEOUT_S = 4L
-        private const val PREFLIGHT_HARD_LIMIT_MS = 5_000L
 
+        // [FIX] Preflight timeout 4s → 10s (dembed.st çok sayıda script yüklüyor)
+        private const val PREFLIGHT_TIMEOUT_S = 10L
+        private const val PREFLIGHT_HARD_LIMIT_MS = 12_000L
+
+        // [FIX] window. opsiyonel — bazı siteler atob()'u doğrudan çağırır
         private val atobRegex = Regex(
-            """(?:source\s*:\s*)?window\.atob\(["']([A-Za-z0-9+/=_-]+)["']\)""",
+            """(?:source\s*:\s*)?(?:window\.)?atob\(["']([A-Za-z0-9+/=_-]+)["']\)""",
             RegexOption.IGNORE_CASE
         )
     }
@@ -67,7 +67,7 @@ class EmbedResolver : ExtractorApi() {
     private fun originOf(url: String): String? = runCatching {
         val uri = URI(url)
         if (uri.scheme.isNullOrBlank() || uri.host.isNullOrBlank()) null
-        else uri.scheme + "://" + uri.host
+        else "${uri.scheme}://${uri.host}"
     }.getOrNull()
 
     private fun absoluteUrl(raw: String, base: String): String? {
@@ -79,8 +79,11 @@ class EmbedResolver : ExtractorApi() {
         val result = StringBuilder(html)
         for (match in atobRegex.findAll(html)) {
             val encoded = match.groupValues.getOrNull(1).orEmpty()
+            // [FIX] URL-safe Base64 fallback
             val decoded = runCatching {
                 String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
+            }.getOrNull() ?: runCatching {
+                String(Base64.decode(encoded, Base64.URL_SAFE), Charsets.UTF_8)
             }.getOrNull()
             if (!decoded.isNullOrBlank()) {
                 result.append('\n').append(decoded)
@@ -89,6 +92,42 @@ class EmbedResolver : ExtractorApi() {
         return result.toString()
     }
 
+    /**
+     * [FIX] Ortak m3u8 arayıcı. Video etiketi → doğrudan regex → script değişkeni
+     * sırasıyla arar. Bu fonksiyon hem ana sayfa hem iframe HTML'i için kullanılır.
+     */
+    private fun findM3u8(
+        html: String,
+        doc: org.jsoup.nodes.Document,
+        base: String
+    ): String? {
+        // 1) <video>/<source> etiketleri (en güvenilir)
+        doc.select("video source[src], video[src], source[src]").forEach { el ->
+            val s = el.absUrl("src").ifBlank { el.attr("src") }
+            if (s.contains(".m3u8", ignoreCase = true)) return s
+        }
+
+        // 2) Doğrudan .m3u8 regex
+        m3u8Regex.find(html)?.value?.trimEnd(';', ')', ']')?.let { raw ->
+            val abs = absoluteUrl(raw, base) ?: raw
+            if (abs.startsWith("http", ignoreCase = true)) return abs
+        }
+
+        // 3) streamUrl/file/source: "..." değişkenleri
+        sourceFieldRegex.find(html)?.groupValues?.getOrNull(1)?.let { raw ->
+            val abs = raw.replace("\\/", "/")
+            if (abs.contains(".m3u8", ignoreCase = true)) {
+                return absoluteUrl(abs, base) ?: abs
+            }
+        }
+        return null
+    }
+
+    /**
+     * [FIX] HlsQuality kaldırıldı, standart M3u8Helper kullanılıyor.
+     * [FIX] Origin, pageUrl'den değil çağıranın verdiği doğru URL'den gelir
+     *       (iframe içinden geliyorsa iframeUrl; ana sayfadan geliyorsa url).
+     */
     private suspend fun emitM3u8(
         mediaUrl: String,
         pageUrl: String,
@@ -101,9 +140,21 @@ class EmbedResolver : ExtractorApi() {
             "Origin" to origin
         )
 
-        // If this is a master playlist, expose its available quality variants.
-        // Media playlists and unparseable masters remain usable as a single link.
-        val variants = HlsQuality.variants(mediaUrl, linkHeaders)
+        // Master playlist ise varyantları çöz. Değilse veya hata olursa direkt link.
+        val variants = try {
+            M3u8Helper.generateM3u8(
+                source = name,
+                streamUrl = mediaUrl,
+                referer = pageUrl,
+                headers = linkHeaders
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.d(TAG, "M3u8Helper başarısız: $mediaUrl (${e.message})")
+            emptyList()
+        }
+
         if (variants.isEmpty()) {
             callback(
                 newExtractorLink(
@@ -120,17 +171,18 @@ class EmbedResolver : ExtractorApi() {
             return
         }
 
-        variants.forEach { variant ->
+        variants.forEach { link ->
+            // Origin/Referer başlıklarını M3u8Helper üretse bile emin olmak için
+            // yeniden gönderiyoruz.
             callback(
                 newExtractorLink(
                     source = name,
-                    name = "DaddyLive " + variant.label,
-                    url = variant.url,
+                    name = link.name ?: "DaddyLive",
+                    url = link.url,
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.referer = pageUrl
-                    this.quality = variant.height.takeIf { it > 0 }
-                        ?: Qualities.Unknown.value
+                    this.quality = link.quality
                     this.headers = linkHeaders
                 }
             )
@@ -144,6 +196,8 @@ class EmbedResolver : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         val pageReferer = referer?.takeIf { it.isNotBlank() } ?: "$mainUrl/"
+
+        // 1) Ana oynatıcı sayfasını çek
         val response = try {
             app.get(url, headers = requestHeaders(pageReferer), timeout = 10)
         } catch (e: CancellationException) {
@@ -158,78 +212,72 @@ class EmbedResolver : ExtractorApi() {
             return
         }
 
-        // Sayfa doğrulama istiyorsa hemen vazgeç; sıradaki oynatıcıya geçilsin
-        if (blockMarkers.any { response.text.contains(it, ignoreCase = true) }) {
-            Log.d(TAG, "doğrulama istiyor, atlandı: $url")
-            return
-        }
-
         val document = response.document
-        val normalizedHtml = response.text
-            .replace("\\/", "/")
-            .replace("&amp;", "&")
+        val normalizedHtml = response.text.replace("\\/", "/").replace("&amp;", "&")
         val scriptContent = appendDecodedScriptValues(normalizedHtml)
 
-        val directUrls = linkedSetOf<String>()
-        m3u8Regex.findAll(scriptContent).forEach {
-            directUrls.add(it.value.trimEnd(';', ')', ']'))
-        }
-        sourceFieldRegex.findAll(scriptContent).forEach {
-            directUrls.add(it.groupValues[1].replace("\\/", "/"))
-        }
-
-        document.select("iframe[src], video[src], source[src]").forEach { element ->
-            val raw = element.attr("src").ifBlank { element.attr("data-src") }
-            val source = element.absUrl("src")
-                .ifBlank { absoluteUrl(raw, url).orEmpty() }
-            if (source.contains(".m3u8", ignoreCase = true)) {
-                directUrls.add(source)
-            }
-        }
-
-        directUrls.firstOrNull()?.let { mediaUrl ->
+        // 2) Ana sayfada m3u8 var mı? (Turnstile marker'ı olsa bile ara)
+        findM3u8(scriptContent, document, url)?.let { mediaUrl ->
+            Log.d(TAG, "ana sayfa HTML içinden akış: $mediaUrl")
             emitM3u8(mediaUrl, url, callback)
             return
         }
 
+        // 3) iframe'leri dene
         val iframeUrls = document.select("iframe[src]")
             .mapNotNull { element -> absoluteUrl(element.attr("src"), url) }
             .distinct()
-        Log.d(TAG, "$url -> ${iframeUrls.size} iframe: $iframeUrls")
 
-        // Not: loadExtractor kullanılmıyor. İlgisiz çıkarıcılar (ör. XStreamCdn) HTML
-        // sayfalarda JSON hatası verip zaman kaybettiriyordu.
+        if (iframeUrls.isEmpty()) {
+            Log.d(TAG, "iframe yok, akış bulunamadı: $url")
+            return
+        }
+
         var webViewTries = 0
         for (iframeUrl in iframeUrls) {
-            if (webViewTries >= MAX_WEBVIEW_TRIES) break
 
-            // Ön kontrol: ulaşılamayan (DNS/bağlantı hatası, zaman aşımı) ya da doğrulama
-            // (Turnstile) isteyen gömülü sayfaları WebView açmadan atla
-            val iframeHtml = try {
+            // 3a) Preflight: iframe HTML'ini çek (timeout 10s)
+            val iframeResponse = try {
                 withTimeoutOrNull(PREFLIGHT_HARD_LIMIT_MS) {
                     app.get(
                         iframeUrl,
                         headers = requestHeaders(url),
                         timeout = PREFLIGHT_TIMEOUT_S
-                    ).text
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 null
             }
-            if (iframeHtml == null) {
-                Log.d(TAG, "ulaşılamıyor, atlandı: $iframeUrl")
-                continue
-            }
-            if (blockMarkers.any { iframeHtml.contains(it, ignoreCase = true) }) {
-                Log.d(TAG, "doğrulama istiyor, atlandı: $iframeUrl")
+
+            if (iframeResponse == null || iframeResponse.code !in 200..299) {
+                Log.d(TAG, "iframe ulaşılamıyor: $iframeUrl")
                 continue
             }
 
+            val iframeHtml = iframeResponse.text
+                .replace("\\/", "/")
+                .replace("&amp;", "&")
+            val iframeDoc = iframeResponse.document
+            val iframeScript = appendDecodedScriptValues(iframeHtml)
+
+            // ⭐ KRİTİK DÜZELTME: iframe HTML'inde m3u8 ara (WebView'dan ÖNCE)
+            findM3u8(iframeScript, iframeDoc, iframeUrl)?.let { mediaUrl ->
+                Log.d(TAG, "iframe HTML içinden akış: $mediaUrl")
+                emitM3u8(mediaUrl, iframeUrl, callback)
+                return
+            }
+
+            // m3u8 HTML'de yoksa Turnstile var mı diye logla
+            if (blockMarkers.any { iframeHtml.contains(it, ignoreCase = true) }) {
+                Log.d(TAG, "iframe Turnstile içeriyor, WebView denenecek: $iframeUrl")
+            }
+
+            // 3b) Son çare: WebView ile HLS isteğini yakala
+            if (webViewTries >= MAX_WEBVIEW_TRIES) continue
             webViewTries++
-            // Kayıtlı çıkarıcısı olmayan gömülü sayfalar için sayfanın normal HLS
-            // isteğini gözlemle.
+
             val interceptedUrl = try {
                 app.get(
                     iframeUrl,
@@ -254,5 +302,7 @@ class EmbedResolver : ExtractorApi() {
                 return
             }
         }
+
+        Log.w(TAG, "Tüm yöntemler başarısız: $url")
     }
 }
