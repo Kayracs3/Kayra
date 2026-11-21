@@ -1,5 +1,7 @@
 package com.Kayracs3
 
+import com.lagradost.cloudstream3.newHomePageResponse
+
 import android.content.SharedPreferences
 import android.net.Uri
 import com.lagradost.cloudstream3.*
