@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:3287e1ed98b128c31530ec08400bcc68d3d71969 -->
+### Fix KayraLive custom channel URL handling
+
+- Etkilenen alanlar: KayraLive
+- Commit: [3287e1e](https://github.com/Kayracs3/Kayra/commit/3287e1ed98b128c31530ec08400bcc68d3d71969)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:fc74e8fd79ae8bfe331e3c00ecf2dc4021eed7e7 -->
 ### Fix KayraLive HTTPS HLS requests
 
