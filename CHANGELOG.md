@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:58cf24b06d9f4c611a5c4f834c96d8b63ed0ed31 -->
+### Update EmbedResolver.kt
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [58cf24b](https://github.com/Kayracs3/Kayra/commit/58cf24b06d9f4c611a5c4f834c96d8b63ed0ed31)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:cd8f6fee39ad4460ca3185640ea4f4be98af6dcc -->
 ### Support average bandwidth in DaddyLive HLS variants
 
