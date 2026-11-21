@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:8448be291032660b286463327ee0aea540d3fca3 -->
+### Add retry logic for iframe URL processing
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [8448be2](https://github.com/Kayracs3/Kayra/commit/8448be291032660b286463327ee0aea540d3fca3)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:56f7a01b7454d44d179b06f4950681d6a1a8e096 -->
 ### Bump version from 3 to 4 in build.gradle.kts
 
