@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:9a9ac7ce87bfe267f43520ac05528fc67b6a685e -->
+### Update project version from 6 to 7
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [9a9ac7c](https://github.com/Kayracs3/Kayra/commit/9a9ac7ce87bfe267f43520ac05528fc67b6a685e)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:1f1a66f578f0a159a7f04ad4c7230b19095652ca -->
 ### Refactor DaddyLiveProvider for better error handling
 
