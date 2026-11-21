@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:1f1a66f578f0a159a7f04ad4c7230b19095652ca -->
+### Refactor DaddyLiveProvider for better error handling
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [1f1a66f](https://github.com/Kayracs3/Kayra/commit/1f1a66f578f0a159a7f04ad4c7230b19095652ca)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:032514fd6ae31ebbbd8e24704f72d5008cb00ac6 -->
 ### Refactor EmbedResolver for m3u8 extraction improvements
 
