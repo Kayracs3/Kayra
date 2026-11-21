@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:2b502905979cb26acb6908becab3bd142839af17 -->
+### Update project version from 5 to 6
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [2b50290](https://github.com/Kayracs3/Kayra/commit/2b502905979cb26acb6908becab3bd142839af17)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:105d7c5fbea177850a73fb4fd0f165f130160697 -->
 ### Update EmbedResolver.kt
 
