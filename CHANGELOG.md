@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:3c0daed7c97e4119a6ce4297fd4c4cf2262c86f7 -->
+### Fix suspend call in NewTane link emitter
+
+- Etkilenen alanlar: NewTane
+- Commit: [3c0daed](https://github.com/Kayracs3/Kayra/commit/3c0daed7c97e4119a6ce4297fd4c4cf2262c86f7)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:1b99e82f33aaa336f04ed757eaec166ed75a85aa -->
 ### Correct NewTane M3U8 and token matching patterns
 
