@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-22
+
+<!-- kayra-commit:2196ef3b744b850edecda07d8b3e5c6079684ad3 -->
+### Add Zuntar live TV provider
+
+- Etkilenen alanlar: Zuntar
+- Commit: [2196ef3](https://github.com/Kayracs3/Kayra/commit/2196ef3b744b850edecda07d8b3e5c6079684ad3)
+
+
 ## 2026-11-21
 
 <!-- kayra-commit:28e7ae2c6328806116d3595a866f2d54314f6248 -->
