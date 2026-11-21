@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:4dcb0e59504cf7f4b92bf68eb524d8979a706804 -->
+### Remove Zuntar plugin
+
+- Etkilenen alanlar: Zuntar
+- Commit: [4dcb0e5](https://github.com/Kayracs3/Kayra/commit/4dcb0e59504cf7f4b92bf68eb524d8979a706804)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:aaf937a69546b9c7017a94c9992e0f812450565b -->
 ### Correct Zuntar channel id matcher
 
