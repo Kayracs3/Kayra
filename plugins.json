@@ -625,10 +625,10 @@
         "name": "JetFilmizle"
     },
     {
-        "fileHash": "sha256-c4d2541f84bfc0e45ea3dfbb09bf06226103ce8f48553c717d0876c07acc6415",
+        "fileHash": "sha256-d3af95684d0062acea42a9a88da0e2104add9a95346be2e144cfc9128429b232",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 24092,
+        "fileSize": 24060,
         "status": 3,
         "language": "tr",
         "authors": [
