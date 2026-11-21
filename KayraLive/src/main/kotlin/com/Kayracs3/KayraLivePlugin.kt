@@ -18,16 +18,19 @@ class KayraLivePlugin : Plugin() {
 
         openSettings = { settingsContext ->
             val input = EditText(settingsContext).apply {
-                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-                maxLines = 1
-                hint = "https://ornek.site/kanallar.m3u"
+                inputType = InputType.TYPE_CLASS_TEXT or
+                    InputType.TYPE_TEXT_VARIATION_URI or
+                    InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                setSingleLine(false)
+                maxLines = 6
+                hint = "Her satıra bir HTTPS M3U adresi"
                 setText(provider.configuredPlaylistUrl)
             }
 
             AlertDialog.Builder(settingsContext)
                 .setTitle("KayraLive – Kanal Listesi")
                 .setMessage(
-                    "Yalnızca erişim ve yayın kullanım hakkına sahip olduğun HTTPS M3U/M3U8 listesini ekle. " +
+                    "Erişim ve yayın kullanım hakkına sahip olduğun bir veya daha fazla HTTPS M3U/M3U8 adresi gir; her satıra bir adres yaz (en fazla 10). " +
                         "18+ / yetişkin olarak etiketlenen kanallar otomatik olarak gizlenir."
                 )
                 .setView(input)
@@ -35,7 +38,7 @@ class KayraLivePlugin : Plugin() {
                     val saved = provider.savePlaylistUrl(input.text?.toString().orEmpty())
                     Toast.makeText(
                         settingsContext,
-                        if (saved) "Kanal listesi kaydedildi." else "Geçerli bir HTTPS M3U adresi gir.",
+                        if (saved) "Kanal listeleri kaydedildi." else "Geçerli HTTPS M3U adresleri gir; her satıra bir tane (en fazla 10).",
                         Toast.LENGTH_LONG
                     ).show()
                 }
