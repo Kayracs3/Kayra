@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:4085066b70de76d622342f9c6a2a4bc27d58be61 -->
+### Add new URL to the list of sources
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [4085066](https://github.com/Kayracs3/Kayra/commit/4085066b70de76d622342f9c6a2a4bc27d58be61)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:158d1d6b92dd8383509dee76a8e7c5b8fb6287f0 -->
 ### Refactor EmbedResolver for media request handling
 
