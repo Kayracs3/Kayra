@@ -26,31 +26,40 @@ class EmbedResolver : ExtractorApi() {
     companion object {
         private const val TAG = "DaddyLiveResolver"
 
-        // Referer/Origin adayları — sırayla denenecek
+        // Token'sız m3u8 URL'leri için Referer/Origin adayları.
+        // Sırayla denenir; hangisi çalışırsa onunla devam edilir.
         private val REFERER_ORIGIN_CANDIDATES = listOf(
             "https://thedaddy.li/" to "https://thedaddy.li",
             "https://dembed.st/" to "https://dembed.st",
             "https://allupplay.xyz/" to "https://allupplay.xyz",
             "https://caq21harderv991gpluralplay.xyz/" to "https://caq21harderv991gpluralplay.xyz",
-            null to null  // Header gönderme (fallback)
+            null to null
         )
 
         private val m3u8WithTokenRegex = Regex(
             """(?:https?:)?//[^\s"'<>\\]+?\.m3u8\?[^\s"'<>\\]*""",
             RegexOption.IGNORE_CASE
         )
+
         private val m3u8PlainRegex = Regex(
             """(?:https?:)?//[^\s"'<>\\]+?\.m3u8""",
             RegexOption.IGNORE_CASE
         )
+
         private val sourceFieldRegex = Regex(
             """(?:streamUrl|file|source|src)\s*[:=]\s*["']([^"']+\.m3u8[^"']*)["']""",
             RegexOption.IGNORE_CASE
         )
 
-        // 25s → 60s: Turnstile bazen uzun sürebiliyor
-        private const val WEBVIEW_TIMEOUT_MS = 80_000L
-        private const val MAX_WEBVIEW_TRIES = 3
+        private val turnstileMarkers = listOf(
+            "challenges.cloudflare.com/turnstile",
+            "cf-turnstile",
+            "Just a moment..."
+        )
+
+        // [FIX] Her player için sadece 1 WebView denemesi; timeout 30s
+        private const val WEBVIEW_TIMEOUT_MS = 30_000L
+        private const val MAX_WEBVIEW_TRIES = 1
 
         private const val PREFLIGHT_TIMEOUT_S = 10L
         private const val PREFLIGHT_HARD_LIMIT_MS = 12_000L
@@ -88,90 +97,137 @@ class EmbedResolver : ExtractorApi() {
             }.getOrNull() ?: runCatching {
                 String(Base64.decode(encoded, Base64.URL_SAFE), Charsets.UTF_8)
             }.getOrNull()
-            if (!decoded.isNullOrBlank()) result.append('\n').append(decoded)
+            if (!decoded.isNullOrBlank()) {
+                result.append('\n').append(decoded)
+            }
         }
         return result.toString()
     }
 
-    private fun findM3u8WithToken(html: String, doc: org.jsoup.nodes.Document, base: String): String? {
+    private fun findM3u8WithToken(
+        html: String,
+        doc: org.jsoup.nodes.Document,
+        base: String
+    ): String? {
         doc.select("video source[src], video[src], source[src]").forEach { el ->
             val s = el.absUrl("src").ifBlank { el.attr("src") }
-            if (s.contains(".m3u8", true) && s.contains("?")) return s
+            if (s.contains(".m3u8", ignoreCase = true) && s.contains("?")) {
+                return s
+            }
         }
+
         m3u8WithTokenRegex.find(html)?.value?.trimEnd(';', ')', ']')?.let { raw ->
             val abs = absoluteUrl(raw, base) ?: raw
-            if (abs.startsWith("http", true)) return abs
+            if (abs.startsWith("http", ignoreCase = true)) return abs
         }
+
         sourceFieldRegex.find(html)?.groupValues?.getOrNull(1)?.let { raw ->
             val abs = raw.replace("\\/", "/")
-            if (abs.contains(".m3u8", true) && abs.contains("?")) {
+            if (abs.contains(".m3u8", ignoreCase = true) && abs.contains("?")) {
                 return absoluteUrl(abs, base) ?: abs
             }
         }
         return null
     }
 
-    private fun findM3u8Plain(html: String, base: String): String? {
+    private fun findM3u8Plain(
+        html: String,
+        base: String
+    ): String? {
         m3u8PlainRegex.find(html)?.value?.trimEnd(';', ')', ']')?.let { raw ->
             val abs = absoluteUrl(raw, base) ?: raw
-            if (abs.startsWith("http", true)) return abs
+            if (abs.startsWith("http", ignoreCase = true)) return abs
         }
         return null
     }
 
-    /** Token'lı URL alındıysa doğrudan; token'sızsa tüm Referer/Origin kombinasyonlarını dene. */
+    /**
+     * Token'lı URL ise doğrudan gönder. Token'sız ise tüm Referer/Origin
+     * kombinasyonları HlsQuality ile denenir; CDN hangisini kabul ediyorsa
+     * o kombinasyonla varyantlar çıkar. Hiçbiri çalışmazsa varsayılan
+     * başlıklarla tek link gönderilir.
+     */
     private suspend fun emitM3u8(
         mediaUrl: String,
         callback: (ExtractorLink) -> Unit
     ) {
         val hasToken = mediaUrl.contains("?")
 
-        if (!hasToken) {
-            // Token yok: her kombinasyonu HlsQuality ile dene; CDN hangisini kabul ederse
-            for ((ref, org) in REFERER_ORIGIN_CANDIDATES) {
-                val headers = mediaHeaders(ref, org)
-                val variants = HlsQuality.variants(mediaUrl, headers)
-                if (variants.isNotEmpty()) {
-                    Log.d(TAG, "Token'sız URL çalıştı (Referer=$ref, Origin=$org)")
-                    variants.forEach { v ->
-                        callback(newExtractorLink(name, "DaddyLive ${v.label}", v.url, ExtractorLinkType.M3U8) {
-                            this.referer = ref ?: mainUrl
+        if (hasToken) {
+            // Token'lı → HlsQuality ile varyantları çöz
+            val headers = mediaHeaders("https://thedaddy.li/", null)
+            val variants = HlsQuality.variants(mediaUrl, headers)
+            if (variants.isNotEmpty()) {
+                variants.forEach { v ->
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = "DaddyLive " + v.label,
+                            url = v.url,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            this.referer = mainUrl
                             this.quality = v.height.takeIf { it > 0 } ?: Qualities.Unknown.value
                             this.headers = headers
-                        })
-                    }
-                    return
+                        }
+                    )
                 }
+            } else {
+                callback(
+                    newExtractorLink(
+                        source = name,
+                        name = "DaddyLive",
+                        url = mediaUrl,
+                        type = ExtractorLinkType.M3U8
+                    ) {
+                        this.referer = mainUrl
+                        this.quality = Qualities.Unknown.value
+                        this.headers = headers
+                    }
+                )
             }
-            // Hiçbiri çalışmadı → token'sız gönder (muhtemelen 403 ama deneyelim)
-            Log.w(TAG, "Token'sız URL tüm Referer/Origin kombinasyonlarında başarısız")
-            val defaultHeaders = mediaHeaders("https://thedaddy.li/", null)
-            callback(newExtractorLink(name, "DaddyLive", mediaUrl, ExtractorLinkType.M3U8) {
-                this.referer = mainUrl
-                this.quality = Qualities.Unknown.value
-                this.headers = defaultHeaders
-            })
             return
         }
 
-        // Token'lı URL → doğrudan gönder
-        val headers = mediaHeaders("https://thedaddy.li/", null)
-        val variants = HlsQuality.variants(mediaUrl, headers)
-        if (variants.isNotEmpty()) {
-            variants.forEach { v ->
-                callback(newExtractorLink(name, "DaddyLive ${v.label}", v.url, ExtractorLinkType.M3U8) {
-                    this.referer = mainUrl
-                    this.quality = v.height.takeIf { it > 0 } ?: Qualities.Unknown.value
-                    this.headers = headers
-                })
+        // Token'sız → tüm Referer/Origin kombinasyonlarını dene
+        for ((ref, org) in REFERER_ORIGIN_CANDIDATES) {
+            val headers = mediaHeaders(ref, org)
+            val variants = HlsQuality.variants(mediaUrl, headers)
+            if (variants.isNotEmpty()) {
+                Log.d(TAG, "Token'sız URL çalıştı (Referer=$ref, Origin=$org)")
+                variants.forEach { v ->
+                    callback(
+                        newExtractorLink(
+                            source = name,
+                            name = "DaddyLive " + v.label,
+                            url = v.url,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            this.referer = ref ?: mainUrl
+                            this.quality = v.height.takeIf { it > 0 } ?: Qualities.Unknown.value
+                            this.headers = headers
+                        }
+                    )
+                }
+                return
             }
-        } else {
-            callback(newExtractorLink(name, "DaddyLive", mediaUrl, ExtractorLinkType.M3U8) {
+        }
+
+        // Hiçbir kombinasyon çalışmadı → varsayılanla tek link gönder
+        Log.w(TAG, "Token'sız URL tüm Referer/Origin kombinasyonlarında başarısız")
+        val defaultHeaders = mediaHeaders("https://thedaddy.li/", null)
+        callback(
+            newExtractorLink(
+                source = name,
+                name = "DaddyLive",
+                url = mediaUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
                 this.referer = mainUrl
                 this.quality = Qualities.Unknown.value
-                this.headers = headers
-            })
-        }
+                this.headers = defaultHeaders
+            }
+        )
     }
 
     override suspend fun getUrl(
@@ -200,12 +256,14 @@ class EmbedResolver : ExtractorApi() {
         val normalizedHtml = response.text.replace("\\/", "/").replace("&amp;", "&")
         val scriptContent = appendDecodedScriptValues(normalizedHtml)
 
+        // 1) Ana sayfada token'lı m3u8
         findM3u8WithToken(scriptContent, document, url)?.let { mediaUrl ->
             Log.d(TAG, "ana sayfa token'lı akış: $mediaUrl")
             emitM3u8(mediaUrl, callback)
             return
         }
 
+        // 2) iframe'leri dene
         val iframeUrls = document.select("iframe[src]")
             .mapNotNull { element -> absoluteUrl(element.attr("src"), url) }
             .distinct()
@@ -218,9 +276,15 @@ class EmbedResolver : ExtractorApi() {
 
         var webViewTries = 0
         for (iframeUrl in iframeUrls) {
+
+            // Preflight
             val iframeResponse = try {
                 withTimeoutOrNull(PREFLIGHT_HARD_LIMIT_MS) {
-                    app.get(iframeUrl, headers = pageHeaders(url), timeout = PREFLIGHT_TIMEOUT_S)
+                    app.get(
+                        iframeUrl,
+                        headers = pageHeaders(url),
+                        timeout = PREFLIGHT_TIMEOUT_S
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -233,16 +297,24 @@ class EmbedResolver : ExtractorApi() {
                 continue
             }
 
-            val iframeHtml = iframeResponse.text.replace("\\/", "/").replace("&amp;", "&")
+            val iframeHtml = iframeResponse.text
+                .replace("\\/", "/")
+                .replace("&amp;", "&")
             val iframeDoc = iframeResponse.document
             val iframeScript = appendDecodedScriptValues(iframeHtml)
 
+            // 2a) iframe HTML'inde token'lı m3u8
             findM3u8WithToken(iframeScript, iframeDoc, iframeUrl)?.let { mediaUrl ->
                 Log.d(TAG, "iframe token'lı akış: $mediaUrl")
                 emitM3u8(mediaUrl, callback)
                 return
             }
 
+            if (turnstileMarkers.any { iframeHtml.contains(it, ignoreCase = true) }) {
+                Log.d(TAG, "iframe Turnstile içeriyor, WebView denenecek: $iframeUrl")
+            }
+
+            // 2b) WebView (her player için en fazla 1 deneme)
             if (webViewTries >= MAX_WEBVIEW_TRIES) continue
             webViewTries++
 
@@ -272,6 +344,7 @@ class EmbedResolver : ExtractorApi() {
                 return
             }
 
+            // 2c) Son çare: token'sız m3u8
             findM3u8Plain(iframeScript, iframeUrl)?.let { mediaUrl ->
                 Log.d(TAG, "iframe token'sız akış (403 riski): $mediaUrl")
                 emitM3u8(mediaUrl, callback)
