@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:fdbfc0ddce2e0e3dc52d6007c2a8fc0a1e3ce2cf -->
+### Update DaddyLive.kt
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [fdbfc0d](https://github.com/Kayracs3/Kayra/commit/fdbfc0ddce2e0e3dc52d6007c2a8fc0a1e3ce2cf)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:4a0a5df77375841e8daf54ef7675c925b4c7f12d -->
 ### Enhance m3u8 resolution logic in EmbedResolver
 
