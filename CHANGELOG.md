@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:df1d683468dde4f779bfd47302e2c451ac0515fe -->
+### Fix KoalaTV category enumeration
+
+- Etkilenen alanlar: KoalaTV
+- Commit: [df1d683](https://github.com/Kayracs3/Kayra/commit/df1d683468dde4f779bfd47302e2c451ac0515fe)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:8199e2c397e86b00849f66f188c9a105847e59a7 -->
 ### Fix KoalaTV main page API override
 
