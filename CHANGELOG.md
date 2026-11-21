@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:66d9a9e10f6bcf404a0b723a8a73765be7994a24 -->
+### Fix Zuntar channel URL lookup
+
+- Etkilenen alanlar: Zuntar
+- Commit: [66d9a9e](https://github.com/Kayracs3/Kayra/commit/66d9a9e10f6bcf404a0b723a8a73765be7994a24)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:2196ef3b744b850edecda07d8b3e5c6079684ad3 -->
 ### Add Zuntar live TV provider
 
