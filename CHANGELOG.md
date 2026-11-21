@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:37c3f5112de6f5b27a3c49dc7c7b8c6ec0020916 -->
+### Bump version from 4 to 5 in build.gradle.kts
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [37c3f51](https://github.com/Kayracs3/Kayra/commit/37c3f5112de6f5b27a3c49dc7c7b8c6ec0020916)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:0dbe0b61b5f0f7a3366e07b3e66097284cb5ce3b -->
 ### Increase TOTAL_TIMEOUT_MS from 40s to 70s
 
