@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:88cc51aeac634133653bea890e7f16e66cb80a7c -->
+### Restore KayraLive v4 stream URL routing
+
+- Etkilenen alanlar: KayraLive
+- Commit: [88cc51a](https://github.com/Kayracs3/Kayra/commit/88cc51aeac634133653bea890e7f16e66cb80a7c)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:3287e1ed98b128c31530ec08400bcc68d3d71969 -->
 ### Fix KayraLive custom channel URL handling
 
