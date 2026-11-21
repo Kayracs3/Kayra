@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:1b99e82f33aaa336f04ed757eaec166ed75a85aa -->
+### Correct NewTane M3U8 and token matching patterns
+
+- Etkilenen alanlar: NewTane
+- Commit: [1b99e82](https://github.com/Kayracs3/Kayra/commit/1b99e82f33aaa336f04ed757eaec166ed75a85aa)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:5c77066249b96907acf420fa754d447435552477 -->
 ### Fix NewTane stream URL regular expressions
 
