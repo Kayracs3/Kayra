@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:bd29d279ebb1c4bb0b8c11f60f28bb2dea06d8dd -->
+### Fix Maven dependency resolution for plugin builds
+
+- Etkilenen alanlar: build.gradle.kts
+- Commit: [bd29d27](https://github.com/Kayracs3/Kayra/commit/bd29d279ebb1c4bb0b8c11f60f28bb2dea06d8dd)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:55011dd049295c09bef5bc7c9d986a0cd3065100 -->
 ### Document multiple KayraLive playlists
 
