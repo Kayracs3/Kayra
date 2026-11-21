@@ -2,6 +2,16 @@
 
 package com.Kayracs3
 
+import com.lagradost.cloudstream3.newHomePageResponse
+
+import com.lagradost.cloudstream3.utils.loadExtractor
+
+import com.lagradost.cloudstream3.utils.ExtractorLink
+
+import com.lagradost.cloudstream3.newMovieSearchResponse
+
+import com.lagradost.cloudstream3.newMovieLoadResponse
+
 import android.util.Log
 import org.jsoup.nodes.Element
 import com.lagradost.cloudstream3.*

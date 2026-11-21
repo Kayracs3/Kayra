@@ -1,0 +1,4 @@
+/home/runner/work/Kayra/Kayra/TheDaddyLive/src/main/kotlin/com/Kayracs3/daddylive/DaddyLive.kt
+/home/runner/work/Kayra/Kayra/TheDaddyLive/src/main/kotlin/com/Kayracs3/daddylive/HlsQuality.kt
+/home/runner/work/Kayra/Kayra/TheDaddyLive/src/main/kotlin/com/Kayracs3/daddylive/DaddyLivePlugin.kt
+/home/runner/work/Kayra/Kayra/TheDaddyLive/src/main/kotlin/com/Kayracs3/daddylive/EmbedResolver.kt
