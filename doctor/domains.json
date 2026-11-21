@@ -721,34 +721,6 @@
         ]
       }
     },
-    "TheDaddyLive": {
-      "identityProfile": {
-        "title": "HOME | DaddyLiveHD - Live Sports Streaming Free - DaddyLive.PK - DLHD",
-        "h1": "",
-        "siteName": "DaddyLiveHD - Live Sports Streaming Free - DaddyLive.PK - DLHD",
-        "description": "Today's live events schedule by category. Filter and search to find your stream.",
-        "tokens": [
-          "and",
-          "category",
-          "daddylive",
-          "daddylivehd",
-          "dlhd",
-          "events",
-          "filter",
-          "find",
-          "free",
-          "home",
-          "live",
-          "schedule",
-          "search",
-          "sports",
-          "stream",
-          "streaming",
-          "today",
-          "your"
-        ]
-      }
-    },
     "DiziCaN": {
       "identityProfile": {
         "title": "DiziCaN – Kore Dizileri İzle, Asya Dizileri İzle",
@@ -768,37 +740,6 @@
           "turkce",
           "ucretsiz",
           "yeni"
-        ]
-      }
-    },
-    "NewTane": {
-      "identityProfile": {
-        "title": "NewTV | Watch Free Movies & TV Series Online in HD Today",
-        "h1": "NewTV | Watch Movies & Series Online",
-        "siteName": "NewTV",
-        "description": "Browse thousands of movies and TV shows in HD. Track your watchlist, get recommendations, and stream anime or sports in one place.",
-        "tokens": [
-          "and",
-          "anime",
-          "browse",
-          "free",
-          "get",
-          "movies",
-          "newtv",
-          "one",
-          "online",
-          "place",
-          "recommendations",
-          "series",
-          "shows",
-          "sports",
-          "stream",
-          "thousands",
-          "today",
-          "track",
-          "watch",
-          "watchlist",
-          "your"
         ]
       }
     }
