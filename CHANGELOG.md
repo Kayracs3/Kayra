@@ -2,6 +2,23 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:28e7ae2c6328806116d3595a866f2d54314f6248 -->
+### Remove NewTane and TheDaddyLive providers
+
+- Etkilenen alanlar: NewTane, Repo / CI, TheDaddyLive
+- Commit: [28e7ae2](https://github.com/Kayracs3/Kayra/commit/28e7ae2c6328806116d3595a866f2d54314f6248)
+
+## 2026-11-21
+
+<!-- kayra-commit:053685db9c9419b9e05224cd164b7bd7c9a9d16a -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [053685d](https://github.com/Kayracs3/Kayra/commit/053685db9c9419b9e05224cd164b7bd7c9a9d16a)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:3c0daed7c97e4119a6ce4297fd4c4cf2262c86f7 -->
 ### Fix suspend call in NewTane link emitter
 
