@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:158d1d6b92dd8383509dee76a8e7c5b8fb6287f0 -->
+### Refactor EmbedResolver for media request handling
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [158d1d6](https://github.com/Kayracs3/Kayra/commit/158d1d6b92dd8383509dee76a8e7c5b8fb6287f0)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:fdbfc0ddce2e0e3dc52d6007c2a8fc0a1e3ce2cf -->
 ### Update DaddyLive.kt
 
