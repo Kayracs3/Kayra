@@ -44,6 +44,7 @@ class KayraLive(private val context: Context) : MainAPI() {
         // iptv-org listesinde Türkçe yayın dili için yayımlanan herkese açık M3U.
         private const val DEFAULT_PLAYLIST_URL =
             "https://iptv-org.github.io/iptv/languages/tur.m3u"
+        "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
         private const val CACHE_TTL_MS = 5 * 60 * 1000L
         private const val MAX_PLAYLIST_CHARS = 5 * 1024 * 1024
         private const val USER_AGENT =
