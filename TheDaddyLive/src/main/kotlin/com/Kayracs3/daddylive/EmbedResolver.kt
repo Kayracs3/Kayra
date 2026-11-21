@@ -26,15 +26,9 @@ class EmbedResolver : ExtractorApi() {
     companion object {
         private const val TAG = "DaddyLiveResolver"
 
-        // 2026 GÜNCEL ADRESLER
-        // Öncelik: allupplay.xyz (2026 Kasım itibarıyla güncel)
-        private const val MEDIA_REFERER = "https://allupplay.xyz/"
-        private const val MEDIA_ORIGIN = "https://allupplay.xyz"
-
-        // Eğer yukarıdaki işe yaramazsa, alternatif olarak
-        // caq21harderv991gpluralplay.xyz adresini deneyebilirsin:
-        // private const val MEDIA_REFERER = "https://caq21harderv991gpluralplay.xyz/"
-        // private const val MEDIA_ORIGIN = "https://caq21harderv991gpluralplay.xyz"
+        // 2026 GÜNCEL ADRESLER (caq21harderv991gpluralplay.xyz)
+        private const val MEDIA_REFERER = "https://caq21harderv991gpluralplay.xyz/"
+        private const val MEDIA_ORIGIN = "https://caq21harderv991gpluralplay.xyz"
 
         private val m3u8WithTokenRegex = Regex(
             """(?:https?:)?//[^\s"'<>\\]+?\.m3u8\?[^\s"'<>\\]*""",
