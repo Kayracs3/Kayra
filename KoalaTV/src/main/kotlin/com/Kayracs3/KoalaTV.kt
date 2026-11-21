@@ -212,7 +212,7 @@ class KoalaTVProvider(private val prefs: SharedPreferences) : MainAPI() {
 
     private suspend fun allChannels(): List<Channel> {
         val result = LinkedHashMap<String, Channel>()
-        getMainPage().forEach { page ->
+        mainPage.forEach { page ->
             streamsFor(page.data).forEach { channel ->
                 result.putIfAbsent(channel.id, channel)
             }
