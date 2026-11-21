@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:ddce890c72b961a316869709470b3e0e4e4d5f7e -->
+### Fix unsupported textLarge usage in DaddyLive logo loading
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [ddce890](https://github.com/Kayracs3/Kayra/commit/ddce890c72b961a316869709470b3e0e4e4d5f7e)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:82fbb65dacdc2cd7386dc6cf7c94381d88937871 -->
 ### Update Kotlin version from 8 to 9
 
