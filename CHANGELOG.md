@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:ae92539089a9798e56cd4369a4d31ae888adcf82 -->
+### Update version from 9 to 10 in build.gradle.kts
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [ae92539](https://github.com/Kayracs3/Kayra/commit/ae92539089a9798e56cd4369a4d31ae888adcf82)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:adec873ada8fdf6fd3432e8e3324526f3f49f17d -->
 ### Refactor EmbedResolver for m3u8 URL handling
 
