@@ -131,10 +131,30 @@ class ZuntarProvider : MainAPI() {
 
     private val channels: List<ZuntarChannel> = ZuntarCatalog.channels + ZuntarAltCatalog.channels
 
-    private fun id(channel: ZuntarChannel): String = "zuntar-${channel.name}"
+    // APIRepository.load() calls fixUrl() for every SearchResponse URL.
+    // Use an absolute internal URL so CloudStream does not prepend mainUrl twice.
+    private fun id(channel: ZuntarChannel): String {
+        val index = channels.indexOfFirst { it === channel }
+        if (index < 0) throw ErrorLoadingException("Zuntar kanalı bulunamadı.")
+        return "$mainUrl/zuntar-channel/$index"
+    }
 
-    private fun row(id: String): ZuntarChannel = channels.firstOrNull { id(it) == id }
-        ?: throw ErrorLoadingException("Zuntar kanalı bulunamadı.")
+    private fun row(url: String): ZuntarChannel {
+        val cleanUrl = url.substringBefore('?').substringBefore('#').trimEnd('/')
+        val index = Regex("""(?:^|/)zuntar-channel/(\\d+)$""")
+            .find(cleanUrl)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+
+        if (index != null) return channels.getOrNull(index)
+            ?: throw ErrorLoadingException("Zuntar kanal kimliği geçersiz.")
+
+        // Accept legacy result URLs created by the first Zuntar build.
+        val legacyId = cleanUrl.substringAfterLast('/')
+        return channels.firstOrNull { "zuntar-${it.name}" == legacyId }
+            ?: throw ErrorLoadingException("Zuntar kanalı bulunamadı.")
+    }
 
     private fun displayName(raw: String): String {
         if (raw == "5\" thumb_square=\"https://i.hizliresim.com/eojp1za.png\" group=\"Canlı\",TV8,5") return "TV8,5"
