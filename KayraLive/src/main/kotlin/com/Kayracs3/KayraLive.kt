@@ -309,10 +309,8 @@ class KayraLive(private val context: Context) : MainAPI() {
                     val logo = attribute(info, "tvg-logo")
                         ?.let { safeHttpsUrl(it) }
 
-                    result.putIfAbsent(
-                        streamUrl,
-                        Channel(channelName, streamUrl, group, logo)
-                    )
+                    val channel = Channel(channelName, streamUrl, group, logo)
+                    result.putIfAbsent(channelKey(channel), channel)
                     currentGroup = ""
                 }
             }
