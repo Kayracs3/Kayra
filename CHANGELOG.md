@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:4823f2e4c8d498389e1758403e3ce7a715eaf2a0 -->
+### Refactor EmbedResolver for improved media handling
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [4823f2e](https://github.com/Kayracs3/Kayra/commit/4823f2e4c8d498389e1758403e3ce7a715eaf2a0)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:ddce890c72b961a316869709470b3e0e4e4d5f7e -->
 ### Fix unsupported textLarge usage in DaddyLive logo loading
 
