@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:56f7a01b7454d44d179b06f4950681d6a1a8e096 -->
+### Bump version from 3 to 4 in build.gradle.kts
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [56f7a01](https://github.com/Kayracs3/Kayra/commit/56f7a01b7454d44d179b06f4950681d6a1a8e096)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:00b602485332a8cd40bc4e8d0d9c036f34483eef -->
 ### Improve base URL handling and link extraction timeout
 
