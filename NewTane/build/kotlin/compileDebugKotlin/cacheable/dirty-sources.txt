@@ -1,0 +1,2 @@
+/home/runner/work/Kayra/Kayra/NewTane/src/main/kotlin/com/Kayracs3/newtane/NewTanePlugin.kt
+/home/runner/work/Kayra/Kayra/NewTane/src/main/kotlin/com/Kayracs3/newtane/NewTane.kt
