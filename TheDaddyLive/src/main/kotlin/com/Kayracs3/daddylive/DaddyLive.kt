@@ -21,7 +21,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeoutOrNull
 
 private const val USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -51,7 +50,6 @@ class DaddyLiveProvider : MainAPI() {
     companion object {
         private const val PAGE_SIZE = 100
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
-        private const val TOTAL_TIMEOUT_MS = 40_000L
 
         private val DOMAINS = listOf(
             "https://thedaddy.li",
@@ -78,6 +76,7 @@ class DaddyLiveProvider : MainAPI() {
         "Referer" to "$base/"
     )
 
+    // ------------------------------------------------------------------ alan adı
     private val baseMutex = Mutex()
     @Volatile
     private var resolvedBase: String? = null
@@ -103,6 +102,7 @@ class DaddyLiveProvider : MainAPI() {
         }
     }
 
+    // ------------------------------------------------------------------ afişler
     private fun normalize(name: String): String {
         val n = java.text.Normalizer.normalize(name.lowercase(), java.text.Normalizer.Form.NFD)
             .replace(Regex("\\p{M}+"), "")
@@ -125,30 +125,28 @@ class DaddyLiveProvider : MainAPI() {
     private suspend fun buildLogoMap(): Map<String, String> = runCatching {
         val base = "https://iptv-org.github.io/api"
         val channels = app.get("$base/channels.json", timeout = 30)
-            .parsedSafe<Array<DlIptvChannel>>()
-            ?: return@runCatching emptyMap<String, String>()
+            .parsedSafe<Array<DlIptvChannel>>() ?: return@runCatching emptyMap<String, String>()
 
         val logoById = HashMap<String, String>()
         app.get("$base/logos.json", timeout = 30)
             .parsedSafe<Array<DlIptvLogo>>()?.forEach {
-                val channelId = it.channel
-                val logoUrl = it.url
-                if (!channelId.isNullOrBlank() && !logoUrl.isNullOrBlank()) {
-                    logoById.putIfAbsent(channelId, logoUrl)
-                }
+                val c = it.channel
+                val u = it.url
+                if (!c.isNullOrBlank() && !u.isNullOrBlank()) logoById.putIfAbsent(c, u)
             }
 
         val out = HashMap<String, String>()
-        for (channel in channels) {
-            val logoUrl = logoById[channel.id ?: continue] ?: continue
-            for (channelName in listOfNotNull(channel.name) + (channel.altNames ?: emptyList())) {
-                val key = normalize(channelName)
-                if (key.length >= 3) out.putIfAbsent(key, logoUrl)
+        for (ch in channels) {
+            val url = logoById[ch.id ?: continue] ?: continue
+            for (n in listOfNotNull(ch.name) + (ch.altNames ?: emptyList())) {
+                val key = normalize(n)
+                if (key.length >= 3) out.putIfAbsent(key, url)
             }
         }
         out
     }.getOrDefault(emptyMap())
 
+    // ------------------------------------------------------------------ katalog
     private val cacheMutex = Mutex()
     private var cache: List<LiveSearchResponse> = emptyList()
     private var cacheTime = 0L
@@ -316,20 +314,21 @@ class DaddyLiveProvider : MainAPI() {
         val resolver = EmbedResolver()
         var emittedLinks = 0
 
-        withTimeoutOrNull(TOTAL_TIMEOUT_MS) {
-            for (playerUrl in playerUrls) {
-                try {
-                    resolver.getUrl(playerUrl, "$base/", subtitleCallback) { link ->
-                        callback(link)
-                        emittedLinks++
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // Sıradaki oynatıcıya geç
+        // Her player'ı sırayla dene. EmbedResolver içinde zaten WebView için
+        // bir üst sınır var (MAX_WEBVIEW_TRIES). Burada toplam süre sınırı yok;
+        // kullanıcı "Oynat"a bastığında tüm player'lar denenir.
+        for (playerUrl in playerUrls) {
+            try {
+                resolver.getUrl(playerUrl, "$base/", subtitleCallback) { link ->
+                    callback(link)
+                    emittedLinks++
                 }
-                if (emittedLinks > 0) break
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Sıradaki oynatıcıya geç
             }
+            if (emittedLinks > 0) break
         }
 
         return emittedLinks > 0
