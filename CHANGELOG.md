@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:d2410cbaad697a6732a6cd26e65981a972fe9fe9 -->
+### Add KoalaTV live TV provider
+
+- Etkilenen alanlar: KoalaTV
+- Commit: [d2410cb](https://github.com/Kayracs3/Kayra/commit/d2410cbaad697a6732a6cd26e65981a972fe9fe9)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:4dcb0e59504cf7f4b92bf68eb524d8979a706804 -->
 ### Remove Zuntar plugin
 
