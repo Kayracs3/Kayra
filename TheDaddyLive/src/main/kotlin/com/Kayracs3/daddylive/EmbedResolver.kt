@@ -8,9 +8,9 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import java.net.URI
+import kotlinx.coroutines.CancellationException
 
 private const val RESOLVER_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -38,6 +38,15 @@ class EmbedResolver : ExtractorApi() {
             """(?:streamUrl|file|source)\s*:\s*["'](https?:[^"']+\.m3u8[^"']*)""",
             RegexOption.IGNORE_CASE
         )
+        // Doğrulama (Turnstile / Cloudflare) isteyen sayfalarda boşuna beklememek için
+        private val blockMarkers = listOf(
+            "challenges.cloudflare.com/turnstile",
+            "cf-turnstile",
+            "Just a moment..."
+        )
+        private const val WEBVIEW_TIMEOUT_MS = 12_000L
+        private const val MAX_WEBVIEW_TRIES = 2
+
         private val atobRegex = Regex(
             """(?:source\s*:\s*)?window\.atob\(["']([A-Za-z0-9+/=_-]+)["']\)""",
             RegexOption.IGNORE_CASE
@@ -130,11 +139,18 @@ class EmbedResolver : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         val pageReferer = referer?.takeIf { it.isNotBlank() } ?: "$mainUrl/"
-        val response = runCatching {
-            app.get(url, headers = requestHeaders(pageReferer))
-        }.getOrNull() ?: return
+        val response = try {
+            app.get(url, headers = requestHeaders(pageReferer), timeout = 10)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return
+        }
 
         if (response.code !in 200..299) return
+
+        // Sayfa doğrulama istiyorsa hemen vazgeç; sıradaki oynatıcıya geçilsin
+        if (blockMarkers.any { response.text.contains(it, ignoreCase = true) }) return
 
         val document = response.document
         val normalizedHtml = response.text
@@ -168,29 +184,26 @@ class EmbedResolver : ExtractorApi() {
             .mapNotNull { element -> absoluteUrl(element.attr("src"), url) }
             .distinct()
 
-        for (iframeUrl in iframeUrls) {
-            var emitted = 0
-            runCatching {
-                loadExtractor(iframeUrl, url, subtitleCallback) {
-                    callback(it)
-                    emitted++
-                }
-            }
-            if (emitted > 0) return
-
-            // For embeds without a registered extractor, observe the normal
-            // HLS request made by the page rather than inventing a media URL.
-            val interceptedUrl = runCatching {
+        // Not: loadExtractor kullanılmıyor. İlgisiz çıkarıcılar (ör. XStreamCdn) HTML
+        // sayfalarda JSON hatası verip zaman kaybettiriyordu.
+        for (iframeUrl in iframeUrls.take(MAX_WEBVIEW_TRIES)) {
+            // Kayıtlı çıkarıcısı olmayan gömülü sayfalar için sayfanın normal HLS
+            // isteğini gözlemle.
+            val interceptedUrl = try {
                 app.get(
                     iframeUrl,
                     referer = url,
                     headers = requestHeaders(url),
                     interceptor = WebViewResolver(
                         interceptUrl = Regex("""(?i)\.m3u8(?:\?|$)"""),
-                        timeout = 30_000L
+                        timeout = WEBVIEW_TIMEOUT_MS
                     )
                 ).url
-            }.getOrNull()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
 
             if (!interceptedUrl.isNullOrBlank() &&
                 interceptedUrl.contains(".m3u8", ignoreCase = true)
