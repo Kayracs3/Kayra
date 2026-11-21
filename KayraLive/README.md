@@ -1,6 +1,6 @@
 # KayraLive
 
-KayraLive, CloudStream için genel amaçlı M3U/M3U8 canlı TV sağlayıcısıdır. TheDaddyLive yayınlarını çekmez.
+KayraLive, CloudStream için genel amaçlı M3U/M3U8 canlı TV sağlayıcısıdır. TheDaddyLive yayınlarını çekmez. Varsayılan olarak iptv-org tarafından yayımlanan Türkçe kanal listesini kullanır; listeye eklenen yayınların bölgesel erişimi ve çalışırlığı değişebilir.
 
 ## Android TV kullanımı
 
