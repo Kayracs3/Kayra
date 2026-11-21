@@ -47,6 +47,10 @@ class KayraLive(private val context: Context) : MainAPI() {
             "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
         )
         private const val MAX_PLAYLIST_SOURCES = 10
+        private const val BUILTIN_SINEMA2_URL = "http://65.108.239.207/sinema2/index.m3u8"
+        private val DEFAULT_DIRECT_CHANNELS = listOf(
+            Channel("Sinema 2", BUILTIN_SINEMA2_URL, "Sinema", null)
+        )
         private const val CACHE_TTL_MS = 5 * 60 * 1000L
         private const val MAX_PLAYLIST_CHARS = 5 * 1024 * 1024
         private const val USER_AGENT =
@@ -74,6 +78,25 @@ class KayraLive(private val context: Context) : MainAPI() {
                 value.takeIf {
                     uri.scheme.equals("https", ignoreCase = true) &&
                         !uri.host.isNullOrBlank()
+                }
+            }.getOrNull()
+        }
+
+        // HTTP is permitted only for this explicitly configured built-in stream.
+        // User-supplied playlist sources remain HTTPS-only.
+        private fun safeStreamUrl(raw: String): String? {
+            val value = raw.trim()
+            safeHttpsUrl(value)?.let { return it }
+            return runCatching {
+                val uri = URI(value)
+                value.takeIf {
+                    uri.scheme.equals("http", ignoreCase = true) &&
+                        uri.host == "65.108.239.207" &&
+                        uri.port == -1 &&
+                        uri.path == "/sinema2/index.m3u8" &&
+                        uri.rawQuery.isNullOrBlank() &&
+                        uri.rawFragment.isNullOrBlank() &&
+                        uri.rawUserInfo.isNullOrBlank()
                 }
             }.getOrNull()
         }
@@ -135,6 +158,9 @@ class KayraLive(private val context: Context) : MainAPI() {
         }
 
         val mergedChannels = linkedMapOf<String, Channel>()
+        DEFAULT_DIRECT_CHANNELS.forEach { channel ->
+            mergedChannels.putIfAbsent(channel.streamUrl, channel)
+        }
         val sourceErrors = mutableListOf<String>()
 
         for ((index, playlistUrl) in playlistUrls.withIndex()) {
@@ -209,7 +235,7 @@ class KayraLive(private val context: Context) : MainAPI() {
 
                 else -> {
                     val info = currentInfo ?: continue
-                    val streamUrl = safeHttpsUrl(line)
+                    val streamUrl = safeStreamUrl(line)
                     currentInfo = null
                     if (streamUrl == null) continue
 
@@ -320,7 +346,7 @@ class KayraLive(private val context: Context) : MainAPI() {
             )
         }.getOrNull() ?: return false
 
-        val streamUrl = safeHttpsUrl(decoded) ?: return false
+        val streamUrl = safeStreamUrl(decoded) ?: return false
         val type = when {
             streamUrl.substringBefore('?').endsWith(".m3u8", ignoreCase = true) ->
                 ExtractorLinkType.M3U8
