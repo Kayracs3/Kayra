@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:adec873ada8fdf6fd3432e8e3324526f3f49f17d -->
+### Refactor EmbedResolver for m3u8 URL handling
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [adec873](https://github.com/Kayracs3/Kayra/commit/adec873ada8fdf6fd3432e8e3324526f3f49f17d)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:e7b465b45a946369e869ba10b4577c69151c05d0 -->
 ### Refactor timeout handling and improve logo mapping
 
