@@ -625,10 +625,10 @@
         "name": "JetFilmizle"
     },
     {
-        "fileHash": "sha256-d3af95684d0062acea42a9a88da0e2104add9a95346be2e144cfc9128429b232",
+        "fileHash": "sha256-8a1231d621f5ed9453144ac3f0ec02b0d268669da9520debfd0a8c2a6a228bbe",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 24060,
+        "fileSize": 24045,
         "status": 3,
         "language": "tr",
         "authors": [
@@ -637,7 +637,7 @@
         "tvTypes": [
             "Live"
         ],
-        "version": 7,
+        "version": 8,
         "internalName": "KayraLive",
         "description": "Kullan\u0131c\u0131n\u0131n yetkili M3U/M3U8 listeleri i\u00e7in canl\u0131 TV sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/KayraLive.cs3",
