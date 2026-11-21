@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:4a0a5df77375841e8daf54ef7675c925b4c7f12d -->
+### Enhance m3u8 resolution logic in EmbedResolver
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [4a0a5df](https://github.com/Kayracs3/Kayra/commit/4a0a5df77375841e8daf54ef7675c925b4c7f12d)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:9a9ac7ce87bfe267f43520ac05528fc67b6a685e -->
 ### Update project version from 6 to 7
 
