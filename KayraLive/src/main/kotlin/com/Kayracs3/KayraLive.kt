@@ -50,27 +50,27 @@ class KayraLive(private val context: Context) : MainAPI() {
         private const val MAX_PLAYLIST_SOURCES = 10
         // Kullanıcının verdiği 21 M3U kaydı. Aynı URL farklı adla gelirse ikisi de korunur.
         private val DEFAULT_DIRECT_CHANNELS = listOf(
-            Channel("Sinema Tv", "http://65.108.239.207/sinema1001/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/0/0/Vod/HLS/22c5fe05-d70b-4c68-98fb-03bae4870e81.png"),
-            Channel("Sinema Tv 2", "http://65.108.239.207/sinema2/index.m3u8", "7/24 Dizi/Film", "https://itv224226.tmp.tivibu.com.tr:6430/images/poster/20250801839032.png"),
-            Channel("Sinema Aksiyon", "http://65.108.239.207/sinemaaksiyon/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/bd434731-0e47-4a37-997e-49f71340fcc6.png"),
-            Channel("Sinema Aksiyon 2", "http://65.108.239.207/sinemaaksiyon2/index.m3u8", "7/24 Dizi/Film", "https://img.dsmartgo.com.tr/content/M/RG/22895/Thumbnail.png"),
-            Channel("Sinema Yerli", "http://65.108.239.207/sinemayerli/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/ae3d90a0-37ee-4e48-a6bc-1375e5f1329a.png"),
-            Channel("Sinema Aile", "http://65.108.239.207/sinemaaile/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/c8283b71-81f8-4fc6-8e48-6bb8f7f49ad7.png"),
-            Channel("Sinema 1001", "http://65.108.239.207/sinema1001/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/8d9fbebd-cade-492d-9cb4-6522cb558794.png"),
-            Channel("Sinema 1002", "http://65.108.239.207/sinema1002/index.m3u8", "7/24 Dizi/Film", "https://itv224226.tmp.tivibu.com.tr:6430/images/poster/20250801838773.png"),
-            Channel("Sinema Komedi", "http://65.108.239.207/sinemakomedi/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/4145ea10-96ad-400d-8870-f22a075f4add.png"),
-            Channel("Bein Movies Action HD", "http://65.108.239.207/bsaction1/index.m3u8", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Action_HD_yeni.png"),
-            Channel("Bein Movies Stars HD", "http://65.108.239.207/bsstars/index.m3u8?token=WbvG4CpE9S4KI8vmXLtsQw&tms=1771162595", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Stars_HD_yeni.png"),
-            Channel("Bein Movies Family HD", "http://65.108.239.207/bsfamily/index.m3u8", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Family_HD_yeni.png"),
-            Channel("Bein Movies Premiere HD", "http://65.108.239.207/bspremier1/index.m3u8", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Premiere_HD_yeni.png"),
-            Channel("Bein Movies Turk HD", "http://65.108.239.207/bsturk/index.m3u8", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Turk_HD_yeni.png"),
-            Channel("Bein Series 1 HD", "http://65.108.239.207/bsseries1/index.m3u8", "7/24 Dizi/Film", "https://w1.pngwing.com/pngs/910/513/png-transparent-network-bein-series-logo-bein-channels-network-bein-media-group-bein-sports-1-lyngsat-organization.png"),
-            Channel("Bein Series 2 HD", "http://65.108.239.207/bsseries2/index.m3u8", "7/24 Dizi/Film", "https://w1.pngwing.com/pngs/910/513/png-transparent-network-bein-series-logo-bein-channels-network-bein-media-group-bein-sports-1-lyngsat-organization.png"),
-            Channel("Bein Series 3 HD", "http://65.108.239.207/bsseries3/index.m3u8", "7/24 Dizi/Film", "https://w1.pngwing.com/pngs/910/513/png-transparent-network-bein-series-logo-bein-channels-network-bein-media-group-bein-sports-1-lyngsat-organization.png"),
-            Channel("Bein Series 4 HD", "http://65.108.239.207/bsseries4/index.m3u8", "7/24 Dizi/Film", "https://w1.pngwing.com/pngs/910/513/png-transparent-network-bein-series-logo-bein-channels-network-bein-media-group-bein-sports-1-lyngsat-organization.png"),
-            Channel("BS BOX OFFİCE 1", "http://65.108.239.207/box1/index.m3u8", "7/24 Dizi/Film", "https://www.digiturkburada.com.tr/kanal3/kanal-buyuk/bein-box-office-1-hd-buyuk.png"),
-            Channel("BS BOX OFFİCE 2", "http://65.108.239.207/box2/index.m3u8", "7/24 Dizi/Film", "https://www.digiturkburada.com.tr/kanal3/kanal-buyuk/bein-box-office-2-hd-buyuk.png"),
-            Channel("BS BOX OFFİCE 3", "http://65.108.239.207/box3/index.m3u8", "7/24 Dizi/Film", "https://www.digiturkburada.com.tr/kanal3/kanal-buyuk/bein-box-office-3-hd-buyuk.png")
+            Channel("Sinema Tv", "https://65.108.239.207/sinema1001/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/0/0/Vod/HLS/22c5fe05-d70b-4c68-98fb-03bae4870e81.png"),
+            Channel("Sinema Tv 2", "https://65.108.239.207/sinema2/index.m3u8", "7/24 Dizi/Film", "https://itv224226.tmp.tivibu.com.tr:6430/images/poster/20250801839032.png"),
+            Channel("Sinema Aksiyon", "https://65.108.239.207/sinemaaksiyon/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/bd434731-0e47-4a37-997e-49f71340fcc6.png"),
+            Channel("Sinema Aksiyon 2", "https://65.108.239.207/sinemaaksiyon2/index.m3u8", "7/24 Dizi/Film", "https://img.dsmartgo.com.tr/content/M/RG/22895/Thumbnail.png"),
+            Channel("Sinema Yerli", "https://65.108.239.207/sinemayerli/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/ae3d90a0-37ee-4e48-a6bc-1375e5f1329a.png"),
+            Channel("Sinema Aile", "https://65.108.239.207/sinemaaile/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/c8283b71-81f8-4fc6-8e48-6bb8f7f49ad7.png"),
+            Channel("Sinema 1001", "https://65.108.239.207/sinema1001/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/8d9fbebd-cade-492d-9cb4-6522cb558794.png"),
+            Channel("Sinema 1002", "https://65.108.239.207/sinema1002/index.m3u8", "7/24 Dizi/Film", "https://itv224226.tmp.tivibu.com.tr:6430/images/poster/20250801838773.png"),
+            Channel("Sinema Komedi", "https://65.108.239.207/sinemakomedi/index.m3u8", "7/24 Dizi/Film", "https://feo.kablowebtv.com/resize/168A635D265A4328C2883FB4CD8FF/500/500/channels/logos/4145ea10-96ad-400d-8870-f22a075f4add.png"),
+            Channel("Bein Movies Action HD", "https://65.108.239.207/bsaction1/index.m3u8", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Action_HD_yeni.png"),
+            Channel("Bein Movies Stars HD", "https://65.108.239.207/bsstars/index.m3u8?token=WbvG4CpE9S4KI8vmXLtsQw&tms=1771162595", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Stars_HD_yeni.png"),
+            Channel("Bein Movies Family HD", "https://65.108.239.207/bsfamily/index.m3u8", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Family_HD_yeni.png"),
+            Channel("Bein Movies Premiere HD", "https://65.108.239.207/bspremier1/index.m3u8", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Premiere_HD_yeni.png"),
+            Channel("Bein Movies Turk HD", "https://65.108.239.207/bsturk/index.m3u8", "7/24 Dizi/Film", "https://mediacms01.digiturkplay.com/channel_logo/Bein_Movies_Turk_HD_yeni.png"),
+            Channel("Bein Series 1 HD", "https://65.108.239.207/bsseries1/index.m3u8", "7/24 Dizi/Film", "https://w1.pngwing.com/pngs/910/513/png-transparent-network-bein-series-logo-bein-channels-network-bein-media-group-bein-sports-1-lyngsat-organization.png"),
+            Channel("Bein Series 2 HD", "https://65.108.239.207/bsseries2/index.m3u8", "7/24 Dizi/Film", "https://w1.pngwing.com/pngs/910/513/png-transparent-network-bein-series-logo-bein-channels-network-bein-media-group-bein-sports-1-lyngsat-organization.png"),
+            Channel("Bein Series 3 HD", "https://65.108.239.207/bsseries3/index.m3u8", "7/24 Dizi/Film", "https://w1.pngwing.com/pngs/910/513/png-transparent-network-bein-series-logo-bein-channels-network-bein-media-group-bein-sports-1-lyngsat-organization.png"),
+            Channel("Bein Series 4 HD", "https://65.108.239.207/bsseries4/index.m3u8", "7/24 Dizi/Film", "https://w1.pngwing.com/pngs/910/513/png-transparent-network-bein-series-logo-bein-channels-network-bein-media-group-bein-sports-1-lyngsat-organization.png"),
+            Channel("BS BOX OFFİCE 1", "https://65.108.239.207/box1/index.m3u8", "7/24 Dizi/Film", "https://www.digiturkburada.com.tr/kanal3/kanal-buyuk/bein-box-office-1-hd-buyuk.png"),
+            Channel("BS BOX OFFİCE 2", "https://65.108.239.207/box2/index.m3u8", "7/24 Dizi/Film", "https://www.digiturkburada.com.tr/kanal3/kanal-buyuk/bein-box-office-2-hd-buyuk.png"),
+            Channel("BS BOX OFFİCE 3", "https://65.108.239.207/box3/index.m3u8", "7/24 Dizi/Film", "https://www.digiturkburada.com.tr/kanal3/kanal-buyuk/bein-box-office-3-hd-buyuk.png")
         )
         private const val CACHE_TTL_MS = 5 * 60 * 1000L
         private const val MAX_PLAYLIST_CHARS = 5 * 1024 * 1024
@@ -110,13 +110,18 @@ class KayraLive(private val context: Context) : MainAPI() {
             safeHttpsUrl(value)?.let { return it }
             return runCatching {
                 val uri = URI(value)
-                value.takeIf {
+                val isAllowedHttp =
                     uri.scheme.equals("http", ignoreCase = true) &&
                         uri.host == "65.108.239.207" &&
                         uri.port == -1 &&
                         uri.path.endsWith(".m3u8", ignoreCase = true) &&
                         uri.rawFragment.isNullOrBlank() &&
                         uri.rawUserInfo.isNullOrBlank()
+
+                if (isAllowedHttp) {
+                    value.replaceFirst(Regex("^http://", RegexOption.IGNORE_CASE), "https://")
+                } else {
+                    null
                 }
             }.getOrNull()
         }
@@ -418,7 +423,11 @@ class KayraLive(private val context: Context) : MainAPI() {
                 type = type
             ) {
                 this.quality = Qualities.Unknown.value
-                this.headers = mapOf("User-Agent" to USER_AGENT)
+                this.referer = streamUrl
+                this.headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to streamUrl
+                )
             }
         )
         return true
