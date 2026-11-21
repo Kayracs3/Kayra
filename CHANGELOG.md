@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:fbf9777be4c539876ec09ed00ef18aed0fa5e004 -->
+### Fix KayraLive compile error and load all supplied M3U entries
+
+- Etkilenen alanlar: KayraLive
+- Commit: [fbf9777](https://github.com/Kayracs3/Kayra/commit/fbf9777be4c539876ec09ed00ef18aed0fa5e004)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:aaec8cbc3daa35ccddf8050997bfd9a93b98ba9b -->
 ### Document the built-in Sinema 2 channel
 
