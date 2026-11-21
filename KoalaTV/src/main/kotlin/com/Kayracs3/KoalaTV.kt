@@ -127,12 +127,13 @@ class KoalaTVProvider(private val prefs: SharedPreferences) : MainAPI() {
         cacheTime = 0L
     }
 
-    override fun getMainPage(): List<MainPageRequest> {
-        val sections = enabledCountries()
-            .flatMap { sectionsForCountry(it) }
-            .distinctBy { it.first }
-        return mainPageOf(*sections.toTypedArray())
-    }
+    override val mainPage: List<MainPageData>
+        get() {
+            val sections = enabledCountries()
+                .flatMap { sectionsForCountry(it) }
+                .distinctBy { it.first }
+            return mainPageOf(*sections.toTypedArray())
+        }
 
     private fun sectionsForCountry(country: String): List<Pair<String, String>> {
         return when (country) {
