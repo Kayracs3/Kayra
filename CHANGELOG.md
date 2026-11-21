@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:aaf937a69546b9c7017a94c9992e0f812450565b -->
+### Correct Zuntar channel id matcher
+
+- Etkilenen alanlar: Zuntar
+- Commit: [aaf937a](https://github.com/Kayracs3/Kayra/commit/aaf937a69546b9c7017a94c9992e0f812450565b)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:66d9a9e10f6bcf404a0b723a8a73765be7994a24 -->
 ### Fix Zuntar channel URL lookup
 
