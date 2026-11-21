@@ -23,7 +23,7 @@ internal data class HlsVariant(
  * original playlist URL.
  */
 internal object HlsQuality {
-    private val bandwidthRegex = Regex("""(?:^|,)BANDWIDTH=([0-9]+)""")
+    private val bandwidthRegex = Regex("""(?:^|,)(?:AVERAGE-)?BANDWIDTH=([0-9]+)""")
     private val resolutionRegex = Regex("""RESOLUTION=([0-9]+)x([0-9]+)""")
     private val namedQualityRegex = Regex(
         """(?i)\b(2160|1440|1080|720|576|480|360)p?\b"""
