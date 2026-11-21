@@ -343,9 +343,8 @@ class KayraLive(private val context: Context) : MainAPI() {
                     entries.map { channel ->
                         newLiveSearchResponse(
                             channel.name,
-                            responseUrl(channel),
-                            TvType.Live,
-                            fix = false
+                            channel.streamUrl,
+                            TvType.Live
                         ) {
                             this.posterUrl = channel.logo
                         }
@@ -366,9 +365,8 @@ class KayraLive(private val context: Context) : MainAPI() {
             .map { channel ->
                 newLiveSearchResponse(
                     channel.name,
-                    responseUrl(channel),
-                    TvType.Live,
-                    fix = false
+                    channel.streamUrl,
+                    TvType.Live
                 ) {
                     this.posterUrl = channel.logo
                 }
@@ -378,8 +376,8 @@ class KayraLive(private val context: Context) : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)
 
     override suspend fun load(url: String): LoadResponse? {
-        val channel = channelFromResponseUrl(url)
-            ?: channels().firstOrNull { it.streamUrl == url }
+        val channel = channels().firstOrNull { it.streamUrl == url }
+            ?: channelFromResponseUrl(url)
             ?: return null
         val payload = Base64.encodeToString(
             channel.streamUrl.toByteArray(Charsets.UTF_8),
@@ -388,7 +386,7 @@ class KayraLive(private val context: Context) : MainAPI() {
 
         return newLiveStreamLoadResponse(
             channel.name,
-            url,
+            channel.streamUrl,
             payload
         ) {
             this.posterUrl = channel.logo
