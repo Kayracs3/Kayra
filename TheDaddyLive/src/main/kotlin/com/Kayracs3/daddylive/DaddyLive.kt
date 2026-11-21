@@ -45,17 +45,12 @@ class DaddyLiveProvider : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
     override val hasMainPage = true
     override val hasDownloadSupport = false
-
-    // [FIX] false: 7 player sırayla denendiği için otomatik yükleme yerine
-    // kullanıcının "Oynat"a basması daha kontrollü UX sağlar.
     override val instantLinkLoading = false
     override val vpnStatus = VPNStatus.MightBeNeeded
 
     companion object {
         private const val PAGE_SIZE = 100
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
-
-        // [FIX] 70s → 40s: 7 player × ortalama 5-6s. Kullanıcı çok beklemesin.
         private const val TOTAL_TIMEOUT_MS = 40_000L
 
         private val DOMAINS = listOf(
@@ -74,7 +69,6 @@ class DaddyLiveProvider : MainAPI() {
             "uk", "usa", "us", "tr", "turkey", "de", "fr", "es"
         )
 
-        // [FIX] Ölü domainler — bunlara istek atılmaz
         private val DEAD_DOMAINS = listOf("ksohls.ru")
     }
 
@@ -183,7 +177,6 @@ class DaddyLiveProvider : MainAPI() {
 
         val document = response.document
 
-        // [FIX] Cloudflare challenge tespiti — sayfa boş gelirse anlamlı hata fırlat
         if (document.select("a.card").isEmpty()) {
             val title = document.title()
             if (title.contains("Just a moment", true) ||
@@ -210,7 +203,6 @@ class DaddyLiveProvider : MainAPI() {
             val channelId = channelIdRegex.find(href)?.groupValues?.getOrNull(1)
                 ?: continue
 
-            // [FIX] data-title'ı da dene, "ID: 51" ham metnini isim yapma
             val channelName = card.selectFirst(
                 ".card__title, .card-title, .channel-title, .channel-name"
             )?.text()?.trim()?.takeIf { it.isNotBlank() }
@@ -275,8 +267,6 @@ class DaddyLiveProvider : MainAPI() {
 
         val base = baseUrl()
 
-        // [FIX] watch.php'yi çek ve oynatıcı URL'lerini DOĞRUDAN data-url
-        // attribute'larından al. Klasör tahmini yok.
         val pageResponse = runCatching {
             app.get(url, headers = requestHeaders(base), interceptor = CloudflareKiller())
         }.getOrNull()
@@ -291,23 +281,19 @@ class DaddyLiveProvider : MainAPI() {
 
         val playerUrls = linkedSetOf<String>()
 
-        // 7 player butonunun data-url'leri
         document?.select("button.player-btn[data-url]")?.forEach { btn ->
             val u = btn.attr("data-url").trim()
             if (u.isNotBlank()) playerUrls.add(u)
         }
 
-        // iframe#playerFrame (Player 1)
         document?.selectFirst("iframe#playerFrame[src]")?.attr("src")?.trim()
             ?.takeIf { it.isNotBlank() }?.let { playerUrls.add(it) }
 
-        // Yedek: butonlar yoksa klasör şablonları
         if (playerUrls.isEmpty()) {
             listOf("stream", "cast", "watch", "plus", "casting", "player", "hub")
                 .forEach { f -> playerUrls.add("$base/$f/stream-$channelId.php") }
         }
 
-        // [FIX] Ölü domainleri filtrele
         val data = playerUrls
             .filterNot { u -> DEAD_DOMAINS.any { u.contains(it) } }
             .joinToString("\n")
@@ -345,8 +331,6 @@ class DaddyLiveProvider : MainAPI() {
             }
         }
 
-        // [FIX] Exception fırlatmıyoruz; false dönerse Cloudstream zaten
-        // "Bağlantı bulunamadı" gösterir.
         return emittedLinks > 0
     }
 }
