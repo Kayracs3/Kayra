@@ -1,4 +1,4 @@
-version = 9
+version = 10
 
 dependencies {
     // Coroutines are provided by CloudStream at runtime; compile against the API only.
