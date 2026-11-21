@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:f52030744495a5668449c2c34abd7a696263b7ec -->
+### Add DaddyLive provider embed and HLS quality components
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [f520307](https://github.com/Kayracs3/Kayra/commit/f52030744495a5668449c2c34abd7a696263b7ec)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:bac738aed849f4b38cbf7e54ace6d7b73b9087e1 -->
 ### Bump KayraLive to version 8
 
