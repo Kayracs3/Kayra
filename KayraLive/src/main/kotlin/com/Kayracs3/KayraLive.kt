@@ -41,8 +41,9 @@ class KayraLive(private val context: Context) : MainAPI() {
     companion object {
         private const val PREFS_NAME = "kayra_live_playlist"
         private const val PLAYLIST_KEY = "playlist_url"
+        // iptv-org listesinde Türkçe yayın dili için yayımlanan herkese açık M3U.
         private const val DEFAULT_PLAYLIST_URL =
-            "https://raw.githubusercontent.com/Kayracs3/Kayra/master/KayraLive/channels.m3u"
+            "https://iptv-org.github.io/iptv/languages/tur.m3u"
         private const val CACHE_TTL_MS = 5 * 60 * 1000L
         private const val MAX_PLAYLIST_CHARS = 5 * 1024 * 1024
         private const val USER_AGENT =
@@ -256,7 +257,7 @@ class KayraLive(private val context: Context) : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val channel = channels().firstOrNull { it.streamUrl == url } ?: return null
         val payload = Base64.encodeToString(
-            "\${channel.streamUrl}\n\${configuredPlaylistUrl}".toByteArray(Charsets.UTF_8),
+            channel.streamUrl.toByteArray(Charsets.UTF_8),
             Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
         )
 
@@ -282,11 +283,7 @@ class KayraLive(private val context: Context) : MainAPI() {
             )
         }.getOrNull() ?: return false
 
-        val parts = decoded.split('\n', limit = 2)
-        if (parts.size != 2) return false
-
-        val streamUrl = safeHttpsUrl(parts[0]) ?: return false
-        val referer = safeHttpsUrl(parts[1]) ?: return false
+        val streamUrl = safeHttpsUrl(decoded) ?: return false
         val type = when {
             streamUrl.substringBefore('?').endsWith(".m3u8", ignoreCase = true) ->
                 ExtractorLinkType.M3U8
@@ -302,7 +299,6 @@ class KayraLive(private val context: Context) : MainAPI() {
                 url = streamUrl,
                 type = type
             ) {
-                this.referer = referer
                 this.quality = Qualities.Unknown.value
                 this.headers = mapOf("User-Agent" to USER_AGENT)
             }
