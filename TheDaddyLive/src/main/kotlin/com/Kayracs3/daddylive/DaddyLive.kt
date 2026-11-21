@@ -17,8 +17,10 @@ import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newLiveSearchResponse
 import com.lagradost.cloudstream3.newLiveStreamLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -56,6 +58,7 @@ class DaddyLiveProvider : MainAPI() {
     companion object {
         private const val PAGE_SIZE = 100
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
+        private const val TOTAL_TIMEOUT_MS = 40_000L
 
         // İlk çalışan adres kullanılır
         private val DOMAINS = listOf(
@@ -82,20 +85,29 @@ class DaddyLiveProvider : MainAPI() {
     )
 
     // ------------------------------------------------------------------ alan adı
+    private val baseMutex = Mutex()
+    @Volatile
     private var resolvedBase: String? = null
 
     private suspend fun baseUrl(): String {
         resolvedBase?.let { return it }
-        for (d in (listOf(mainUrl) + DOMAINS).distinct()) {
-            val ok = runCatching {
-                app.get(d, headers = requestHeaders(d), timeout = 8).code in 200..399
-            }.getOrDefault(false)
-            if (ok) {
-                resolvedBase = d
-                return d
+        return baseMutex.withLock {
+            resolvedBase?.let { return@withLock it }
+            for (d in (listOf(mainUrl) + DOMAINS).distinct()) {
+                val ok = try {
+                    app.get(d, headers = requestHeaders(d), timeout = 8).code in 200..399
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    false
+                }
+                if (ok) {
+                    resolvedBase = d
+                    return@withLock d
+                }
             }
+            mainUrl
         }
-        return mainUrl
     }
 
     // ------------------------------------------------------------------ afişler
@@ -281,20 +293,38 @@ class DaddyLiveProvider : MainAPI() {
             "hub"       // Player 7
         )
 
-        // Alan adı yedeklemesi nedeniyle loadExtractor'a güvenmeden doğrudan çağır
+        // Alan adı yedeklemesi nedeniyle loadExtractor'a güvenmeden doğrudan çağır.
+        // loadExtractor kullanılmaz: ilgisiz çıkarıcılar (ör. XStreamCdn) HTML sayfalarda
+        // JSON hatası verip zaman kaybettiriyor.
         val extractor = EmbedResolver()
         var emittedLinks = 0
-        for (folder in playerFolders) {
-            val playerUrl = data.replace("{folder}", folder)
-            runCatching {
-                extractor.getUrl(playerUrl, "$base/", subtitleCallback) { link ->
-                    callback(link)
-                    emittedLinks++
+
+        // CloudStream linkleri 120 sn içinde bekler. Toplam süreye sınır koyuyoruz ki
+        // her oynatıcı için 30 sn bekleyip zaman aşımına düşmeyelim.
+        withTimeoutOrNull(TOTAL_TIMEOUT_MS) {
+            for (folder in playerFolders) {
+                val playerUrl = data.replace("{folder}", folder)
+                try {
+                    extractor.getUrl(playerUrl, "$base/", subtitleCallback) { link ->
+                        callback(link)
+                        emittedLinks++
+                    }
+                } catch (e: CancellationException) {
+                    // İptal/zaman aşımı yutulmamalı
+                    throw e
+                } catch (e: Exception) {
+                    // Bu oynatıcı çalışmadı, sıradakine geç
                 }
+                // İlk çalışan oynatıcıda dur
+                if (emittedLinks > 0) break
             }
-            // İlk çalışan oynatıcıda dur
-            if (emittedLinks > 0) break
         }
-        return emittedLinks > 0
+
+        if (emittedLinks == 0) {
+            throw ErrorLoadingException(
+                "Yayın adresi alınamadı. Oynatıcı sayfaları doğrulama istiyor olabilir."
+            )
+        }
+        return true
     }
 }
