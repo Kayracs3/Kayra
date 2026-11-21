@@ -2,6 +2,39 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:55011dd049295c09bef5bc7c9d986a0cd3065100 -->
+### Document multiple KayraLive playlists
+
+- Etkilenen alanlar: KayraLive
+- Commit: [55011dd](https://github.com/Kayracs3/Kayra/commit/55011dd049295c09bef5bc7c9d986a0cd3065100)
+
+## 2026-11-21
+
+<!-- kayra-commit:90622a24dd9344b0437bb45623f2f001135ea3cd -->
+### Bump KayraLive to version 5
+
+- Etkilenen alanlar: KayraLive
+- Commit: [90622a2](https://github.com/Kayracs3/Kayra/commit/90622a24dd9344b0437bb45623f2f001135ea3cd)
+
+## 2026-11-21
+
+<!-- kayra-commit:94bc9859b291b09f750a17b95d4e308b015e17cb -->
+### Allow multiple playlist URLs in KayraLive settings
+
+- Etkilenen alanlar: KayraLive
+- Commit: [94bc985](https://github.com/Kayracs3/Kayra/commit/94bc9859b291b09f750a17b95d4e308b015e17cb)
+
+## 2026-11-21
+
+<!-- kayra-commit:e1336bb4e5b32564ca5eb55f1b05c25f79f1c74b -->
+### Support multiple M3U playlist sources in KayraLive
+
+- Etkilenen alanlar: KayraLive
+- Commit: [e1336bb](https://github.com/Kayracs3/Kayra/commit/e1336bb4e5b32564ca5eb55f1b05c25f79f1c74b)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:bd5d5d3ccdcf895aaf128e2a11aaa1ac712bb773 -->
 ### Add new default playlist URL
 
