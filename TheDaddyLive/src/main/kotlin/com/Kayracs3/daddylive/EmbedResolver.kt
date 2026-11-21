@@ -1,6 +1,7 @@
 package com.Kayracs3.daddylive
 
 import android.util.Base64
+import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.network.WebViewResolver
@@ -45,8 +46,9 @@ class EmbedResolver : ExtractorApi() {
             "cf-turnstile",
             "Just a moment..."
         )
-        private const val WEBVIEW_TIMEOUT_MS = 12_000L
+        private const val WEBVIEW_TIMEOUT_MS = 20_000L
         private const val MAX_WEBVIEW_TRIES = 2
+        private const val TAG = "DaddyLiveResolver"
         private const val PREFLIGHT_TIMEOUT_S = 4L
         private const val PREFLIGHT_HARD_LIMIT_MS = 5_000L
 
@@ -147,13 +149,20 @@ class EmbedResolver : ExtractorApi() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Log.d(TAG, "sayfa alınamadı: $url (${e.javaClass.simpleName})")
             return
         }
 
-        if (response.code !in 200..299) return
+        if (response.code !in 200..299) {
+            Log.d(TAG, "HTTP ${response.code}: $url")
+            return
+        }
 
         // Sayfa doğrulama istiyorsa hemen vazgeç; sıradaki oynatıcıya geçilsin
-        if (blockMarkers.any { response.text.contains(it, ignoreCase = true) }) return
+        if (blockMarkers.any { response.text.contains(it, ignoreCase = true) }) {
+            Log.d(TAG, "doğrulama istiyor, atlandı: $url")
+            return
+        }
 
         val document = response.document
         val normalizedHtml = response.text
@@ -186,6 +195,7 @@ class EmbedResolver : ExtractorApi() {
         val iframeUrls = document.select("iframe[src]")
             .mapNotNull { element -> absoluteUrl(element.attr("src"), url) }
             .distinct()
+        Log.d(TAG, "$url -> ${iframeUrls.size} iframe: $iframeUrls")
 
         // Not: loadExtractor kullanılmıyor. İlgisiz çıkarıcılar (ör. XStreamCdn) HTML
         // sayfalarda JSON hatası verip zaman kaybettiriyordu.
@@ -207,9 +217,15 @@ class EmbedResolver : ExtractorApi() {
                 throw e
             } catch (e: Exception) {
                 null
-            } ?: continue
-
-            if (blockMarkers.any { iframeHtml.contains(it, ignoreCase = true) }) continue
+            }
+            if (iframeHtml == null) {
+                Log.d(TAG, "ulaşılamıyor, atlandı: $iframeUrl")
+                continue
+            }
+            if (blockMarkers.any { iframeHtml.contains(it, ignoreCase = true) }) {
+                Log.d(TAG, "doğrulama istiyor, atlandı: $iframeUrl")
+                continue
+            }
 
             webViewTries++
             // Kayıtlı çıkarıcısı olmayan gömülü sayfalar için sayfanın normal HLS
@@ -230,6 +246,7 @@ class EmbedResolver : ExtractorApi() {
                 null
             }
 
+            Log.d(TAG, "WebView sonucu ($iframeUrl): $interceptedUrl")
             if (!interceptedUrl.isNullOrBlank() &&
                 interceptedUrl.contains(".m3u8", ignoreCase = true)
             ) {
