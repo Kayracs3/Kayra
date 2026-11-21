@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:00b602485332a8cd40bc4e8d0d9c036f34483eef -->
+### Improve base URL handling and link extraction timeout
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [00b6024](https://github.com/Kayracs3/Kayra/commit/00b602485332a8cd40bc4e8d0d9c036f34483eef)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:58cf24b06d9f4c611a5c4f834c96d8b63ed0ed31 -->
 ### Update EmbedResolver.kt
 
