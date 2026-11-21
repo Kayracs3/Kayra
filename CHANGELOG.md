@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:67a74c03e464b45f88471c8a44a17e1d544b4efd -->
+### Increase WEBVIEW_TIMEOUT_MS and add logging
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [67a74c0](https://github.com/Kayracs3/Kayra/commit/67a74c03e464b45f88471c8a44a17e1d544b4efd)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:2b502905979cb26acb6908becab3bd142839af17 -->
 ### Update project version from 5 to 6
 
