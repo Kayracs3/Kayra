@@ -8,7 +8,6 @@ import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.M3u8Helper
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import java.net.URI
@@ -19,6 +18,14 @@ private const val RESOLVER_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
+/**
+ * Resolves publicly exposed DaddyLive player/embed pages.
+ *
+ * Arama sırası:
+ *   1. Ana oynatıcı sayfası HTML'inde m3u8
+ *   2. iframe HTML'inde m3u8        ← [KRİTİK] Turnstile'a takılmadan çözer
+ *   3. Cloudflare Turnstile'lı iframe'ler için WebViewResolver (son çare)
+ */
 class EmbedResolver : ExtractorApi() {
     override val mainUrl = "https://thedaddy.li"
     override val name = "DaddyLive Embed Resolver"
@@ -27,18 +34,21 @@ class EmbedResolver : ExtractorApi() {
     companion object {
         private const val TAG = "DaddyLiveResolver"
 
+        // [FIX] Protokol-göreli URL'leri de yakala (//cdn.../index.m3u8)
         private val m3u8Regex = Regex(
             """(?:https?:)?//[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?""",
             RegexOption.IGNORE_CASE
         )
+
+        // [FIX] "src" ve "=" da kabul ediliyor; tırnak içindeki .m3u8
         private val sourceFieldRegex = Regex(
             """(?:streamUrl|file|source|src)\s*[:=]\s*["']([^"']+\.m3u8[^"']*)["']""",
             RegexOption.IGNORE_CASE
         )
 
-        // [FIX] Turnstile sadece LOG için kullanılıyor; m3u8 aramasını engellemez.
-        // (dembed.st gibi sayfalarda Turnstile script'i olsa bile m3u8 HTML'de olabilir.)
-        private val blockMarkers = listOf(
+        // [FIX] Bu marker'lar artık m3u8 aramasını ENGELLEMİYOR; sadece
+        // WebView denemesinden önce bilgi logu için kullanılıyor.
+        private val turnstileMarkers = listOf(
             "challenges.cloudflare.com/turnstile",
             "cf-turnstile",
             "Just a moment..."
@@ -47,11 +57,11 @@ class EmbedResolver : ExtractorApi() {
         private const val WEBVIEW_TIMEOUT_MS = 20_000L
         private const val MAX_WEBVIEW_TRIES = 2
 
-        // [FIX] Preflight timeout 4s → 10s (dembed.st çok sayıda script yüklüyor)
+        // [FIX] Preflight 4s → 10s (dembed.st çok sayıda script yüklüyor)
         private const val PREFLIGHT_TIMEOUT_S = 10L
         private const val PREFLIGHT_HARD_LIMIT_MS = 12_000L
 
-        // [FIX] window. opsiyonel — bazı siteler atob()'u doğrudan çağırır
+        // [FIX] window. opsiyonel
         private val atobRegex = Regex(
             """(?:source\s*:\s*)?(?:window\.)?atob\(["']([A-Za-z0-9+/=_-]+)["']\)""",
             RegexOption.IGNORE_CASE
@@ -93,27 +103,27 @@ class EmbedResolver : ExtractorApi() {
     }
 
     /**
-     * [FIX] Ortak m3u8 arayıcı. Video etiketi → doğrudan regex → script değişkeni
-     * sırasıyla arar. Bu fonksiyon hem ana sayfa hem iframe HTML'i için kullanılır.
+     * [FIX] Ortak m3u8 arayıcı. Hem ana sayfa hem iframe HTML'i için kullanılır.
+     * Sıralama: video/source etiketi → doğrudan regex → streamUrl/file değişkeni.
      */
     private fun findM3u8(
         html: String,
         doc: org.jsoup.nodes.Document,
         base: String
     ): String? {
-        // 1) <video>/<source> etiketleri (en güvenilir)
+        // 1) <video>/<source> — en güvenilir
         doc.select("video source[src], video[src], source[src]").forEach { el ->
             val s = el.absUrl("src").ifBlank { el.attr("src") }
             if (s.contains(".m3u8", ignoreCase = true)) return s
         }
 
-        // 2) Doğrudan .m3u8 regex
+        // 2) Doğrudan regex
         m3u8Regex.find(html)?.value?.trimEnd(';', ')', ']')?.let { raw ->
             val abs = absoluteUrl(raw, base) ?: raw
             if (abs.startsWith("http", ignoreCase = true)) return abs
         }
 
-        // 3) streamUrl/file/source: "..." değişkenleri
+        // 3) streamUrl / file / source / src değişkenleri
         sourceFieldRegex.find(html)?.groupValues?.getOrNull(1)?.let { raw ->
             val abs = raw.replace("\\/", "/")
             if (abs.contains(".m3u8", ignoreCase = true)) {
@@ -124,9 +134,8 @@ class EmbedResolver : ExtractorApi() {
     }
 
     /**
-     * [FIX] HlsQuality kaldırıldı, standart M3u8Helper kullanılıyor.
-     * [FIX] Origin, pageUrl'den değil çağıranın verdiği doğru URL'den gelir
-     *       (iframe içinden geliyorsa iframeUrl; ana sayfadan geliyorsa url).
+     * [FIX] Origin artık pageUrl'den türetiliyor; çağıran doğru URL'i geçmeli
+     * (iframe içinden çözülüyorsa iframeUrl, ana sayfadan ise ana URL).
      */
     private suspend fun emitM3u8(
         mediaUrl: String,
@@ -140,21 +149,8 @@ class EmbedResolver : ExtractorApi() {
             "Origin" to origin
         )
 
-        // Master playlist ise varyantları çöz. Değilse veya hata olursa direkt link.
-        val variants = try {
-            M3u8Helper.generateM3u8(
-                source = name,
-                streamUrl = mediaUrl,
-                referer = pageUrl,
-                headers = linkHeaders
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.d(TAG, "M3u8Helper başarısız: $mediaUrl (${e.message})")
-            emptyList()
-        }
-
+        // HlsQuality ile master playlist varyantlarını çöz
+        val variants = HlsQuality.variants(mediaUrl, linkHeaders)
         if (variants.isEmpty()) {
             callback(
                 newExtractorLink(
@@ -171,18 +167,17 @@ class EmbedResolver : ExtractorApi() {
             return
         }
 
-        variants.forEach { link ->
-            // Origin/Referer başlıklarını M3u8Helper üretse bile emin olmak için
-            // yeniden gönderiyoruz.
+        variants.forEach { variant ->
             callback(
                 newExtractorLink(
                     source = name,
-                    name = link.name ?: "DaddyLive",
-                    url = link.url,
+                    name = "DaddyLive " + variant.label,
+                    url = variant.url,
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.referer = pageUrl
-                    this.quality = link.quality
+                    this.quality = variant.height.takeIf { it > 0 }
+                        ?: Qualities.Unknown.value
                     this.headers = linkHeaders
                 }
             )
@@ -216,7 +211,7 @@ class EmbedResolver : ExtractorApi() {
         val normalizedHtml = response.text.replace("\\/", "/").replace("&amp;", "&")
         val scriptContent = appendDecodedScriptValues(normalizedHtml)
 
-        // 2) Ana sayfada m3u8 var mı? (Turnstile marker'ı olsa bile ara)
+        // 2) Ana sayfada m3u8 var mı? Turnstile marker olsa bile ARA.
         findM3u8(scriptContent, document, url)?.let { mediaUrl ->
             Log.d(TAG, "ana sayfa HTML içinden akış: $mediaUrl")
             emitM3u8(mediaUrl, url, callback)
@@ -262,19 +257,19 @@ class EmbedResolver : ExtractorApi() {
             val iframeDoc = iframeResponse.document
             val iframeScript = appendDecodedScriptValues(iframeHtml)
 
-            // ⭐ KRİTİK DÜZELTME: iframe HTML'inde m3u8 ara (WebView'dan ÖNCE)
+            // ⭐ KRİTİK DÜZELTME: WebView'dan ÖNCE iframe HTML'inde m3u8 ara
             findM3u8(iframeScript, iframeDoc, iframeUrl)?.let { mediaUrl ->
                 Log.d(TAG, "iframe HTML içinden akış: $mediaUrl")
                 emitM3u8(mediaUrl, iframeUrl, callback)
                 return
             }
 
-            // m3u8 HTML'de yoksa Turnstile var mı diye logla
-            if (blockMarkers.any { iframeHtml.contains(it, ignoreCase = true) }) {
+            // m3u8 HTML'de yoksa Turnstile var mı diye logla (engel değil)
+            if (turnstileMarkers.any { iframeHtml.contains(it, ignoreCase = true) }) {
                 Log.d(TAG, "iframe Turnstile içeriyor, WebView denenecek: $iframeUrl")
             }
 
-            // 3b) Son çare: WebView ile HLS isteğini yakala
+            // 3b) Son çare: WebView ile m3u8 isteğini yakala
             if (webViewTries >= MAX_WEBVIEW_TRIES) continue
             webViewTries++
 
