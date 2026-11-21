@@ -123,33 +123,31 @@ class DaddyLiveProvider : MainAPI() {
     }
 
     private suspend fun buildLogoMap(): Map<String, String> = runCatching {
-    val base = "https://iptv-org.github.io/api"
-    
-    // [FIX] OOM hatasını önlemek için textLarge kullan
-    val channelsText = app.get("$base/channels.json", timeout = 30).textLarge
-    val channels = channelsText.parsedSafe<Array<DlIptvChannel>>() 
-        ?: return@runCatching emptyMap<String, String>()
-    
-    val logosText = app.get("$base/logos.json", timeout = 30).textLarge
-    val logos = logosText.parsedSafe<Array<DlIptvLogo>>()
+        val base = "https://iptv-org.github.io/api"
+        val channels = app.get("$base/channels.json", timeout = 30)
+            .parsedSafe<Array<DlIptvChannel>>()
+            ?: return@runCatching emptyMap<String, String>()
 
-    val logoById = HashMap<String, String>()
-    logos?.forEach {
-        val c = it.channel
-        val u = it.url
-        if (!c.isNullOrBlank() && !u.isNullOrBlank()) logoById.putIfAbsent(c, u)
-    }
+        val logoById = HashMap<String, String>()
+        app.get("$base/logos.json", timeout = 30)
+            .parsedSafe<Array<DlIptvLogo>>()?.forEach {
+                val channelId = it.channel
+                val logoUrl = it.url
+                if (!channelId.isNullOrBlank() && !logoUrl.isNullOrBlank()) {
+                    logoById.putIfAbsent(channelId, logoUrl)
+                }
+            }
 
-    val out = HashMap<String, String>()
-    for (ch in channels) {
-        val url = logoById[ch.id ?: continue] ?: continue
-        for (n in listOfNotNull(ch.name) + (ch.altNames ?: emptyList())) {
-            val key = normalize(n)
-            if (key.length >= 3) out.putIfAbsent(key, url)
+        val out = HashMap<String, String>()
+        for (channel in channels) {
+            val logoUrl = logoById[channel.id ?: continue] ?: continue
+            for (channelName in listOfNotNull(channel.name) + (channel.altNames ?: emptyList())) {
+                val key = normalize(channelName)
+                if (key.length >= 3) out.putIfAbsent(key, logoUrl)
+            }
         }
-    }
-    out
-}.getOrDefault(emptyMap())
+        out
+    }.getOrDefault(emptyMap())
 
     private val cacheMutex = Mutex()
     private var cache: List<LiveSearchResponse> = emptyList()
