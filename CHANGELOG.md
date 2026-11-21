@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:5c77066249b96907acf420fa754d447435552477 -->
+### Fix NewTane stream URL regular expressions
+
+- Etkilenen alanlar: NewTane
+- Commit: [5c77066](https://github.com/Kayracs3/Kayra/commit/5c77066249b96907acf420fa754d447435552477)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:9a121932680862f9127233c5fea55d1a85bcf938 -->
 ### Add NewTane plugin module configuration
 
