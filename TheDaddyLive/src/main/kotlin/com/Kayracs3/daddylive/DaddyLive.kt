@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.VPNStatus
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newLiveSearchResponse
 import com.lagradost.cloudstream3.newLiveStreamLoadResponse
@@ -26,7 +27,6 @@ private const val USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-// iptv-org API şemasının kullandığımız kısmı (https://iptv-org.github.io/api/)
 data class DlIptvChannel(
     val id: String? = null,
     val name: String? = null,
@@ -38,13 +38,6 @@ data class DlIptvLogo(
     val url: String? = null
 )
 
-/**
- * DaddyLive 24/7 kanal kataloğu.
- *
- * Sitenin JSON kanal uç noktası özel API anahtarı istediği için herkese açık
- * HTML kataloğu okunur. Korumalı API'yi veya oynatıcı doğrulamasını atlatmaya
- * çalışmaz.
- */
 class DaddyLiveProvider : MainAPI() {
     override var mainUrl = "https://thedaddy.li"
     override var name = "DaddyLive 24/7"
@@ -52,15 +45,19 @@ class DaddyLiveProvider : MainAPI() {
     override val supportedTypes = setOf(TvType.Live)
     override val hasMainPage = true
     override val hasDownloadSupport = false
-    override val instantLinkLoading = true
+
+    // [FIX] false: 7 player sırayla denendiği için otomatik yükleme yerine
+    // kullanıcının "Oynat"a basması daha kontrollü UX sağlar.
+    override val instantLinkLoading = false
     override val vpnStatus = VPNStatus.MightBeNeeded
 
     companion object {
         private const val PAGE_SIZE = 100
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
-        private const val TOTAL_TIMEOUT_MS = 70_000L
 
-        // İlk çalışan adres kullanılır
+        // [FIX] 70s → 40s: 7 player × ortalama 5-6s. Kullanıcı çok beklemesin.
+        private const val TOTAL_TIMEOUT_MS = 40_000L
+
         private val DOMAINS = listOf(
             "https://thedaddy.li",
             "https://daddylive.pk",
@@ -72,11 +69,13 @@ class DaddyLiveProvider : MainAPI() {
 
         private val channelIdRegex = Regex("""[?&]id=(\d+)""")
 
-        // Afiş eşleştirmede atılan ekler
         private val DROP_TOKENS = setOf(
             "hd", "fhd", "sd", "uhd", "4k", "tv", "live", "canli", "channel", "kanal",
             "uk", "usa", "us", "tr", "turkey", "de", "fr", "es"
         )
+
+        // [FIX] Ölü domainler — bunlara istek atılmaz
+        private val DEAD_DOMAINS = listOf("ksohls.ru")
     }
 
     private fun requestHeaders(base: String): Map<String, String> = mapOf(
@@ -177,10 +176,26 @@ class DaddyLiveProvider : MainAPI() {
 
     private suspend fun fetchChannels(): List<LiveSearchResponse> {
         val base = baseUrl()
-        val document = app.get(
+        val response = app.get(
             "$base/24-7-channels.php",
             headers = requestHeaders(base)
-        ).document
+        )
+
+        val document = response.document
+
+        // [FIX] Cloudflare challenge tespiti — sayfa boş gelirse anlamlı hata fırlat
+        if (document.select("a.card").isEmpty()) {
+            val title = document.title()
+            if (title.contains("Just a moment", true) ||
+                title.contains("Attention Required", true) ||
+                response.code == 403 || response.code == 503
+            ) {
+                throw ErrorLoadingException(
+                    "Cloudflare engeli tespit edildi (HTTP ${response.code}). " +
+                        "VPN veya 'Clone site' deneyin."
+                )
+            }
+        }
 
         val cards = document.select(
             "div.grid > a, a.card, a[href*='watch.php?id=']"
@@ -195,21 +210,21 @@ class DaddyLiveProvider : MainAPI() {
             val channelId = channelIdRegex.find(href)?.groupValues?.getOrNull(1)
                 ?: continue
 
+            // [FIX] data-title'ı da dene, "ID: 51" ham metnini isim yapma
             val channelName = card.selectFirst(
                 ".card__title, .card-title, .channel-title, .channel-name"
             )?.text()?.trim()?.takeIf { it.isNotBlank() }
+                ?: card.attr("data-title").trim().takeIf { it.isNotBlank() }
                 ?: card.selectFirst("img[alt]")?.attr("alt")?.trim()
                     ?.takeIf { it.isNotBlank() }
                 ?: card.attr("title").trim().takeIf { it.isNotBlank() }
-                ?: card.text().trim()
-
-            if (channelName.isBlank()) continue
+                ?: card.text().substringBefore("ID:").trim().takeIf { it.isNotBlank() }
+                ?: continue
 
             val channelUrl = card.absUrl("href").ifBlank {
                 "$base/${href.trimStart('/')}"
             }
 
-            // Afiş: önce sayfadaki görsel, yoksa iptv-org logosu
             val pageImg = card.selectFirst("img")?.let { i ->
                 i.absUrl("data-src").ifBlank { i.absUrl("src") }
             }?.takeIf { it.isNotBlank() && !it.startsWith("data:") }
@@ -259,19 +274,45 @@ class DaddyLiveProvider : MainAPI() {
         }.getOrNull()
 
         val base = baseUrl()
-        val title = known?.name ?: runCatching {
-            app.get(url, headers = requestHeaders(base))
-                .document
-                .selectFirst("h1, h2")
-                ?.text()
-                ?.substringBefore("(")
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-        }.getOrNull() ?: "Channel $channelId"
 
-        // Oynatıcı klasörleri loadLinks içinde sırayla denenir.
-        val playerTemplate = "$base/{folder}/stream-$channelId.php"
-        return newLiveStreamLoadResponse(title, url, playerTemplate) {
+        // [FIX] watch.php'yi çek ve oynatıcı URL'lerini DOĞRUDAN data-url
+        // attribute'larından al. Klasör tahmini yok.
+        val pageResponse = runCatching {
+            app.get(url, headers = requestHeaders(base), interceptor = CloudflareKiller())
+        }.getOrNull()
+
+        val document = pageResponse?.document
+
+        val title = known?.name
+            ?: document?.selectFirst("h2")?.text()
+                ?.replace(Regex("""\(ID\s*\d+\)"""), "")
+                ?.substringBefore("(")?.trim()?.takeIf { it.isNotBlank() }
+            ?: "Channel $channelId"
+
+        val playerUrls = linkedSetOf<String>()
+
+        // 7 player butonunun data-url'leri
+        document?.select("button.player-btn[data-url]")?.forEach { btn ->
+            val u = btn.attr("data-url").trim()
+            if (u.isNotBlank()) playerUrls.add(u)
+        }
+
+        // iframe#playerFrame (Player 1)
+        document?.selectFirst("iframe#playerFrame[src]")?.attr("src")?.trim()
+            ?.takeIf { it.isNotBlank() }?.let { playerUrls.add(it) }
+
+        // Yedek: butonlar yoksa klasör şablonları
+        if (playerUrls.isEmpty()) {
+            listOf("stream", "cast", "watch", "plus", "casting", "player", "hub")
+                .forEach { f -> playerUrls.add("$base/$f/stream-$channelId.php") }
+        }
+
+        // [FIX] Ölü domainleri filtrele
+        val data = playerUrls
+            .filterNot { u -> DEAD_DOMAINS.any { u.contains(it) } }
+            .joinToString("\n")
+
+        return newLiveStreamLoadResponse(title, url, data) {
             this.posterUrl = known?.posterUrl
         }
     }
@@ -283,48 +324,29 @@ class DaddyLiveProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val base = baseUrl()
-        val playerFolders = listOf(
-            "stream",   // Player 1
-            "cast",     // Player 2
-            "watch",    // Player 3
-            "plus",     // Player 4
-            "casting",  // Player 5
-            "player",   // Player 6
-            "hub"       // Player 7
-        )
+        val playerUrls = data.split("\n").map { it.trim() }.filter { it.isNotBlank() }
 
-        // Alan adı yedeklemesi nedeniyle loadExtractor'a güvenmeden doğrudan çağır.
-        // loadExtractor kullanılmaz: ilgisiz çıkarıcılar (ör. XStreamCdn) HTML sayfalarda
-        // JSON hatası verip zaman kaybettiriyor.
-        val extractor = EmbedResolver()
+        val resolver = EmbedResolver()
         var emittedLinks = 0
 
-        // CloudStream linkleri 120 sn içinde bekler. Toplam süreye sınır koyuyoruz ki
-        // her oynatıcı için 30 sn bekleyip zaman aşımına düşmeyelim.
         withTimeoutOrNull(TOTAL_TIMEOUT_MS) {
-            for (folder in playerFolders) {
-                val playerUrl = data.replace("{folder}", folder)
+            for (playerUrl in playerUrls) {
                 try {
-                    extractor.getUrl(playerUrl, "$base/", subtitleCallback) { link ->
+                    resolver.getUrl(playerUrl, "$base/", subtitleCallback) { link ->
                         callback(link)
                         emittedLinks++
                     }
                 } catch (e: CancellationException) {
-                    // İptal/zaman aşımı yutulmamalı
                     throw e
                 } catch (e: Exception) {
-                    // Bu oynatıcı çalışmadı, sıradakine geç
+                    // Sıradaki oynatıcıya geç
                 }
-                // İlk çalışan oynatıcıda dur
                 if (emittedLinks > 0) break
             }
         }
 
-        if (emittedLinks == 0) {
-            throw ErrorLoadingException(
-                "Yayın adresi alınamadı. Oynatıcı sayfaları doğrulama istiyor olabilir."
-            )
-        }
-        return true
+        // [FIX] Exception fırlatmıyoruz; false dönerse Cloudstream zaten
+        // "Bağlantı bulunamadı" gösterir.
+        return emittedLinks > 0
     }
 }
