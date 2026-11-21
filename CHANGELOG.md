@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:e7b465b45a946369e869ba10b4577c69151c05d0 -->
+### Refactor timeout handling and improve logo mapping
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [e7b465b](https://github.com/Kayracs3/Kayra/commit/e7b465b45a946369e869ba10b4577c69151c05d0)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:4823f2e4c8d498389e1758403e3ce7a715eaf2a0 -->
 ### Refactor EmbedResolver for improved media handling
 
