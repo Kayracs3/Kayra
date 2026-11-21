@@ -2,6 +2,31 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:aaec8cbc3daa35ccddf8050997bfd9a93b98ba9b -->
+### Document the built-in Sinema 2 channel
+
+- Etkilenen alanlar: KayraLive
+- Commit: [aaec8cb](https://github.com/Kayracs3/Kayra/commit/aaec8cbc3daa35ccddf8050997bfd9a93b98ba9b)
+
+## 2026-11-21
+
+<!-- kayra-commit:2cf3efbadd703b77466b57bb8f0580f480ff6aab -->
+### Bump KayraLive version for Sinema 2 stream
+
+- Etkilenen alanlar: KayraLive
+- Commit: [2cf3efb](https://github.com/Kayracs3/Kayra/commit/2cf3efbadd703b77466b57bb8f0580f480ff6aab)
+
+## 2026-11-21
+
+<!-- kayra-commit:84f8349b8d53b23d2ca2892519ebc2688259db99 -->
+### Add the supplied Sinema 2 stream to KayraLive
+
+- Etkilenen alanlar: KayraLive
+- Commit: [84f8349](https://github.com/Kayracs3/Kayra/commit/84f8349b8d53b23d2ca2892519ebc2688259db99)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:bd29d279ebb1c4bb0b8c11f60f28bb2dea06d8dd -->
 ### Fix Maven dependency resolution for plugin builds
 
