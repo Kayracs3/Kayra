@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:4f88e5943a6e93f493a68552bae024c97f3237ee -->
+### Update media referer and origin URLs
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [4f88e59](https://github.com/Kayracs3/Kayra/commit/4f88e5943a6e93f493a68552bae024c97f3237ee)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:5dc0f1a9f4602c1c7b228785c2ff931c6f51f582 -->
 ### Update Kotlin version from 7 to 8
 
