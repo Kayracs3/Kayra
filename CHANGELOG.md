@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:82fbb65dacdc2cd7386dc6cf7c94381d88937871 -->
+### Update Kotlin version from 8 to 9
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [82fbb65](https://github.com/Kayracs3/Kayra/commit/82fbb65dacdc2cd7386dc6cf7c94381d88937871)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:e923f4acec111e633327ed4c123c7857e09a01f9 -->
 ### Refactor logo fetching and mapping logic
 
