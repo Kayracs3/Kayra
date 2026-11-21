@@ -123,28 +123,33 @@ class DaddyLiveProvider : MainAPI() {
     }
 
     private suspend fun buildLogoMap(): Map<String, String> = runCatching {
-        val base = "https://iptv-org.github.io/api"
-        val channels = app.get("$base/channels.json", timeout = 30)
-            .parsedSafe<Array<DlIptvChannel>>() ?: return@runCatching emptyMap<String, String>()
+    val base = "https://iptv-org.github.io/api"
+    
+    // [FIX] OOM hatasını önlemek için textLarge kullan
+    val channelsText = app.get("$base/channels.json", timeout = 30).textLarge
+    val channels = channelsText.parsedSafe<Array<DlIptvChannel>>() 
+        ?: return@runCatching emptyMap<String, String>()
+    
+    val logosText = app.get("$base/logos.json", timeout = 30).textLarge
+    val logos = logosText.parsedSafe<Array<DlIptvLogo>>()
 
-        val logoById = HashMap<String, String>()
-        app.get("$base/logos.json", timeout = 30)
-            .parsedSafe<Array<DlIptvLogo>>()?.forEach {
-                val c = it.channel
-                val u = it.url
-                if (!c.isNullOrBlank() && !u.isNullOrBlank()) logoById.putIfAbsent(c, u)
-            }
+    val logoById = HashMap<String, String>()
+    logos?.forEach {
+        val c = it.channel
+        val u = it.url
+        if (!c.isNullOrBlank() && !u.isNullOrBlank()) logoById.putIfAbsent(c, u)
+    }
 
-        val out = HashMap<String, String>()
-        for (ch in channels) {
-            val url = logoById[ch.id ?: continue] ?: continue
-            for (n in listOfNotNull(ch.name) + (ch.altNames ?: emptyList())) {
-                val key = normalize(n)
-                if (key.length >= 3) out.putIfAbsent(key, url)
-            }
+    val out = HashMap<String, String>()
+    for (ch in channels) {
+        val url = logoById[ch.id ?: continue] ?: continue
+        for (n in listOfNotNull(ch.name) + (ch.altNames ?: emptyList())) {
+            val key = normalize(n)
+            if (key.length >= 3) out.putIfAbsent(key, url)
         }
-        out
-    }.getOrDefault(emptyMap())
+    }
+    out
+}.getOrDefault(emptyMap())
 
     private val cacheMutex = Mutex()
     private var cache: List<LiveSearchResponse> = emptyList()
