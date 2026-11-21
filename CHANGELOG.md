@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:fc74e8fd79ae8bfe331e3c00ecf2dc4021eed7e7 -->
+### Fix KayraLive HTTPS HLS requests
+
+- Etkilenen alanlar: KayraLive
+- Commit: [fc74e8f](https://github.com/Kayracs3/Kayra/commit/fc74e8fd79ae8bfe331e3c00ecf2dc4021eed7e7)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:b75439fba998057de379b78663b67df9023b1b4e -->
 ### Document all built-in M3U channels and HTTP host restriction
 
