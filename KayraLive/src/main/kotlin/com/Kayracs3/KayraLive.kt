@@ -344,7 +344,8 @@ class KayraLive(private val context: Context) : MainAPI() {
                         newLiveSearchResponse(
                             channel.name,
                             responseUrl(channel),
-                            TvType.Live
+                            TvType.Live,
+                            fix = false
                         ) {
                             this.posterUrl = channel.logo
                         }
@@ -366,7 +367,8 @@ class KayraLive(private val context: Context) : MainAPI() {
                 newLiveSearchResponse(
                     channel.name,
                     responseUrl(channel),
-                    TvType.Live
+                    TvType.Live,
+                    fix = false
                 ) {
                     this.posterUrl = channel.logo
                 }
@@ -386,7 +388,7 @@ class KayraLive(private val context: Context) : MainAPI() {
 
         return newLiveStreamLoadResponse(
             channel.name,
-            channel.streamUrl,
+            url,
             payload
         ) {
             this.posterUrl = channel.logo
