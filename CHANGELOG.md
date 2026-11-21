@@ -1,5 +1,38 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-21
+
+<!-- kayra-commit:7153e74094f77294aeea15f8af25463833f492db -->
+### Document KayraLive Turkish public playlist default
+
+- Etkilenen alanlar: KayraLive
+- Commit: [7153e74](https://github.com/Kayracs3/Kayra/commit/7153e74094f77294aeea15f8af25463833f492db)
+
+## 2026-11-21
+
+<!-- kayra-commit:a51fe1d1734e4bb19f939a17fe71f509f7997a5d -->
+### Bump KayraLive version for playback fix
+
+- Etkilenen alanlar: KayraLive
+- Commit: [a51fe1d](https://github.com/Kayracs3/Kayra/commit/a51fe1d1734e4bb19f939a17fe71f509f7997a5d)
+
+## 2026-11-21
+
+<!-- kayra-commit:6affad0626ce6e4c9ae18c1e857d0bac09672380 -->
+### Fix KayraLive stream URL payload and default Turkish playlist
+
+- Etkilenen alanlar: KayraLive
+- Commit: [6affad0](https://github.com/Kayracs3/Kayra/commit/6affad0626ce6e4c9ae18c1e857d0bac09672380)
+
+## 2026-11-20
+
+<!-- kayra-commit:732a42bc3c25e1d9be59093c949c250cfebc6ab3 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [732a42b](https://github.com/Kayracs3/Kayra/commit/732a42bc3c25e1d9be59093c949c250cfebc6ab3)
+
+
 ## 2026-11-20
 
 <!-- kayra-commit:e11728fd03dc47e3a9dbde62189769c4c31c5241 -->
