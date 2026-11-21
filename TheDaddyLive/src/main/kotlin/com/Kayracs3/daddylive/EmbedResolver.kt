@@ -46,6 +46,7 @@ class EmbedResolver : ExtractorApi() {
         )
         private const val WEBVIEW_TIMEOUT_MS = 12_000L
         private const val MAX_WEBVIEW_TRIES = 2
+        private const val PREFLIGHT_TIMEOUT_S = 5L
 
         private val atobRegex = Regex(
             """(?:source\s*:\s*)?window\.atob\(["']([A-Za-z0-9+/=_-]+)["']\)""",
@@ -186,7 +187,27 @@ class EmbedResolver : ExtractorApi() {
 
         // Not: loadExtractor kullanılmıyor. İlgisiz çıkarıcılar (ör. XStreamCdn) HTML
         // sayfalarda JSON hatası verip zaman kaybettiriyordu.
-        for (iframeUrl in iframeUrls.take(MAX_WEBVIEW_TRIES)) {
+        var webViewTries = 0
+        for (iframeUrl in iframeUrls) {
+            if (webViewTries >= MAX_WEBVIEW_TRIES) break
+
+            // Doğrulama (Turnstile) isteyen gömülü sayfaları WebView açmadan atla
+            val iframeHtml = try {
+                app.get(
+                    iframeUrl,
+                    headers = requestHeaders(url),
+                    timeout = PREFLIGHT_TIMEOUT_S
+                ).text
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            if (iframeHtml != null &&
+                blockMarkers.any { iframeHtml.contains(it, ignoreCase = true) }
+            ) continue
+
+            webViewTries++
             // Kayıtlı çıkarıcısı olmayan gömülü sayfalar için sayfanın normal HLS
             // isteğini gözlemle.
             val interceptedUrl = try {
