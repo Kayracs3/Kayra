@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:5dc0f1a9f4602c1c7b228785c2ff931c6f51f582 -->
+### Update Kotlin version from 7 to 8
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [5dc0f1a](https://github.com/Kayracs3/Kayra/commit/5dc0f1a9f4602c1c7b228785c2ff931c6f51f582)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:0d0cdc7eda75b341c260f5641d3eba38ed074cd4 -->
 ### Refactor EmbedResolver for new media source handling
 
