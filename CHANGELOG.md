@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:bac738aed849f4b38cbf7e54ace6d7b73b9087e1 -->
+### Bump KayraLive to version 8
+
+- Etkilenen alanlar: KayraLive
+- Commit: [bac738a](https://github.com/Kayracs3/Kayra/commit/bac738aed849f4b38cbf7e54ace6d7b73b9087e1)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:88cc51aeac634133653bea890e7f16e66cb80a7c -->
 ### Restore KayraLive v4 stream URL routing
 
