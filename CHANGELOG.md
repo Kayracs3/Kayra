@@ -2,6 +2,31 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:b75439fba998057de379b78663b67df9023b1b4e -->
+### Document all built-in M3U channels and HTTP host restriction
+
+- Etkilenen alanlar: KayraLive
+- Commit: [b75439f](https://github.com/Kayracs3/Kayra/commit/b75439fba998057de379b78663b67df9023b1b4e)
+
+## 2026-11-21
+
+<!-- kayra-commit:ee01614a2cd2471378e9e819e7d258d0745c55b8 -->
+### Bump KayraLive version for complete M3U channel list
+
+- Etkilenen alanlar: KayraLive
+- Commit: [ee01614](https://github.com/Kayracs3/Kayra/commit/ee01614a2cd2471378e9e819e7d258d0745c55b8)
+
+## 2026-11-21
+
+<!-- kayra-commit:fa5fc0686901fa592b38090ce80c9f6439f5a456 -->
+### Preserve repeated M3U URLs with distinct channel names
+
+- Etkilenen alanlar: KayraLive
+- Commit: [fa5fc06](https://github.com/Kayracs3/Kayra/commit/fa5fc0686901fa592b38090ce80c9f6439f5a456)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:fbf9777be4c539876ec09ed00ef18aed0fa5e004 -->
 ### Fix KayraLive compile error and load all supplied M3U entries
 
