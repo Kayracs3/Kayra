@@ -41,7 +41,7 @@ class NewTaneProvider : MainAPI() {
 
         private val SAFE_ID = Regex("""[A-Za-z0-9_-]{1,80}""")
         private val M3U8_REGEX = Regex(
-            """https?://[^\s"'<>\]+?\.m3u8[^\s"'<>\]*""",
+            """https?://[^\s"'<>]+?\.m3u8[^\s"'<>]*""",
             RegexOption.IGNORE_CASE
         )
         private val IFRAME_REGEX = Regex(
@@ -301,7 +301,7 @@ class NewTaneProvider : MainAPI() {
             val tokenUrls = linkedSetOf<String>()
             val tokenRegexes = listOf(
                 Regex("""["'](https?://[^"' ]*?/api/playlist-token\?slug=[^"']+)["']""", RegexOption.IGNORE_CASE),
-                Regex("""(https?://[^\s"'<>\]+?/api/playlist-token\?slug=[^\s"'<>\&]+)""", RegexOption.IGNORE_CASE),
+                Regex("""(https?://[^\s"'<>]+?/api/playlist-token\?slug=[^\s"'<&]+)""", RegexOption.IGNORE_CASE),
                 Regex("""["'](/api/playlist-token\?slug=[^"']+)["']""", RegexOption.IGNORE_CASE)
             )
 
@@ -438,7 +438,7 @@ class NewTaneProvider : MainAPI() {
         }
 
         val tokenRegex = Regex(
-            """https?://[^\s"'<>\]+?/index\.m3u8\?[^\s"'<>\]*\bt=[^\s"'<>\&]+[^\s"'<>\]*""",
+            """https?://[^\s"'<>]+?/index\.m3u8\?[^\s"'<>]*\bt=[^\s"'&]+[^\s"'<>]*""",
             RegexOption.IGNORE_CASE
         )
         tokenRegex.find(normalized)?.value?.let { stream ->
