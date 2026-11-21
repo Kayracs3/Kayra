@@ -450,7 +450,7 @@ class NewTaneProvider : MainAPI() {
         return false
     }
 
-    private fun emitLink(
+    private suspend fun emitLink(
         url: String,
         referer: String,
         callback: (ExtractorLink) -> Unit
