@@ -2,6 +2,31 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:9a121932680862f9127233c5fea55d1a85bcf938 -->
+### Add NewTane plugin module configuration
+
+- Etkilenen alanlar: NewTane
+- Commit: [9a12193](https://github.com/Kayracs3/Kayra/commit/9a121932680862f9127233c5fea55d1a85bcf938)
+
+## 2026-11-21
+
+<!-- kayra-commit:87b5f91cac8cb2949d2b4cdefe46aa8cbb4b529b -->
+### Register NewTane CloudStream provider
+
+- Etkilenen alanlar: NewTane
+- Commit: [87b5f91](https://github.com/Kayracs3/Kayra/commit/87b5f91cac8cb2949d2b4cdefe46aa8cbb4b529b)
+
+## 2026-11-21
+
+<!-- kayra-commit:b44a2d5ca88d25fa2675fd52cbd8fdee03a1ce7e -->
+### Add NewTane live TV provider
+
+- Etkilenen alanlar: NewTane
+- Commit: [b44a2d5](https://github.com/Kayracs3/Kayra/commit/b44a2d5ca88d25fa2675fd52cbd8fdee03a1ce7e)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:ae92539089a9798e56cd4369a4d31ae888adcf82 -->
 ### Update version from 9 to 10 in build.gradle.kts
 
