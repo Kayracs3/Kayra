@@ -4,7 +4,9 @@ KayraLive, CloudStream için genel amaçlı M3U/M3U8 canlı TV sağlayıcısıd�
 
 ## Android TV kullanımı
 
-Eklenti varsayılan olarak Kayra deposundaki [channels.m3u](https://github.com/Kayracs3/Kayra/blob/master/KayraLive/channels.m3u) dosyasını okur. Bu dosyaya yalnızca erişim ve yayın kullanım hakkına sahip olduğun HTTPS kanal kayıtlarını ekle. Değişiklikler depoya kaydedildikten sonra CloudStream kanal listesini yeniden yükler.
+Varsayılan olarak iptv-org tarafından yayımlanan [Türkçe yayın listesi](https://iptv-org.github.io/iptv/languages/tur.m3u) kullanılır. Kaynak dokümantasyonunda bu listede 181 kanal gösterilir; yayınların bölgesel erişimi, sürekliliği ve çalışırlığı değişebilir. Kaynak, kullanıcıların gönderdiği herkese açık yayın bağlantılarının hak sahipleri tarafından kasıtlı olarak yayımlandığını bildiği ölçüde listelediğini belirtir.
+
+Kendi HTTPS M3U/M3U8 listen varsa eklenti ayarlarından ekleyebilirsin. Yalnızca erişim ve yayın kullanım hakkına sahip olduğun kaynakları kullan.
 
 M3U kayıt biçimi:
 
