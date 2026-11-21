@@ -41,10 +41,12 @@ class KayraLive(private val context: Context) : MainAPI() {
     companion object {
         private const val PREFS_NAME = "kayra_live_playlist"
         private const val PLAYLIST_KEY = "playlist_url"
-        // iptv-org listesinde Türkçe yayın dili için yayımlanan herkese açık M3U.
-        private const val DEFAULT_PLAYLIST_URL =
-            "https://iptv-org.github.io/iptv/languages/tur.m3u"
-        "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
+        // Varsayılan listeler birleştirilir; her satır ayrı bir M3U kaynağıdır.
+        private val DEFAULT_PLAYLIST_URLS = listOf(
+            "https://iptv-org.github.io/iptv/languages/tur.m3u",
+            "https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u"
+        )
+        private const val MAX_PLAYLIST_SOURCES = 10
         private const val CACHE_TTL_MS = 5 * 60 * 1000L
         private const val MAX_PLAYLIST_CHARS = 5 * 1024 * 1024
         private const val USER_AGENT =
@@ -83,12 +85,24 @@ class KayraLive(private val context: Context) : MainAPI() {
     }
 
     val configuredPlaylistUrl: String
-        get() = preferences.getString(PLAYLIST_KEY, DEFAULT_PLAYLIST_URL).orEmpty()
+        get() = preferences.getString(PLAYLIST_KEY, null)
+            ?.takeIf { it.isNotBlank() }
+            ?: DEFAULT_PLAYLIST_URLS.joinToString("\n")
 
     fun savePlaylistUrl(raw: String): Boolean {
-        val value = raw.trim()
-        if (safeHttpsUrl(value) == null) return false
-        preferences.edit().putString(PLAYLIST_KEY, value).apply()
+        val urls = raw.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+            .toList()
+
+        if (urls.isEmpty() || urls.size > MAX_PLAYLIST_SOURCES) return false
+
+        val normalized = urls.mapNotNull { safeHttpsUrl(it) }
+        if (normalized.size != urls.size) return false
+
+        preferences.edit()
+            .putString(PLAYLIST_KEY, normalized.distinct().joinToString("\n"))
+            .apply()
         cachedChannels = emptyList()
         cacheTimestamp = 0L
         return true
@@ -108,40 +122,62 @@ class KayraLive(private val context: Context) : MainAPI() {
             return cachedChannels
         }
 
-        val playlistUrl = safeHttpsUrl(configuredPlaylistUrl)
-            ?: throw ErrorLoadingException(
-                "Önce KayraLive eklenti ayarlarından yetkili M3U/M3U8 liste adresini ekleyin."
-            )
+        val playlistUrls = configuredPlaylistUrl.lineSequence()
+            .mapNotNull { safeHttpsUrl(it) }
+            .distinct()
+            .take(MAX_PLAYLIST_SOURCES)
+            .toList()
 
-        val response = runCatching {
-            app.get(
-                playlistUrl,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Accept" to "application/vnd.apple.mpegurl, audio/x-mpegurl, text/plain, */*"
-                ),
-                timeout = 20
-            )
-        }.getOrElse {
-            throw ErrorLoadingException("Kanal listesi indirilemedi: ${it.message}")
-        }
-
-        if (!response.isSuccessful) {
-            throw ErrorLoadingException("Kanal listesi HTTP ${response.code} döndürdü.")
-        }
-
-        val body = response.text
-        if (body.length > MAX_PLAYLIST_CHARS) {
-            throw ErrorLoadingException("M3U listesi 5 MB sınırını aşıyor.")
-        }
-        if (!body.trimStart().startsWith("#EXTM3U")) {
-            throw ErrorLoadingException("Kaynak geçerli bir M3U listesi değil.")
-        }
-
-        val parsed = parsePlaylist(body)
-        if (parsed.isEmpty()) {
+        if (playlistUrls.isEmpty()) {
             throw ErrorLoadingException(
-                "Listede HTTPS yayın adresi bulunamadı veya tüm kayıtlar güvenlik filtresinden geçti."
+                "En az bir HTTPS M3U/M3U8 liste adresi eklemelisin."
+            )
+        }
+
+        val mergedChannels = linkedMapOf<String, Channel>()
+        val sourceErrors = mutableListOf<String>()
+
+        for ((index, playlistUrl) in playlistUrls.withIndex()) {
+            val sourceChannels = try {
+                val response = app.get(
+                    playlistUrl,
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Accept" to "application/vnd.apple.mpegurl, audio/x-mpegurl, text/plain, */*"
+                    ),
+                    timeout = 20
+                )
+
+                if (!response.isSuccessful) {
+                    throw ErrorLoadingException("HTTP ${response.code}")
+                }
+
+                val body = response.text
+                if (body.length > MAX_PLAYLIST_CHARS) {
+                    throw ErrorLoadingException("M3U dosyası 5 MB sınırını aşıyor")
+                }
+                if (!body.trimStart().startsWith("#EXTM3U")) {
+                    throw ErrorLoadingException("Yanıt geçerli bir M3U listesi değil")
+                }
+
+                parsePlaylist(body)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                sourceErrors += "Liste ${index + 1}: ${e.message ?: "yüklenemedi"}"
+                emptyList()
+            }
+
+            sourceChannels.forEach { channel ->
+                mergedChannels.putIfAbsent(channel.streamUrl, channel)
+            }
+        }
+
+        val parsed = mergedChannels.values.toList()
+        if (parsed.isEmpty()) {
+            val detail = sourceErrors.joinToString("; ")
+            throw ErrorLoadingException(
+                "Hiçbir kanal listesi yüklenemedi. ${detail.ifBlank { "Listelerde geçerli HTTPS kanal bulunamadı." }}"
             )
         }
 
