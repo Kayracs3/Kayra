@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:e923f4acec111e633327ed4c123c7857e09a01f9 -->
+### Refactor logo fetching and mapping logic
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [e923f4a](https://github.com/Kayracs3/Kayra/commit/e923f4acec111e633327ed4c123c7857e09a01f9)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:4f88e5943a6e93f493a68552bae024c97f3237ee -->
 ### Update media referer and origin URLs
 
