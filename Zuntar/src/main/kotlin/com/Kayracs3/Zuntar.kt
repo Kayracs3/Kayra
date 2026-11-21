@@ -141,7 +141,7 @@ class ZuntarProvider : MainAPI() {
 
     private fun row(url: String): ZuntarChannel {
         val cleanUrl = url.substringBefore('?').substringBefore('#').trimEnd('/')
-        val index = Regex("""(?:^|/)zuntar-channel/(\\d+)$""")
+        val index = Regex("""(?:^|/)zuntar-channel/(\d+)$""")
             .find(cleanUrl)
             ?.groupValues
             ?.getOrNull(1)
