@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:8199e2c397e86b00849f66f188c9a105847e59a7 -->
+### Fix KoalaTV main page API override
+
+- Etkilenen alanlar: KoalaTV
+- Commit: [8199e2c](https://github.com/Kayracs3/Kayra/commit/8199e2c397e86b00849f66f188c9a105847e59a7)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:d2410cbaad697a6732a6cd26e65981a972fe9fe9 -->
 ### Add KoalaTV live TV provider
 
