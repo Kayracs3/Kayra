@@ -58,7 +58,7 @@ class DaddyLiveProvider : MainAPI() {
     companion object {
         private const val PAGE_SIZE = 100
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
-        private const val TOTAL_TIMEOUT_MS = 40_000L
+        private const val TOTAL_TIMEOUT_MS = 70_000L
 
         // İlk çalışan adres kullanılır
         private val DOMAINS = listOf(
