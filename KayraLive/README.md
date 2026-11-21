@@ -4,7 +4,7 @@ KayraLive, CloudStream için genel amaçlı M3U/M3U8 canlı TV sağlayıcısıd�
 
 ## Android TV kullanımı
 
-Varsayılan olarak [iptv-org Türkçe yayın listesi](https://iptv-org.github.io/iptv/languages/tur.m3u) ve [belesplus listesi](https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u) birleştirilir. Ayrıca kullanıcı tarafından belirtilen tekil Sinema 2 HLS adresi ayrı bir kanal olarak listelenir. Her iki listedeki aynı yayın adresleri tek kayıt olarak gösterilir. Yayınların erişilebilirliği ve çalışırlığı kaynaklara ve bölgeye göre değişebilir.
+Varsayılan olarak [iptv-org Türkçe yayın listesi](https://iptv-org.github.io/iptv/languages/tur.m3u) ve [belesplus listesi](https://raw.githubusercontent.com/sunarproje/support/refs/heads/main/belesplus.m3u) birleştirilir. Ayrıca verdiğin M3U bloğundaki 21 kanal, adları, grup bilgileri ve logo adresleriyle yerleşik listeye eklenir. Aynı yayın URL'si farklı kanal adıyla tekrarlanırsa iki kayıt da ayrı ayrı gösterilir. Yayınların erişilebilirliği ve çalışırlığı kaynaklara ve bölgeye göre değişebilir.
 
 Eklenti ayarlarında birden fazla HTTPS M3U/M3U8 adresi kullanabilirsin: her adresi ayrı satıra yaz. En fazla 10 liste kabul edilir. Bir listenin geçici olarak açılamaması diğer listelerin yüklenmesini durdurmaz. **Temizle** seçeneği varsayılan iki listeyi yeniden etkinleştirir. Yalnızca erişim ve yayın kullanım hakkına sahip olduğun kaynakları kullan.
 
@@ -22,8 +22,8 @@ Android telefon veya tablette eklentinin ayar düğmesinden farklı bir HTTPS M3
 
 ## Güvenlik ve sınırlar
 
-- Kullanıcı ayarlarından eklenen M3U liste adresleri yalnızca HTTPS olabilir. Yerleşik Sinema 2 kanalında ise sadece o tek adrese özel HTTP izni vardır; başka HTTP adreslerine izin verilmez.
-- HTTP yayınının sunucusu erişilemezse veya CloudStream/Android ağ güvenliği bağlantıyı engellerse oynatma gerçekleşmez.
+- Kullanıcı ayarlarından eklenen M3U liste adresleri yalnızca HTTPS olabilir. Verdiğin yerleşik kanal listesindeki HTTP yayınları için HTTP izni yalnızca `65.108.239.207` sunucusundaki `.m3u8` yollarıyla sınırlandırılmıştır.
+- HTTP yayınının sunucusu erişilemezse veya CloudStream/Android ağ güvenliği bağlantıyı engellerse oynatma gerçekleşmez. Token içeren bir URL'nin süresi dolduysa yayın sağlayıcısından güncel bağlantı gerekir.
 - Adında veya grup bilgisinde açıkça 18+ / yetişkin ibaresi bulunan kanallar gizlenir.
 - Korumalı API'lere veya oynatıcı doğrulamalarına müdahale etmez.
 - Etiket filtresi yanlış etiketlenmiş içerikleri kesin olarak tanımlayamaz.
