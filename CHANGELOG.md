@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:234f281e52213b57175ab2ac7fa5259b2abd763c -->
+### Correct KayraLive default playlist documentation
+
+- Etkilenen alanlar: KayraLive
+- Commit: [234f281](https://github.com/Kayracs3/Kayra/commit/234f281e52213b57175ab2ac7fa5259b2abd763c)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:7153e74094f77294aeea15f8af25463833f492db -->
 ### Document KayraLive Turkish public playlist default
 
