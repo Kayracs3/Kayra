@@ -2,6 +2,15 @@
 
 ## 2026-11-21
 
+<!-- kayra-commit:032514fd6ae31ebbbd8e24704f72d5008cb00ac6 -->
+### Refactor EmbedResolver for m3u8 extraction improvements
+
+- Etkilenen alanlar: TheDaddyLive
+- Commit: [032514f](https://github.com/Kayracs3/Kayra/commit/032514fd6ae31ebbbd8e24704f72d5008cb00ac6)
+
+
+## 2026-11-21
+
 <!-- kayra-commit:67a74c03e464b45f88471c8a44a17e1d544b4efd -->
 ### Increase WEBVIEW_TIMEOUT_MS and add logging
 
