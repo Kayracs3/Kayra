@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import java.net.URI
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val RESOLVER_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -46,7 +47,8 @@ class EmbedResolver : ExtractorApi() {
         )
         private const val WEBVIEW_TIMEOUT_MS = 12_000L
         private const val MAX_WEBVIEW_TRIES = 2
-        private const val PREFLIGHT_TIMEOUT_S = 5L
+        private const val PREFLIGHT_TIMEOUT_S = 4L
+        private const val PREFLIGHT_HARD_LIMIT_MS = 5_000L
 
         private val atobRegex = Regex(
             """(?:source\s*:\s*)?window\.atob\(["']([A-Za-z0-9+/=_-]+)["']\)""",
@@ -191,21 +193,23 @@ class EmbedResolver : ExtractorApi() {
         for (iframeUrl in iframeUrls) {
             if (webViewTries >= MAX_WEBVIEW_TRIES) break
 
-            // Doğrulama (Turnstile) isteyen gömülü sayfaları WebView açmadan atla
+            // Ön kontrol: ulaşılamayan (DNS/bağlantı hatası, zaman aşımı) ya da doğrulama
+            // (Turnstile) isteyen gömülü sayfaları WebView açmadan atla
             val iframeHtml = try {
-                app.get(
-                    iframeUrl,
-                    headers = requestHeaders(url),
-                    timeout = PREFLIGHT_TIMEOUT_S
-                ).text
+                withTimeoutOrNull(PREFLIGHT_HARD_LIMIT_MS) {
+                    app.get(
+                        iframeUrl,
+                        headers = requestHeaders(url),
+                        timeout = PREFLIGHT_TIMEOUT_S
+                    ).text
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 null
-            }
-            if (iframeHtml != null &&
-                blockMarkers.any { iframeHtml.contains(it, ignoreCase = true) }
-            ) continue
+            } ?: continue
+
+            if (blockMarkers.any { iframeHtml.contains(it, ignoreCase = true) }) continue
 
             webViewTries++
             // Kayıtlı çıkarıcısı olmayan gömülü sayfalar için sayfanın normal HLS
