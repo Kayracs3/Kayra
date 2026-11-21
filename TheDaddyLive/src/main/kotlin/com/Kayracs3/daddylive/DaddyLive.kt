@@ -59,7 +59,8 @@ class DaddyLiveProvider : MainAPI() {
             "https://dlhd.pk",
             "https://dlhd.st",
             "https://dlstreams.st",
-            "https://dlive.sx"
+            "https://dlive.sx",
+            "https://daddylive.dad"
         )
 
         private val channelIdRegex = Regex("""[?&]id=(\d+)""")
@@ -77,7 +78,6 @@ class DaddyLiveProvider : MainAPI() {
         "Referer" to "$base/"
     )
 
-    // ------------------------------------------------------------------ alan adı
     private val baseMutex = Mutex()
     @Volatile
     private var resolvedBase: String? = null
@@ -103,7 +103,6 @@ class DaddyLiveProvider : MainAPI() {
         }
     }
 
-    // ------------------------------------------------------------------ afişler
     private fun normalize(name: String): String {
         val n = java.text.Normalizer.normalize(name.lowercase(), java.text.Normalizer.Form.NFD)
             .replace(Regex("\\p{M}+"), "")
@@ -147,7 +146,6 @@ class DaddyLiveProvider : MainAPI() {
         out
     }.getOrDefault(emptyMap())
 
-    // ------------------------------------------------------------------ katalog
     private val cacheMutex = Mutex()
     private var cache: List<LiveSearchResponse> = emptyList()
     private var cacheTime = 0L
