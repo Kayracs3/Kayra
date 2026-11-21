@@ -856,10 +856,10 @@
         "name": "WebDramaTurkey"
     },
     {
-        "fileHash": "sha256-7d8a195d7826c02e04402c8b48d7dd0b86e1f24ae8ceba0b7c1f9732b83b4f5f",
+        "fileHash": "sha256-70e6c14e3736dd079c94db0f7f33a2d1357e8d9ff1af89be2cd5d8d3322e81e0",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 21782,
+        "fileSize": 22388,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -868,7 +868,7 @@
         "tvTypes": [
             "Live"
         ],
-        "version": 1,
+        "version": 2,
         "internalName": "Zuntar",
         "description": "Canl\u0131 TV ve etkinlik sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/Zuntar.cs3",
