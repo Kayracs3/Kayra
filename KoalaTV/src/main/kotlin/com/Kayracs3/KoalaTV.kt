@@ -6,8 +6,6 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -39,8 +37,6 @@ class KoalaTVProvider(private val prefs: SharedPreferences) : MainAPI() {
         val logo: String,
         val ext: String
     )
-
-    private val sessionMutex = Mutex()
 
     @Volatile
     private var session: Session? = null
@@ -334,13 +330,16 @@ class KoalaTVProvider(private val prefs: SharedPreferences) : MainAPI() {
         return true
     }
 
-    private suspend fun getSession(): Session = sessionMutex.withLock {
+    private suspend fun getSession(): Session {
         session?.let { cached ->
             if (cached.expiresAt > System.currentTimeMillis() + 30_000L) {
-                return@withLock cached
+                return cached
             }
         }
-        acquireSession().also { session = it }
+
+        // Refresh only when there is no valid cached session.
+        // Avoids an extra kotlinx.coroutines dependency in the shared build.
+        return acquireSession().also { session = it }
     }
 
     private fun installationToken(): String {
