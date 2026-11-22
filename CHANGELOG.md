@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:77d15e1fc5b8620f7f548fd6830653f9608503df -->
+### Update mainUrl to new domain
+
+- Etkilenen alanlar: PatronSH
+- Commit: [77d15e1](https://github.com/Kayracs3/Kayra/commit/77d15e1fc5b8620f7f548fd6830653f9608503df)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:df1d683468dde4f779bfd47302e2c451ac0515fe -->
 ### Fix KoalaTV category enumeration
 
