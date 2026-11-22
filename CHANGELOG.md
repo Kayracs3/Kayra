@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:4091d821ec20b3c892d50c186067f583d43a03d9 -->
+### Update API URLs for channels and stream host
+
+- Etkilenen alanlar: PatronSH
+- Commit: [4091d82](https://github.com/Kayracs3/Kayra/commit/4091d821ec20b3c892d50c186067f583d43a03d9)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:20b4314d2b1be691f85cf8d8f6dec980264d79ab -->
 ### Update URLs for PatronSaha service
 
