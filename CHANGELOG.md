@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:5db619a15b97b3708b0d67d3db9d90856cc2defb -->
+### Update API URLs for channels and stream host
+
+- Etkilenen alanlar: PatronSH
+- Commit: [5db619a](https://github.com/Kayracs3/Kayra/commit/5db619a15b97b3708b0d67d3db9d90856cc2defb)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:57555707afe0bc385fab306863a69ccba7f63ecb -->
 ### Fix KoalaTV coroutine dependency compile errors
 
