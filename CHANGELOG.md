@@ -2,6 +2,15 @@
 
 ## 2026-11-22
 
+<!-- kayra-commit:81b08460264a3ac6eab713f89ea7b0fc5c181654 -->
+### Remove KoalaTV plugin
+
+- Etkilenen alanlar: KoalaTV
+- Commit: [81b0846](https://github.com/Kayracs3/Kayra/commit/81b08460264a3ac6eab713f89ea7b0fc5c181654)
+
+
+## 2026-11-22
+
 <!-- kayra-commit:5db619a15b97b3708b0d67d3db9d90856cc2defb -->
 ### Update API URLs for channels and stream host
 
