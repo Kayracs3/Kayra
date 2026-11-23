@@ -271,7 +271,34 @@
         ]
       }
     },
-    "FullHDFilmizlesene": {},
+    "FullHDFilmizlesene": {
+      "identityProfile": {
+        "title": "Film İzle | Full HD Filmler | FullHDFilmizlesene",
+        "h1": "Film İzle",
+        "siteName": "",
+        "description": "FullHDFilmizlesene’de Full HD yerli ve yabancı filmleri net görüntüyle izleyin. Türkçe dublaj, altyazı, IMDb ve türlere göre film seçin.",
+        "tokens": [
+          "altyaz",
+          "dublaj",
+          "film",
+          "filmler",
+          "filmleri",
+          "full",
+          "fullhdfilmizlesene",
+          "gore",
+          "goruntuyle",
+          "imdb",
+          "izle",
+          "izleyin",
+          "net",
+          "secin",
+          "turkce",
+          "turlere",
+          "yabanc",
+          "yerli"
+        ]
+      }
+    },
     "HDFilmCehennemi": {
       "history": [
         {
