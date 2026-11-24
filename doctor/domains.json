@@ -109,7 +109,34 @@
       }
     },
     "DiziAsya": {},
-    "DiziDad": {},
+    "DiziDad": {
+      "identityProfile": {
+        "title": "Dizi izle - Dizidad | Yabancı dizi izle",
+        "h1": "Son Eklenen Diziler Son Eklenen Filmler",
+        "siteName": "Dizi izle - Dizidad | Yabancı dizi izle",
+        "description": "Binlerce yerli yabancı dizi arşivi, tüm sezonlar, kesintisiz bölümler. Sadece dizi izle, Dizidad heryerde seninle!",
+        "tokens": [
+          "arsivi",
+          "binlerce",
+          "bolumler",
+          "dizi",
+          "dizidad",
+          "diziler",
+          "eklenen",
+          "filmler",
+          "heryerde",
+          "izle",
+          "kesintisiz",
+          "sadece",
+          "seninle",
+          "sezonlar",
+          "son",
+          "tum",
+          "yabanc",
+          "yerli"
+        ]
+      }
+    },
     "DiziKorea": {
       "identityProfile": {
         "title": "DiziKorea - En Güncel Asya ve Kore Dizileri izleme Sitesi",
