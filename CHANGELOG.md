@@ -2,6 +2,15 @@
 
 ## 2026-11-24
 
+<!-- kayra-commit:f1f5f7ce52b4338a42a7b480146270d8534ecc38 -->
+### Remove unreachable Talend repository from project Gradle repositories
+
+- Etkilenen alanlar: build.gradle.kts
+- Commit: [f1f5f7c](https://github.com/Kayracs3/Kayra/commit/f1f5f7ce52b4338a42a7b480146270d8534ecc38)
+
+
+## 2026-11-24
+
 <!-- kayra-commit:717591cab159738e1bd1f8bd6f8b8648c68ddb2e -->
 ### Remove empty Maven repository block from Gradle settings
 
