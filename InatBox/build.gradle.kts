@@ -1,5 +1,4 @@
-version = 21
-
+version = 22
 cloudstream {
     authors     = listOf("JustRelaxable", "Kayracs3")
     language    = "tr"

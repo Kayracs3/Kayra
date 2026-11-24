@@ -930,24 +930,24 @@ class InatBox : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "https://sprboxs.bar/CDN/001/SPR/v2/spor_v3.php" to "Spor",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/tv/ulusal.php" to "Ulusal Kanallar",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/tv/haber.php" to "Haber Kanalları",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/tv/cocuk.php" to "Çocuk Kanalları",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/tv/sinema.php" to "Sinema Kanalları",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/tv/belgesel.php" to "Belgesel Kanalları",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/ex/index.php" to "Exxen",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/nf/index.php" to "Netflix",
-        "https://sprboxs.bar/CDN/001/SPR/v2/ccc/a/index.php" to "TOD",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/hb/index.php" to "BluTV & HBO",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/dsny/index.php" to "Disney+",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/ga/index.php" to "Gain",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/amz/index.php" to "Amazon Prime",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/tbi/index.php" to "Tabii",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/yerli-dizi/index.php" to "Yerli Diziler",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/yabanci-dizi/index.php" to "Yabancı Diziler",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/film/yerli-filmler.php" to "Yerli Filmler",
-        "https://diziboxen.help/CDN/001/002/dizibox/v2/film/mubi.php" to "Mubi",
+        "https://sprbox.top/CDN/001/SPR/v2/spor_v3.php" to "Spor",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/tv/ulusal.php" to "Ulusal Kanallar",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/tv/haber.php" to "Haber Kanalları",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/tv/cocuk.php" to "Çocuk Kanalları",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/tv/sinema.php" to "Sinema Kanalları",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/tv/belgesel.php" to "Belgesel Kanalları",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/ex/index.php" to "Exxen",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/nf/index.php" to "Netflix",
+        "https://sprbox.top/CDN/001/SPR/v2/ccc/a/index.php" to "TOD",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/hb/index.php" to "BluTV & HBO",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/dsny/index.php" to "Disney+",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/ga/index.php" to "Gain",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/amz/index.php" to "Amazon Prime",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/tbi/index.php" to "Tabii",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/yerli-dizi/index.php" to "Yerli Diziler",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/yabanci-dizi/index.php" to "Yabancı Diziler",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/film/yerli-filmler.php" to "Yerli Filmler",
+        "https://diziboxen.top/CDN/001/002/dizibox/v2/film/mubi.php" to "Mubi",
     )
 
     override suspend fun getMainPage(
@@ -1125,12 +1125,12 @@ class InatBox : MainAPI() {
         if (q.isBlank()) return emptyList()
 
         val keyUrls = listOf(
-            "https://sprboxs.bar/CDN/001/SPR/v2/spor_v3.php",
-            "https://diziboxen.help/CDN/001/002/dizibox/v2/tv/ulusal.php",
-            "https://diziboxen.help/CDN/001/002/dizibox/v2/nf/index.php",
-            "https://diziboxen.help/CDN/001/002/dizibox/v2/yerli-dizi/index.php",
-            "https://diziboxen.help/CDN/001/002/dizibox/v2/yabanci-dizi/index.php",
-            "https://diziboxen.help/CDN/001/002/dizibox/v2/film/yerli-filmler.php"
+            "https://sprbox.top/CDN/001/SPR/v2/spor_v3.php",
+            "https://diziboxen.top/CDN/001/002/dizibox/v2/tv/ulusal.php",
+            "https://diziboxen.top/CDN/001/002/dizibox/v2/nf/index.php",
+            "https://diziboxen.top/CDN/001/002/dizibox/v2/yerli-dizi/index.php",
+            "https://diziboxen.top/CDN/001/002/dizibox/v2/yabanci-dizi/index.php",
+            "https://diziboxen.top/CDN/001/002/dizibox/v2/film/yerli-filmler.php"
         )
         val now = System.currentTimeMillis()
         val cacheDuration = 15 * 60 * 1000L
