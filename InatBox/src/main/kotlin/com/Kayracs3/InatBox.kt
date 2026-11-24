@@ -1825,13 +1825,21 @@ class InatBox : MainAPI() {
             }
         }
 
-        return emitDirectOrRawStream(
+        val loaded = emitDirectOrRawStream(
             name = chContent.chName.ifBlank { "InatBox" },
             url = playbackUrl,
             headers = playbackHeaders,
             subtitleCallback = subtitleCallback,
             callback = callback
         )
+
+        if (!loaded) {
+            Log.w(
+                "InatBox",
+                "Unresolved channel source: name=${chContent.chName}, type=${chContent.chType}, url=$playbackUrl"
+            )
+        }
+        return loaded
     }
 
     private fun parseFirstJsonObject(raw: String): JSONObject? {
