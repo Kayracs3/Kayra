@@ -2,6 +2,15 @@
 
 ## 2026-11-24
 
+<!-- kayra-commit:2dbdccd0add4293924e0f5f738239f25f01ced70 -->
+### Add fallback Maven mirrors for CloudStream Kotlin plugin
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [2dbdccd](https://github.com/Kayracs3/Kayra/commit/2dbdccd0add4293924e0f5f738239f25f01ced70)
+
+
+## 2026-11-24
+
 <!-- kayra-commit:d760d0694dae41581a8d047473e6a226000ed223 -->
 ### Bump InatBox provider version for HLS fix
 
