@@ -7,7 +7,6 @@ buildscript {
 repositories {
 mavenLocal()
 google()
-maven("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
 mavenCentral()
 maven("https://jitpack.io")
 }
@@ -32,7 +31,6 @@ allprojects {
 repositories {
 mavenLocal()
 google()
-maven("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
 mavenCentral()
 maven("https://jitpack.io")
 }
