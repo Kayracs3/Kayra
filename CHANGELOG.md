@@ -2,6 +2,15 @@
 
 ## 2026-11-25
 
+<!-- kayra-commit:fba0d41946932831cb686da3bdd2e04029450e62 -->
+### Include channel name in unresolved stream log
+
+- Etkilenen alanlar: InatBox
+- Commit: [fba0d41](https://github.com/Kayracs3/Kayra/commit/fba0d41946932831cb686da3bdd2e04029450e62)
+
+
+## 2026-11-25
+
 <!-- kayra-commit:6866151fef3f0c97ae16cd2bc3952b12d7735047 -->
 ### Bump InatBox version to 23
 
