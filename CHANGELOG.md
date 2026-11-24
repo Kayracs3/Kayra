@@ -2,6 +2,15 @@
 
 ## 2026-11-24
 
+<!-- kayra-commit:d1ad9e13ede26dab42bedbdf908f98922fb89e1b -->
+### Update mainUrl to new DiziLife URL
+
+- Etkilenen alanlar: DiziLife
+- Commit: [d1ad9e1](https://github.com/Kayracs3/Kayra/commit/d1ad9e13ede26dab42bedbdf908f98922fb89e1b)
+
+
+## 2026-11-24
+
 <!-- kayra-commit:f1f5f7ce52b4338a42a7b480146270d8534ecc38 -->
 ### Remove unreachable Talend repository from project Gradle repositories
 
