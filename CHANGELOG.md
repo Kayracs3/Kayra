@@ -1,5 +1,30 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-24
+
+<!-- kayra-commit:f9331090baf6302838c91bb1af78d32fc9ad91b6 -->
+### Bump version from 1 to 2
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [f933109](https://github.com/Kayracs3/Kayra/commit/f9331090baf6302838c91bb1af78d32fc9ad91b6)
+
+## 2026-11-24
+
+<!-- kayra-commit:6cd03632e98b0c0b1b9004edb17f766216c47886 -->
+### Update DiziPalOrjinal.kt
+
+- Etkilenen alanlar: DiziPalOrjinal
+- Commit: [6cd0363](https://github.com/Kayracs3/Kayra/commit/6cd03632e98b0c0b1b9004edb17f766216c47886)
+
+## 2026-11-23
+
+<!-- kayra-commit:dec26dfcdbeb523364261e073fb9de175e1125bf -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [dec26df](https://github.com/Kayracs3/Kayra/commit/dec26dfcdbeb523364261e073fb9de175e1125bf)
+
+
 ## 2026-11-22
 
 <!-- kayra-commit:4091d821ec20b3c892d50c186067f583d43a03d9 -->
