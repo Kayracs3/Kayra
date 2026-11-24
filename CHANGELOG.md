@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-25
+
+<!-- kayra-commit:5be9f60f3912456c2bf9bdb7674af7d039a8e791 -->
+### Update InatBox catalogue hostnames
+
+- Etkilenen alanlar: InatBox
+- Commit: [5be9f60](https://github.com/Kayracs3/Kayra/commit/5be9f60f3912456c2bf9bdb7674af7d039a8e791)
+
+
 ## 2026-11-24
 
 <!-- kayra-commit:d1ad9e13ede26dab42bedbdf908f98922fb89e1b -->
