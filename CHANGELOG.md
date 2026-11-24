@@ -2,6 +2,15 @@
 
 ## 2026-11-24
 
+<!-- kayra-commit:cd9fb1e3669467796d3952399875e0ab9f37fa6c -->
+### Remove unreachable Talend repository from Gradle setup
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [cd9fb1e](https://github.com/Kayracs3/Kayra/commit/cd9fb1e3669467796d3952399875e0ab9f37fa6c)
+
+
+## 2026-11-24
+
 <!-- kayra-commit:2dbdccd0add4293924e0f5f738239f25f01ced70 -->
 ### Add fallback Maven mirrors for CloudStream Kotlin plugin
 
