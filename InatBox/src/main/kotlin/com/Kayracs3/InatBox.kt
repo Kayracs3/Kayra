@@ -461,10 +461,17 @@ private object InatHlsProxy {
                 // Inherit it only for same-host resources that have no query of
                 // their own; never leak a token to a different host.
                 val inheritedQuery = baseUri?.rawQuery
-                val sameHost = !baseUri?.host.isNullOrBlank() &&
-                    resolved.host.equals(baseUri?.host, ignoreCase = true) &&
-                    (resolved.port == -1 || baseUri?.port == -1 ||
-                        resolved.port == baseUri?.port)
+                fun effectivePort(uri: URI): Int = when {
+                    uri.port >= 0 -> uri.port
+                    uri.scheme.equals("https", ignoreCase = true) -> 443
+                    uri.scheme.equals("http", ignoreCase = true) -> 80
+                    else -> -1
+                }
+                val sameHost = baseUri != null &&
+                    !baseUri.host.isNullOrBlank() &&
+                    resolved.host.equals(baseUri.host, ignoreCase = true) &&
+                    resolved.scheme.equals(baseUri.scheme, ignoreCase = true) &&
+                    effectivePort(resolved) == effectivePort(baseUri)
 
                 if (
                     sameHost &&
