@@ -136,8 +136,6 @@ jobs:
                       url = uri("https://maven.aliyun.com/repository/central/")
                   }
                   mavenCentral()
-                  maven {
-                  }
               }
               resolutionStrategy {
                   eachPlugin {
