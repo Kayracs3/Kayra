@@ -2,6 +2,15 @@
 
 ## 2026-11-24
 
+<!-- kayra-commit:d760d0694dae41581a8d047473e6a226000ed223 -->
+### Bump InatBox provider version for HLS fix
+
+- Etkilenen alanlar: InatBox
+- Commit: [d760d06](https://github.com/Kayracs3/Kayra/commit/d760d0694dae41581a8d047473e6a226000ed223)
+
+
+## 2026-11-24
+
 <!-- kayra-commit:b1136ffde53bbc810695b2d8ef0dd15be9f93176 -->
 ### Restrict InatBox HLS query inheritance to the same origin
 
