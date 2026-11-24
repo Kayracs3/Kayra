@@ -1964,7 +1964,7 @@ class InatBox : MainAPI() {
 
         Log.w(
             "InatBox",
-            "No extractor/direct stream found: $cleanUrl"
+            "No extractor/direct stream found for $name: $cleanUrl"
         )
         return false
     }
