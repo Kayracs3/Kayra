@@ -2,6 +2,15 @@
 
 ## 2026-11-24
 
+<!-- kayra-commit:b1136ffde53bbc810695b2d8ef0dd15be9f93176 -->
+### Restrict InatBox HLS query inheritance to the same origin
+
+- Etkilenen alanlar: InatBox
+- Commit: [b1136ff](https://github.com/Kayracs3/Kayra/commit/b1136ffde53bbc810695b2d8ef0dd15be9f93176)
+
+
+## 2026-11-24
+
 <!-- kayra-commit:8c971ea4f351f967294558330b1c365c713a17e0 -->
 ### Preserve signed query parameters for InatBox HLS segments
 
