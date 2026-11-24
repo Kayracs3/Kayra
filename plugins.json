@@ -255,10 +255,10 @@
     },
     {
         "iconUrl": "https://dizi82.life/favicon.ico",
-        "fileHash": "sha256-7c8e2d0651392905ec1f921d640196354df6fea00354f3f5206501a0e6aa9086",
+        "fileHash": "sha256-211e17057f279ec2cf9c444ba0d6c59797e62b72c7866ef9565637ab4b9e5936",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 50109,
+        "fileSize": 50106,
         "status": 1,
         "language": "tr",
         "authors": [
