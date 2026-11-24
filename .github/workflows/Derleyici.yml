@@ -114,7 +114,6 @@ jobs:
           new = """repositories {
               maven("https://maven-central.storage-download.googleapis.com/maven2/")
               maven("https://maven.aliyun.com/repository/central/")
-              maven("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
               mavenCentral()
               google()
               maven("https://jitpack.io")
@@ -138,7 +137,6 @@ jobs:
                   }
                   mavenCentral()
                   maven {
-                      url = uri("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
                   }
               }
               resolutionStrategy {
