@@ -2,6 +2,15 @@
 
 ## 2026-11-24
 
+<!-- kayra-commit:8c971ea4f351f967294558330b1c365c713a17e0 -->
+### Preserve signed query parameters for InatBox HLS segments
+
+- Etkilenen alanlar: InatBox
+- Commit: [8c971ea](https://github.com/Kayracs3/Kayra/commit/8c971ea4f351f967294558330b1c365c713a17e0)
+
+
+## 2026-11-24
+
 <!-- kayra-commit:f9331090baf6302838c91bb1af78d32fc9ad91b6 -->
 ### Bump version from 1 to 2
 
