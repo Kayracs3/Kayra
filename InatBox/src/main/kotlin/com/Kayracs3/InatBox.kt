@@ -446,10 +446,41 @@ private object InatHlsProxy {
             if (target.isBlank()) return raw
 
             val absolute = runCatching {
-                if (target.startsWith("http://", true) || target.startsWith("https://", true)) {
-                    target
+                val resolved = if (
+                    target.startsWith("http://", true) ||
+                    target.startsWith("https://", true)
+                ) {
+                    URI(target)
                 } else {
-                    baseUri?.resolve(target)?.toString() ?: target
+                    baseUri?.resolve(target) ?: URI(target)
+                }
+
+                // Signed HLS manifests often return relative segment URLs.
+                // URI.resolve() drops the manifest query from those URLs, even
+                // when the CDN expects the same token on every child request.
+                // Inherit it only for same-host resources that have no query of
+                // their own; never leak a token to a different host.
+                val inheritedQuery = baseUri?.rawQuery
+                val sameHost = !baseUri?.host.isNullOrBlank() &&
+                    resolved.host.equals(baseUri?.host, ignoreCase = true) &&
+                    (resolved.port == -1 || baseUri?.port == -1 ||
+                        resolved.port == baseUri?.port)
+
+                if (
+                    sameHost &&
+                    resolved.rawQuery.isNullOrBlank() &&
+                    !inheritedQuery.isNullOrBlank()
+                ) {
+                    val value = resolved.toString()
+                    val fragmentIndex = value.indexOf('#')
+                    if (fragmentIndex >= 0) {
+                        value.substring(0, fragmentIndex) + "?" +
+                            inheritedQuery + value.substring(fragmentIndex)
+                    } else {
+                        "$value?$inheritedQuery"
+                    }
+                } else {
+                    resolved.toString()
                 }
             }.getOrDefault(target)
 
