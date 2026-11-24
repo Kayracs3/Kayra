@@ -112,6 +112,8 @@ jobs:
               maven("https://jitpack.io")
           }"""
           new = """repositories {
+              maven("https://maven-central.storage-download.googleapis.com/maven2/")
+              maven("https://maven.aliyun.com/repository/central/")
               maven("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
               mavenCentral()
               google()
@@ -127,12 +129,17 @@ jobs:
           cat > settings.gradle.kts <<'SETTINGS'
           pluginManagement {
               repositories {
-                  // Bu aynalarda Kotlin 2.0.0 JAR dosyası doğrudan mevcut;
-                  // Maven Central'ın GitHub Release'e yaptığı 504 veren yönlendirmeyi kullanmaz.
+                  // Önce bağımsız Maven Central aynalarını dene; merkez depo son yedek olarak kalır.
+                  maven {
+                      url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+                  }
+                  maven {
+                      url = uri("https://maven.aliyun.com/repository/central/")
+                  }
+                  mavenCentral()
                   maven {
                       url = uri("https://artifacts-oss.talend.com/nexus/content/repositories/central/")
                   }
-                  mavenCentral()
               }
               resolutionStrategy {
                   eachPlugin {
