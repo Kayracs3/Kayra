@@ -2,6 +2,31 @@
 
 ## 2026-11-25
 
+<!-- kayra-commit:6866151fef3f0c97ae16cd2bc3952b12d7735047 -->
+### Bump InatBox version to 23
+
+- Etkilenen alanlar: InatBox
+- Commit: [6866151](https://github.com/Kayracs3/Kayra/commit/6866151fef3f0c97ae16cd2bc3952b12d7735047)
+
+## 2026-11-25
+
+<!-- kayra-commit:3642c04fd882c9a03422a7903cf600393e497fdb -->
+### Log unresolved InatBox channel metadata
+
+- Etkilenen alanlar: InatBox
+- Commit: [3642c04](https://github.com/Kayracs3/Kayra/commit/3642c04fd882c9a03422a7903cf600393e497fdb)
+
+## 2026-11-24
+
+<!-- kayra-commit:081533a1c040cc9269ca13b57a46b7596c076015 -->
+### Auto-update identity-verified provider domains
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [081533a](https://github.com/Kayracs3/Kayra/commit/081533a1c040cc9269ca13b57a46b7596c076015)
+
+
+## 2026-11-25
+
 <!-- kayra-commit:5be9f60f3912456c2bf9bdb7674af7d039a8e791 -->
 ### Update InatBox catalogue hostnames
 
