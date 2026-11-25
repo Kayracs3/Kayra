@@ -2,6 +2,15 @@
 
 ## 2026-11-25
 
+<!-- kayra-commit:e9f4e3f16bbc5f13af5b563d918e44f074aa1a09 -->
+### Fix InatBox missing coroutine dependency
+
+- Etkilenen alanlar: InatBox
+- Commit: [e9f4e3f](https://github.com/Kayracs3/Kayra/commit/e9f4e3f16bbc5f13af5b563d918e44f074aa1a09)
+
+
+## 2026-11-25
+
 <!-- kayra-commit:dac25f8ebcba3c3685857a30798be60d9d87fa12 -->
 ### Sync InatBox API and catalogue handling with working provider
 
