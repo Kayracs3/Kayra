@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-26
+
+<!-- kayra-commit:40e02909eb3696975446a5d7f70a3e4a74fed4f6 -->
+### Add InatBox User-Agent fallback test
+
+- Etkilenen alanlar: InatBox
+- Commit: [40e0290](https://github.com/Kayracs3/Kayra/commit/40e02909eb3696975446a5d7f70a3e4a74fed4f6)
+
+
 ## 2026-11-25
 
 <!-- kayra-commit:e9f4e3f16bbc5f13af5b563d918e44f074aa1a09 -->
