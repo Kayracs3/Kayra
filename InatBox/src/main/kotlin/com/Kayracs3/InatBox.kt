@@ -53,6 +53,7 @@ import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import kotlinx.coroutines.delay
 
 
 private object InatHlsProxy {
@@ -623,6 +624,11 @@ class InatBox : MainAPI() {
     private val urlToSearchResponse = ConcurrentHashMap<String, SearchResponse>()
     private val catalogCacheLock = Any()
 
+    private val LIVE_CATALOG_NAMES = setOf(
+        "Spor", "Ulusal Kanallar", "Haber Kanalları",
+        "Çocuk Kanalları", "Sinema Kanalları", "Belgesel Kanalları"
+    )
+
     private fun rememberCatalog(url: String, fetchedAt: Long, items: List<SearchResponse>) {
         synchronized(catalogCacheLock) {
             if (items.isNotEmpty() && items.size <= MAX_CACHED_CATALOG_ITEMS) {
@@ -664,7 +670,50 @@ class InatBox : MainAPI() {
         private const val MAX_CATALOG_CACHE_AGE_MS = 30 * 60 * 1000L
         private const val HMK = "x7kkk0qmqz63kj68tla5i7u26192v7zqnnddhjgm"
         private const val LEGACY_AES_KEY = "ywevqtjrurkwtqgz"
+        @Volatile private var serverClockOffsetSeconds = 0L
+        private val preferredInatHosts = ConcurrentHashMap<String, String>()
         private val SECURE_RANDOM = SecureRandom()
+
+        private fun inatHostFamily(host: String): String? = when (host.lowercase(Locale.ROOT)) {
+            "diziboxen.top", "diziboxen.help", "dizilabmedia.click" -> "diziboxen"
+            "sprbox.top", "sprboxs.bar" -> "sprbox"
+            "4k.filmizleeeee.cfd", "str.filmizleeeee.cfd" -> "filmizleeeee"
+            else -> null
+        }
+
+        internal fun inatRequestUrlsFor(url: String): List<String> {
+            val uri = runCatching { URI(url) }.getOrNull() ?: return listOf(url)
+            val host = uri.host?.lowercase(Locale.ROOT) ?: return listOf(url)
+            val family = inatHostFamily(host)
+            val alternatives = when (host) {
+                "diziboxen.top" -> listOf("diziboxen.help", "dizilabmedia.click")
+                "diziboxen.help" -> listOf("diziboxen.top", "dizilabmedia.click")
+                "dizilabmedia.click" -> listOf("diziboxen.top", "diziboxen.help")
+                "sprbox.top" -> listOf("sprboxs.bar")
+                "sprboxs.bar" -> listOf("sprbox.top")
+                "4k.filmizleeeee.cfd" -> listOf("str.filmizleeeee.cfd")
+                "str.filmizleeeee.cfd" -> listOf("4k.filmizleeeee.cfd")
+                else -> emptyList()
+            }
+
+            val hosts = linkedSetOf<String>()
+            family?.let { preferredInatHosts[it] }?.let(hosts::add)
+            hosts.add(host)
+            hosts.addAll(alternatives)
+
+            return hosts.map { candidate ->
+                url.replaceFirst(uri.host, candidate, ignoreCase = true)
+            }.distinct()
+        }
+
+        internal fun rememberSuccessfulInatHost(url: String) {
+            val host = runCatching { URI(url).host?.lowercase(Locale.ROOT) }.getOrNull() ?: return
+            val family = inatHostFamily(host) ?: return
+            preferredInatHosts[family] = host
+        }
+
+        internal fun shouldRetryInatHttp(code: Int): Boolean =
+            code == 403 || code == 408 || code == 425 || code == 429 || code in 500..599
         private val HEX_CHARS = "0123456789abcdef".toCharArray()
 
         fun generateRandomKey(length: Int = 16): String {
@@ -708,61 +757,64 @@ class InatBox : MainAPI() {
             url: String,
             retryCount: Int = 2
         ): String? {
-            val hostName = try {
-                URI(url).host ?: "speedrestapi.com"
-            } catch (_: Exception) {
-                "speedrestapi.com"
-            }
+            for (requestUrl in inatRequestUrlsFor(url)) {
+                val hostName = runCatching { URI(requestUrl).host }
+                    .getOrNull() ?: "speedrestapi.com"
 
-            repeat(retryCount) { attempt ->
-                try {
-                    val dynamicKey = generateRandomKey(16)
-                    val requestBody = "1=$dynamicKey&0=$dynamicKey"
-                    val headers = mutableMapOf(
-                        "User-Agent" to "speedrestapi",
-                        "X-Requested-With" to "com.bp.box",
-                        "Referer" to "https://speedrestapi.com/",
-                        "Cache-Control" to "no-cache",
-                        "Host" to hostName
-                    )
-                    headers.putAll(signRequest("POST", url, requestBody))
-
-                    val request = Request.Builder()
-                        .url(url)
-                        .post(
-                            requestBody.toRequestBody(
-                                "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
-                            )
+                repeat(retryCount.coerceAtLeast(1)) { attempt ->
+                    try {
+                        val dynamicKey = generateRandomKey(16)
+                        val requestBody = "1=$dynamicKey&0=$dynamicKey"
+                        val headers = mutableMapOf(
+                            "User-Agent" to "speedrestapi",
+                            "X-Requested-With" to "com.bp.box",
+                            "Referer" to "https://speedrestapi.com/",
+                            "Cache-Control" to "no-cache",
+                            "Host" to hostName
                         )
-                        .apply {
-                            headers.forEach { (key, value) ->
-                                addHeader(key, value)
+                        headers.putAll(signRequest("POST", requestUrl, requestBody))
+
+                        val request = Request.Builder()
+                            .url(requestUrl)
+                            .post(
+                                requestBody.toRequestBody(
+                                    "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
+                                )
+                            )
+                            .apply {
+                                headers.forEach { (key, value) ->
+                                    addHeader(key, value)
+                                }
+                            }
+                            .build()
+
+                        proxyHttpClient.newCall(request).execute().use { response ->
+                            if (!response.isSuccessful) {
+                                Log.w("InatBox", "Proxy refresh HTTP ${response.code} for $requestUrl")
+                                return@use
+                            }
+                            val body = response.body?.bytes() ?: return@use
+                            if (body.isEmpty()) return@use
+
+                            val decrypted = decryptDoubleAes(
+                                String(body, StandardCharsets.UTF_8),
+                                dynamicKey
+                            )
+
+                            if (!decrypted.isNullOrBlank()) {
+                                rememberSuccessfulInatHost(requestUrl)
+                                throw ProxyResult(decrypted)
                             }
                         }
-                        .build()
-
-                    proxyHttpClient.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) return@use
-                        val body = response.body?.bytes() ?: return@use
-                        if (body.isEmpty()) return@use
-
-                        val decrypted = decryptDoubleAes(
-                            String(body, StandardCharsets.UTF_8),
-                            dynamicKey
-                        )
-
-                        if (!decrypted.isNullOrBlank()) {
-                            throw ProxyResult(decrypted)
+                    } catch (result: ProxyResult) {
+                        return result.value
+                    } catch (e: Exception) {
+                        if (attempt == retryCount - 1) {
+                            Log.w(
+                                "InatBox",
+                                "Proxy refresh request failed for $requestUrl: ${e.message}"
+                            )
                         }
-                    }
-                } catch (result: ProxyResult) {
-                    return result.value
-                } catch (e: Exception) {
-                    if (attempt == retryCount - 1) {
-                        Log.w(
-                            "InatBox",
-                            "Proxy refresh request failed: ${e.message}"
-                        )
                     }
                 }
             }
@@ -847,7 +899,7 @@ class InatBox : MainAPI() {
                 "/"
             }
 
-            val timestamp = (System.currentTimeMillis() / 1000).toString()
+            val timestamp = (System.currentTimeMillis() / 1000 + serverClockOffsetSeconds).toString()
             val nonceBytes = ByteArray(16)
             SECURE_RANDOM.nextBytes(nonceBytes)
             val nonce = bytesToHex(nonceBytes)
@@ -972,7 +1024,8 @@ class InatBox : MainAPI() {
                 val results = getSearchResponseList(
                     jsonResponse,
                     sourceUrl = url,
-                    allowGeneric4k = is4kCatalogUrl(url)
+                    allowGeneric4k = is4kCatalogUrl(url),
+                    defaultLiveCategory = request.name in LIVE_CATALOG_NAMES
                 )
                 if (results.isNotEmpty()) {
                     rememberCatalog(url, System.currentTimeMillis(), results)
@@ -1034,8 +1087,9 @@ class InatBox : MainAPI() {
     }
 
     private fun is4kCatalogUrl(url: String): Boolean =
-        url.contains("4k.filmizleeeee.cfd", ignoreCase = true) &&
-            url.contains("catalog-exo.php", ignoreCase = true)
+        (url.contains("4k.filmizleeeee.cfd", ignoreCase = true) ||
+            url.contains("str.filmizleeeee.cfd", ignoreCase = true)) &&
+            url.contains("catalog-", ignoreCase = true)
 
     private suspend fun loadCatalogResponse(url: String): String? {
         // Normal InatBox API path.
@@ -2200,61 +2254,90 @@ class InatBox : MainAPI() {
         url: String,
         retryCount: Int = 2
     ): String? {
-        val hostName = try {
-            URI(url).host ?: "speedrestapi.com"
-        } catch (_: Exception) {
-            "speedrestapi.com"
-        }
+        // Use CloudStream's form-data POST path (same wire format as the official
+        // Inat client) instead of a hand-built RequestBody with an overridden Host.
+        val requestUrls = inatRequestUrlsFor(url)
 
-        repeat(retryCount) { attempt ->
-            try {
-                val dynamicKey = generateRandomKey(16)
-                val requestBody = "1=$dynamicKey&0=$dynamicKey"
-
-                val headers = mutableMapOf(
-                    "User-Agent" to "speedrestapi",
-                    "X-Requested-With" to "com.bp.box",
-                    "Referer" to "https://speedrestapi.com/",
-                    "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
-                    "Cache-Control" to "no-cache",
-                    "Host" to hostName
-                )
-
-                headers.putAll(
-                    signRequest(
-                        "POST",
-                        url,
-                        requestBody
+        for (requestUrl in requestUrls) {
+            for (attempt in 0 until retryCount.coerceAtLeast(1)) {
+                try {
+                    val dynamicKey = generateRandomKey(16)
+                    val form = linkedMapOf(
+                        "1" to dynamicKey,
+                        "0" to dynamicKey
                     )
-                )
-
-                val response = app.post(
-                    url = url,
-                    headers = headers,
-                    requestBody = requestBody.toRequestBody(
-                        "application/x-www-form-urlencoded; charset=UTF-8".toMediaType()
+                    val requestBody = form.entries.joinToString("&") { "${it.key}=${it.value}" }
+                    val headers = mutableMapOf(
+                        "user-agent" to "speedrestapi",
+                        "x-requested-with" to "com.bp.box",
+                        "referer" to "https://speedrestapi.com/",
+                        "content-type" to "application/x-www-form-urlencoded; charset=UTF-8",
+                        "cache-control" to "no-cache"
                     )
-                )
+                    headers.putAll(signRequest("POST", requestUrl, requestBody))
 
-                if (
-                    response.isSuccessful &&
-                    response.text.isNotBlank()
-                ) {
-                    val decrypted = decryptDoubleAes(
-                        response.text,
-                        dynamicKey
+                    val response = app.post(
+                        url = requestUrl,
+                        data = form,
+                        headers = headers
                     )
 
+                    val serverTime = response.headers["x-st"]
+                    val correctedClock = serverTime
+                        ?.takeIf { Regex("^\\d{1,12}$").matches(it) }
+                        ?.toLongOrNull()
+                        ?.let { serverSeconds ->
+                            val newOffset = serverSeconds - System.currentTimeMillis() / 1000
+                            val changed = kotlin.math.abs(newOffset - serverClockOffsetSeconds) > 2
+                            if (changed) serverClockOffsetSeconds = newOffset
+                            changed
+                        } ?: false
+
+                    if (response.code == 403 && correctedClock && attempt == 0) {
+                        delay(150L)
+                        continue
+                    }
+
+                    if (!response.isSuccessful) {
+                        Log.w(
+                            "InatBox",
+                            "Catalogue POST HTTP ${response.code} for $requestUrl"
+                        )
+                        if (shouldRetryInatHttp(response.code) && attempt < retryCount - 1) {
+                            delay(350L * (attempt + 1))
+                            continue
+                        }
+                        break
+                    }
+
+                    if (response.text.isBlank()) {
+                        Log.w("InatBox", "Catalogue POST returned an empty body for $requestUrl")
+                        if (attempt < retryCount - 1) delay(300L * (attempt + 1))
+                        continue
+                    }
+
+                    val decrypted = decryptDoubleAes(response.text, dynamicKey)
                     if (!decrypted.isNullOrBlank()) {
+                        rememberSuccessfulInatHost(requestUrl)
+                        if (requestUrl != url) {
+                            Log.i("InatBox", "Catalogue request succeeded through the alternate host")
+                        }
+                        Log.d(
+                            "InatBox",
+                            "Catalogue response decoded: ${decrypted.length} chars from $requestUrl"
+                        )
                         return decrypted
                     }
-                }
-            } catch (e: Exception) {
-                if (attempt == retryCount - 1) {
-                    Log.e(
+
+                    Log.w(
                         "InatBox",
-                        "Post request failed for $url: ${e.message}",
-                        e
+                        "Catalogue response could not be AES-decoded (HTTP ${response.code}, ${response.text.length} chars) from $requestUrl"
+                    )
+                    if (attempt < retryCount - 1) delay(300L * (attempt + 1))
+                } catch (e: Exception) {
+                    Log.w(
+                        "InatBox",
+                        "Catalogue POST attempt ${attempt + 1} failed for $requestUrl: ${e.message}"
                     )
                 }
             }
@@ -2316,15 +2399,32 @@ class InatBox : MainAPI() {
 
     private fun isArtworkField(key: String): Boolean {
         val normalized = key.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
-        return normalized in setOf(
-            "diziimg", "diziimage", "diziimageurl", "diziposter", "diziposterurl",
-            "chimg", "chimage", "chimageurl", "poster", "posterurl", "posterpath",
-            "posterimage", "image", "imageurl", "imagepath", "img", "imgurl",
-            "thumbnail", "thumbnailurl", "thumb", "thumburl", "cover", "coverurl",
-            "coverimage", "afis", "afisurl", "picture", "pictureurl", "photourl"
-        ) || listOf("poster", "thumbnail", "cover", "afis").any { normalized.contains(it) }
+        val artworkTokens = listOf(
+            "poster", "thumbnail", "thumb", "cover", "afis", "resim",
+            "image", "img", "picture", "photo", "banner", "backdrop", "logo", "icon"
+        )
+        return artworkTokens.any { normalized.contains(it) }
     }
 
+    private fun looksLikeArtworkUrl(raw: String): Boolean {
+        val value = raw.trim().lowercase(Locale.ROOT)
+        if (value.isBlank() || value == "null" || value == "0") return false
+        if (value.startsWith("data:") || value.startsWith("javascript:")) return false
+        if (value.contains(".m3u8") || value.contains(".mpd") ||
+            value.contains(".mp4") || value.contains(".mkv") ||
+            value.contains(".webm") || value.contains(".ts?")
+        ) return false
+
+        val path = runCatching {
+            URI(if (value.startsWith("//")) "https:$value" else value).path.orEmpty()
+        }.getOrDefault(value)
+        return Regex("""(?i)\.(jpg|jpeg|png|webp|gif|avif|bmp)(?:$|/)""").containsMatchIn(path) ||
+            path.contains("/content/") ||
+            path.contains("/images/") ||
+            path.contains("/image/") ||
+            path.contains("/poster/") ||
+            path.contains("/thumb/")
+    }
     private fun posterCandidate(value: Any?, sourceUrl: String?, depth: Int = 0): String? {
         if (value == null || depth > 4) return null
 
@@ -2364,8 +2464,9 @@ class InatBox : MainAPI() {
         val source = sourceUrl?.takeIf { it.isNotBlank() }
             ?: item.optString("__inat_source_url").takeIf { it.isNotBlank() }
         val knownKeys = (preferredKeys + listOf(
-            "diziImg", "diziImage", "dizi_image", "dizi_image_url", "diziPoster", "diziPosterUrl",
-            "chImg", "chImage", "ch_image", "ch_image_url", "poster", "posterUrl", "poster_url",
+            "diziImg", "diziImage", "dizi_image", "dizi_image_url", "diziPoster", "diziPosterUrl", "diziResim", "catImg", "catImage",
+            "filmImg", "filmResim", "chImg", "chImage", "ch_image", "ch_image_url", "chResim",
+            "bolumImg", "bolumResim", "resim", "poster", "posterUrl", "poster_url",
             "posterPath", "poster_path", "posterImage", "poster_image",
             "image", "imageUrl", "image_url", "imagePath", "image_path",
             "img", "imgUrl", "thumbnail", "thumbnailUrl", "thumbnail_url",
@@ -2377,11 +2478,29 @@ class InatBox : MainAPI() {
             posterCandidate(item.opt(key), source)?.let { return it }
         }
 
-        val keys = item.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
+        val keys = item.keys().asSequence().toList()
+
+        // First search all known artwork-named fields (including provider-specific names).
+        for (key in keys) {
             if (!isArtworkField(key)) continue
             posterCandidate(item.opt(key), source)?.let { return it }
+        }
+
+        // Some InatBox catalogue revisions rename the poster field. As a fallback,
+        // accept only URL-like values that look like image/content paths; explicitly
+        // ignore playback URL fields so a stream is never mistaken for a poster.
+        val playbackKeys = setOf(
+            "churl", "diziurl", "filmurl", "bolumurl", "streamurl",
+            "url", "link", "href", "playurl", "video", "source"
+        )
+        for (key in keys) {
+            if (key.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "") in playbackKeys) continue
+            val value = item.opt(key)
+            if (value is String && looksLikeArtworkUrl(value)) {
+                normalizePosterUrl(value, source)?.let { return it }
+            } else if (value is JSONObject || value is JSONArray) {
+                posterCandidate(value, source)?.let { return it }
+            }
         }
         return null
     }
@@ -2485,8 +2604,15 @@ class InatBox : MainAPI() {
         }.getOrNull()
     }
 
-    private fun hasStandardInatFields(item: JSONObject): Boolean =
-        item.has("diziType") || (item.has("chName") && item.has("chUrl"))
+    private fun hasStandardInatFields(item: JSONObject): Boolean {
+        val hasName = listOf(
+            "chName", "bolumName", "filmName", "diziName", "title", "name"
+        ).any { item.has(it) && item.optString(it).isNotBlank() }
+        val hasUrl = listOf(
+            "chUrl", "bolumUrl", "filmUrl", "diziUrl", "url", "link", "href", "streamUrl"
+        ).any { item.has(it) && item.optString(it).isNotBlank() }
+        return item.has("diziType") || item.has("filmType") || (hasName && hasUrl)
+    }
 
     private fun normalizeGeneric4kItem(item: JSONObject): JSONObject? {
         fun firstNonBlank(vararg keys: String): String =
@@ -2521,135 +2647,210 @@ class InatBox : MainAPI() {
         }
     }
 
+    private fun firstInatText(item: JSONObject, vararg keys: String): String =
+        keys.asSequence()
+            .map { item.optString(it).trim() }
+            .firstOrNull { it.isNotBlank() && !it.equals("null", true) && it != "0" }
+            .orEmpty()
+
+    private fun findCatalogueArray(value: Any?, depth: Int = 0): JSONArray? {
+        if (value == null || depth > 5) return null
+        return when (value) {
+            is JSONArray -> value
+            is JSONObject -> {
+                val preferredKeys = listOf(
+                    "data", "result", "results", "items", "list", "rows",
+                    "channels", "movies", "films", "catalog", "content"
+                )
+                for (key in preferredKeys) {
+                    val nested = value.opt(key) ?: continue
+                    findCatalogueArray(nested, depth + 1)?.let { return it }
+                }
+                val keys = value.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    if (key in preferredKeys) continue
+                    findCatalogueArray(value.opt(key), depth + 1)?.let { return it }
+                }
+                if (hasStandardInatFields(value) || value.has("name") || value.has("title")) {
+                    JSONArray().put(value)
+                } else {
+                    null
+                }
+            }
+            is String -> {
+                val candidate = value.trim()
+                if (candidate.startsWith("[") || candidate.startsWith("{")) {
+                    val parsed = runCatching {
+                        if (candidate.startsWith("[")) JSONArray(candidate) else JSONObject(candidate)
+                    }.getOrNull()
+                    findCatalogueArray(parsed, depth + 1)
+                } else null
+            }
+            else -> null
+        }
+    }
+
+    private fun normalizeInatCatalogItem(
+        raw: JSONObject,
+        sourceUrl: String?,
+        defaultLiveCategory: Boolean,
+        allowGeneric4k: Boolean
+    ): JSONObject? {
+        val item = runCatching { JSONObject(raw.toString()) }.getOrElse { raw }
+
+        val hasSeriesFields = item.has("diziType") || item.has("filmType") ||
+            item.has("diziName") || item.has("filmName") ||
+            item.has("diziUrl") || item.has("filmUrl")
+
+        if (hasSeriesFields) {
+            val name = firstInatText(item, "diziName", "filmName", "title", "name", "chName")
+            val url = firstInatText(item, "diziUrl", "filmUrl", "url", "link", "href", "chUrl")
+            if (name.isNotBlank() && url.isNotBlank()) {
+                val type = firstInatText(item, "diziType", "filmType")
+                    .ifBlank { if (item.has("filmName") || item.has("filmUrl")) "film" else "dizi" }
+                val poster = posterUrlFrom(
+                    item,
+                    sourceUrl,
+                    listOf(
+                        "diziImg", "diziImage", "diziResim",
+                        "filmImg", "filmResim", "poster", "posterUrl", "image", "catImg", "catImage"
+                    )
+                ).orEmpty()
+                item.put("diziName", name)
+                item.put("diziUrl", url)
+                item.put("diziType", type)
+                item.put("diziImg", poster)
+                return enrichInatItem(item, sourceUrl)
+            }
+        }
+
+        val name = firstInatText(item, "chName", "bolumName", "title", "name", "filmName", "diziName")
+        val url = firstInatText(item, "chUrl", "bolumUrl", "filmUrl", "diziUrl", "url", "link", "href", "streamUrl")
+        if (name.isNotBlank() && url.isNotBlank()) {
+            val poster = posterUrlFrom(
+                item,
+                sourceUrl,
+                listOf(
+                    "chImg", "chImage", "chResim",
+                    "bolumImg", "bolumResim",
+                    "filmImg", "filmResim",
+                    "diziImg", "diziImage", "diziResim",
+                    "poster", "posterUrl", "image", "img", "resim", "catImg", "catImage"
+                )
+            ).orEmpty()
+            val type = firstInatText(item, "chType", "bolumType", "type", "filmType")
+                .ifBlank { if (defaultLiveCategory) "live_url" else "film" }
+
+            item.put("chName", name)
+            item.put("chUrl", url)
+            item.put("chImg", poster)
+            item.put("chType", type)
+            return enrichInatItem(item, sourceUrl)
+        }
+
+        if (allowGeneric4k && !hasStandardInatFields(item)) {
+            return normalizeGeneric4kItem(item)?.let { enrichInatItem(it, sourceUrl) }
+        }
+        return null
+    }
+
     private fun getSearchResponseList(
         jsonResponse: String,
         sourceUrl: String? = null,
-        allowGeneric4k: Boolean = false
+        allowGeneric4k: Boolean = false,
+        defaultLiveCategory: Boolean = false
     ): List<SearchResponse> {
         val searchResults = mutableListOf<SearchResponse>()
 
         try {
-            val trimmedJson = jsonResponse.trimStart()
-            val itemsArray = if (trimmedJson.startsWith("[")) {
-                JSONArray(jsonResponse)
-            } else if (allowGeneric4k && trimmedJson.startsWith("{")) {
-                val root = JSONObject(jsonResponse)
-                sequenceOf("data", "results", "items", "movies", "films", "catalog")
-                    .mapNotNull { key -> root.optJSONArray(key) }
-                    .firstOrNull()
-                    ?: JSONArray().apply {
-                        if (hasStandardInatFields(root) || root.has("name") || root.has("title")) {
-                            put(root)
-                        }
-                    }
-            } else {
-                JSONArray()
-            }
+            val extracted = extractJsonPayload(jsonResponse) ?: jsonResponse.trim()
+            val parsed = runCatching {
+                when {
+                    extracted.startsWith("[") -> JSONArray(extracted)
+                    extracted.startsWith("{") -> JSONObject(extracted)
+                    else -> null
+                }
+            }.getOrNull()
+            val itemsArray = findCatalogueArray(parsed) ?: JSONArray()
 
             for (i in 0 until itemsArray.length()) {
                 val rawItem = itemsArray.optJSONObject(i) ?: continue
-                if (!inatContentAllowed(rawItem)) continue
+                val item = normalizeInatCatalogItem(
+                    raw = rawItem,
+                    sourceUrl = sourceUrl,
+                    defaultLiveCategory = defaultLiveCategory,
+                    allowGeneric4k = allowGeneric4k
+                ) ?: continue
 
-                val item = if (allowGeneric4k && !hasStandardInatFields(rawItem)) {
-                    normalizeGeneric4kItem(rawItem) ?: continue
-                } else {
-                    rawItem
-                }.let { enrichInatItem(it, sourceUrl) }
+                if (!inatContentAllowed(item)) continue
 
                 if (item.has("diziType")) {
-                    val name = item.optString("diziName", "İsimsiz")
+                    val name = item.optString("diziName").ifBlank { "İsimsiz" }
                     val type = item.optString("diziType")
                     val posterUrl = posterUrlFrom(
                         item,
                         sourceUrl,
-                        listOf("diziImg", "diziImage", "poster", "posterUrl", "image")
+                        listOf("diziImg", "diziImage", "diziResim", "filmImg", "filmResim", "poster", "posterUrl", "image", "catImg", "catImage")
                     ).orEmpty()
+                    if (searchResults.size < 3) {
+                        val fields = item.keys().asSequence().filter { isArtworkField(it) }.take(10).joinToString(",")
+                        val host = runCatching { URI(posterUrl).host }.getOrNull() ?: "missing"
+                        Log.d("InatBox", "Poster mapping sample: title=${name.take(28)}, host=$host, artworkFields=$fields")
+                    }
 
                     when {
-                        type.contains("dizi", ignoreCase = true) -> {
+                        type.contains("dizi", ignoreCase = true) ||
+                            type.contains("series", ignoreCase = true) -> {
                             searchResults.add(
-                                newTvSeriesSearchResponse(
-                                    name,
-                                    item.toString()
-                                ) {
+                                newTvSeriesSearchResponse(name, item.toString(), TvType.TvSeries) {
                                     this.posterUrl = posterUrl
                                 }
                             )
                         }
-
-                        type.contains("film", ignoreCase = true) -> {
+                        type.contains("film", ignoreCase = true) ||
+                            type.contains("movie", ignoreCase = true) -> {
                             searchResults.add(
-                                newMovieSearchResponse(
-                                    name,
-                                    item.toString()
-                                ) {
+                                newMovieSearchResponse(name, item.toString(), TvType.Movie) {
                                     this.posterUrl = posterUrl
                                 }
                             )
                         }
                     }
-
                     continue
                 }
 
-                if (
-                    item.has("chName") &&
-                    item.has("chUrl") &&
-                    item.has("chImg")
-                ) {
-                    val name = item.optString("chName", "İsimsiz")
+                if (item.has("chName") && item.has("chUrl")) {
+                    val name = item.optString("chName").ifBlank { "İsimsiz" }
                     val posterUrl = posterUrlFrom(
                         item,
                         sourceUrl,
-                        listOf("chImg", "chImage", "poster", "posterUrl", "image")
+                        listOf("chImg", "chImage", "chResim", "bolumImg", "bolumResim", "poster", "posterUrl", "image", "resim", "catImg", "catImage")
                     ).orEmpty()
                     val chType = item.optString("chType")
                     val chUrl = item.optString("chUrl")
 
                     when {
-                        chType.contains("live", ignoreCase = true) -> {
+                        chType.contains("live", ignoreCase = true) ||
+                            chType.contains("cable", ignoreCase = true) ||
+                            (chType.contains("tekli", ignoreCase = true) && !chUrl.contains("filmizleeeee", true)) -> {
                             searchResults.add(
-                                newLiveSearchResponse(
-                                    name,
-                                    item.toString(),
-                                    TvType.Live
-                                ) {
+                                newLiveSearchResponse(name, item.toString(), TvType.Live) {
                                     this.posterUrl = posterUrl
                                 }
                             )
                         }
-
-                        chType.contains("cable", ignoreCase = true) -> {
+                        chType.contains("dizi", ignoreCase = true) ||
+                            chType.contains("sezon", ignoreCase = true) -> {
                             searchResults.add(
-                                newLiveSearchResponse(
-                                    name,
-                                    item.toString(),
-                                    TvType.Live
-                                ) {
+                                newTvSeriesSearchResponse(name, item.toString(), TvType.TvSeries) {
                                     this.posterUrl = posterUrl
                                 }
                             )
                         }
-
-                        chType.contains("tekli", ignoreCase = true) &&
-                            !chUrl.contains("filmizleeeee", ignoreCase = true) -> {
-                            searchResults.add(
-                                newLiveSearchResponse(
-                                    name,
-                                    item.toString(),
-                                    TvType.Live
-                                ) {
-                                    this.posterUrl = posterUrl
-                                }
-                            )
-                        }
-
                         else -> {
                             searchResults.add(
-                                newMovieSearchResponse(
-                                    name,
-                                    item.toString()
-                                ) {
+                                newMovieSearchResponse(name, item.toString(), TvType.Movie) {
                                     this.posterUrl = posterUrl
                                 }
                             )
@@ -2658,15 +2859,12 @@ class InatBox : MainAPI() {
                 }
             }
         } catch (e: Exception) {
-            Log.e(
-                "InatBox",
-                "Failed to parse JSON response: ${e.message}",
-                e
-            )
+            Log.e("InatBox", "Failed to parse catalogue JSON: " + e.message, e)
         }
 
         return searchResults
     }
+
 }
 
 
