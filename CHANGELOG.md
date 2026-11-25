@@ -2,6 +2,15 @@
 
 ## 2026-11-25
 
+<!-- kayra-commit:dac25f8ebcba3c3685857a30798be60d9d87fa12 -->
+### Sync InatBox API and catalogue handling with working provider
+
+- Etkilenen alanlar: InatBox
+- Commit: [dac25f8](https://github.com/Kayracs3/Kayra/commit/dac25f8ebcba3c3685857a30798be60d9d87fa12)
+
+
+## 2026-11-25
+
 <!-- kayra-commit:fba0d41946932831cb686da3bdd2e04029450e62 -->
 ### Include channel name in unresolved stream log
 
