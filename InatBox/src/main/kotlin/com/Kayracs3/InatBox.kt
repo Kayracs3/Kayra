@@ -53,7 +53,6 @@ import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import kotlinx.coroutines.delay
 
 
 private object InatHlsProxy {
@@ -2294,7 +2293,7 @@ class InatBox : MainAPI() {
                         } ?: false
 
                     if (response.code == 403 && correctedClock && attempt == 0) {
-                        delay(150L)
+                        Thread.sleep(150L)
                         continue
                     }
 
@@ -2304,7 +2303,7 @@ class InatBox : MainAPI() {
                             "Catalogue POST HTTP ${response.code} for $requestUrl"
                         )
                         if (shouldRetryInatHttp(response.code) && attempt < retryCount - 1) {
-                            delay(350L * (attempt + 1))
+                            Thread.sleep(350L * (attempt + 1))
                             continue
                         }
                         break
@@ -2312,7 +2311,7 @@ class InatBox : MainAPI() {
 
                     if (response.text.isBlank()) {
                         Log.w("InatBox", "Catalogue POST returned an empty body for $requestUrl")
-                        if (attempt < retryCount - 1) delay(300L * (attempt + 1))
+                        if (attempt < retryCount - 1) Thread.sleep(300L * (attempt + 1))
                         continue
                     }
 
@@ -2333,7 +2332,7 @@ class InatBox : MainAPI() {
                         "InatBox",
                         "Catalogue response could not be AES-decoded (HTTP ${response.code}, ${response.text.length} chars) from $requestUrl"
                     )
-                    if (attempt < retryCount - 1) delay(300L * (attempt + 1))
+                    if (attempt < retryCount - 1) Thread.sleep(300L * (attempt + 1))
                 } catch (e: Exception) {
                     Log.w(
                         "InatBox",
