@@ -2266,14 +2266,24 @@ class InatBox : MainAPI() {
                         "0" to dynamicKey
                     )
                     val requestBody = form.entries.joinToString("&") { "${it.key}=${it.value}" }
+                    val userAgentProfile = if (attempt == 0) "speedrestapi" else "chrome-android-test"
+                    val userAgent = if (attempt == 0) {
+                        "speedrestapi"
+                    } else {
+                        "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+                    }
                     val headers = mutableMapOf(
-                        "user-agent" to "speedrestapi",
+                        "user-agent" to userAgent,
                         "x-requested-with" to "com.bp.box",
                         "referer" to "https://speedrestapi.com/",
                         "content-type" to "application/x-www-form-urlencoded; charset=UTF-8",
                         "cache-control" to "no-cache"
                     )
                     headers.putAll(signRequest("POST", requestUrl, requestBody))
+                    Log.d(
+                        "InatBox",
+                        "Catalogue POST attempt ${attempt + 1} using UA profile=$userAgentProfile for $requestUrl"
+                    )
 
                     val response = app.post(
                         url = requestUrl,
