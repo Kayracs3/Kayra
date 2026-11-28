@@ -2,6 +2,23 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:9e4126eb14d19ee0dcd039bd21f65e927cf401bb -->
+### Dizilla sürümünü 27 yap
+
+- Etkilenen alanlar: Dizilla
+- Commit: [9e4126e](https://github.com/Kayracs3/Kayra/commit/9e4126eb14d19ee0dcd039bd21f65e927cf401bb)
+
+## 2026-11-28
+
+<!-- kayra-commit:12ee5a9c6f3dba1750fd285e5e4db8e610503435 -->
+### Dizilla FourPichive gate çözümlemesini AsyaWatch ile eşle
+
+- Etkilenen alanlar: Dizilla
+- Commit: [12ee5a9](https://github.com/Kayracs3/Kayra/commit/12ee5a9c6f3dba1750fd285e5e4db8e610503435)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:a38fce6f8c96f0f10379cb81b9643339d9917436 -->
 ### Dizilla Pichive gate regex boşluk uyumunu düzelt
 
