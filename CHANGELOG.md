@@ -2,6 +2,15 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:fc8d3eb80535773c98a83229545c69c668a63b45 -->
+### Update mainUrl to new DiziLife URL
+
+- Etkilenen alanlar: DiziLife
+- Commit: [fc8d3eb](https://github.com/Kayracs3/Kayra/commit/fc8d3eb80535773c98a83229545c69c668a63b45)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:c2057981676794100265e1799c6a55681b318f2f -->
 ### Update DiziLife domain registry
 
