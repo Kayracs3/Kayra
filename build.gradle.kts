@@ -52,7 +52,7 @@ fun Project.android(
 configuration: BaseExtension.() -> Unit
 ) {
 extensions
-.getByName< BaseExtension>("android")
+.getByName<BaseExtension>("android")
 .configuration()
 }
 
