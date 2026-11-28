@@ -1,6 +1,5 @@
 // CloudStream updates require a higher version number for existing installations.
-version = 27
-
+version = 28
 cloudstream {
     description = "DiziDAD — tüm diziler, filmler ve eksiksiz sezon/bölüm listeleri"
     authors = listOf("Kayracs3")
