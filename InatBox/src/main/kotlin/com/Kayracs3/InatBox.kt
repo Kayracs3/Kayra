@@ -1042,6 +1042,10 @@ class InatBox : MainAPI() {
         } else {
             val jsonResponse = loadCatalogResponse(url)
             if (jsonResponse.isNullOrBlank()) {
+                Log.w(
+                    "InatBox",
+                    "Catalogue unavailable for ${request.name}; using cached items=${cached?.second?.size ?: 0}"
+                )
                 cached?.second ?: emptyList()
             } else {
                 val results = getSearchResponseList(
@@ -2290,14 +2294,8 @@ class InatBox : MainAPI() {
                         "0" to dynamicKey
                     )
                     val requestBody = form.entries.joinToString("&") { "${it.key}=${it.value}" }
-                    val userAgentProfile = if (attempt == 0) "speedrestapi" else "chrome-android-test"
-                    val userAgent = if (attempt == 0) {
-                        "speedrestapi"
-                    } else {
-                        "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-                    }
                     val headers = mutableMapOf(
-                        "user-agent" to userAgent,
+                        "user-agent" to "speedrestapi",
                         "x-requested-with" to "com.bp.box",
                         "referer" to "https://speedrestapi.com/",
                         "content-type" to "application/x-www-form-urlencoded; charset=UTF-8",
@@ -2306,7 +2304,7 @@ class InatBox : MainAPI() {
                     headers.putAll(signRequest("POST", requestUrl, requestBody))
                     Log.d(
                         "InatBox",
-                        "Catalogue POST attempt ${attempt + 1} using UA profile=$userAgentProfile for $requestUrl"
+                        "Catalogue POST attempt ${attempt + 1} using UA=speedrestapi for $requestUrl"
                     )
 
                     val response = app.post(
@@ -2334,8 +2332,20 @@ class InatBox : MainAPI() {
                     if (!response.isSuccessful) {
                         Log.w(
                             "InatBox",
-                            "Catalogue POST HTTP ${response.code} for $requestUrl"
+                            "Catalogue POST HTTP ${response.code} for $requestUrl" +
+                                if (response.code == 520) {
+                                    " (server=${response.headers["server"]}, cf-ray=${response.headers["cf-ray"]})"
+                                } else {
+                                    ""
+                                }
                         )
+                        if (response.code == 520) {
+                            Log.w(
+                                "InatBox",
+                                "HTTP 520 received; skip failed mirror fallback and return cached catalogue if available"
+                            )
+                            return null
+                        }
                         if (shouldRetryInatHttp(response.code) && attempt < retryCount - 1) {
                             Thread.sleep(350L * (attempt + 1))
                             continue
