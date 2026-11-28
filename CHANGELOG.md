@@ -2,6 +2,23 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:580780138e9faa2b76e651a6c8584385135fbee2 -->
+### Dizilla sürümünü 29 yap
+
+- Etkilenen alanlar: Dizilla
+- Commit: [5807801](https://github.com/Kayracs3/Kayra/commit/580780138e9faa2b76e651a6c8584385135fbee2)
+
+## 2026-11-28
+
+<!-- kayra-commit:ae010f9781f0600481e684fdb4a3f33a3d422c47 -->
+### Dizilla Pichive kaynaklarını doğrula ve gate hata tanılamasını ekle
+
+- Etkilenen alanlar: Dizilla
+- Commit: [ae010f9](https://github.com/Kayracs3/Kayra/commit/ae010f9781f0600481e684fdb4a3f33a3d422c47)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:d6d72e86731bdb4813c53277987b165d519db1c3 -->
 ### Dizilla sürümünü 28 yap
 
