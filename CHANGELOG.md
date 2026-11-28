@@ -2,6 +2,23 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:514f76c2e5b963473707a506eca18c3c36b9af26 -->
+### Dizilla sürümünü 26 yap
+
+- Etkilenen alanlar: Dizilla
+- Commit: [514f76c](https://github.com/Kayracs3/Kayra/commit/514f76c2e5b963473707a506eca18c3c36b9af26)
+
+## 2026-11-28
+
+<!-- kayra-commit:d8dd75191ab626218ba36f8a942df49aedb3030b -->
+### Dizilla AsyaWatch video regex kaynak taramasını ekle
+
+- Etkilenen alanlar: Dizilla
+- Commit: [d8dd751](https://github.com/Kayracs3/Kayra/commit/d8dd75191ab626218ba36f8a942df49aedb3030b)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:4b354c6343904560bb261df168111904935baa16 -->
 ### DiziDad sürümünü 28 yap
 
