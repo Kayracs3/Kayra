@@ -2,6 +2,15 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:770215505afbf1616a136e3683f2154533108bad -->
+### Prioritize Google Maven for Android build dependencies
+
+- Etkilenen alanlar: build.gradle.kts
+- Commit: [7702155](https://github.com/Kayracs3/Kayra/commit/770215505afbf1616a136e3683f2154533108bad)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:ec811982e823ca74dbae2e2e06403f7faca048ae -->
 ### Preserve original Kotlin formatting
 
