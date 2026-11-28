@@ -14,7 +14,7 @@ import java.net.URI
 import java.net.URLEncoder
 
 class DiziMom : MainAPI() {
-    override var mainUrl = "https://ddizimom.net"
+    override var mainUrl = "https://ddizimom.icu"
     override var name = "DiziMom"
     override var lang = "tr"
     override val hasMainPage = true
