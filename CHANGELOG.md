@@ -2,6 +2,15 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:f883664dcddbbba2eda569168a10fc385896c423 -->
+### Update mainUrl to new domain for DiziMom
+
+- Etkilenen alanlar: DiziMom
+- Commit: [f883664](https://github.com/Kayracs3/Kayra/commit/f883664dcddbbba2eda569168a10fc385896c423)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:770215505afbf1616a136e3683f2154533108bad -->
 ### Prioritize Google Maven for Android build dependencies
 
