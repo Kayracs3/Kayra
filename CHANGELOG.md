@@ -2,6 +2,39 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:c2057981676794100265e1799c6a55681b318f2f -->
+### Update DiziLife domain registry
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [c205798](https://github.com/Kayracs3/Kayra/commit/c2057981676794100265e1799c6a55681b318f2f)
+
+## 2026-11-28
+
+<!-- kayra-commit:3b9cd3544f61730a827e45344a4753cf3fe74870 -->
+### Update DiziLife source URL
+
+- Etkilenen alanlar: DiziLife
+- Commit: [3b9cd35](https://github.com/Kayracs3/Kayra/commit/3b9cd3544f61730a827e45344a4753cf3fe74870)
+
+## 2026-11-28
+
+<!-- kayra-commit:cba6fb3754d3ea9edf769716fb8ea2fc05aa9ecf -->
+### Bump DiziLife plugin version
+
+- Etkilenen alanlar: DiziLife
+- Commit: [cba6fb3](https://github.com/Kayracs3/Kayra/commit/cba6fb3754d3ea9edf769716fb8ea2fc05aa9ecf)
+
+## 2026-11-28
+
+<!-- kayra-commit:07a3954b45a3708bff94a236262fafa99c641651 -->
+### Fix DiziLife domain and routes
+
+- Etkilenen alanlar: DiziLife
+- Commit: [07a3954](https://github.com/Kayracs3/Kayra/commit/07a3954b45a3708bff94a236262fafa99c641651)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:88b99de4c1d3b2c82d8ee2eb7a1b0e6d1c291523 -->
 ### Add Google-first provider domain discovery
 
