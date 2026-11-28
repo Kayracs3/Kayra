@@ -2,6 +2,23 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:ec811982e823ca74dbae2e2e06403f7faca048ae -->
+### Preserve original Kotlin formatting
+
+- Etkilenen alanlar: build.gradle.kts
+- Commit: [ec81198](https://github.com/Kayracs3/Kayra/commit/ec811982e823ca74dbae2e2e06403f7faca048ae)
+
+## 2026-11-28
+
+<!-- kayra-commit:36b71448616659ea3d14c79f165f72a8102435ab -->
+### Fix Gradle classpath dependency mirrors
+
+- Etkilenen alanlar: build.gradle.kts
+- Commit: [36b7144](https://github.com/Kayracs3/Kayra/commit/36b71448616659ea3d14c79f165f72a8102435ab)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:d0ae7a1bb9710659d8be5418a7a3a3baee62954b -->
 ### Avoid InatBox homepage timeout on HTTP 520
 
