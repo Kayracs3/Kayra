@@ -71,14 +71,16 @@ private object InatHlsProxy {
         val image: String,
         val signature: String,
         val createdAt: Long,
+        @Volatile var lastAccessedAt: Long = createdAt,
         val targets: MutableMap<String, Target> = ConcurrentHashMap(),
         @Volatile var currentUrl: String = initialUrl
     )
 
-    private const val MAX_MAPPING_AGE_MS = 6 * 60 * 60 * 1000L
+    private const val MAX_MAPPING_IDLE_MS = 6 * 60 * 60 * 1000L
     private const val MAX_REQUEST_HEADER_BYTES = 32 * 1024
-    private const val MAX_TARGETS_PER_MAPPING = 2048
-    private const val MAX_TARGET_IDLE_MS = 30 * 60 * 1000L
+    // Keep enough recent and seekable HLS resources without allowing unbounded growth.
+    private const val MAX_TARGETS_PER_MAPPING = 8192
+    private const val MAX_TARGET_IDLE_MS = MAX_MAPPING_IDLE_MS
 
     private val mappings = ConcurrentHashMap<String, Mapping>()
     private val executor = Executors.newFixedThreadPool(6) { runnable ->
@@ -161,7 +163,7 @@ private object InatHlsProxy {
 
     private fun cleanupMappings() {
         val now = System.currentTimeMillis()
-        mappings.entries.removeIf { now - it.value.createdAt > MAX_MAPPING_AGE_MS }
+        mappings.entries.removeIf { now - it.value.lastAccessedAt > MAX_MAPPING_IDLE_MS }
     }
 
     private fun handleClient(socket: Socket) {
@@ -184,6 +186,7 @@ private object InatHlsProxy {
 
                 val match = Regex("^/hls/([^/]+)/(.+)$").matchEntire(path)
                 if (match == null) {
+                    Log.w("InatHlsProxy", "404 invalid HLS path: $path")
                     writeResponse(output, 404, "text/plain; charset=utf-8", "Not Found".toByteArray())
                     return
                 }
@@ -192,9 +195,11 @@ private object InatHlsProxy {
                 val resourcePath = match.groupValues[2]
                 val mapping = mappings[mappingId]
                 if (mapping == null) {
+                    Log.w("InatHlsProxy", "404 mapping missing: id=$mappingId path=$path")
                     writeResponse(output, 404, "text/plain; charset=utf-8", "Mapping expired".toByteArray())
                     return
                 }
+                mapping.lastAccessedAt = System.currentTimeMillis()
 
                 val clientHeaders = requestHeaders.drop(1).mapNotNull { line ->
                     val colon = line.indexOf(':')
@@ -209,10 +214,16 @@ private object InatHlsProxy {
                     val token = resourcePath.removePrefix("resource/")
                     val target = mapping.targets[token]
                     if (target == null) {
+                        Log.w(
+                            "InatHlsProxy",
+                            "404 HLS resource missing: id=$mappingId token=$token targets=${mapping.targets.size}"
+                        )
                         writeResponse(output, 404, "text/plain; charset=utf-8", "Resource not found".toByteArray())
                         return
                     }
-                    target.lastAccessedAt = System.currentTimeMillis()
+                    val now = System.currentTimeMillis()
+                    target.lastAccessedAt = now
+                    mapping.lastAccessedAt = now
                     serveTarget(output, mapping, mappingId, target.url, clientHeaders)
                 }
             } catch (e: Exception) {
@@ -520,11 +531,24 @@ private object InatHlsProxy {
 
     private fun cleanupTargets(mapping: Mapping) {
         val now = System.currentTimeMillis()
+        val beforeCleanup = mapping.targets.size
         mapping.targets.entries.removeIf { now - it.value.lastAccessedAt > MAX_TARGET_IDLE_MS }
+        val idleRemoved = beforeCleanup - mapping.targets.size
+
         val excess = mapping.targets.size - MAX_TARGETS_PER_MAPPING
+        var capacityRemoved = 0
         if (excess > 0) {
-            mapping.targets.entries.sortedBy { it.value.lastAccessedAt }
-                .take(excess).forEach { mapping.targets.remove(it.key, it.value) }
+            val oldest = mapping.targets.entries.sortedBy { it.value.lastAccessedAt }.take(excess)
+            oldest.forEach { entry ->
+                if (mapping.targets.remove(entry.key, entry.value)) capacityRemoved++
+            }
+        }
+
+        if (idleRemoved > 0 || capacityRemoved > 0) {
+            Log.d(
+                "InatHlsProxy",
+                "HLS resource cleanup: idle=$idleRemoved capacity=$capacityRemoved remaining=${mapping.targets.size}"
+            )
         }
     }
 
