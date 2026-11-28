@@ -650,9 +650,23 @@ private val m3u8Regex = Regex("""https?://[^\s"'<>\\)]+?\.m3u8[^\s"'<>\\)]*""")
                     val isTwitterHls = link.url.contains("video.twimg.com/amplify_video/") &&
                         Regex("""\.m3u8(?:\?|$)""", RegexOption.IGNORE_CASE).containsMatchIn(link.url)
                     if (isTwitterHls) {
-                        // Asıl HLS bağlantısını hemen sun ve ilk sırada koru;
-                        // MP4 alternatifinin aranması mevcut oynatımı geciktirmesin.
-                        callback(link)
+                        // Tarayıcıda doğrulanan peacemakerst.com Origin başlığını kullan.
+                        // Tarayıcı isteğinde Referer gönderilmediği için link.referer boş bırakılır.
+                        val browserContextLink = newExtractorLink(
+                            link.source,
+                            link.name,
+                            link.url,
+                            link.type
+                        ) {
+                            this.referer = ""
+                            this.headers = link.headers + mapOf(
+                                "Origin" to "https://peacemakerst.com"
+                            )
+                            this.quality = link.quality
+                            this.extractorData = link.extractorData
+                        }
+                        // Asıl HLS bağlantısını ilk sırada koru.
+                        callback(browserContextLink)
                         val mp4Variants = runCatching { twitterMp4Variants(link.url) }
                             .getOrDefault(emptyList())
                         for ((quality, mp4Url) in mp4Variants) {
