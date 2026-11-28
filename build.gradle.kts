@@ -6,9 +6,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 buildscript {
 repositories {
 mavenLocal()
-maven("https://maven-central.storage-download.googleapis.com/maven2/")
-maven("https://maven.aliyun.com/repository/central/")
 google()
+maven("https://maven-central.storage-download.googleapis.com/maven2/")
 mavenCentral()
 maven("https://jitpack.io")
 }
@@ -32,9 +31,8 @@ dependencies {
 allprojects {
 repositories {
 mavenLocal()
-maven("https://maven-central.storage-download.googleapis.com/maven2/")
-maven("https://maven.aliyun.com/repository/central/")
 google()
+maven("https://maven-central.storage-download.googleapis.com/maven2/")
 mavenCentral()
 maven("https://jitpack.io")
 }
