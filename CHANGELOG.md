@@ -2,6 +2,15 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:d0ae7a1bb9710659d8be5418a7a3a3baee62954b -->
+### Avoid InatBox homepage timeout on HTTP 520
+
+- Etkilenen alanlar: InatBox
+- Commit: [d0ae7a1](https://github.com/Kayracs3/Kayra/commit/d0ae7a1bb9710659d8be5418a7a3a3baee62954b)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:349e3c5712dbb4b1404cb2d59da1f3c9f7b08098 -->
 ### Keep InatBox HLS proxy mappings alive during active playback
 
