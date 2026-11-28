@@ -2,6 +2,23 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:4b354c6343904560bb261df168111904935baa16 -->
+### DiziDad sürümünü 28 yap
+
+- Etkilenen alanlar: DiziDad
+- Commit: [4b354c6](https://github.com/Kayracs3/Kayra/commit/4b354c6343904560bb261df168111904935baa16)
+
+## 2026-11-28
+
+<!-- kayra-commit:93467c2eb8928a70836381053150dff820ea2d47 -->
+### DiziDad Twitter HLS Origin başlığını düzelt
+
+- Etkilenen alanlar: DiziDad
+- Commit: [93467c2](https://github.com/Kayracs3/Kayra/commit/93467c2eb8928a70836381053150dff820ea2d47)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:fc8d3eb80535773c98a83229545c69c668a63b45 -->
 ### Update mainUrl to new DiziLife URL
 
