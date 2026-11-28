@@ -254,11 +254,11 @@
         "name": "DiziKorea"
     },
     {
-        "iconUrl": "https://dizi82.life/favicon.ico",
-        "fileHash": "sha256-211e17057f279ec2cf9c444ba0d6c59797e62b72c7866ef9565637ab4b9e5936",
+        "iconUrl": "https://dizi74.life/favicon.ico",
+        "fileHash": "sha256-5264ff4a5bf011c842024c60e3036c7753b4de8fa8d01e72af4ba75a4ee5a457",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/Kayracs3/Kayra",
-        "fileSize": 50106,
+        "fileSize": 50091,
         "status": 1,
         "language": "tr",
         "authors": [
@@ -268,7 +268,7 @@
             "TvSeries",
             "Movie"
         ],
-        "version": 10,
+        "version": 11,
         "internalName": "DiziLife",
         "description": "DiziLife \u2014 dizi ve film sa\u011flay\u0131c\u0131s\u0131",
         "url": "https://raw.githubusercontent.com/Kayracs3/Kayra/builds/DiziLife.cs3",
