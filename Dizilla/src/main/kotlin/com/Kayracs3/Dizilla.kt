@@ -34,6 +34,15 @@ class Dizilla : MainAPI() {
     private val paginationSignatures =
         HashMap<String, String>()
 
+    // AsyaWatch'taki video ve oynatıcı URL desenleri.
+    private val mediaRegex = Regex(
+        """(?i)(?:https?:)?//[^"'<> \s]+?\.(?:m3u8|mpd|mp4|webm)(?:\?[^"'<> \s]*)?"""
+    )
+    private val playerUrlRegex = Regex(
+        """(?i)["'](?:src|master|file|source|url)["']\s*:\s*["']((?:https?:)?//[^"']+)["']"""
+    )
+    private val rawPlayerUrlRegex = Regex("""(?i)(?:https?:)?//[^"'<> \s]+""")
+
     /**
      * Resolve relative paths against the current site host and migrate links
      * saved with the former Dizilla domains. External player hosts stay intact.
@@ -3461,6 +3470,81 @@ class Dizilla : MainAPI() {
         return result
     }
 
+    private fun cleanRegexVideoUrl(raw: String): String {
+        val value = raw.trim()
+            .replace("\\/", "/")
+            .replace("\\u0026", "&")
+            .replace("&amp;", "&")
+            .trim('"', '\'', ' ', ')', ']', '}', ',', ';', '.')
+        return if (value.startsWith("//")) "https:$value" else value
+    }
+
+    private fun resolveRegexVideoUrl(raw: String, baseUrl: String): String? {
+        val cleaned = cleanRegexVideoUrl(raw)
+        if (cleaned.isBlank()) return null
+        val resolved = runCatching { URI(baseUrl).resolve(cleaned).toString() }.getOrNull()
+            ?: return null
+        val fixed = canonicalizeDizillaUrl(resolved) ?: resolved
+        return fixed.takeIf {
+            it.startsWith("http://", true) || it.startsWith("https://", true)
+        }
+    }
+
+    private fun String.isDirectMediaUrl(): Boolean {
+        val path = substringBefore('#').substringBefore('?').lowercase()
+        return path.endsWith(".m3u8") || path.endsWith(".mpd") ||
+            path.endsWith(".mp4") || path.endsWith(".webm")
+    }
+
+    private fun looksLikeRegexPlayerUrl(url: String): Boolean {
+        val value = url.lowercase()
+        return url.isDirectMediaUrl() || listOf(
+            "iframe", "player", "pichive.online", "hotlinger", "playru",
+            "nm.php", "nl.php", "iframe.php"
+        ).any(value::contains)
+    }
+
+    /**
+     * AsyaWatch'taki mediaRegex, playerUrlRegex ve iframe/video/source taramasını
+     * Dizilla bölüm HTML'ine uygular. Mevcut RSC/secureData kaynakları ayrıca korunur.
+     */
+    private fun collectRegexVideoCandidates(rawHtml: String, baseUrl: String): List<String> {
+        if (rawHtml.isBlank()) return emptyList()
+        val normalized = rawHtml
+            .replace("\\\"", "\"")
+            .replace("\\/", "/")
+            .replace("\\u0026", "&")
+            .replace("&amp;", "&")
+        val output = LinkedHashSet<String>()
+
+        val document = runCatching { Jsoup.parse(normalized, baseUrl) }.getOrNull()
+        document?.select("iframe, video, source, embed")?.forEach { element ->
+            for (attribute in listOf("src", "data-src", "data-url", "data-embed", "href")) {
+                val raw = element.attr(attribute).trim()
+                if (raw.isBlank()) continue
+                val absolute = runCatching {
+                    URI(element.baseUri().ifBlank { baseUrl }).resolve(cleanRegexVideoUrl(raw)).toString()
+                }.getOrNull() ?: continue
+                val fixed = canonicalizeDizillaUrl(absolute) ?: absolute
+                if (looksLikeRegexPlayerUrl(fixed)) output.add(fixed)
+            }
+        }
+
+        mediaRegex.findAll(normalized).forEach { match ->
+            resolveRegexVideoUrl(match.value, baseUrl)?.let(output::add)
+        }
+        playerUrlRegex.findAll(normalized).forEach { match ->
+            val raw = match.groupValues.getOrNull(1).orEmpty()
+            val absolute = resolveRegexVideoUrl(raw, baseUrl) ?: return@forEach
+            if (looksLikeRegexPlayerUrl(absolute)) output.add(absolute)
+        }
+        rawPlayerUrlRegex.findAll(normalized).forEach { match ->
+            val absolute = resolveRegexVideoUrl(match.value, baseUrl) ?: return@forEach
+            if (looksLikeRegexPlayerUrl(absolute)) output.add(absolute)
+        }
+        return output.toList()
+    }
+
     private fun extractPlayerConfig(
         html: String
     ): JSONObject? {
@@ -3521,15 +3605,88 @@ class Dizilla : MainAPI() {
      * Mirrors the Pichive NP_GATE JavaScript:
      * SHA-256(challenge + salt + base36(nonce) + salt)[3] >>> (32 - bits) == 0.
      */
-    private fun fourPichiveGateProof(config: JSONObject?): String? {
+    /**
+     * Önce AsyaWatch'taki gibi NP_GATE JavaScript fonksiyonunun salt/radix/mask
+     * desenini regex ile okur. Eski sabit algoritma uyumluluk yedeği olarak kalır.
+     */
+    private fun fourPichiveGateProof(html: String, config: JSONObject?): String? {
         val gate = config?.optJSONObject("gate") ?: return null
         val challenge = gate.optString("n").trim().takeIf { it.isNotBlank() }
             ?: return null
         val bits = gate.optInt("b", 12).takeIf { it in 1..32 } ?: 12
         val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
             ?: return null
-        val salt = "nEhC31vsdq"
 
+        val normalizedHtml = html
+            .replace("\\\"", "\"")
+            .replace("\\/", "/")
+            .replace("\\u0026", "&")
+
+        val function = Regex(
+            """window\.NP_GATE\s*=\s*function\(\s*(\w+)\s*,\s*(\w+)\s*\)\s*\{([\s\S]*?)\};"""
+        ).find(normalizedHtml)
+
+        if (function != null) {
+            val nonceVariable = function.groupValues[1]
+            val body = function.groupValues[3]
+            val charMatch = Regex(
+                """(?:var|let|const)\s+(\w+)\s*=\s*String\.fromCharCode\(([\d,\s]+)\)"""
+            ).find(body)
+            val nonceMatch = Regex(
+                """(?:var|let|const)\s+(\w+)\s*=\s*(?:\w+\.toString\((\d*)\)|String\(\w+\))"""
+            ).find(body)
+            val maskMatch = Regex(
+                """\(\s*\w+\(([^)]+)\)\[(\d+)\]\s*(>>>|&)\s*(\d+)\s*\)\s*===? 0"""
+            ).find(body)
+
+            if (charMatch != null && nonceMatch != null && maskMatch != null) {
+                val saltVariable = charMatch.groupValues[1]
+                val salt = charMatch.groupValues[2].split(',')
+                    .mapNotNull { it.trim().toIntOrNull()?.takeIf { code -> code in 0..65535 } }
+                    .joinToString("") { it.toChar().toString() }
+                val nonceValueVariable = nonceMatch.groupValues[1]
+                val radix = nonceMatch.groupValues[2].toIntOrNull()?.coerceIn(2, 36) ?: 10
+                val parts = maskMatch.groupValues[1].split('+').map { it.trim() }
+                val wordIndex = maskMatch.groupValues[2].toIntOrNull() ?: return null
+                val operation = maskMatch.groupValues[3]
+                val rhs = maskMatch.groupValues[4].toLongOrNull() ?: return null
+                if (rhs !in 0L..31L) return null
+
+                fun wordAt(message: String): Long {
+                    val bytes = digest.digest(message.toByteArray(Charsets.UTF_8))
+                    val offset = wordIndex.coerceIn(0, 7) * 4
+                    return ((bytes[offset].toLong() and 0xff) shl 24) or
+                        ((bytes[offset + 1].toLong() and 0xff) shl 16) or
+                        ((bytes[offset + 2].toLong() and 0xff) shl 8) or
+                        (bytes[offset + 3].toLong() and 0xff)
+                }
+
+                for (index in 0L until 50_000_000L) {
+                    val nonce = java.lang.Long.toString(index, radix)
+                    val message = buildString {
+                        for (part in parts) {
+                            when (part) {
+                                nonceVariable -> append(challenge)
+                                saltVariable -> append(salt)
+                                nonceValueVariable -> append(nonce)
+                                else -> append(part.trim('\'', '"'))
+                            }
+                        }
+                    }
+                    val word = wordAt(message)
+                    val valid = if (operation == ">>>") {
+                        (word ushr rhs.toInt()) == 0L
+                    } else {
+                        (word and rhs) == 0L
+                    }
+                    if (valid) return nonce
+                }
+                return null
+            }
+        }
+
+        // Eski Dizilla sayfaları için daha önce kullanılan sabit gate formülü.
+        val salt = "nEhC31vsdq"
         for (nonce in 0L until 100_000_000L) {
             val nonceText = nonce.toString(36)
             val input = challenge + salt + nonceText + salt
@@ -3644,7 +3801,7 @@ class Dizilla : MainAPI() {
         }.getOrDefault(false)
         val gate = config.optJSONObject("gate")
         val hasGate = !gate?.optString("n").isNullOrBlank()
-        val gateProof = if (isFourPichive && hasGate) fourPichiveGateProof(config) else null
+        val gateProof = if (isFourPichive && hasGate) fourPichiveGateProof(playerHtml, config) else null
         if (isFourPichive && hasGate && gateProof == null) {
             Log.e("Dizilla", "FourPichive gate doğrulaması hesaplanamadı; geçersiz kaynak verilmeyecek")
             return false
@@ -4024,15 +4181,50 @@ class Dizilla : MainAPI() {
 
         val securePlayers = collectPlayersFromSecureData(secure)
         val rscPlayers = collectRscPlayers(response.text)
-        val candidates = (securePlayers + rscPlayers).distinctBy { it.url }
+
+        // AsyaWatch'taki regex taramasını bölüm sayfasına da uygula.
+        val regexVideoCandidates = collectRegexVideoCandidates(response.text, episodeUrl)
+        val directMediaCandidates = regexVideoCandidates.filter { it.isDirectMediaUrl() }
+        val regexPlayers = regexVideoCandidates
+            .filterNot { it.isDirectMediaUrl() }
+            .map { playerUrl ->
+                DizillaRscPlayer(
+                    url = playerUrl,
+                    name = "Regex",
+                    quality = "",
+                    language = ""
+                )
+            }
+        val candidates = (securePlayers + rscPlayers + regexPlayers).distinctBy { it.url }
 
         Log.d(
             "Dizilla",
-            "Playback candidates secureData=${securePlayers.size} RSC=${rscPlayers.size} total=${candidates.size}"
+            "Playback candidates secureData=\${securePlayers.size} RSC=\${rscPlayers.size} " +
+                "regexPlayers=\${regexPlayers.size} directMedia=\${directMediaCandidates.size} total=\${candidates.size}"
         )
 
         var delivered = false
         val seenSubtitles = HashSet<String>()
+
+        for (mediaUrl in directMediaCandidates) {
+            val path = mediaUrl.substringBefore('#').substringBefore('?').lowercase()
+            val type = when {
+                path.endsWith(".mp4") || path.endsWith(".webm") -> ExtractorLinkType.VIDEO
+                path.endsWith(".mpd") -> ExtractorLinkType.DASH
+                else -> ExtractorLinkType.M3U8
+            }
+            callback(
+                newExtractorLink(name, displayTitle, mediaUrl, type) {
+                    this.referer = episodeUrl
+                    this.headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to episodeUrl
+                    )
+                    this.quality = Qualities.Unknown.value
+                }
+            )
+            delivered = true
+        }
 
         for (player in candidates) {
             try {
