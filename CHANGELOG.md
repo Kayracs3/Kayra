@@ -2,6 +2,15 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:88b99de4c1d3b2c82d8ee2eb7a1b0e6d1c291523 -->
+### Add Google-first provider domain discovery
+
+- Etkilenen alanlar: Repo / CI
+- Commit: [88b99de](https://github.com/Kayracs3/Kayra/commit/88b99de4c1d3b2c82d8ee2eb7a1b0e6d1c291523)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:f883664dcddbbba2eda569168a10fc385896c423 -->
 ### Update mainUrl to new domain for DiziMom
 
