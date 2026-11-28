@@ -184,6 +184,11 @@
           "from": "https://dizi79.life",
           "to": "https://dizi82.life",
           "reason": "HTTP redirect from primary domain to https://dizi82.life/; provider module brand matched candidate page header"
+        },
+        {
+          "from": "https://dizi82.life",
+          "to": "https://dizi74.life",
+          "reason": "Updated after current indexed DiziLife search and detail pages, plus an independent CloudStream provider source, identified dizi74.life as the active canonical domain."
         }
       ],
       "identityProfile": {
@@ -208,9 +213,9 @@
       },
       "candidateDomains": [],
       "lastSwitch": {
-        "from": "https://dizi79.life",
-        "to": "https://dizi82.life",
-        "reason": "Restored previously identity-verified DiziLife host after the maintainer reported ERR_CERT_COMMON_NAME_INVALID on dizi79.life; homepage and service-status records for dizi82.life were checked."
+        "from": "https://dizi82.life",
+        "to": "https://dizi74.life",
+        "reason": "Current DiziLife search/detail pages and an independent CloudStream provider source identify dizi74.life as the active canonical domain."
       }
     },
     "DiziPal": {},
