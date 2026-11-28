@@ -3497,6 +3497,13 @@ class Dizilla : MainAPI() {
     }
 
     private fun looksLikeRegexPlayerUrl(url: String): Boolean {
+        val parsed = runCatching { URI(url) }.getOrNull()
+        val host = parsed?.host.orEmpty()
+        val path = parsed?.path.orEmpty()
+        if (host.equals("four.pichive.online", true) &&
+            (path.isBlank() || path == "/") && parsed?.rawQuery.isNullOrBlank()
+        ) return false
+
         val value = url.lowercase()
         return url.isDirectMediaUrl() || listOf(
             "iframe", "player", "pichive.online", "hotlinger", "playru",
@@ -3609,95 +3616,107 @@ class Dizilla : MainAPI() {
      * Önce AsyaWatch'taki gibi NP_GATE JavaScript fonksiyonunun salt/radix/mask
      * desenini regex ile okur. Eski sabit algoritma uyumluluk yedeği olarak kalır.
      */
+    /** AsyaWatch ile aynı NP_GATE regex ve fallback akışı. */
     private fun fourPichiveGateProof(html: String, config: JSONObject?): String? {
-        val gate = config?.optJSONObject("gate") ?: return null
-        val challenge = gate.optString("n").trim().takeIf { it.isNotBlank() }
-            ?: return null
-        val bits = gate.optInt("b", 12).takeIf { it in 1..32 } ?: 12
-        val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
-            ?: return null
-
         val normalizedHtml = html
             .replace("\\\"", "\"")
             .replace("\\/", "/")
             .replace("\\u0026", "&")
 
+        val gateMatch = Regex(
+            """"gate"\s*:\s*\{\s*"n"\s*:\s*"([^"]+)"(?:\s*,\s*"b"\s*:\s*(\d+))?"""
+        ).find(normalizedHtml)
+        val gateObject = config?.optJSONObject("gate")
+        val challenge = gateMatch?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+            ?: gateObject?.optString("n")?.trim()?.takeIf { it.isNotBlank() }
+            ?: return null
+        val bits = (gateMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
+            ?: gateObject?.optInt("b", 12) ?: 12).takeIf { it in 1..32 } ?: return null
+        val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
+            ?: return null
+
+        fun wordAt(message: String, index: Int): Long {
+            val bytes = digest.digest(message.toByteArray(Charsets.UTF_8))
+            val offset = index.coerceIn(0, 7) * 4
+            return ((bytes[offset].toLong() and 0xff) shl 24) or
+                ((bytes[offset + 1].toLong() and 0xff) shl 16) or
+                ((bytes[offset + 2].toLong() and 0xff) shl 8) or
+                (bytes[offset + 3].toLong() and 0xff)
+        }
+
         val function = Regex(
             """window\.NP_GATE\s*=\s*function\(\s*(\w+)\s*,\s*(\w+)\s*\)\s*\{([\s\S]*?)\};"""
         ).find(normalizedHtml)
 
-        if (function != null) {
-            val nonceVariable = function.groupValues[1]
-            val body = function.groupValues[3]
-            val charMatch = Regex(
-                """(?:var|let|const)\s+(\w+)\s*=\s*String\.fromCharCode\(([\d,\s]+)\)"""
-            ).find(body)
-            val nonceMatch = Regex(
-                """(?:var|let|const)\s+(\w+)\s*=\s*(?:\w+\.toString\((\d*)\)|String\(\w+\))"""
-            ).find(body)
-            val maskMatch = Regex(
-                """\(\s*\w+\(([^)]+)\)\[(\d+)\]\s*(>>>|&)\s*(\d+)\s*\)\s*===?\s*0"""
-            ).find(body)
-
-            if (charMatch != null && nonceMatch != null && maskMatch != null) {
-                val saltVariable = charMatch.groupValues[1]
-                val salt = charMatch.groupValues[2].split(',')
-                    .mapNotNull { it.trim().toIntOrNull()?.takeIf { code -> code in 0..65535 } }
-                    .joinToString("") { it.toChar().toString() }
-                val nonceValueVariable = nonceMatch.groupValues[1]
-                val radix = nonceMatch.groupValues[2].toIntOrNull()?.coerceIn(2, 36) ?: 10
-                val parts = maskMatch.groupValues[1].split('+').map { it.trim() }
-                val wordIndex = maskMatch.groupValues[2].toIntOrNull() ?: return null
-                val operation = maskMatch.groupValues[3]
-                val rhs = maskMatch.groupValues[4].toLongOrNull() ?: return null
-                if (rhs !in 0L..31L) return null
-
-                fun wordAt(message: String): Long {
-                    val bytes = digest.digest(message.toByteArray(Charsets.UTF_8))
-                    val offset = wordIndex.coerceIn(0, 7) * 4
-                    return ((bytes[offset].toLong() and 0xff) shl 24) or
-                        ((bytes[offset + 1].toLong() and 0xff) shl 16) or
-                        ((bytes[offset + 2].toLong() and 0xff) shl 8) or
-                        (bytes[offset + 3].toLong() and 0xff)
+        // AsyaWatch fallback: NP_GATE fonksiyonu yoksa challenge:i biçimini kullanır.
+        if (function == null) {
+            for (index in 0 until 50_000_000) {
+                if (wordAt("$challenge:$index", 0) ushr (32 - bits) == 0L) {
+                    Log.d("Dizilla", "FourPichive gate fallback çözüldü; bits=" + bits)
+                    return index.toString()
                 }
+            }
+            Log.w("Dizilla", "FourPichive gate fallback eşleşme bulamadı; bits=" + bits)
+            return null
+        }
 
-                for (index in 0L until 50_000_000L) {
-                    val nonce = java.lang.Long.toString(index, radix)
-                    val message = buildString {
-                        for (part in parts) {
-                            when (part) {
-                                nonceVariable -> append(challenge)
-                                saltVariable -> append(salt)
-                                nonceValueVariable -> append(nonce)
-                                else -> append(part.trim('\'', '"'))
-                            }
-                        }
+        val nonceVariable = function.groupValues[1]
+        val body = function.groupValues[3]
+        val charMatch = Regex(
+            """var\s+(\w+)\s*=\s*String\.fromCharCode\(([\d,\s]+)\)"""
+        ).find(body)
+        val nonceMatch = Regex(
+            """var\s+(\w+)\s*=\s*(?:\w+\.toString\((\d*)\)|String\(\w+\))"""
+        ).find(body)
+        val maskMatch = Regex(
+            """\(\s*\w+\(([^)]+)\)\[(\d+)\]\s*(>>>|&)\s*(\d+)\s*\)\s*===? 0"""
+        ).find(body)
+
+        if (charMatch == null || nonceMatch == null || maskMatch == null) {
+            Log.w(
+                "Dizilla",
+                "FourPichive NP_GATE regex eksik: salt=" + (charMatch != null) +
+                    " nonce=" + (nonceMatch != null) +
+                    " mask=" + (maskMatch != null)
+            )
+            return null
+        }
+
+        val saltVariable = charMatch.groupValues[1]
+        val salt = charMatch.groupValues[2].split(',')
+            .map { it.trim().toInt().toChar() }.joinToString("")
+        val nonceValueVariable = nonceMatch.groupValues[1]
+        val radix = nonceMatch.groupValues[2].toIntOrNull()?.coerceIn(2, 36) ?: 10
+        val parts = maskMatch.groupValues[1].split('+').map { it.trim() }
+        val wordIndex = maskMatch.groupValues[2].toIntOrNull() ?: return null
+        val operation = maskMatch.groupValues[3]
+        val rhs = maskMatch.groupValues[4].toLongOrNull() ?: return null
+        if (rhs !in 0L..31L) return null
+
+        for (index in 0 until 50_000_000) {
+            val nonce = java.lang.Long.toString(index.toLong(), radix)
+            val message = buildString {
+                for (part in parts) {
+                    when (part) {
+                        nonceVariable -> append(challenge)
+                        saltVariable -> append(salt)
+                        nonceValueVariable -> append(nonce)
+                        else -> append(part.trim('\'', '"'))
                     }
-                    val word = wordAt(message)
-                    val valid = if (operation == ">>>") {
-                        (word ushr rhs.toInt()) == 0L
-                    } else {
-                        (word and rhs) == 0L
-                    }
-                    if (valid) return nonce
                 }
-                return null
+            }
+            val word = wordAt(message, wordIndex)
+            val valid = if (operation == ">>>") {
+                (word ushr rhs.toInt()) == 0L
+            } else {
+                (word and rhs) == 0L
+            }
+            if (valid) {
+                Log.d("Dizilla", "FourPichive NP_GATE regex çözüldü; bits=" + bits + " radix=" + radix)
+                return nonce
             }
         }
-
-        // Eski Dizilla sayfaları için daha önce kullanılan sabit gate formülü.
-        val salt = "nEhC31vsdq"
-        for (nonce in 0L until 100_000_000L) {
-            val nonceText = nonce.toString(36)
-            val input = challenge + salt + nonceText + salt
-            val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
-            val fourthWord =
-                ((hash[12].toInt() and 0xff) shl 24) or
-                    ((hash[13].toInt() and 0xff) shl 16) or
-                    ((hash[14].toInt() and 0xff) shl 8) or
-                    (hash[15].toInt() and 0xff)
-            if ((fourthWord ushr (32 - bits)) == 0) return nonceText
-        }
+        Log.w("Dizilla", "FourPichive NP_GATE nonce bulunamadı; bits=" + bits + " radix=" + radix)
         return null
     }
 
@@ -4199,8 +4218,11 @@ class Dizilla : MainAPI() {
 
         Log.d(
             "Dizilla",
-            "Playback candidates secureData=\${securePlayers.size} RSC=\${rscPlayers.size} " +
-                "regexPlayers=\${regexPlayers.size} directMedia=\${directMediaCandidates.size} total=\${candidates.size}"
+            "Playback candidates secureData=" + securePlayers.size +
+                " RSC=" + rscPlayers.size +
+                " regexPlayers=" + regexPlayers.size +
+                " directMedia=" + directMediaCandidates.size +
+                " total=" + candidates.size
         )
 
         var delivered = false
