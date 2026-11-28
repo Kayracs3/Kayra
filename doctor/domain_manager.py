@@ -22,7 +22,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote_plus, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, quote_plus, urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 MAIN_URL_RE = re.compile(
@@ -351,12 +351,53 @@ def configured_candidates(config: dict[str, Any], old_url: str) -> list[tuple[st
     return list(deduped.items())
 
 
-def search_candidates(provider: dict[str, str], profile: dict[str, Any] | None, old_url: str) -> list[tuple[str, str]]:
-    """Use web search only to nominate possible hosts; identity checks still decide trust.
+def extract_google_result_links(body: bytes, base_url: str) -> list[str]:
+    """Extract outbound URLs from Google's HTML results without trusting them.
 
-    This is a last-resort discovery layer for cases where the old hostname no longer
-    redirects and has no useful canonical metadata. Search results are never applied
-    directly, and all candidates must pass identity_match() in inspect_provider().
+    Google does not offer a generally available full-web JSON API for new
+    projects, so this is a best-effort HTML parser. Search results only nominate
+    candidate hosts; inspect_provider() still requires a live page and an
+    independent provider-identity match before any source can be changed.
+    """
+    parsed_page = parse_page(body, base_url)
+    results: list[str] = []
+    seen: set[str] = set()
+    for raw_link in parsed_page.get("links", []):
+        link = urljoin(base_url, html.unescape(str(raw_link).strip()))
+        parsed = urlparse(link)
+        host = (parsed.hostname or "").lower()
+
+        # Google commonly wraps result URLs in /url?q=... or /url?url=...
+        if host == "google.com" or host.endswith(".google.com"):
+            if parsed.path.rstrip("/") != "/url":
+                continue
+            params = parse_qs(parsed.query)
+            targets = params.get("q") or params.get("url") or []
+            if not targets:
+                continue
+            link = html.unescape(targets[0].strip())
+            parsed = urlparse(link)
+            host = (parsed.hostname or "").lower()
+
+        if parsed.scheme not in {"http", "https"} or not host:
+            continue
+        if host == "google.com" or host.endswith(".google.com"):
+            continue
+        if host == "bing.com" or host.endswith(".bing.com"):
+            continue
+        if link not in seen:
+            seen.add(link)
+            results.append(link)
+    return results[:20]
+
+
+def search_candidates(provider: dict[str, str], profile: dict[str, Any] | None, old_url: str) -> list[tuple[str, str]]:
+    """Use Google first and Bing RSS as a fallback/second opinion.
+
+    Search engines only nominate possible hosts. Results are never applied
+    directly: every candidate must pass the live-page and identity checks in
+    inspect_provider(). This runs only after the old hostname has been
+    confirmed dead by two independent checks.
     """
     profile = profile or {}
     brand = str(profile.get("siteName") or profile.get("h1") or "").strip()
@@ -366,32 +407,48 @@ def search_candidates(provider: dict[str, str], profile: dict[str, Any] | None, 
         queries.append(f'"{brand}" official website')
         if title and normalize_text(title) != normalize_text(brand):
             queries.append(f'"{brand}" "{title}"')
-    # The module name is a weaker fallback, but still only creates a candidate.
     module_name = provider.get("name", "").strip()
     if module_name:
         queries.append(f'"{module_name}" official site')
 
     found: dict[str, str] = {}
     for query in queries[:3]:
-        search_url = "https://www.bing.com/search?format=rss&q=" + quote_plus(query)
-        response = fetch_page(search_url, timeout=8)
-        if not (response.get("status") and 200 <= response["status"] < 300):
-            continue
-        body = response.get("body", b"")
-        try:
-            from xml.etree import ElementTree
-            root = ElementTree.fromstring(body)
-            links = [node.text.strip() for node in root.findall(".//item/link") if node.text]
-        except Exception:
-            links = []
-        for link in links[:12]:
-            candidate = normalize_candidate(link, old_url)
-            if candidate and candidate not in found:
-                found[candidate] = f'web search nomination for {query!r}'
-        if len(found) >= 8:
-            break
-    return list(found.items())[:8]
+        # Google HTML search is best-effort and may be rate-limited or served a
+        # consent/challenge page. Bing RSS remains an independent fallback.
+        google_url = "https://www.google.com/search?hl=tr&num=10&q=" + quote_plus(query)
+        google_response = fetch_page(google_url, timeout=8)
+        if google_response.get("status") is not None and 200 <= int(google_response["status"]) < 300:
+            google_body = google_response.get("body", b"")
+            if isinstance(google_body, str):
+                google_body = google_body.encode("utf-8", errors="ignore")
+            google_text = google_body[:120_000].decode("utf-8", errors="ignore").lower()
+            google_blocked = any(marker in google_text for marker in (
+                "unusual traffic", "our systems have detected", "recaptcha",
+                "before you continue to google", "consent.google.com",
+            ))
+            if not google_blocked:
+                for link in extract_google_result_links(google_body, google_response.get("finalUrl") or google_url):
+                    candidate = normalize_candidate(link, old_url)
+                    if candidate:
+                        found.setdefault(candidate, f"Google search nomination for {query!r}")
 
+        bing_url = "https://www.bing.com/search?format=rss&q=" + quote_plus(query)
+        bing_response = fetch_page(bing_url, timeout=8)
+        if bing_response.get("status") is not None and 200 <= int(bing_response["status"]) < 300:
+            body = bing_response.get("body", b"")
+            try:
+                from xml.etree import ElementTree
+                root = ElementTree.fromstring(body)
+                links = [node.text.strip() for node in root.findall(".//item/link") if node.text]
+            except Exception:
+                links = []
+            for link in links[:12]:
+                candidate = normalize_candidate(link, old_url)
+                if candidate:
+                    found.setdefault(candidate, f"Bing RSS fallback nomination for {query!r}")
+        if len(found) >= 16:
+            break
+    return list(found.items())[:16]
 
 def update_module_domain(root: Path, provider: dict[str, str], old_url: str, new_url: str) -> list[str]:
     module = root / provider["module"]
@@ -658,13 +715,33 @@ def main() -> int:
     providers_cfg = registry.setdefault("providers", {})
     providers = discover_modules(root)
     results: list[dict[str, Any]] = []
+    excluded_names = {
+        str(name).strip().casefold()
+        for name in policy.get("excludedProviders", [])
+        if str(name).strip()
+    }
 
-    # Every provider gets a registry entry so identity can be learned while its
-    # currently configured domain is healthy. A healthy or redirected primary
-    # URL is retained and never replaced.
+    # Certain gambling/prediction-oriented services are intentionally excluded:
+    # do not probe them, search for replacement hosts, or rewrite their sources.
+    eligible_providers = []
+    for provider in providers:
+        if provider["name"].casefold() in excluded_names:
+            results.append({
+                "provider": provider["name"],
+                "currentUrl": provider["url"],
+                "status": "excluded",
+                "reason": "provider excluded by repository safety policy; no network request or source update performed",
+                "changedFiles": [],
+            })
+        else:
+            eligible_providers.append(provider)
+
+    # Every eligible provider gets a registry entry so identity can be learned
+    # while its currently configured domain is healthy. Healthy/redirected
+    # primary URLs are retained and never replaced.
     with ThreadPoolExecutor(max_workers=max(1, min(args.workers, 12))) as pool:
         future_map = {}
-        for provider in providers:
+        for provider in eligible_providers:
             entry = providers_cfg.setdefault(provider["name"], {})
             future_map[pool.submit(inspect_provider, root, provider, entry, args.apply)] = provider["name"]
         for future in as_completed(future_map):

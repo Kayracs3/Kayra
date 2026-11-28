@@ -291,6 +291,45 @@ class DomainManagerTests(unittest.TestCase):
         }
         self.assertIsNone(dm.classify_primary_failure(error))
 
+    def test_google_search_result_links_unwrap_google_redirects(self):
+        body = b"""
+        <html><body>
+          <a href="/url?q=https%3A%2F%2Fnew.example%2Fwatch&sa=U">New</a>
+          <a href="https://direct.example/home">Direct</a>
+          <a href="https://www.google.com/search?q=another">Google internal</a>
+        </body></html>
+        """
+        links = dm.extract_google_result_links(body, "https://www.google.com/search?q=demo")
+        self.assertIn("https://new.example/watch", links)
+        self.assertIn("https://direct.example/home", links)
+        self.assertFalse(any("google.com" in link for link in links))
+
+    def test_google_search_candidates_are_only_untrusted_nominations(self):
+        provider = {"name": "Demo", "module": "Demo", "url": "https://old.example"}
+        profile = {
+            "siteName": "SiteMarka", "title": "SiteMarka Dizi Arsivi",
+            "tokens": ["sitemarka", "dizi", "arsivi"],
+        }
+        google_html = b'<html><body><a href="/url?q=https%3A%2F%2Fnew.example%2F">SiteMarka</a></body></html>'
+        google_response = {
+            "status": 200, "body": google_html,
+            "finalUrl": "https://www.google.com/search?q=SiteMarka",
+            "contentType": "text/html", "error": "",
+        }
+        bing_response = {
+            "status": 200, "body": b"<rss><channel></channel></rss>",
+            "finalUrl": "https://www.bing.com/search?format=rss",
+            "contentType": "application/rss+xml", "error": "",
+        }
+
+        def fake_fetch(url, timeout=12):
+            return google_response if "google.com/search" in url else bing_response
+
+        with patch.object(dm, "fetch_page", side_effect=fake_fetch):
+            candidates = dm.search_candidates(provider, profile, "https://old.example")
+        self.assertEqual(candidates[0][0], "https://new.example")
+        self.assertIn("Google search nomination", candidates[0][1])
+
     def test_search_results_only_nominate_candidates_for_later_identity_check(self):
         provider = {"name": "Demo", "module": "Demo", "url": "https://old.example"}
         profile = {

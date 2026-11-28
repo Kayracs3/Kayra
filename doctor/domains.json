@@ -26,7 +26,17 @@
       "A TLS hostname/common-name mismatch is treated as a domain failure only after two independent confirmations.",
       "A replacement must pass identity verification after the primary domain is confirmed dead."
     ],
-    "workingDomainRule": "Never rewrite a provider's current domain when it responds successfully or redirects successfully. Only confirmed dead primary domains may enter candidate discovery."
+    "workingDomainRule": "Never rewrite a provider's current domain when it responds successfully or redirects successfully. Only confirmed dead primary domains may enter candidate discovery.",
+    "excludedProviders": [
+      "Flix",
+      "Newtv"
+    ],
+    "searchStrategy": [
+      "Google HTML search is attempted first after a provider domain is confirmed dead twice.",
+      "Bing RSS is queried as an independent fallback/second opinion.",
+      "Search results are untrusted nominations only; live-page and saved identity verification remain mandatory.",
+      "Providers listed in excludedProviders are not probed, searched, or modified."
+    ]
   },
   "providers": {
     "AsyaFilmIzle": {},
