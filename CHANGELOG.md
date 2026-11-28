@@ -1,5 +1,14 @@
 # Kayra Güncelleme Notları
 
+## 2026-11-28
+
+<!-- kayra-commit:349e3c5712dbb4b1404cb2d59da1f3c9f7b08098 -->
+### Keep InatBox HLS proxy mappings alive during active playback
+
+- Etkilenen alanlar: InatBox
+- Commit: [349e3c5](https://github.com/Kayracs3/Kayra/commit/349e3c5712dbb4b1404cb2d59da1f3c9f7b08098)
+
+
 ## 2026-11-26
 
 <!-- kayra-commit:40e02909eb3696975446a5d7f70a3e4a74fed4f6 -->
