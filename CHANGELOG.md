@@ -2,6 +2,23 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:d6d72e86731bdb4813c53277987b165d519db1c3 -->
+### Dizilla sürümünü 28 yap
+
+- Etkilenen alanlar: Dizilla
+- Commit: [d6d72e8](https://github.com/Kayracs3/Kayra/commit/d6d72e86731bdb4813c53277987b165d519db1c3)
+
+## 2026-11-28
+
+<!-- kayra-commit:a22865123485d7660177c9be9b900bb356e4abb9 -->
+### Dizilla NP_GATE maske regex boşluk uyumunu düzelt
+
+- Etkilenen alanlar: Dizilla
+- Commit: [a228651](https://github.com/Kayracs3/Kayra/commit/a22865123485d7660177c9be9b900bb356e4abb9)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:9e4126eb14d19ee0dcd039bd21f65e927cf401bb -->
 ### Dizilla sürümünü 27 yap
 
