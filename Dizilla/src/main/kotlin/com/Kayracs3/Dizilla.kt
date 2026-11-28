@@ -3629,9 +3629,20 @@ class Dizilla : MainAPI() {
         val gateObject = config?.optJSONObject("gate")
         val challenge = gateMatch?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
             ?: gateObject?.optString("n")?.trim()?.takeIf { it.isNotBlank() }
-            ?: return null
-        val bits = (gateMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
-            ?: gateObject?.optInt("b", 12) ?: 12).takeIf { it in 1..32 } ?: return null
+        if (challenge.isNullOrBlank()) {
+            Log.w(
+                "Dizilla",
+                "FourPichive gate challenge eksik: htmlGate=${gateMatch != null} configGate=${gateObject != null}"
+            )
+            return null
+        }
+        val rawBits = gateMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
+            ?: gateObject?.optInt("b", 12) ?: 12
+        if (rawBits !in 1..32) {
+            Log.w("Dizilla", "FourPichive gate bits geçersiz: bits=" + rawBits)
+            return null
+        }
+        val bits = rawBits
         val digest = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
             ?: return null
 
@@ -3650,6 +3661,7 @@ class Dizilla : MainAPI() {
 
         // AsyaWatch fallback: NP_GATE fonksiyonu yoksa challenge:i biçimini kullanır.
         if (function == null) {
+            Log.d("Dizilla", "FourPichive NP_GATE fonksiyonu bulunamadı; AsyaWatch fallback deneniyor")
             for (index in 0 until 50_000_000) {
                 if (wordAt("$challenge:$index", 0) ushr (32 - bits) == 0L) {
                     Log.d("Dizilla", "FourPichive gate fallback çözüldü; bits=" + bits)
@@ -3820,6 +3832,12 @@ class Dizilla : MainAPI() {
         }.getOrDefault(false)
         val gate = config.optJSONObject("gate")
         val hasGate = !gate?.optString("n").isNullOrBlank()
+        if (isFourPichive) {
+            Log.d(
+                "Dizilla",
+                "FourPichive gate config: present=${gate != null} challenge=${hasGate} bits=${gate?.optInt("b", 12) ?: 12}"
+            )
+        }
         val gateProof = if (isFourPichive && hasGate) fourPichiveGateProof(playerHtml, config) else null
         if (isFourPichive && hasGate && gateProof == null) {
             Log.e("Dizilla", "FourPichive gate doğrulaması hesaplanamadı; geçersiz kaynak verilmeyecek")
@@ -4687,12 +4705,7 @@ class Dizilla : MainAPI() {
                     file = "https://$host/$file"
                 }
 
-                val masterUrl =
-                    file.replace(
-                        "m.php",
-                        "master.m3u8"
-                    )
-
+                val masterUrl = file.replace("m.php", "master.m3u8")
                 val quality =
                     Regex("""\d{3,4}""")
                         .find(qualityName)
@@ -4700,39 +4713,91 @@ class Dizilla : MainAPI() {
                         ?.toIntOrNull()
                         ?: Qualities.Unknown.value
 
-                callback.invoke(
+                val requestHeaders = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to iframeUrl
+                )
+                val isPichiveHost = host.contains("pichive.online", ignoreCase = true)
+
+                if (isPichiveHost) {
+                    // Do not emit a legacy Pichive URL unless it actually returns an HLS playlist.
+                    val playlistCandidates = linkedSetOf(file, masterUrl)
+                    var validPlaylistUrl: String? = null
+
+                    for (candidateUrl in playlistCandidates) {
+                        val response = runCatching {
+                            app.get(
+                                candidateUrl,
+                                headers = requestHeaders,
+                                referer = iframeUrl
+                            )
+                        }.getOrNull()
+                        val playlistText = response?.text
+                            ?.trimStart('\uFEFF', ' ', '\t', '\r', '\n')
+                            .orEmpty()
+                        val isHls = response != null &&
+                            response.code in 200..299 &&
+                            playlistText.startsWith("#EXTM3U")
+
+                        Log.d(
+                            "Dizilla",
+                            "Pichive legacy source check: status=${response?.code ?: -1} hls=$isHls"
+                        )
+                        if (isHls) {
+                            validPlaylistUrl = candidateUrl
+                            break
+                        }
+                    }
+
+                    if (validPlaylistUrl == null) {
+                        Log.w("Dizilla", "Pichive legacy source geçersiz; HLS olmayan URL atlandı")
+                        continue
+                    }
+
+                    val variants = runCatching {
+                        M3u8Helper.generateM3u8(label, validPlaylistUrl, iframeUrl)
+                    }.getOrElse {
+                        Log.d("Dizilla", "Pichive legacy M3U8 variants failed: ${it.message}")
+                        emptyList()
+                    }
+
+                    if (variants.isNotEmpty()) {
+                        variants.forEach(callback)
+                    } else {
+                        callback(
+                            newExtractorLink(
+                                source = mediaTitle,
+                                name = label,
+                                url = validPlaylistUrl,
+                                type = ExtractorLinkType.M3U8
+                            ) {
+                                this.referer = iframeUrl
+                                this.headers = requestHeaders
+                                this.quality = quality
+                            }
+                        )
+                    }
+                    delivered = true
+                    continue
+                }
+
+                callback(
                     newExtractorLink(
                         source = mediaTitle,
                         name = label,
                         url = masterUrl,
                         type = ExtractorLinkType.M3U8
                     ) {
-
                         this.referer = iframeUrl
-
-                        this.headers =
-                            mapOf(
-                                "User-Agent" to USER_AGENT,
-                                "Referer" to iframeUrl
-                            )
-
+                        this.headers = requestHeaders
                         this.quality = quality
                     }
                 )
 
                 try {
-                    M3u8Helper
-                        .generateM3u8(
-                            label,
-                            masterUrl,
-                            iframeUrl
-                        )
-                        .forEach(callback)
+                    M3u8Helper.generateM3u8(label, masterUrl, iframeUrl).forEach(callback)
                 } catch (e: Exception) {
-                    Log.d(
-                        "Dizilla",
-                        "M3U8 variant error: ${e.message}"
-                    )
+                    Log.d("Dizilla", "M3U8 variant error: ${e.message}")
                 }
 
                 delivered = true
