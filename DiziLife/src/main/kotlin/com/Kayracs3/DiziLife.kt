@@ -19,7 +19,7 @@ import java.util.Locale
 import java.util.ArrayDeque
 
 class DiziLife : MainAPI() {
-    override var mainUrl = "https://dizi87.life"
+    override var mainUrl = "https://dizi74.life"
     override var name = "DiziLife"
     override var lang = "tr"
     override val hasMainPage = true
@@ -41,7 +41,6 @@ class DiziLife : MainAPI() {
 
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Öne Çıkanlar",
-        "$mainUrl/son-eklenenler" to "Son Eklenenler",
         "$mainUrl/diziler" to "Tüm Diziler",
         "$mainUrl/filmler" to "Tüm Filmler"
     )
@@ -135,7 +134,7 @@ class DiziLife : MainAPI() {
             .find(text)?.groupValues?.getOrNull(1)?.replace(',', '.')?.toFloatOrNull()?.takeIf { it in 0f..10f }
 
     private fun pageFor(base: String, page: Int): String =
-        if (page <= 1) base else if (base.contains('?')) "$base&page=$page" else "$base?page=$page"
+        if (page <= 1) base else if (base.contains('?')) "$base&sayfa=$page" else "$base?sayfa=$page"
 
     private fun cardFor(anchor: Element): Element {
         var node: Element? = anchor
@@ -257,6 +256,7 @@ class DiziLife : MainAPI() {
         if (q.length < 2) return emptyList()
         val encoded = URLEncoder.encode(q, "UTF-8")
         val searchUrls = listOf(
+            "$mainUrl/ara?q=$encoded",
             "$mainUrl/api/search?query=$encoded",
             "$mainUrl/api/search?q=$encoded",
             "$mainUrl/api/search?term=$encoded",
