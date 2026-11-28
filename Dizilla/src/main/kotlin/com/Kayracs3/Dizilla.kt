@@ -3669,7 +3669,7 @@ class Dizilla : MainAPI() {
             """var\s+(\w+)\s*=\s*(?:\w+\.toString\((\d*)\)|String\(\w+\))"""
         ).find(body)
         val maskMatch = Regex(
-            """\(\s*\w+\(([^)]+)\)\[(\d+)\]\s*(>>>|&)\s*(\d+)\s*\)\s*===? 0"""
+            """\(\s*\w+\(([^)]+)\)\[(\d+)\]\s*(>>>|&)\s*(\d+)\s*\)\s*===?\s*0"""
         ).find(body)
 
         if (charMatch == null || nonceMatch == null || maskMatch == null) {
