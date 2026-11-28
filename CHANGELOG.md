@@ -2,6 +2,15 @@
 
 ## 2026-11-28
 
+<!-- kayra-commit:a38fce6f8c96f0f10379cb81b9643339d9917436 -->
+### Dizilla Pichive gate regex boşluk uyumunu düzelt
+
+- Etkilenen alanlar: Dizilla
+- Commit: [a38fce6](https://github.com/Kayracs3/Kayra/commit/a38fce6f8c96f0f10379cb81b9643339d9917436)
+
+
+## 2026-11-28
+
 <!-- kayra-commit:514f76c2e5b963473707a506eca18c3c36b9af26 -->
 ### Dizilla sürümünü 26 yap
 
