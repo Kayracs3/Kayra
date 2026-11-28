@@ -6,6 +6,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 buildscript {
 repositories {
 mavenLocal()
+maven("https://maven-central.storage-download.googleapis.com/maven2/")
+maven("https://maven.aliyun.com/repository/central/")
 google()
 mavenCentral()
 maven("https://jitpack.io")
@@ -30,6 +32,8 @@ dependencies {
 allprojects {
 repositories {
 mavenLocal()
+maven("https://maven-central.storage-download.googleapis.com/maven2/")
+maven("https://maven.aliyun.com/repository/central/")
 google()
 mavenCentral()
 maven("https://jitpack.io")
@@ -48,7 +52,7 @@ fun Project.android(
 configuration: BaseExtension.() -> Unit
 ) {
 extensions
-.getByName<BaseExtension>("android")
+.getByName< BaseExtension>("android")
 .configuration()
 }
 
